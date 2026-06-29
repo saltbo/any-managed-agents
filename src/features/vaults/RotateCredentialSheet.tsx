@@ -44,7 +44,7 @@ export function RotateCredentialSheet({
     /* v8 ignore start -- credential is null only when sheet is closed; form can't be submitted then */
     if (!credential || stringData.trim() === '') return
     /* v8 ignore stop */
-    rotateCredential.mutate(credential.id)
+    rotateCredential.mutate(credential.metadata.uid)
   }
 
   return (
@@ -55,7 +55,7 @@ export function RotateCredentialSheet({
           <SheetDescription>
             {/* v8 ignore start -- sheet is only open when credential !== null; the null fallback never renders */}
             {credential
-              ? `Create a new active version for ${credential.name}. The previous version is kept as a safe reference for auditability.`
+              ? `Create a new active version for ${credential.metadata.name}. The previous version is kept as a safe reference for auditability.`
               : 'Create a new active credential version.'}
             {/* v8 ignore stop */}
           </SheetDescription>

@@ -1,5 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { normalizeEnvironmentNetworkPolicy } from '@server/contracts/environment-contracts'
+import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
+import type { Environment, EnvironmentVersion } from '@server/domain/environment'
 import { requireAuth } from '../auth/session'
 import { EnvironmentHostingModeSchema, EnvironmentNetworkPolicySchema } from '../contracts/environment-contracts'
 import {
@@ -12,12 +14,7 @@ import {
   parseListCursor,
 } from '../openapi'
 import { createEnvironment, type UpdateEnvironmentPatch, updateEnvironment } from '../usecases/environments'
-import {
-  EnvironmentArchivedError,
-  type EnvironmentRecord,
-  EnvironmentValidationError,
-  type EnvironmentVersionRecord,
-} from '../usecases/ports'
+import { EnvironmentArchivedError, EnvironmentValidationError } from '../usecases/ports'
 import { requestId } from './request-context'
 
 type EnvironmentRoutes = OpenAPIHono<DepsEnv>
@@ -52,12 +49,9 @@ const ResourceLimitsSchema = z
   })
   .strict()
 const RuntimeConfigSchema = JsonObjectSchema
-const EnvironmentSchema = z
+
+const EnvironmentSpecSchema = z
   .object({
-    id: z.string().openapi({ example: 'env_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    name: z.string().openapi({ example: 'Node workspace' }),
-    description: z.string().nullable().openapi({ example: 'Default Node.js environment.' }),
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
@@ -69,32 +63,35 @@ const EnvironmentSchema = z
     resourceLimits: ResourceLimitsSchema.openapi({ example: { memoryMb: 512 } }),
     runtimeConfig: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
+  })
+  .openapi('EnvironmentSpec')
+
+const EnvironmentStatusSchema = z
+  .object({
+    phase: ResourcePhaseSchema,
     currentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
     version: z.number().int().openapi({ example: 1 }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+  })
+  .openapi('EnvironmentStatus')
+
+const EnvironmentSchema = z
+  .object({
+    metadata: ResourceMetadataSchema,
+    spec: EnvironmentSpecSchema,
+    status: EnvironmentStatusSchema,
   })
   .openapi('Environment')
 
 const EnvironmentVersionSchema = z
   .object({
-    id: z.string().openapi({ example: 'envver_abc123' }),
-    environmentId: z.string().openapi({ example: 'env_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    version: z.number().int().openapi({ example: 1 }),
-    packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx' }] }),
-    variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { required: true } } }),
-    hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
-    networkPolicy: NetworkPolicySchema.openapi({
-      example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    }),
-    mcpPolicy: McpPolicySchema.openapi({ example: { allowedConnectors: ['github'] } }),
-    packageManagerPolicy: JsonObjectSchema.openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
-    resourceLimits: ResourceLimitsSchema.openapi({ example: { memoryMb: 512 } }),
-    runtimeConfig: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+    metadata: ResourceMetadataSchema,
+    spec: EnvironmentSpecSchema,
+    status: z
+      .object({
+        environmentId: z.string().openapi({ example: 'env_abc123' }),
+        version: z.number().int().openapi({ example: 1 }),
+      })
+      .openapi('EnvironmentVersionStatus'),
   })
   .openapi('EnvironmentVersion')
 
@@ -162,48 +159,12 @@ function domainValidation(message: string, fields: Record<string, string>) {
   return { error: { type: 'validation_error', message, details: { fields } } } as const
 }
 
-// The DTO that crosses the wire mirrors EnvironmentRecord; serialization is
-// identity plus the version field that the record already carries.
-function serializeEnvironment(record: EnvironmentRecord) {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    name: record.name,
-    description: record.description,
-    packages: record.packages,
-    variables: record.variables,
-    hostingMode: record.hostingMode,
-    networkPolicy: record.networkPolicy,
-    mcpPolicy: record.mcpPolicy,
-    packageManagerPolicy: record.packageManagerPolicy,
-    resourceLimits: record.resourceLimits,
-    runtimeConfig: record.runtimeConfig,
-    metadata: record.metadata,
-    archivedAt: record.archivedAt,
-    currentVersionId: record.currentVersionId,
-    version: record.version,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
+function serializeEnvironment(record: Environment) {
+  return record
 }
 
-function serializeEnvironmentVersion(record: EnvironmentVersionRecord) {
-  return {
-    id: record.id,
-    environmentId: record.environmentId,
-    projectId: record.projectId,
-    version: record.version,
-    packages: record.packages,
-    variables: record.variables,
-    hostingMode: record.hostingMode,
-    networkPolicy: record.networkPolicy,
-    mcpPolicy: record.mcpPolicy,
-    packageManagerPolicy: record.packageManagerPolicy,
-    resourceLimits: record.resourceLimits,
-    runtimeConfig: record.runtimeConfig,
-    metadata: record.metadata,
-    createdAt: record.createdAt,
-  }
+function serializeEnvironmentVersion(record: EnvironmentVersion) {
+  return record
 }
 
 const listRoute = createRoute({
@@ -341,7 +302,8 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         {
           data: page.rows.map(serializeEnvironment),
@@ -405,7 +367,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
             outcome: 'success',
             requestId: requestId(c),
             before: serializeEnvironment(before),
-            after: { archivedAt: result.environment.archivedAt },
+            after: { archivedAt: result.environment.metadata.archivedAt },
           })
         } else if (result.unarchived) {
           await deps.audit.record(scope, {
@@ -414,7 +376,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
             resourceId: environmentId,
             outcome: 'success',
             requestId: requestId(c),
-            before: { archivedAt: before.archivedAt },
+            before: { archivedAt: before.metadata.archivedAt },
             after: { archivedAt: null },
           })
         }

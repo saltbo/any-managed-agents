@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Agent, Environment, Provider } from '@/lib/api'
+import type { Provider } from '@/lib/api'
+import { agent as resourceAgent, environment as resourceEnvironment } from '@/test/resource-fixtures'
 import { buildTestSession } from '@/testing/session'
 import {
   agentHasSandboxExecution,
@@ -14,8 +15,8 @@ import {
 } from './quickstart-model'
 
 const activeProvider = { enabled: true } as Provider
-const activeEnvironment = { archivedAt: null } as Environment
-const activeAgent = { archivedAt: null } as Agent
+const activeEnvironment = resourceEnvironment()
+const activeAgent = resourceAgent()
 const cloudSession = buildTestSession({ phase: 'idle' })
 
 const emptyResources = { providers: [], environments: [], agents: [], sessions: [] }
@@ -67,8 +68,8 @@ describe('quickstart step sequencing — all-complete fallback [spec: quickstart
   it('returns integration when all steps are complete (firstIncompleteStep fallback)', () => {
     const completion = quickstartCompletion({
       providers: [{ enabled: true } as import('@/lib/api').Provider],
-      environments: [{ archivedAt: null } as import('@/lib/api').Environment],
-      agents: [{ archivedAt: null } as import('@/lib/api').Agent],
+      environments: [resourceEnvironment()],
+      agents: [resourceAgent()],
       sessions: [buildTestSession({ phase: 'idle' })],
     })
     expect(firstIncompleteStep(completion)).toBe('integration')
@@ -117,14 +118,27 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
 
 describe('quickstart sandbox add-on [spec: quickstart/sandbox-addon]', () => {
   it('adds sandbox tools and carries skills consistent with the agent schema', () => {
-    const agent = { tools: [{ name: 'read' }, { name: 'sandbox.exec' }], skills: [] } as unknown as Agent
+    const agent = resourceAgent({
+      tools: [
+        { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
+        { name: 'sandbox.exec', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
+      ],
+      skills: [],
+    })
     expect(agentHasSandboxExecution(agent)).toBe(true)
-    expect(agentHasSandboxExecution({ tools: [{ name: 'read' }], skills: [] } as unknown as Agent)).toBe(false)
+    expect(
+      agentHasSandboxExecution(
+        resourceAgent({
+          tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+          skills: [],
+        }),
+      ),
+    ).toBe(false)
     expect(sandboxAgentInput(agent)).toEqual({
       tools: [{ name: 'read' }, { name: 'sandbox.exec' }, { name: 'sandbox.read' }, { name: 'sandbox.write' }],
       skills: ['ama@coding-agent'],
     })
-    expect(sandboxAgentInput({ tools: [], skills: ['team@skill'] } as unknown as Agent).skills).toEqual(['team@skill'])
+    expect(sandboxAgentInput(resourceAgent({ tools: [], skills: ['team@skill'] })).skills).toEqual(['team@skill'])
   })
 })
 

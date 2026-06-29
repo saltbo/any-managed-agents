@@ -1,5 +1,6 @@
 import { RuntimeSchema } from '@server/contracts/environment-contracts'
-import type { ClaimedRun, DueTrigger, TriggerDispatchRepo, TriggerRecord } from '@server/usecases/ports'
+import type { Trigger } from '@server/domain/trigger'
+import type { ClaimedRun, DueTrigger, TriggerDispatchRepo } from '@server/usecases/ports'
 import { and, asc, eq, isNull, lte } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { projects, triggerRuns, triggers } from '../../db/schema'
@@ -52,6 +53,10 @@ function nextDueAt(trigger: DueTrigger) {
   return new Date(new Date(trigger.nextDueAt).getTime() + trigger.intervalSeconds * 1000).toISOString()
 }
 
+function triggerId(trigger: DueTrigger | Trigger) {
+  return 'intervalSeconds' in trigger ? trigger.id : trigger.metadata.uid
+}
+
 async function advanceTrigger(db: Db, trigger: DueTrigger, run: ClaimedRun, timestamp: string) {
   await db
     .update(triggers)
@@ -61,10 +66,10 @@ async function advanceTrigger(db: Db, trigger: DueTrigger, run: ClaimedRun, time
       lastRunId: run.id,
       updatedAt: timestamp,
     })
-    .where(eq(triggers.id, trigger.id))
+    .where(eq(triggers.id, triggerId(trigger)))
 }
 
-async function advanceRunTrigger(db: Db, trigger: DueTrigger | TriggerRecord, run: ClaimedRun, timestamp: string) {
+async function advanceRunTrigger(db: Db, trigger: DueTrigger | Trigger, run: ClaimedRun, timestamp: string) {
   if ('intervalSeconds' in trigger) {
     await advanceTrigger(db, trigger, run, timestamp)
     return
@@ -76,7 +81,7 @@ async function advanceRunTrigger(db: Db, trigger: DueTrigger | TriggerRecord, ru
       lastRunId: run.id,
       updatedAt: timestamp,
     })
-    .where(eq(triggers.id, trigger.id))
+    .where(eq(triggers.id, triggerId(trigger)))
 }
 
 export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
@@ -132,18 +137,18 @@ export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
       return { id: runId, scheduledFor, correlationId }
     },
 
-    async claimHttpRun(trigger, triggeredAt, rawIdempotencyKey): Promise<ClaimedRun | null> {
+    async claimHttpRun(auth, trigger, triggeredAt, rawIdempotencyKey): Promise<ClaimedRun | null> {
       const runId = newId('httprun')
       const idempotencyKey = rawIdempotencyKey
-        ? `http:${trigger.id}:${rawIdempotencyKey}`
-        : `http:${trigger.id}:${runId}`
+        ? `http:${trigger.metadata.uid}:${rawIdempotencyKey}`
+        : `http:${trigger.metadata.uid}:${runId}`
       const correlationId = `http:${idempotencyKey}`
       try {
         await db.insert(triggerRuns).values({
           id: runId,
-          organizationId: trigger.organizationId,
-          projectId: trigger.projectId,
-          triggerId: trigger.id,
+          organizationId: auth.organization.id,
+          projectId: auth.project.id,
+          triggerId: trigger.metadata.uid,
           scheduledFor: null,
           heartbeatAt: null,
           triggeredAt,

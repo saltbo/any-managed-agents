@@ -12,6 +12,7 @@ import type { AgentBuilderDraft } from '@/features/agents/agent-builder-model'
 import { emptyBuilderDraft } from '@/features/agents/agent-builder-model'
 import type { Environment, Provider } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { type EnvironmentOverrides, environment as resourceEnvironment } from '@/test/resource-fixtures'
 import {
   OpenPageLink,
   QuickstartAgentStep,
@@ -46,28 +47,13 @@ function buildProvider(overrides: Partial<Provider> = {}): Provider {
   }
 }
 
-function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
-    description: null,
-    packages: [],
-    variables: {},
-    hostingMode: 'cloud',
+function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({
     networkPolicy: { mode: 'unrestricted' },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  }
+  })
 }
 
 const defaultEnvForm: QuickstartEnvironmentForm = {

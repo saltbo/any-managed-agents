@@ -3,6 +3,8 @@
 // unit-testable. Secret storage is a boundary and lives behind the SecretStore
 // gateway, not here.
 
+import type { ResourceMetadata, ResourcePhase } from './resource'
+
 export const SECRET_PROVIDERS = ['ama'] as const
 export const VAULT_SCOPES = ['project', 'organization'] as const
 export const CREDENTIAL_TYPES = [
@@ -48,6 +50,67 @@ export interface SecretReference {
   referenceName: string
   hasSecret: boolean
   metadata: Record<string, unknown>
+}
+
+export interface Vault {
+  metadata: ResourceMetadata
+  spec: VaultSpec
+  status: VaultStatus
+}
+
+export interface VaultSpec {
+  organizationId: string
+  scope: VaultScope
+  metadata: Record<string, unknown>
+}
+
+export interface VaultStatus {
+  phase: ResourcePhase
+}
+
+export interface Credential {
+  metadata: ResourceMetadata
+  spec: CredentialSpec
+  status: CredentialStatus
+}
+
+export interface CredentialSpec {
+  vaultId: string
+  organizationId: string
+  type: CredentialType
+  metadata: Record<string, unknown>
+}
+
+export interface CredentialStatus {
+  phase: CredentialState
+  activeVersionId: string | null
+  revokedAt: string | null
+  revokedByUserId: string | null
+  revokeReason: string | null
+}
+
+export interface CredentialVersion {
+  metadata: ResourceMetadata
+  spec: CredentialVersionSpec
+  status: CredentialVersionStatus
+}
+
+export interface CredentialVersionSpec {
+  credentialId: string
+  vaultId: string
+  organizationId: string
+  version: number
+  provider: SecretProvider
+  secretRef: string
+  referenceName: string
+  hasSecret: boolean
+  metadata: Record<string, unknown>
+}
+
+export interface CredentialVersionStatus {
+  phase: VersionState
+  supersededAt: string | null
+  revokedAt: string | null
 }
 
 function secretReferenceName(credentialId: string, version: number, requestedName: string | undefined) {

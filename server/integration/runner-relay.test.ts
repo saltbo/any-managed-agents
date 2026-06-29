@@ -49,7 +49,8 @@ async function createSelfHostedEnvironment(authorization: string) {
     }),
   })
   if (res.status !== 201) throw new Error(`Environment creation failed: ${res.status} ${await res.text()}`)
-  return (await res.json()) as { id: string }
+  const environment = (await res.json()) as { metadata: { uid: string } }
+  return { id: environment.metadata.uid }
 }
 
 async function createAgent(authorization: string) {
@@ -64,7 +65,8 @@ async function createAgent(authorization: string) {
     }),
   })
   if (res.status !== 201) throw new Error(`Agent creation failed: ${res.status} ${await res.text()}`)
-  return (await res.json()) as { id: string }
+  const agent = (await res.json()) as { metadata: { uid: string } }
+  return { id: agent.metadata.uid }
 }
 
 async function createCliRelaySession(authorization: string, agentId: string, environmentId: string) {

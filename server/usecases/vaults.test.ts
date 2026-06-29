@@ -1,68 +1,97 @@
+import { resourceMetadata } from '@server/domain/resource'
+import type { Credential, CredentialVersion, Vault } from '@server/domain/vault'
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
-import {
-  type CredentialRecord,
-  type CredentialVersionRecord,
-  type VaultRecord,
-  VaultSecretError,
-  VaultVersionReferencedError,
-} from './ports'
+import { VaultSecretError, VaultVersionReferencedError } from './ports'
 import { createCredential, deleteCredentialVersion, rotateCredential } from './vaults'
 
-function vault(overrides: Partial<VaultRecord> = {}): VaultRecord {
+function vault(
+  overrides: {
+    metadata?: Partial<Vault['metadata']>
+    spec?: Partial<Vault['spec']>
+    status?: Partial<Vault['status']>
+  } = {},
+): Vault {
+  const timestamp = '2026-01-01T00:00:00.000Z'
   return {
-    id: 'vault_1',
-    organizationId: 'org_1',
-    projectId: 'project_1',
-    name: 'Vault',
-    description: null,
-    scope: 'project',
-    metadata: {},
-    archivedAt: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
+    metadata: {
+      ...resourceMetadata({
+        uid: 'vault_1',
+        pid: 'project_1',
+        name: 'Vault',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      ...overrides.metadata,
+    },
+    spec: { organizationId: 'org_1', scope: 'project', metadata: {}, ...overrides.spec },
+    status: { phase: 'active', ...overrides.status },
   }
 }
 
-function credential(overrides: Partial<CredentialRecord> = {}): CredentialRecord {
+function credential(
+  overrides: {
+    metadata?: Partial<Credential['metadata']>
+    spec?: Partial<Credential['spec']>
+    status?: Partial<Credential['status']>
+  } = {},
+): Credential {
+  const timestamp = '2026-01-01T00:00:00.000Z'
   return {
-    id: 'vaultcred_1',
-    vaultId: 'vault_1',
-    organizationId: 'org_1',
-    projectId: 'project_1',
-    name: 'Token',
-    type: 'opaque',
-    metadata: {},
-    state: 'active',
-    activeVersionId: 'vaultver_1',
-    revokedAt: null,
-    revokedByUserId: null,
-    revokeReason: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
+    metadata: {
+      ...resourceMetadata({
+        uid: 'vaultcred_1',
+        pid: 'project_1',
+        name: 'Token',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      ...overrides.metadata,
+    },
+    spec: { vaultId: 'vault_1', organizationId: 'org_1', type: 'opaque', metadata: {}, ...overrides.spec },
+    status: {
+      phase: 'active',
+      activeVersionId: 'vaultver_1',
+      revokedAt: null,
+      revokedByUserId: null,
+      revokeReason: null,
+      ...overrides.status,
+    },
   }
 }
 
-function version(overrides: Partial<CredentialVersionRecord> = {}): CredentialVersionRecord {
+function version(
+  overrides: {
+    metadata?: Partial<CredentialVersion['metadata']>
+    spec?: Partial<CredentialVersion['spec']>
+    status?: Partial<CredentialVersion['status']>
+  } = {},
+): CredentialVersion {
+  const timestamp = '2026-01-01T00:00:00.000Z'
   return {
-    id: 'vaultver_2',
-    credentialId: 'vaultcred_1',
-    vaultId: 'vault_1',
-    organizationId: 'org_1',
-    projectId: 'project_1',
-    version: 2,
-    provider: 'ama',
-    secretRef: 'ama://vaults/vault_x/credentials/cred_x/versions/ver_x',
-    referenceName: 'X',
-    state: 'active',
-    hasSecret: true,
-    metadata: {},
-    createdAt: '2026-01-01T00:00:00.000Z',
-    supersededAt: null,
-    revokedAt: null,
-    ...overrides,
+    metadata: {
+      ...resourceMetadata({
+        uid: 'vaultver_2',
+        pid: 'project_1',
+        name: 'v2',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      ...overrides.metadata,
+    },
+    spec: {
+      credentialId: 'vaultcred_1',
+      vaultId: 'vault_1',
+      organizationId: 'org_1',
+      version: 2,
+      provider: 'ama',
+      secretRef: 'ama://vaults/vault_x/credentials/cred_x/versions/ver_x',
+      referenceName: 'X',
+      hasSecret: true,
+      metadata: {},
+      ...overrides.spec,
+    },
+    status: { phase: 'active', supersededAt: null, revokedAt: null, ...overrides.status },
   }
 }
 
@@ -80,13 +109,16 @@ function fakeDeps(
     activeVersion: async () => null,
     latestVersionNumber: async () => 1,
     insertCredentialWithVersion: async (cred, ver) => ({
-      credential: credential({ id: ver.credentialId, name: cred.name, activeVersionId: ver.id }),
-      version: version({ id: ver.id, version: ver.version }),
+      credential: credential({
+        metadata: { uid: ver.credentialId, name: cred.name },
+        status: { activeVersionId: ver.id },
+      }),
+      version: version({ metadata: { uid: ver.id }, spec: { version: ver.version } }),
     }),
     updateCredential: async () => {},
     listVersions: async () => ({ rows: [], hasMore: false }),
     findVersion: async () => null,
-    insertVersionRotation: async (ver) => version({ id: ver.id, version: ver.version }),
+    insertVersionRotation: async (ver) => version({ metadata: { uid: ver.id }, spec: { version: ver.version } }),
     deleteVersion: async () => {},
     versionHasActiveReferences: async () => false,
     ...overrides.vaults,
@@ -169,8 +201,8 @@ describe('[spec: vaults/credential-create] createCredential', () => {
       secret: { stringData: { value: 'raw' } },
     })
     expect(stored).toBe(true)
-    expect(result.version.version).toBe(1)
-    expect(result.credential.activeVersionId).toBe(result.version.id)
+    expect(result.version.spec.version).toBe(1)
+    expect(result.credential.status.activeVersionId).toBe(result.version.metadata.uid)
   })
 
   it('merges version metadata even when the secret store returns undefined', async () => {
@@ -185,7 +217,7 @@ describe('[spec: vaults/credential-create] createCredential', () => {
       metadata: {},
       secret: { stringData: { value: 'raw' } },
     })
-    expect(result.credential.activeVersionId).toBeDefined()
+    expect(result.credential.status.activeVersionId).toBeDefined()
   })
 
   it('maps an invalid secret reference to a VaultSecretError', async () => {
@@ -226,14 +258,14 @@ describe('[spec: vaults/credential-rotate] rotateCredential', () => {
         latestVersionNumber: async () => 1,
         insertVersionRotation: async (ver, previous) => {
           supersededOf = previous
-          return version({ id: ver.id, version: ver.version })
+          return version({ metadata: { uid: ver.id }, spec: { version: ver.version } })
         },
       },
     })
-    const result = await rotateCredential(deps, credential({ activeVersionId: 'vaultver_1' }), {
+    const result = await rotateCredential(deps, credential({ status: { activeVersionId: 'vaultver_1' } }), {
       stringData: { value: 'raw' },
     })
-    expect(result.version.version).toBe(2)
+    expect(result.version.spec.version).toBe(2)
     expect(supersededOf).toBe('vaultver_1')
   })
 
@@ -254,14 +286,18 @@ describe('[spec: vaults/credential-rotate] rotateCredential', () => {
 describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
   it('refuses to delete the active version', async () => {
     await expect(
-      deleteCredentialVersion(fakeDeps(), credential({ activeVersionId: 'vaultver_2' }), version({ id: 'vaultver_2' })),
+      deleteCredentialVersion(
+        fakeDeps(),
+        credential({ status: { activeVersionId: 'vaultver_2' } }),
+        version({ metadata: { uid: 'vaultver_2' } }),
+      ),
     ).rejects.toBeInstanceOf(VaultVersionReferencedError)
   })
 
   it('refuses to delete a version pinned by live runtime metadata', async () => {
     const deps = fakeDeps({ vaults: { versionHasActiveReferences: async () => true } })
     await expect(
-      deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version()),
+      deleteCredentialVersion(deps, credential({ status: { activeVersionId: 'vaultver_1' } }), version()),
     ).rejects.toBeInstanceOf(VaultVersionReferencedError)
   })
 
@@ -275,7 +311,7 @@ describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
         },
       },
     })
-    await deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version())
+    await deleteCredentialVersion(deps, credential({ status: { activeVersionId: 'vaultver_1' } }), version())
     expect(deletedVersionId).toBe('vaultver_2')
   })
 

@@ -162,8 +162,8 @@ export function QuickstartEnvironmentStep({
             <SelectContent>
               <SelectGroup>
                 {activeEnvironments.map((environment) => (
-                  <SelectItem key={environment.id} value={environment.id}>
-                    {environment.name}
+                  <SelectItem key={environment.metadata.uid} value={environment.metadata.uid}>
+                    {environment.metadata.name}
                   </SelectItem>
                 ))}
               </SelectGroup>

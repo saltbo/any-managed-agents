@@ -5,62 +5,27 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { Agent, AgentVersion, Session, SessionAgentSnapshot } from '@/lib/api'
+import {
+  type AgentOverrides,
+  type AgentVersionOverrides,
+  agent as resourceAgent,
+  agentVersion as resourceAgentVersion,
+} from '@/test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { AgentDetailView } from './AgentDetailView'
 
 const now = '2026-05-23T00:00:00.000Z'
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [
-      { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-    ],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({ createdAt: now, updatedAt: now, ...overrides })
 }
 
-function buildAgentVersion(overrides: Partial<AgentVersion> = {}): AgentVersion {
-  return {
-    id: 'agentver_1',
-    agentId: 'agent_1',
-    projectId: 'project_1',
-    version: 1,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
+function buildAgentVersion(overrides: AgentVersionOverrides = {}): AgentVersion {
+  return resourceAgentVersion({
     tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
-    mcpConnectors: [],
-    metadata: {},
     createdAt: now,
     ...overrides,
-  }
+  })
 }
 
 function buildSessionAgentSnapshot(overrides: Partial<SessionAgentSnapshot> = {}): SessionAgentSnapshot {

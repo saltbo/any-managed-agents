@@ -8,6 +8,7 @@ import { EnvironmentDetailView } from '@/features/environments/EnvironmentDetail
 import { EnvironmentsView } from '@/features/environments/EnvironmentsView'
 import type { Environment, Session } from '@/lib/api'
 import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
+import { type EnvironmentOverrides, environment as resourceEnvironment } from '@/test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { CreateEnvironmentSheet } from './CreateEnvironmentSheet'
 import { EnvironmentDetailPage } from './EnvironmentDetailPage'
@@ -16,28 +17,20 @@ import { useEnvironmentActions } from './use-environment-actions'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-function environment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
+function environment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({
     description: 'Node 22 toolchain',
     packages: [{ name: 'vite', version: '7' }],
     variables: { NODE_ENV: { description: 'environment' } },
     hostingMode: 'self_hosted',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
     resourceLimits: {},
     runtimeConfig: { image: 'node:22' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
     version: 2,
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function buildSession(overrides: TestSessionOverrides = {}): Session {

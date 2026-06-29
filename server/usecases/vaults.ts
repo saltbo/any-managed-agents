@@ -1,13 +1,14 @@
-import type { CredentialType, SecretMaterial, VaultScope } from '@server/domain/vault'
+import type {
+  Credential,
+  CredentialType,
+  CredentialVersion,
+  SecretMaterial,
+  Vault,
+  VaultScope,
+} from '@server/domain/vault'
 import { secretReference } from '@server/domain/vault'
 import type { Deps } from './deps'
-import {
-  type CredentialRecord,
-  type CredentialVersionRecord,
-  type VaultRecord,
-  VaultSecretError,
-  VaultVersionReferencedError,
-} from './ports'
+import { VaultSecretError, VaultVersionReferencedError } from './ports'
 
 // Merges the safe reference metadata with the stored secret metadata
 // (ciphertext) the gateway returned.
@@ -26,8 +27,8 @@ export interface CreateCredentialInputDto {
 }
 
 export interface CreateCredentialResult {
-  credential: CredentialRecord
-  version: CredentialVersionRecord
+  credential: Credential
+  version: CredentialVersion
 }
 
 // Creates a credential and its first version: builds the safe reference, stores
@@ -35,7 +36,7 @@ export interface CreateCredentialResult {
 // Throws VaultSecretError on invalid material or storage failure.
 export async function createCredential(
   deps: Deps,
-  vault: VaultRecord,
+  vault: Vault,
   input: CreateCredentialInputDto,
 ): Promise<CreateCredentialResult> {
   const timestamp = new Date().toISOString()
@@ -43,7 +44,7 @@ export async function createCredential(
   const versionId = newId('vaultver')
   let reference: ReturnType<typeof secretReference>
   try {
-    reference = secretReference({ vaultId: vault.id, credentialId, versionId }, 1, input.type, input.secret)
+    reference = secretReference({ vaultId: vault.metadata.uid, credentialId, versionId }, 1, input.type, input.secret)
   } catch (error) {
     throw secretError(error)
   }
@@ -55,9 +56,9 @@ export async function createCredential(
   }
   return await deps.vaults.insertCredentialWithVersion(
     {
-      vaultId: vault.id,
-      organizationId: vault.organizationId,
-      projectId: vault.projectId,
+      vaultId: vault.metadata.uid,
+      organizationId: vault.spec.organizationId,
+      projectId: vault.metadata.pid,
       name: input.name,
       type: input.type,
       metadata: input.metadata,
@@ -65,9 +66,9 @@ export async function createCredential(
     {
       id: versionId,
       credentialId,
-      vaultId: vault.id,
-      organizationId: vault.organizationId,
-      projectId: vault.projectId,
+      vaultId: vault.metadata.uid,
+      organizationId: vault.spec.organizationId,
+      projectId: vault.metadata.pid,
       version: 1,
       reference,
       metadata: versionMetadata(reference, stored),
@@ -80,20 +81,20 @@ export async function createCredential(
 // previous one. Throws VaultSecretError on invalid material or storage failure.
 export async function rotateCredential(
   deps: Deps,
-  credential: CredentialRecord,
+  credential: Credential,
   secret: SecretMaterial,
-): Promise<{ credential: CredentialRecord; version: CredentialVersionRecord }> {
+): Promise<{ credential: Credential; version: CredentialVersion }> {
   const timestamp = new Date().toISOString()
   let reference: ReturnType<typeof secretReference>
   let stored: Record<string, unknown> | undefined
   let nextVersion: number
   const versionId = newId('vaultver')
   try {
-    nextVersion = (await deps.vaults.latestVersionNumber(credential.id)) + 1
+    nextVersion = (await deps.vaults.latestVersionNumber(credential.metadata.uid)) + 1
     reference = secretReference(
-      { vaultId: credential.vaultId, credentialId: credential.id, versionId },
+      { vaultId: credential.spec.vaultId, credentialId: credential.metadata.uid, versionId },
       nextVersion,
-      credential.type,
+      credential.spec.type,
       secret,
     )
     stored = await deps.secretStore.store(reference, secret)
@@ -103,18 +104,25 @@ export async function rotateCredential(
   const version = await deps.vaults.insertVersionRotation(
     {
       id: versionId,
-      credentialId: credential.id,
-      vaultId: credential.vaultId,
-      organizationId: credential.organizationId,
-      projectId: credential.projectId,
+      credentialId: credential.metadata.uid,
+      vaultId: credential.spec.vaultId,
+      organizationId: credential.spec.organizationId,
+      projectId: credential.metadata.pid,
       version: nextVersion,
       reference,
       metadata: versionMetadata(reference, stored),
     },
-    credential.activeVersionId,
+    credential.status.activeVersionId,
     timestamp,
   )
-  return { credential: { ...credential, activeVersionId: version.id, updatedAt: timestamp }, version }
+  return {
+    credential: {
+      ...credential,
+      metadata: { ...credential.metadata, updatedAt: timestamp },
+      status: { ...credential.status, activeVersionId: version.metadata.uid },
+    },
+    version,
+  }
 }
 
 // Deletes an unused credential version. The active version and versions pinned
@@ -122,16 +130,16 @@ export async function rotateCredential(
 // VaultVersionReferencedError, mapped to 409.
 export async function deleteCredentialVersion(
   deps: Deps,
-  credential: CredentialRecord,
-  version: CredentialVersionRecord,
+  credential: Credential,
+  version: CredentialVersion,
 ): Promise<void> {
-  if (credential.activeVersionId === version.id) {
+  if (credential.status.activeVersionId === version.metadata.uid) {
     throw new VaultVersionReferencedError('Active credential version cannot be deleted')
   }
   if (await deps.vaults.versionHasActiveReferences(version)) {
     throw new VaultVersionReferencedError('Credential version is referenced by active runtime metadata')
   }
-  await deps.vaults.deleteVersion(version.id)
+  await deps.vaults.deleteVersion(version.metadata.uid)
 }
 
 function secretError(error: unknown) {

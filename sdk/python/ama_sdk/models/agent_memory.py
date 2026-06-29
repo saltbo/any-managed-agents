@@ -9,10 +9,11 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from typing import cast
-import datetime
 
 if TYPE_CHECKING:
-  from ..models.agent_memory_metadata import AgentMemoryMetadata
+  from ..models.agent_memory_spec import AgentMemorySpec
+  from ..models.agent_memory_status import AgentMemoryStatus
+  from ..models.resource_metadata import ResourceMetadata
 
 
 
@@ -26,20 +27,14 @@ T = TypeVar("T", bound="AgentMemory")
 class AgentMemory:
     """ 
         Attributes:
-            agent_id (str):  Example: agent_abc123.
-            project_id (str):  Example: project_abc123.
-            content (str):  Example: Previous heartbeat checked open PRs and deferred billing export..
-            metadata (AgentMemoryMetadata):  Example: {'format': 'markdown'}.
-            created_at (datetime.datetime):  Example: 2026-05-22T00:00:00.000Z.
-            updated_at (datetime.datetime):  Example: 2026-05-22T00:00:00.000Z.
+            metadata (ResourceMetadata):
+            spec (AgentMemorySpec):
+            status (AgentMemoryStatus):
      """
 
-    agent_id: str
-    project_id: str
-    content: str
-    metadata: AgentMemoryMetadata
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    metadata: ResourceMetadata
+    spec: AgentMemorySpec
+    status: AgentMemoryStatus
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -47,29 +42,22 @@ class AgentMemory:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.agent_memory_metadata import AgentMemoryMetadata
-        agent_id = self.agent_id
-
-        project_id = self.project_id
-
-        content = self.content
-
+        from ..models.agent_memory_spec import AgentMemorySpec
+        from ..models.agent_memory_status import AgentMemoryStatus
+        from ..models.resource_metadata import ResourceMetadata
         metadata = self.metadata.to_dict()
 
-        created_at = self.created_at.isoformat()
+        spec = self.spec.to_dict()
 
-        updated_at = self.updated_at.isoformat()
+        status = self.status.to_dict()
 
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
-            "agentId": agent_id,
-            "projectId": project_id,
-            "content": content,
             "metadata": metadata,
-            "createdAt": created_at,
-            "updatedAt": updated_at,
+            "spec": spec,
+            "status": status,
         })
 
         return field_dict
@@ -78,36 +66,29 @@ class AgentMemory:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.agent_memory_metadata import AgentMemoryMetadata
+        from ..models.agent_memory_spec import AgentMemorySpec
+        from ..models.agent_memory_status import AgentMemoryStatus
+        from ..models.resource_metadata import ResourceMetadata
         d = dict(src_dict)
-        agent_id = d.pop("agentId")
-
-        project_id = d.pop("projectId")
-
-        content = d.pop("content")
-
-        metadata = AgentMemoryMetadata.from_dict(d.pop("metadata"))
+        metadata = ResourceMetadata.from_dict(d.pop("metadata"))
 
 
 
 
-        created_at = datetime.datetime.fromisoformat(d.pop("createdAt"))
+        spec = AgentMemorySpec.from_dict(d.pop("spec"))
 
 
 
 
-        updated_at = datetime.datetime.fromisoformat(d.pop("updatedAt"))
+        status = AgentMemoryStatus.from_dict(d.pop("status"))
 
 
 
 
         agent_memory = cls(
-            agent_id=agent_id,
-            project_id=project_id,
-            content=content,
             metadata=metadata,
-            created_at=created_at,
-            updated_at=updated_at,
+            spec=spec,
+            status=status,
         )
 
 

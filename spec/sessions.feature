@@ -27,26 +27,26 @@ Feature: Sessions
 
   # ── API contract (api: assembled server, real D1, runtime, OpenAPI) ──
 
-  @sessions/create @api
-  Scenario: Create a session from an active agent and environment
-    Given a project has an active agent and an active environment
-    When the user creates a session with the agent and environment
-    Then the response includes id, project id, status, timestamps, connection, and runtime metadata
-    And the session stores immutable agent and environment snapshots
-    And internal placement and tenancy fields never leave the API
+	  @sessions/create @api
+	  Scenario: Create a session from an active agent and environment
+	    Given a project has an active agent and an active environment
+	    When the user creates a session with the agent and environment
+	    Then the response includes metadata uid, spec, status, connection, and runtime metadata
+	    And the session stores immutable agent and environment snapshots
+	    And internal placement and tenancy fields never leave the API
 
-  @sessions/create-explicit-inputs @api
-  Scenario: Create a session with explicit runtime and secret references
-    Given a project has an active agent and active environments
-    When the user creates a session with title, metadata, resource refs, runtime env, and secret env references
-    Then those values are stored as safe references
-    And repository resources are declared in the deterministic workspace manifest
-    And raw credentials are rejected from the request body
+	  @sessions/create-explicit-inputs @api
+	  Scenario: Create a session with explicit runtime and secret references
+	    Given a project has an active agent and active environments
+	    When the user creates a session with name, metadata, env, envFrom, volumes, and volumeMounts
+	    Then those values are stored as safe references
+	    And repository resources are declared in the deterministic workspace manifest
+	    And raw credentials are rejected from the request body
 
-  @sessions/memory-store-resources @api
-  Scenario: Create a session with attached memory stores
-    Given a project has an active memory store with memories
-    When the user creates a session with memory store resource refs and access modes
+	  @sessions/memory-store-resources @api
+	  Scenario: Create a session with attached memory stores
+	    Given a project has an active memory store with memories
+	    When the user creates a session with memory volumes and access modes
     Then AMA resolves managed mount paths and snapshots memory store contents into the session
     And store names, descriptions, access modes, and mount paths are included in the runtime system prompt context
     And memory contents are mounted as files instead of injected into the prompt
@@ -82,11 +82,11 @@ Feature: Sessions
     And the status becomes stopped with stop lifecycle and audit records
     And no successful completion events are written after cancellation
 
-  @sessions/archive @api
-  Scenario: Archive and read sessions safely
-    Given a session exists
-    When the user archives the session
-    Then it is hidden from default lists but returned by includeArchived
+	  @sessions/archive @api
+	  Scenario: Archive and read sessions safely
+	    Given a session exists
+	    When the user archives the session
+	    Then it is hidden from default lists but returned by archived filtering
     And archived sessions reject edits but can be restored
     And events and immutable snapshots remain readable
 

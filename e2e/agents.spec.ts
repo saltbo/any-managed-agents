@@ -12,11 +12,11 @@ test('lists a seeded agent and opens its detail page [spec: web-console/routed-p
   const name = `ui-agent-${runId}`
   const res = await api.post('/api/v1/agents', { data: { name, instructions: 'E2E view journey' } })
   expect(res.status(), 'seed agent').toBe(201)
-  const agent = (await res.json()) as { id: string }
+  const agent = (await res.json()) as { metadata: { uid: string } }
 
   await gotoAuthed(page, token, '/agents')
   await expect(page.getByRole('link', { name })).toBeVisible()
 
   await page.getByRole('link', { name }).click()
-  await expect(page).toHaveURL(new RegExp(`/agents/${agent.id}$`))
+  await expect(page).toHaveURL(new RegExp(`/agents/${agent.metadata.uid}$`))
 })

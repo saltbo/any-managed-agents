@@ -1,5 +1,38 @@
+import type { ResourceMetadata, ResourcePhase } from './resource'
+
 export const MEMORY_STORE_ACCESS = ['read_only', 'read_write'] as const
 export type MemoryStoreAccess = (typeof MEMORY_STORE_ACCESS)[number]
+
+export interface MemoryStore {
+  metadata: ResourceMetadata
+  spec: MemoryStoreSpec
+  status: MemoryStoreStatus
+}
+
+export interface MemoryStoreSpec {
+  metadata: Record<string, unknown>
+}
+
+export interface MemoryStoreStatus {
+  phase: ResourcePhase
+}
+
+export interface Memory {
+  metadata: ResourceMetadata
+  spec: MemorySpec
+  status: MemoryStatus
+}
+
+export interface MemorySpec {
+  storeId: string
+  path: string
+  content: string
+  metadata: Record<string, unknown>
+}
+
+export interface MemoryStatus {
+  phase: ResourcePhase
+}
 
 export const MEMORY_STORE_MOUNT_ROOT = '/workspace/.ama/memory-stores'
 

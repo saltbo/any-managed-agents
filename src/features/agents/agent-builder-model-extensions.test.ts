@@ -3,7 +3,9 @@
  * No API calls, no MSW, no rendering.
  */
 import { describe, expect, it } from 'vitest'
+import type { Agent } from '@/lib/api'
 import { ApiError } from '@/lib/api'
+import { type AgentOverrides, agent as resourceAgent } from '@/test/resource-fixtures'
 import {
   agentApiExamples,
   apiErrorToBuilder,
@@ -13,38 +15,8 @@ import {
   toAgentInput,
 } from './agent-builder-model'
 
-const now = '2026-05-23T00:00:00.000Z'
-
-import type { Agent } from '@/lib/api'
-
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [
-      { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-    ],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent(overrides)
 }
 
 describe('[spec: agents/builder] agent-builder-model extensions', () => {

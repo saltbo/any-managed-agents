@@ -10,7 +10,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - The web console uses the project-local Hono RPC client for internal control-plane calls.
 - Command-line automation uses restish against the published OpenAPI document; this repository does not maintain a bespoke CLI binary.
 - The project provides an agent-facing skill that teaches automation agents how to use restish with the AMA OpenAPI document.
-- Agent products run as Environment-selected runtimes. `ama`, `claude-code`, `codex`, and `copilot` are runtime choices behind one AMA control-plane and event surface.
+- Agent products run as Session-selected runtimes on Environment-selected hosting. `ama`, `claude-code`, `codex`, and `copilot` are runtime choices behind one AMA control-plane and event surface.
 - The `ama` runtime is the first-party AMA/Pi runtime. External runtimes such as `claude-code`, `codex`, and `copilot` are runner-managed integrations, not replacements for AMA's control plane.
 - Runtime traffic goes through AMA session endpoints; clients do not connect directly to sandbox-owned or runner-owned agent processes.
 - The canonical AMA session event protocol is the only UI, API, and session-state contract.
@@ -22,7 +22,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - OIDC provider owns users and organizations; AMA stores project and product-resource metadata only.
 - Secret values are stored in Cloudflare Secrets; D1 stores metadata and references only.
 - BDD specs are the agent-facing acceptance contract for development and verification.
-- E2E specs use Cucumber with Playwright.
+- E2E specs use native Playwright specs traced to BDD-lite scenario ids.
 
 ## Boundary
 
@@ -34,7 +34,7 @@ The platform owns the control plane:
 - model policy
 - sandbox and runtime policy
 - session metadata
-- environment hosting, runtime, workspace, network, resource, secret-reference, and runtime-config metadata
+- environment hosting, workspace, network, resource, secret-reference, and runtime-config metadata
 - sandbox lifecycle
 - self-hosted runtime runner metadata and work leases
 - runtime endpoint and event transport
@@ -74,16 +74,28 @@ Runtime hosting:
 ## Product Model
 
 - `Agent` is a long-lived managed definition: persona, instructions, policy, provider, model, carried skills, tool declarations, MCP connectors, metadata, and versions. Agents do not bind environments and do not own hosting, workspace, secrets, network, or resource policy.
-- `Environment` is a long-lived hosting and runtime configuration: hosting mode, runtime, workspace setup, packages, variables, safe secret references, network policy, resource limits, runtime config, and metadata. It is not a running sandbox or runner.
+- `Environment` is a long-lived hosting and workspace configuration: hosting mode, workspace setup, packages, variables, safe secret references, network policy, resource limits, runtime config, and metadata. It is not a running sandbox or runner, and it does not select the agent runtime.
 - `Sandbox` is an ephemeral `cloud` workspace/runtime instance created from an environment snapshot for exactly one cloud session when the selected hosting/runtime combination requires Cloudflare Sandbox.
 - `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, runtime/provider/model validation result, runtime endpoint, canonical AMA session events, and status.
 - `Runner` is a registered `self_hosted` runtime host. Runners heartbeat capability, supported runtime/provider/model combinations, load, and safe metadata to AMA, claim leases for queued self-hosted session runtime work, open one outbound session WebSocket per claimed session, and send canonical AMA session events/results through AMA.
 
-Environment `hostingMode` is exactly `cloud` or `self_hosted`. Environment `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
+Environment `hostingMode` is exactly `cloud` or `self_hosted`. Session and Trigger `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
 
-The Environment API surface is `hostingMode`, `runtime`, and `runtimeConfig`. Hosting mode chooses AMA-managed cloud infrastructure or registered self-hosted runners, while `runtime` selects the adapter family and `runtimeConfig` stores runtime-owned configuration such as image, command, or adapter settings.
+The Environment API surface is `hostingMode` and `runtimeConfig`. Hosting mode chooses AMA-managed cloud infrastructure or registered self-hosted runners, while Session/Trigger `runtime` selects the adapter family.
 
-Session creation validates the selected Agent provider/model against the selected Environment runtime and hosting mode. If the exact runtime/provider/model combination is unsupported, session creation fails before workspace allocation, sandbox creation, or self-hosted lease creation.
+Core product resources follow the standard resource entity shape in API and SDK responses:
+
+```ts
+{
+  metadata: { uid, pid, name, description, labels, annotations, createdBy, createdAt, updatedAt, archivedAt }
+  spec: object
+  status: object
+}
+```
+
+This applies to agents, environments, vaults, memory stores, triggers, and their child resources such as versions, memories, credentials, credential versions, and trigger runs. External callers use `metadata.uid` as the stable id. Create and update requests remain business-shaped request DTOs; callers do not submit full resource entities.
+
+Session creation validates the selected Agent provider/model against the selected Session runtime and Environment hosting mode. If the exact runtime/provider/model combination is unsupported, session creation fails before workspace allocation, sandbox creation, or self-hosted lease creation.
 
 Session creation resolves runtime inputs into safe execution references. Runtime secrets travel as `secretRef` URL references in `envFrom` or `volumes` and are materialized only at dispatch — on self-hosted lease claim or cloud session startup — never stored raw in D1 or session records. Workers AI runs on the platform binding and contributes no connection env.
 
@@ -139,7 +151,7 @@ Release verification must include:
   sessions.
 - UI coverage for signed-out and signed-in console states.
 - BDD-lite acceptance scenarios in `spec/`, traced to layered tests via `[spec: id]`.
-- `pnpm run lint`, `pnpm run typecheck`, `pnpm test`, `pnpm run test:e2e`,
+- `pnpm run lint`, `pnpm run typecheck`, `pnpm test`, `pnpm run e2e`,
   and `pnpm run build`.
 
 Secrets must remain in Cloudflare Secrets or external vaults. D1 may store

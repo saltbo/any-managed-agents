@@ -43,8 +43,8 @@ export function MemoryStoreDetailPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow="Memory Store"
-        title={store?.name ?? 'Memory store detail'}
-        description={store?.description ?? 'Manage reusable memory files mounted into sessions.'}
+        title={store?.metadata.name ?? 'Memory store detail'}
+        description={store?.metadata.description ?? 'Manage reusable memory files mounted into sessions.'}
         actions={
           <Button
             type="button"
@@ -76,10 +76,10 @@ export function MemoryStoreDetailPage() {
           </TableHeader>
           <TableBody>
             {pagination.items.map((memory) => (
-              <TableRow key={memory.id}>
-                <TableCell className="font-mono text-xs">{memory.path}</TableCell>
-                <TableCell className="max-w-xl truncate text-sm text-muted-foreground">{memory.content}</TableCell>
-                <TableCell>{formatDate(memory.updatedAt)}</TableCell>
+              <TableRow key={memory.metadata.uid}>
+                <TableCell className="font-mono text-xs">{memory.spec.path}</TableCell>
+                <TableCell className="max-w-xl truncate text-sm text-muted-foreground">{memory.spec.content}</TableCell>
+                <TableCell>{formatDate(memory.metadata.updatedAt)}</TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
                     <Button
@@ -96,10 +96,10 @@ export function MemoryStoreDetailPage() {
                     </Button>
                     <ConfirmAction
                       title="Delete memory?"
-                      description={`Delete ${memory.path} from this memory store.`}
+                      description={`Delete ${memory.spec.path} from this memory store.`}
                       confirmLabel="Delete memory"
                       destructive
-                      onConfirm={() => deleteMemory.mutate(memory.id)}
+                      onConfirm={() => deleteMemory.mutate(memory.metadata.uid)}
                     >
                       <Button type="button" variant="outline" size="icon" aria-label="Delete memory">
                         <Trash2 data-icon="inline-start" />

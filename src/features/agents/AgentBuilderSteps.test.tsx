@@ -9,6 +9,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { Connector, Environment, ProviderModel } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { type EnvironmentOverrides, environment as resourceEnvironment } from '@/test/resource-fixtures'
 import {
   BuilderStepper,
   CoreStep,
@@ -71,28 +72,14 @@ function buildProviderModel(overrides: Partial<ProviderModel> = {}): ProviderMod
   }
 }
 
-function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
-    description: null,
+function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({
     packages: [{ name: 'tsx', version: 'latest' }],
-    variables: {},
-    hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  }
+  })
 }
 
 function makeQueryClient() {

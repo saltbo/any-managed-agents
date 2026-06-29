@@ -28,7 +28,8 @@ async function createSelfHostedEnvironment(authorization: string) {
   if (res.status !== 201) {
     throw new Error(`Session creation failed: ${res.status} ${await res.text()}`)
   }
-  return (await res.json()) as { id: string }
+  const environment = (await res.json()) as { metadata: { uid: string } }
+  return { id: environment.metadata.uid }
 }
 
 async function createAgent(authorization: string) {
@@ -43,7 +44,8 @@ async function createAgent(authorization: string) {
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string }
+  const agent = (await res.json()) as { metadata: { uid: string } }
+  return { id: agent.metadata.uid }
 }
 
 async function createSessionEnvFrom(authorization: string) {
@@ -52,8 +54,8 @@ async function createSessionEnvFrom(authorization: string) {
     body: JSON.stringify({ name: `Runner runtime secrets ${crypto.randomUUID()}` }),
   })
   expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'AK agent session key',
@@ -62,8 +64,8 @@ async function createSessionEnvFrom(authorization: string) {
     }),
   })
   expect(credentialRes.status).toBe(201)
-  const credential = (await credentialRes.json()) as { activeVersion: { secretRef: string } }
-  return [{ type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.activeVersion.secretRef }]
+  const credential = (await credentialRes.json()) as { status: { activeVersion: { spec: { secretRef: string } } } }
+  return [{ type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.status.activeVersion.spec.secretRef }]
 }
 
 async function createSelfHostedSession(

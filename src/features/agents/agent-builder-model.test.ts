@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { type Agent, ApiError } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { agent as resourceAgent } from '@/test/resource-fixtures'
 import {
   agentApiExamples,
   apiErrorToBuilder,
@@ -88,7 +89,7 @@ describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder m
   })
 
   it('renders secret-free API examples against the platform origin', () => {
-    const agent = {
+    const agent = resourceAgent({
       id: 'agent_123',
       name: 'Review agent',
       description: null,
@@ -96,13 +97,13 @@ describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder m
       providerId: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       skills: [],
-      tools: [{ name: 'read' }],
+      tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
       mcpConnectors: [],
       role: 'maintainer',
       capabilityTags: [],
       handoffPolicy: {},
       memoryPolicy: { enabled: false },
-    } as unknown as Agent
+    })
     const examples = agentApiExamples('https://ama.example.com', agent)
     expect(examples.curl).toContain('https://ama.example.com/api/v1/agents')
     expect(examples.restish).toContain('https://ama.example.com/api/v1/agents/agent_123')

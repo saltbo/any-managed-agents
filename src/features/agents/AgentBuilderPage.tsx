@@ -126,12 +126,12 @@ export function AgentBuilderPage() {
   const startTest = useMutation({
     mutationFn: async () => {
       const input = { ...toAgentInput(draft), metadata: { builderDraft: true } }
-      const agent = draftAgent ? await api.updateAgent(draftAgent.id, input) : await api.createAgent(input)
+      const agent = draftAgent ? await api.updateAgent(draftAgent.metadata.uid, input) : await api.createAgent(input)
       const session = await api.createSession({
-        agentId: agent.id,
+        agentId: agent.metadata.uid,
         environmentId,
         runtime: 'ama',
-        name: `${agent.name} draft test`,
+        name: `${agent.metadata.name} draft test`,
         initialPrompt: testPrompt.trim(),
       })
       return { agent, session }
@@ -148,7 +148,7 @@ export function AgentBuilderPage() {
   const publish = useMutation({
     mutationFn: () => {
       if (draftAgent) {
-        return api.updateAgent(draftAgent.id, { ...toAgentInput(draft), metadata: { builderDraft: null } })
+        return api.updateAgent(draftAgent.metadata.uid, { ...toAgentInput(draft), metadata: { builderDraft: null } })
       }
       return api.createAgent(toAgentInput(draft))
     },
@@ -298,10 +298,10 @@ export function AgentBuilderPage() {
           {step === 'done' && publishedAgent && examples ? (
             <div className="grid gap-4">
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium">{publishedAgent.name}</span>
+                <span className="font-medium">{publishedAgent.metadata.name}</span>
                 <StatusBadge value={archivedLabel(publishedAgent)} />
-                <StatusBadge value={`v${publishedAgent.version}`} />
-                <span className="font-mono text-xs text-muted-foreground">{publishedAgent.id}</span>
+                <StatusBadge value={`v${publishedAgent.status.version}`} />
+                <span className="font-mono text-xs text-muted-foreground">{publishedAgent.metadata.uid}</span>
               </div>
               <Field>
                 <FieldLabel>Equivalent curl call</FieldLabel>
@@ -318,7 +318,7 @@ export function AgentBuilderPage() {
               </Field>
               <div className="flex flex-wrap gap-2">
                 <Button asChild>
-                  <Link to={`/agents/${publishedAgent.id}`}>Open agent</Link>
+                  <Link to={`/agents/${publishedAgent.metadata.uid}`}>Open agent</Link>
                 </Button>
                 <Button asChild variant="outline">
                   <Link to="/agents">Back to agents</Link>

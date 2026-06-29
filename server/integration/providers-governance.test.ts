@@ -54,7 +54,7 @@ describe('[CF] providers', () => {
       body: JSON.stringify({ name: 'Deferred provider agent' }),
     })
     expect(deferredAgentRes.status).toBe(201)
-    await expect(deferredAgentRes.json()).resolves.toMatchObject({ providerId: null })
+    await expect(deferredAgentRes.json()).resolves.toMatchObject({ spec: { providerId: null } })
 
     // Binding to an enabled vendor + available model succeeds.
     const boundAgentRes = await jsonFetch('/api/v1/agents', authorization, {
@@ -66,7 +66,7 @@ describe('[CF] providers', () => {
       }),
     })
     expect(boundAgentRes.status).toBe(201)
-    await expect(boundAgentRes.json()).resolves.toMatchObject({ providerId: 'workers-ai' })
+    await expect(boundAgentRes.json()).resolves.toMatchObject({ spec: { providerId: 'workers-ai' } })
 
     // Binding to a disabled vendor is rejected at agent creation.
     const disabledAgentRes = await jsonFetch('/api/v1/agents', authorization, {

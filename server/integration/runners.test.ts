@@ -26,7 +26,8 @@ async function createSelfHostedEnvironment(authorization: string) {
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string }
+  const environment = (await res.json()) as { metadata: { uid: string } }
+  return { id: environment.metadata.uid }
 }
 
 async function createRunnerCredential(authorization: string) {
@@ -35,8 +36,8 @@ async function createRunnerCredential(authorization: string) {
     body: JSON.stringify({ name: `Runner credentials ${crypto.randomUUID()}` }),
   })
   expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Self-hosted runner token',
@@ -45,7 +46,11 @@ async function createRunnerCredential(authorization: string) {
     }),
   })
   expect(credentialRes.status).toBe(201)
-  return (await credentialRes.json()) as { id: string; activeVersion: { id: string } }
+  const credential = (await credentialRes.json()) as {
+    metadata: { uid: string }
+    status: { activeVersion: { metadata: { uid: string } } }
+  }
+  return { id: credential.metadata.uid, activeVersion: { id: credential.status.activeVersion.metadata.uid } }
 }
 
 describe('[CF] /api/v1/runners', () => {

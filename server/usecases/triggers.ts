@@ -1,12 +1,6 @@
-import { hasSecretMaterial, nextDueFromInterval } from '@server/domain/trigger'
+import { hasSecretMaterial, nextDueFromInterval, type Trigger } from '@server/domain/trigger'
 import type { Deps } from './deps'
-import {
-  type AuthScope,
-  type TriggerConfig,
-  TriggerConflictError,
-  type TriggerRecord,
-  TriggerValidationError,
-} from './ports'
+import { type AuthScope, type TriggerConfig, TriggerConflictError, TriggerValidationError } from './ports'
 
 // Raw secrets must be stored as secret references, so trigger metadata, resource
 // volumes, and plain env are rejected when they carry secret-like material.
@@ -74,7 +68,7 @@ function normalizeScheduleConfig(config: CreateTriggerInputDto['config']) {
   return { schedule: null, nextDueAt: null }
 }
 
-export async function createTrigger(deps: Deps, auth: AuthScope, input: CreateTriggerInputDto): Promise<TriggerRecord> {
+export async function createTrigger(deps: Deps, auth: AuthScope, input: CreateTriggerInputDto): Promise<Trigger> {
   rejectSecretMaterial(input.config)
   await assertReferencesUsable(deps, auth.project.id, input.agentId, input.environmentId)
 
@@ -126,10 +120,10 @@ export interface UpdateTriggerPatch {
 }
 
 function mergeSchedule(
-  trigger: TriggerRecord,
+  trigger: Trigger,
   patch: UpdateTriggerPatch,
 ): Pick<TriggerConfig, 'type' | 'schedule' | 'nextDueAt'> {
-  const type = patch.type ?? trigger.type
+  const type = patch.type ?? trigger.spec.type
   if (type === 'http') {
     if (patch.schedule !== undefined && patch.schedule !== null) {
       throw new TriggerValidationError('Invalid trigger schedule', {
@@ -138,7 +132,7 @@ function mergeSchedule(
     }
     return { type, schedule: null, nextDueAt: null }
   }
-  const current = trigger.schedule
+  const current = trigger.spec.schedule
   const schedule =
     patch.schedule === null
       ? null
@@ -151,11 +145,15 @@ function mergeSchedule(
       schedule: 'Scheduled triggers require an interval schedule.',
     })
   }
-  return { type, schedule: schedule as TriggerConfig['schedule'], nextDueAt: patch.nextDueAt ?? trigger.nextDueAt }
+  return {
+    type,
+    schedule: schedule as TriggerConfig['schedule'],
+    nextDueAt: patch.nextDueAt ?? trigger.status.nextDueAt,
+  }
 }
 
 export interface UpdateTriggerResult {
-  trigger: TriggerRecord
+  trigger: Trigger
   archived: boolean
 }
 
@@ -166,42 +164,46 @@ export interface UpdateTriggerResult {
 export async function updateTrigger(
   deps: Deps,
   auth: AuthScope,
-  trigger: TriggerRecord,
+  trigger: Trigger,
   patch: UpdateTriggerPatch,
 ): Promise<UpdateTriggerResult> {
-  if (trigger.archivedAt !== null && patch.archived !== false) {
+  if (trigger.metadata.archivedAt !== null && patch.archived !== false) {
     throw new TriggerConflictError('Archived triggers cannot be updated')
   }
   rejectSecretMaterial({ metadata: patch.metadata, volumes: patch.volumes, env: patch.env })
   const timing = mergeSchedule(trigger, patch)
 
-  const agentId = patch.agentId ?? trigger.agentId
-  const environmentId = patch.environmentId ?? trigger.environmentId
+  const agentId = patch.agentId ?? trigger.spec.agentId
+  const environmentId = patch.environmentId ?? trigger.spec.environmentId
   if (patch.agentId !== undefined || patch.environmentId !== undefined) {
     await assertReferencesUsable(deps, auth.project.id, agentId, environmentId)
   }
 
   const timestamp = new Date().toISOString()
   const archivedAt =
-    patch.archived === true ? (trigger.archivedAt ?? timestamp) : patch.archived === false ? null : trigger.archivedAt
+    patch.archived === true
+      ? (trigger.metadata.archivedAt ?? timestamp)
+      : patch.archived === false
+        ? null
+        : trigger.metadata.archivedAt
   const config: TriggerConfig = {
     type: timing.type,
     agentId,
     environmentId,
-    runtime: patch.runtime ?? trigger.runtime,
-    name: patch.name ?? trigger.name,
-    promptTemplate: patch.promptTemplate ?? trigger.promptTemplate,
-    env: patch.env ?? trigger.env,
-    envFrom: patch.envFrom ?? trigger.envFrom,
-    volumes: patch.volumes ?? trigger.volumes,
-    volumeMounts: patch.volumeMounts ?? trigger.volumeMounts,
+    runtime: patch.runtime ?? trigger.spec.runtime,
+    name: patch.name ?? trigger.metadata.name,
+    promptTemplate: patch.promptTemplate ?? trigger.spec.promptTemplate,
+    env: patch.env ?? trigger.spec.env,
+    envFrom: patch.envFrom ?? trigger.spec.envFrom,
+    volumes: patch.volumes ?? trigger.spec.volumes,
+    volumeMounts: patch.volumeMounts ?? trigger.spec.volumeMounts,
     schedule: timing.schedule,
-    enabled: patch.enabled ?? trigger.enabled,
+    enabled: patch.enabled ?? trigger.spec.enabled,
     nextDueAt: timing.nextDueAt,
-    metadata: patch.metadata ?? trigger.metadata,
+    metadata: patch.metadata ?? trigger.spec.metadata,
   }
-  const updated = await deps.triggers.update(auth.project.id, trigger.id, { config, archivedAt }, timestamp)
-  return { trigger: updated, archived: patch.archived === true && trigger.archivedAt === null }
+  const updated = await deps.triggers.update(auth.project.id, trigger.metadata.uid, { config, archivedAt }, timestamp)
+  return { trigger: updated, archived: patch.archived === true && trigger.metadata.archivedAt === null }
 }
 
 // Hard-deletes the trigger and its runs, tenant-scoped. Returns false when no

@@ -61,28 +61,30 @@ export function MemoryStoresPage() {
           </TableHeader>
           <TableBody>
             {pagination.items.map((store) => (
-              <TableRow key={store.id}>
+              <TableRow key={store.metadata.uid}>
                 <TableCell className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
-                    <Link className="truncate font-medium hover:underline" to={`/memory-stores/${store.id}`}>
-                      {store.name}
+                    <Link className="truncate font-medium hover:underline" to={`/memory-stores/${store.metadata.uid}`}>
+                      {store.metadata.name}
                     </Link>
-                    <span className="truncate text-xs text-muted-foreground">{store.description ?? store.id}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {store.metadata.description ?? store.metadata.uid}
+                    </span>
                   </div>
                 </TableCell>
                 <TableCell>
                   <StatusBadge value={archivedLabel(store)} />
                 </TableCell>
-                <TableCell>{formatDate(store.createdAt)}</TableCell>
-                <TableCell>{formatDate(store.updatedAt)}</TableCell>
+                <TableCell>{formatDate(store.metadata.createdAt)}</TableCell>
+                <TableCell>{formatDate(store.metadata.updatedAt)}</TableCell>
                 <TableCell>
                   <div className="flex justify-end">
                     <ConfirmAction
                       title="Archive memory store?"
-                      description={`Archive ${store.name}. Existing sessions keep their snapshots.`}
+                      description={`Archive ${store.metadata.name}. Existing sessions keep their snapshots.`}
                       confirmLabel="Archive store"
                       destructive
-                      onConfirm={() => archiveStore.mutate(store.id)}
+                      onConfirm={() => archiveStore.mutate(store.metadata.uid)}
                     >
                       <Button type="button" variant="outline" size="icon" aria-label="Archive memory store">
                         <Archive data-icon="inline-start" />

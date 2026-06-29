@@ -8,13 +8,12 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.vault_credential_version_type_0_provider import VaultCredentialVersionType0Provider
-from ..models.vault_credential_version_type_0_state import VaultCredentialVersionType0State
 from typing import cast
-import datetime
 
 if TYPE_CHECKING:
-  from ..models.vault_json_object import VaultJsonObject
+  from ..models.resource_metadata import ResourceMetadata
+  from ..models.vault_credential_version_spec import VaultCredentialVersionSpec
+  from ..models.vault_credential_version_status import VaultCredentialVersionStatus
 
 
 
@@ -28,38 +27,14 @@ T = TypeVar("T", bound="VaultCredentialVersionType0")
 class VaultCredentialVersionType0:
     """ 
         Attributes:
-            id (str):  Example: vaultver_abc123.
-            credential_id (str):  Example: vaultcred_abc123.
-            vault_id (str):  Example: vault_abc123.
-            project_id (None | str):  Example: project_abc123.
-            version (int):  Example: 2.
-            provider (VaultCredentialVersionType0Provider):  Example: ama.
-            secret_ref (str):  Example: ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123.
-            reference_name (str):  Example: AMA_PROJECT_ABC123_TOKEN_V2.
-            state (VaultCredentialVersionType0State):  Example: active.
-            has_secret (bool):  Example: True.
-            data_keys (list[str]):  Example: ['token'].
-            metadata (VaultJsonObject):  Example: {'rotatedBy': 'operator'}.
-            created_at (datetime.datetime):  Example: 2026-05-24T00:00:00.000Z.
-            superseded_at (datetime.datetime | None):  Example: 2026-05-24T01:00:00.000Z.
-            revoked_at (datetime.datetime | None):
+            metadata (ResourceMetadata):
+            spec (VaultCredentialVersionSpec):
+            status (VaultCredentialVersionStatus):
      """
 
-    id: str
-    credential_id: str
-    vault_id: str
-    project_id: None | str
-    version: int
-    provider: VaultCredentialVersionType0Provider
-    secret_ref: str
-    reference_name: str
-    state: VaultCredentialVersionType0State
-    has_secret: bool
-    data_keys: list[str]
-    metadata: VaultJsonObject
-    created_at: datetime.datetime
-    superseded_at: datetime.datetime | None
-    revoked_at: datetime.datetime | None
+    metadata: ResourceMetadata
+    spec: VaultCredentialVersionSpec
+    status: VaultCredentialVersionStatus
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -67,67 +42,22 @@ class VaultCredentialVersionType0:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.vault_json_object import VaultJsonObject
-        id = self.id
-
-        credential_id = self.credential_id
-
-        vault_id = self.vault_id
-
-        project_id: None | str
-        project_id = self.project_id
-
-        version = self.version
-
-        provider = self.provider.value
-
-        secret_ref = self.secret_ref
-
-        reference_name = self.reference_name
-
-        state = self.state.value
-
-        has_secret = self.has_secret
-
-        data_keys = self.data_keys
-
-
-
+        from ..models.resource_metadata import ResourceMetadata
+        from ..models.vault_credential_version_spec import VaultCredentialVersionSpec
+        from ..models.vault_credential_version_status import VaultCredentialVersionStatus
         metadata = self.metadata.to_dict()
 
-        created_at = self.created_at.isoformat()
+        spec = self.spec.to_dict()
 
-        superseded_at: None | str
-        if isinstance(self.superseded_at, datetime.datetime):
-            superseded_at = self.superseded_at.isoformat()
-        else:
-            superseded_at = self.superseded_at
-
-        revoked_at: None | str
-        if isinstance(self.revoked_at, datetime.datetime):
-            revoked_at = self.revoked_at.isoformat()
-        else:
-            revoked_at = self.revoked_at
+        status = self.status.to_dict()
 
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
-            "id": id,
-            "credentialId": credential_id,
-            "vaultId": vault_id,
-            "projectId": project_id,
-            "version": version,
-            "provider": provider,
-            "secretRef": secret_ref,
-            "referenceName": reference_name,
-            "state": state,
-            "hasSecret": has_secret,
-            "dataKeys": data_keys,
             "metadata": metadata,
-            "createdAt": created_at,
-            "supersededAt": superseded_at,
-            "revokedAt": revoked_at,
+            "spec": spec,
+            "status": status,
         })
 
         return field_dict
@@ -136,105 +66,29 @@ class VaultCredentialVersionType0:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.vault_json_object import VaultJsonObject
+        from ..models.resource_metadata import ResourceMetadata
+        from ..models.vault_credential_version_spec import VaultCredentialVersionSpec
+        from ..models.vault_credential_version_status import VaultCredentialVersionStatus
         d = dict(src_dict)
-        id = d.pop("id")
-
-        credential_id = d.pop("credentialId")
-
-        vault_id = d.pop("vaultId")
-
-        def _parse_project_id(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        project_id = _parse_project_id(d.pop("projectId"))
-
-
-        version = d.pop("version")
-
-        provider = VaultCredentialVersionType0Provider(d.pop("provider"))
+        metadata = ResourceMetadata.from_dict(d.pop("metadata"))
 
 
 
 
-        secret_ref = d.pop("secretRef")
-
-        reference_name = d.pop("referenceName")
-
-        state = VaultCredentialVersionType0State(d.pop("state"))
+        spec = VaultCredentialVersionSpec.from_dict(d.pop("spec"))
 
 
 
 
-        has_secret = d.pop("hasSecret")
-
-        data_keys = cast(list[str], d.pop("dataKeys"))
+        status = VaultCredentialVersionStatus.from_dict(d.pop("status"))
 
 
-        metadata = VaultJsonObject.from_dict(d.pop("metadata"))
-
-
-
-
-        created_at = datetime.datetime.fromisoformat(d.pop("createdAt"))
-
-
-
-
-        def _parse_superseded_at(data: object) -> datetime.datetime | None:
-            if data is None:
-                return data
-            try:
-                if not isinstance(data, str):
-                    raise TypeError()
-                superseded_at_type_0 = datetime.datetime.fromisoformat(data)
-
-
-
-                return superseded_at_type_0
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            return cast(datetime.datetime | None, data)
-
-        superseded_at = _parse_superseded_at(d.pop("supersededAt"))
-
-
-        def _parse_revoked_at(data: object) -> datetime.datetime | None:
-            if data is None:
-                return data
-            try:
-                if not isinstance(data, str):
-                    raise TypeError()
-                revoked_at_type_0 = datetime.datetime.fromisoformat(data)
-
-
-
-                return revoked_at_type_0
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            return cast(datetime.datetime | None, data)
-
-        revoked_at = _parse_revoked_at(d.pop("revokedAt"))
 
 
         vault_credential_version_type_0 = cls(
-            id=id,
-            credential_id=credential_id,
-            vault_id=vault_id,
-            project_id=project_id,
-            version=version,
-            provider=provider,
-            secret_ref=secret_ref,
-            reference_name=reference_name,
-            state=state,
-            has_secret=has_secret,
-            data_keys=data_keys,
             metadata=metadata,
-            created_at=created_at,
-            superseded_at=superseded_at,
-            revoked_at=revoked_at,
+            spec=spec,
+            status=status,
         )
 
 

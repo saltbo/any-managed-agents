@@ -1,4 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
+import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
+import type { Trigger, TriggerRun } from '@server/domain/trigger'
 import { requireAuth } from '../auth/session'
 import { RuntimeSchema } from '../contracts/environment-contracts'
 import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
@@ -13,13 +15,7 @@ import {
   parseListCursor,
 } from '../openapi'
 import { dispatchHttpTrigger } from '../usecases/dispatch-triggers'
-import {
-  type EnvFromEntry,
-  TriggerConflictError,
-  type TriggerRecord,
-  type TriggerRunRecord,
-  TriggerValidationError,
-} from '../usecases/ports'
+import { type EnvFromEntry, TriggerConflictError, TriggerValidationError } from '../usecases/ports'
 import { createTrigger, deleteTrigger, type UpdateTriggerPatch, updateTrigger } from '../usecases/triggers'
 import { requestId } from './request-context'
 
@@ -30,15 +26,20 @@ const TRIGGER_TYPES = ['scheduled', 'http'] as const
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const EnvSchema = z.record(z.string(), z.string())
 
-const TriggerSchema = z
+const TriggerScheduleSchema = z
   .object({
-    id: z.string().openapi({ example: 'trigger_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
+    type: z.literal('interval'),
+    intervalSeconds: z.number().int().openapi({ example: 86400 }),
+    windowSeconds: z.number().int().openapi({ example: 0 }),
+  })
+  .openapi('TriggerSchedule')
+
+const TriggerSpecSchema = z
+  .object({
     type: z.enum(TRIGGER_TYPES).openapi({ example: 'scheduled' }),
     agentId: z.string().openapi({ example: 'agent_abc123' }),
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
-    name: z.string().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
     env: EnvSchema.openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
     envFrom: z.array(EnvFromEntrySchema).openapi({
@@ -56,42 +57,52 @@ const TriggerSchema = z
     volumeMounts: z.array(VolumeMountSchema).openapi({
       example: [{ name: 'project-secrets', mountPath: '/workspace/.ama/secrets/project', readOnly: true }],
     }),
-    schedule: z
-      .object({
-        type: z.literal('interval'),
-        intervalSeconds: z.number().int().openapi({ example: 86400 }),
-        windowSeconds: z.number().int().openapi({ example: 0 }),
-      })
-      .nullable()
-      .openapi({ example: { type: 'interval', intervalSeconds: 86400, windowSeconds: 0 } }),
+    schedule: TriggerScheduleSchema.nullable().openapi({
+      example: { type: 'interval', intervalSeconds: 86400, windowSeconds: 0 },
+    }),
     enabled: z.boolean().openapi({ example: true }),
+    metadata: JsonObjectSchema.openapi({ example: { owner: 'growth' } }),
+  })
+  .openapi('TriggerSpec')
+
+const TriggerStatusSchema = z
+  .object({
+    phase: ResourcePhaseSchema,
     nextDueAt: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:00:00.000Z' }),
     lastDispatchedAt: z.string().datetime().nullable().openapi({ example: null }),
     lastRunId: z.string().nullable().openapi({ example: 'trigrun_abc123' }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'growth' } }),
-    createdByUserId: z.string().nullable().openapi({ example: 'user_abc123' }),
-    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
+  })
+  .openapi('TriggerStatus')
+
+const TriggerSchema = z
+  .object({
+    metadata: ResourceMetadataSchema,
+    spec: TriggerSpecSchema,
+    status: TriggerStatusSchema,
   })
   .openapi('Trigger')
 
 const TriggerRunSchema = z
   .object({
-    id: z.string().openapi({ example: 'trigrun_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    triggerId: z.string().openapi({ example: 'trigger_abc123' }),
-    scheduledFor: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:00:00.000Z' }),
-    heartbeatAt: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:01:00.000Z' }),
-    triggeredAt: z.string().datetime().openapi({ example: '2026-05-26T12:01:00.000Z' }),
-    state: z.enum(RUN_STATES).openapi({ example: 'dispatched' }),
-    idempotencyKey: z.string().openapi({ example: 'trigger_abc123:2026-05-26T12:00:00.000Z' }),
-    sessionId: z.string().nullable().openapi({ example: 'session_abc123' }),
-    correlationId: z.string().openapi({ example: 'schedule:trigger_abc123:2026-05-26T12:00:00.000Z' }),
-    errorMessage: z.string().nullable().openapi({ example: null }),
-    metadata: JsonObjectSchema.openapi({ example: { source: 'trigger' } }),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
+    metadata: ResourceMetadataSchema,
+    spec: z
+      .object({
+        triggerId: z.string().openapi({ example: 'trigger_abc123' }),
+        scheduledFor: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:00:00.000Z' }),
+        idempotencyKey: z.string().openapi({ example: 'trigger_abc123:2026-05-26T12:00:00.000Z' }),
+        correlationId: z.string().openapi({ example: 'schedule:trigger_abc123:2026-05-26T12:00:00.000Z' }),
+        metadata: JsonObjectSchema.openapi({ example: { source: 'trigger' } }),
+      })
+      .openapi('TriggerRunSpec'),
+    status: z
+      .object({
+        phase: z.enum(RUN_STATES).openapi({ example: 'dispatched' }),
+        heartbeatAt: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:01:00.000Z' }),
+        triggeredAt: z.string().datetime().openapi({ example: '2026-05-26T12:01:00.000Z' }),
+        sessionId: z.string().nullable().openapi({ example: 'session_abc123' }),
+        errorMessage: z.string().nullable().openapi({ example: null }),
+      })
+      .openapi('TriggerRunStatus'),
   })
   .openapi('TriggerRun')
 
@@ -220,56 +231,12 @@ function normalizeEnvFrom(entries: z.infer<typeof EnvFromEntrySchema>[]): EnvFro
   }))
 }
 
-function serializeTrigger(record: TriggerRecord) {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    type: record.type,
-    agentId: record.agentId,
-    environmentId: record.environmentId,
-    runtime: record.runtime,
-    name: record.name,
-    promptTemplate: record.promptTemplate,
-    env: record.env,
-    envFrom: record.envFrom,
-    volumes: record.volumes,
-    volumeMounts: record.volumeMounts,
-    schedule: record.schedule
-      ? {
-          type: 'interval' as const,
-          intervalSeconds: record.schedule.intervalSeconds,
-          windowSeconds: record.schedule.windowSeconds,
-        }
-      : null,
-    enabled: record.enabled,
-    nextDueAt: record.nextDueAt,
-    lastDispatchedAt: record.lastDispatchedAt,
-    lastRunId: record.lastRunId,
-    metadata: record.metadata,
-    createdByUserId: record.createdByUserId,
-    archivedAt: record.archivedAt,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
+function serializeTrigger(record: Trigger) {
+  return record
 }
 
-function serializeRun(record: TriggerRunRecord) {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    triggerId: record.triggerId,
-    scheduledFor: record.scheduledFor,
-    heartbeatAt: record.heartbeatAt,
-    triggeredAt: record.triggeredAt,
-    state: record.state,
-    idempotencyKey: record.idempotencyKey,
-    sessionId: record.sessionId,
-    correlationId: record.correlationId,
-    errorMessage: record.errorMessage,
-    metadata: record.metadata,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
+function serializeRun(record: TriggerRun) {
+  return record
 }
 
 const TEMPLATE_HEADER_DENYLIST = new Set(['authorization', 'cookie', 'set-cookie', 'proxy-authorization'])
@@ -465,7 +432,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         await deps.audit.record(scope, {
           action: 'trigger.create',
           resourceType: 'trigger',
-          resourceId: trigger.id,
+          resourceId: trigger.metadata.uid,
           outcome: 'success',
           requestId: requestId(c),
           after: serializeTrigger(trigger),
@@ -502,7 +469,8 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         { data: page.rows.map(serializeTrigger), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
@@ -538,7 +506,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         await deps.audit.record(scope, {
           action: result.archived ? 'trigger.archive' : 'trigger.update',
           resourceType: 'trigger',
-          resourceId: trigger.id,
+          resourceId: trigger.metadata.uid,
           outcome: 'success',
           requestId: requestId(c),
           before: serializeTrigger(trigger),
@@ -565,7 +533,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       await deps.audit.record(scope, {
         action: 'trigger.delete',
         resourceType: 'trigger',
-        resourceId: trigger.id,
+        resourceId: trigger.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
         before: serializeTrigger(trigger),
@@ -604,7 +572,8 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         { data: page.rows.map(serializeRun), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,

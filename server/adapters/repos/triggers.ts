@@ -1,13 +1,13 @@
 import type { RuntimeName } from '@server/contracts/environment-contracts'
+import { resourceMetadata, resourcePhase } from '@server/domain/resource'
+import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
+import type { Trigger, TriggerRun } from '@server/domain/trigger'
 import type {
   CreateTriggerInput,
-  EnvFromEntry,
   ListPageResult,
   TriggerListQuery,
-  TriggerRecord,
   TriggerRepo,
   TriggerRunListQuery,
-  TriggerRunRecord,
   UpdateTriggerFields,
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
@@ -30,54 +30,67 @@ function parseJson<T>(value: string | null, fallback: T) {
   return value ? (JSON.parse(value) as T) : fallback
 }
 
-function recordFrom(row: TriggerRow): TriggerRecord {
+function recordFrom(row: TriggerRow): Trigger {
   const type = row.triggerType ?? 'scheduled'
   return {
-    id: row.id,
-    organizationId: row.organizationId,
-    projectId: row.projectId,
-    type,
-    agentId: row.agentId,
-    environmentId: row.environmentId,
-    runtime: row.runtime as RuntimeName,
-    name: row.name,
-    promptTemplate: row.promptTemplate,
-    env: parseJson<Record<string, string>>(row.env, {}),
-    envFrom: parseJson<EnvFromEntry[]>(row.envFrom, []),
-    volumes: parseJson<TriggerRecord['volumes']>(row.volumes, []),
-    volumeMounts: parseJson<TriggerRecord['volumeMounts']>(row.volumeMounts, []),
-    schedule:
-      type === 'scheduled'
-        ? { intervalSeconds: row.intervalSeconds ?? 0, windowSeconds: row.windowSeconds ?? 0 }
-        : null,
-    enabled: row.enabled,
-    nextDueAt: row.nextDueAt,
-    lastDispatchedAt: row.lastDispatchedAt,
-    lastRunId: row.lastRunId,
-    metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
-    createdByUserId: row.createdByUserId,
-    archivedAt: row.archivedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.name,
+      createdBy: row.createdByUserId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.archivedAt,
+    }),
+    spec: {
+      type,
+      agentId: row.agentId,
+      environmentId: row.environmentId,
+      runtime: row.runtime as RuntimeName,
+      promptTemplate: row.promptTemplate,
+      env: parseJson<Record<string, string>>(row.env, {}),
+      envFrom: parseJson<EnvFromEntry[]>(row.envFrom, []),
+      volumes: parseJson<Volume[]>(row.volumes, []),
+      volumeMounts: parseJson<VolumeMount[]>(row.volumeMounts, []),
+      schedule:
+        type === 'scheduled'
+          ? { type: 'interval', intervalSeconds: row.intervalSeconds ?? 0, windowSeconds: row.windowSeconds ?? 0 }
+          : null,
+      enabled: row.enabled,
+      metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
+    },
+    status: {
+      phase: resourcePhase(row.archivedAt),
+      nextDueAt: row.nextDueAt,
+      lastDispatchedAt: row.lastDispatchedAt,
+      lastRunId: row.lastRunId,
+    },
   }
 }
 
-function runRecordFrom(row: RunRow): TriggerRunRecord {
+function runRecordFrom(row: RunRow): TriggerRun {
   return {
-    id: row.id,
-    projectId: row.projectId,
-    triggerId: row.triggerId,
-    scheduledFor: row.scheduledFor,
-    heartbeatAt: row.heartbeatAt,
-    triggeredAt: row.triggeredAt,
-    state: row.state as TriggerRunRecord['state'],
-    idempotencyKey: row.idempotencyKey,
-    sessionId: row.sessionId,
-    correlationId: row.correlationId,
-    errorMessage: row.errorMessage,
-    metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.correlationId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }),
+    spec: {
+      triggerId: row.triggerId,
+      scheduledFor: row.scheduledFor,
+      idempotencyKey: row.idempotencyKey,
+      correlationId: row.correlationId,
+      metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
+    },
+    status: {
+      phase: row.state as TriggerRun['status']['phase'],
+      heartbeatAt: row.heartbeatAt,
+      triggeredAt: row.triggeredAt,
+      sessionId: row.sessionId,
+      errorMessage: row.errorMessage,
+    },
   }
 }
 
@@ -103,7 +116,7 @@ function configColumns(config: CreateTriggerInput['config']) {
 
 export function createTriggerRepo(db: Db): TriggerRepo {
   return {
-    async list(query: TriggerListQuery): Promise<ListPageResult<TriggerRecord>> {
+    async list(query: TriggerListQuery): Promise<ListPageResult<Trigger>> {
       const filters = [
         eq(triggers.projectId, query.projectId),
         query.archived ? isNotNull(triggers.archivedAt) : isNull(triggers.archivedAt),
@@ -183,7 +196,7 @@ export function createTriggerRepo(db: Db): TriggerRepo {
       return true
     },
 
-    async listRuns(query: TriggerRunListQuery): Promise<ListPageResult<TriggerRunRecord>> {
+    async listRuns(query: TriggerRunListQuery): Promise<ListPageResult<TriggerRun>> {
       const filters = [
         eq(triggerRuns.triggerId, query.triggerId),
         eq(triggerRuns.projectId, query.projectId),

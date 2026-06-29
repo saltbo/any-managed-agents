@@ -8,35 +8,13 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import type { Agent } from '@/lib/api'
 import { createCollection, HttpResponse, http, server } from '@/test/msw'
+import { type AgentOverrides, agent as resourceAgent } from '@/test/resource-fixtures'
 import { CreateAgentSheet } from './CreateAgentSheet'
 
 const now = '2026-05-23T00:00:00.000Z'
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: [],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({ skills: [], tools: [], createdAt: now, updatedAt: now, ...overrides })
 }
 
 function makeQueryClient() {

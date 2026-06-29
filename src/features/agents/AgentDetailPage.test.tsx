@@ -9,35 +9,18 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import type { Agent, AgentVersion, Session } from '@/lib/api'
 import { createCollection, HttpResponse, http, server } from '@/test/msw'
+import { type AgentOverrides, agent as resourceAgent } from '@/test/resource-fixtures'
 import { AgentDetailPage } from './AgentDetailPage'
 
 const now = '2026-05-23T00:00:00.000Z'
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({
     tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  }
+  })
 }
 
 const emptyList = { data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }
@@ -50,7 +33,7 @@ function makeQueryClient() {
 function setupAgentHandlers(agent: Agent, versions: AgentVersion[] = [], sessions: Session[] = []) {
   server.use(
     http.get('*/api/v1/agents/:agentId', ({ params }) => {
-      if (params.agentId === agent.id) return HttpResponse.json(agent)
+      if (params.agentId === agent.metadata.uid) return HttpResponse.json(agent)
       return HttpResponse.json({ error: { type: 'not_found', message: 'Not found' } }, { status: 404 })
     }),
     http.get('*/api/v1/agents/:agentId/versions', () =>
@@ -61,7 +44,7 @@ function setupAgentHandlers(agent: Agent, versions: AgentVersion[] = [], session
     ),
     http.patch('*/api/v1/agents/:agentId', async ({ params, request }) => {
       const body = (await request.json()) as Record<string, unknown>
-      return HttpResponse.json({ ...agent, ...(params.agentId === agent.id ? body : {}) })
+      return HttpResponse.json(params.agentId === agent.metadata.uid ? buildAgent({ ...body }) : agent)
     }),
     // CreateSessionSheet (opened from detail page) also fetches agents + environments
     http.get('*/api/v1/environments', () => HttpResponse.json(emptyList)),

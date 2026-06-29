@@ -30,16 +30,17 @@ export function AgentsPage() {
   })
   const allAgents = useMemo(() => agentsQuery.data?.data ?? [], [agentsQuery.data?.data])
   const providers = useMemo(
-    () => [...new Set(allAgents.map((agent) => agent.providerId).filter((id): id is string => Boolean(id)))].sort(),
+    () =>
+      [...new Set(allAgents.map((agent) => agent.spec.providerId).filter((id): id is string => Boolean(id)))].sort(),
     [allAgents],
   )
   const agents = useMemo(
     () =>
       allAgents.filter(
         (agent) =>
-          matchesSearch(search, agent.name, agent.description) &&
+          matchesSearch(search, agent.metadata.name, agent.metadata.description) &&
           (status === 'all' || archivedLabel(agent) === status) &&
-          (provider === 'all' || agent.providerId === provider),
+          (provider === 'all' || agent.spec.providerId === provider),
       ),
     [allAgents, search, status, provider],
   )

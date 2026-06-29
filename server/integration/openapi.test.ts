@@ -52,6 +52,10 @@ function schemaProperties(doc: OpenApiDocument, name: string) {
   return Object.keys((doc.components?.schemas?.[name] as { properties?: Record<string, unknown> })?.properties ?? [])
 }
 
+function schemaPropertyRefs(doc: OpenApiDocument, name: string) {
+  return (doc.components?.schemas?.[name] as { properties?: Record<string, { $ref?: string }> })?.properties ?? {}
+}
+
 function operations(doc: OpenApiDocument) {
   return Object.entries(doc.paths).flatMap(([path, pathItem]) =>
     Object.entries(pathItem)
@@ -68,7 +72,7 @@ function expectJsonErrorResponse(operation: OpenApiOperation, status: string) {
 }
 
 describe('[CF] OpenAPI documentation', () => {
-  it('publishes the generated control-plane OpenAPI document [spec: agents/api-openapi] [spec: environments/api-openapi] [spec: mcp/openapi] [spec: runners/openapi] [spec: triggers/openapi] [spec: api-contracts/openapi]', async () => {
+  it('publishes the generated control-plane OpenAPI document [spec: agents/api-openapi] [spec: environments/api-openapi] [spec: mcp/openapi] [spec: runners/openapi] [spec: triggers/openapi] [spec: api-contracts/openapi] [spec: api-contracts/resource-entities]', async () => {
     const doc = await fetchOpenApi()
 
     expect(doc.openapi).toBe('3.0.0')
@@ -266,6 +270,8 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('VaultListResponse')
     expect(doc.components?.schemas).toHaveProperty('VaultCredentialListResponse')
     expect(doc.components?.schemas).toHaveProperty('VaultCredentialVersionListResponse')
+    expect(doc.components?.schemas).toHaveProperty('ResourceMetadata')
+    expect(doc.components?.schemas).toHaveProperty('ResourcePhase')
     expect(doc.components?.schemas).toHaveProperty('CreateAgentRequest')
     expect(doc.components?.schemas).toHaveProperty('UpdateAgentRequest')
     expect(doc.components?.schemas).toHaveProperty('Agent')
@@ -310,6 +316,9 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('TriggerRunListResponse')
     expect(doc.components?.schemas).toHaveProperty('CreateTriggerRequest')
     expect(doc.components?.schemas).toHaveProperty('UpdateTriggerRequest')
+    expect(doc.components?.schemas).toHaveProperty('MemoryStore')
+    expect(doc.components?.schemas).toHaveProperty('MemoryStoreMemory')
+    expect(doc.components?.schemas).toHaveProperty('AgentMemory')
 
     expect(doc.components?.schemas).not.toHaveProperty('GovernancePolicy')
     expect(doc.components?.schemas).not.toHaveProperty('McpConnector')
@@ -317,18 +326,58 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).not.toHaveProperty('ScheduledAgentTrigger')
     expect(doc.components?.schemas).not.toHaveProperty('ScheduledTriggerRun')
 
-    for (const schemaName of [
-      'Environment',
-      'EnvironmentVersion',
-      'CreateEnvironmentRequest',
-      'UpdateEnvironmentRequest',
-      'SessionEnvironmentSnapshot',
-    ]) {
+    for (const schemaName of ['CreateEnvironmentRequest', 'UpdateEnvironmentRequest', 'SessionEnvironmentSnapshot']) {
       const properties = schemaProperties(doc, schemaName)
       expect(properties).toEqual(expect.arrayContaining(['hostingMode', 'runtimeConfig']))
       expect(properties).not.toContain('runtime')
       expect(properties).not.toContain('runtimeType')
       expect(properties).not.toContain('runtimeImage')
+    }
+    for (const schemaName of ['Environment', 'EnvironmentVersion']) {
+      const properties = schemaProperties(doc, schemaName)
+      expect(properties).toEqual(expect.arrayContaining(['metadata', 'spec', 'status']))
+      expect(properties).not.toContain('runtime')
+      expect(properties).not.toContain('runtimeType')
+      expect(properties).not.toContain('runtimeImage')
+    }
+
+    const resourceMetadataProperties = schemaProperties(doc, 'ResourceMetadata')
+    expect(resourceMetadataProperties).toEqual(
+      expect.arrayContaining([
+        'uid',
+        'pid',
+        'name',
+        'description',
+        'labels',
+        'annotations',
+        'createdBy',
+        'createdAt',
+        'updatedAt',
+        'archivedAt',
+      ]),
+    )
+    for (const schemaName of [
+      'Agent',
+      'AgentVersion',
+      'AgentMemory',
+      'Environment',
+      'EnvironmentVersion',
+      'Vault',
+      'VaultCredential',
+      'VaultCredentialVersion',
+      'MemoryStore',
+      'MemoryStoreMemory',
+      'Trigger',
+      'TriggerRun',
+    ]) {
+      const properties = schemaPropertyRefs(doc, schemaName)
+      expect(properties).toMatchObject({
+        metadata: { $ref: '#/components/schemas/ResourceMetadata' },
+      })
+      expect(Object.keys(properties)).toEqual(expect.arrayContaining(['metadata', 'spec', 'status']))
+      expect(Object.keys(properties)).not.toContain('id')
+      expect(Object.keys(properties)).not.toContain('projectId')
+      expect(Object.keys(properties)).not.toContain('archivedAt')
     }
 
     const createSessionProperties = (
@@ -372,17 +421,34 @@ describe('[CF] OpenAPI documentation', () => {
 
     const triggerRunProperties = (
       doc.components?.schemas?.TriggerRun as {
-        properties?: Record<string, { type?: string; nullable?: boolean }>
+        properties?: Record<string, { type?: string; nullable?: boolean; $ref?: string }>
       }
     )?.properties
     expect(triggerRunProperties).toMatchObject({
+      metadata: { $ref: '#/components/schemas/ResourceMetadata' },
+      spec: { $ref: '#/components/schemas/TriggerRunSpec' },
+      status: { $ref: '#/components/schemas/TriggerRunStatus' },
+    })
+    const triggerRunSpecProperties = (
+      doc.components?.schemas?.TriggerRunSpec as {
+        properties?: Record<string, { type?: string; nullable?: boolean }>
+      }
+    )?.properties
+    expect(triggerRunSpecProperties).toMatchObject({
       scheduledFor: { type: 'string', nullable: true },
+      idempotencyKey: { type: 'string' },
+      correlationId: { type: 'string' },
+    })
+    const triggerRunStatusProperties = (
+      doc.components?.schemas?.TriggerRunStatus as {
+        properties?: Record<string, { type?: string; nullable?: boolean }>
+      }
+    )?.properties
+    expect(triggerRunStatusProperties).toMatchObject({
       heartbeatAt: { type: 'string', nullable: true },
       triggeredAt: { type: 'string' },
-      state: { type: 'string' },
-      idempotencyKey: { type: 'string' },
+      phase: { type: 'string' },
       sessionId: { type: 'string', nullable: true },
-      correlationId: { type: 'string' },
     })
   })
 

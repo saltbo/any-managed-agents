@@ -62,8 +62,8 @@ export function SessionDetailPage() {
     <div className="min-h-[calc(100dvh-8rem)]">
       <SessionDetailView
         session={session}
-        agentName={agentQuery.data?.name}
-        environmentName={environmentQuery.data?.name}
+        agentName={agentQuery.data?.metadata.name}
+        environmentName={environmentQuery.data?.metadata.name}
         events={eventsQuery.data?.data ?? EMPTY_EVENTS}
         runtime={runtime.state}
         onStop={actions.stopSession}

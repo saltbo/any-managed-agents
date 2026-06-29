@@ -17,20 +17,22 @@ import { useEnvironmentActions } from './use-environment-actions'
 
 function formStateFromEnvironment(environment: Environment): EnvironmentFormState {
   return {
-    name: environment.name,
-    description: environment.description ?? '',
-    hostingMode: environment.hostingMode,
-    networkMode: environment.networkPolicy.mode,
+    name: environment.metadata.name,
+    description: environment.metadata.description ?? '',
+    hostingMode: environment.spec.hostingMode,
+    networkMode: environment.spec.networkPolicy.mode,
     allowedHosts:
-      environment.networkPolicy.mode === 'restricted' ? environment.networkPolicy.allowedHosts.join('\n') : '',
-    packages: environment.packages.map((pkg) => `${pkg.name}@${pkg.version ?? 'latest'}`).join('\n'),
-    variables: Object.entries(environment.variables)
+      environment.spec.networkPolicy.mode === 'restricted'
+        ? environment.spec.networkPolicy.allowedHosts.join('\n')
+        : '',
+    packages: environment.spec.packages.map((pkg) => `${pkg.name}@${pkg.version ?? 'latest'}`).join('\n'),
+    variables: Object.entries(environment.spec.variables)
       .map(
         ([name, variable]) =>
           `${name}=${typeof variable === 'object' && variable && 'value' in variable ? String(variable.value ?? '') : String(variable)}`,
       )
       .join('\n'),
-    runtimeConfig: stringifyJson(environment.runtimeConfig),
+    runtimeConfig: stringifyJson(environment.spec.runtimeConfig),
   }
 }
 
@@ -86,9 +88,9 @@ export function EnvironmentDetailPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow="Environment"
-        title={environment?.name ?? 'Environment detail'}
+        title={environment?.metadata.name ?? 'Environment detail'}
         description={
-          environment?.description ?? 'Inspect runtime config, package policy, network policy, and bindings.'
+          environment?.metadata.description ?? 'Inspect runtime config, package policy, network policy, and bindings.'
         }
         actions={
           environment && !isArchived(environment) ? (

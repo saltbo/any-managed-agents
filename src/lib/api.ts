@@ -78,16 +78,27 @@ export interface CredentialRef {
 
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted'
 export type RuntimeName = 'ama' | 'claude-code' | 'codex' | 'copilot'
+export type ResourcePhase = 'active' | 'archived'
+
+export interface ResourceMetadata {
+  uid: string
+  pid: string | null
+  name: string
+  description: string | null
+  labels: Record<string, string>
+  annotations: Record<string, string>
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+  archivedAt: string | null
+}
+
 export type EnvironmentNetworkPolicy =
   | { mode: 'unrestricted' }
   | { mode: 'restricted'; allowedHosts: string[] }
   | { mode: 'offline' }
 
-export interface Environment {
-  id: string
-  projectId: string
-  name: string
-  description: string | null
+export interface EnvironmentSpec {
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
   hostingMode: EnvironmentHostingMode
@@ -97,11 +108,18 @@ export interface Environment {
   resourceLimits: Record<string, unknown>
   runtimeConfig: Record<string, unknown>
   metadata: Record<string, unknown>
-  archivedAt: string | null
+}
+
+export interface EnvironmentStatus {
+  phase: ResourcePhase
   currentVersionId: string | null
   version: number
-  createdAt: string
-  updatedAt: string
+}
+
+export interface Environment {
+  metadata: ResourceMetadata
+  spec: EnvironmentSpec
+  status: EnvironmentStatus
 }
 
 export interface TriggerSchedule {
@@ -110,14 +128,11 @@ export interface TriggerSchedule {
   windowSeconds: number
 }
 
-export interface Trigger {
-  id: string
-  projectId: string
+export interface TriggerSpec {
   type: 'scheduled' | 'http'
   agentId: string
   environmentId: string | null
   runtime: RuntimeName
-  name: string
   promptTemplate: string
   env: Record<string, string>
   envFrom: EnvFromEntry[]
@@ -125,31 +140,42 @@ export interface Trigger {
   volumeMounts: VolumeMount[]
   schedule: TriggerSchedule | null
   enabled: boolean
+  metadata: Record<string, unknown>
+}
+
+export interface TriggerStatus {
+  phase: ResourcePhase
   nextDueAt: string | null
   lastDispatchedAt: string | null
   lastRunId: string | null
+}
+
+export interface Trigger {
+  metadata: ResourceMetadata
+  spec: TriggerSpec
+  status: TriggerStatus
+}
+
+export interface TriggerRunSpec {
+  triggerId: string
+  scheduledFor: string | null
+  idempotencyKey: string
+  correlationId: string
   metadata: Record<string, unknown>
-  createdByUserId: string | null
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
+}
+
+export interface TriggerRunStatus {
+  phase: 'claimed' | 'dispatched' | 'failed'
+  heartbeatAt: string | null
+  triggeredAt: string
+  sessionId: string | null
+  errorMessage: string | null
 }
 
 export interface TriggerRun {
-  id: string
-  projectId: string
-  triggerId: string
-  scheduledFor: string | null
-  heartbeatAt: string | null
-  triggeredAt: string
-  state: 'claimed' | 'session_created' | 'failed'
-  idempotencyKey: string
-  sessionId: string | null
-  correlationId: string
-  errorMessage: string | null
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
+  metadata: ResourceMetadata
+  spec: TriggerRunSpec
+  status: TriggerRunStatus
 }
 
 export interface AgentToolAttachment {
@@ -168,11 +194,7 @@ export interface AgentToolAttachmentInput {
   policyMetadata?: Record<string, unknown>
 }
 
-export interface Agent {
-  id: string
-  projectId: string
-  name: string
-  description: string | null
+export interface AgentSpec {
   instructions: string | null
   providerId: string | null
   model: string | null
@@ -185,57 +207,48 @@ export interface Agent {
   tools: AgentToolAttachment[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
-  archivedAt: string | null
+}
+
+export interface AgentStatus {
+  phase: ResourcePhase
   currentVersionId: string | null
   version: number
-  createdAt: string
-  updatedAt: string
+}
+
+export interface Agent {
+  metadata: ResourceMetadata
+  spec: AgentSpec
+  status: AgentStatus
 }
 
 export interface AgentVersion {
-  id: string
-  agentId: string
-  projectId: string
-  version: number
-  instructions: string | null
-  providerId: string | null
-  model: string | null
-  skills: string[]
-  subagents: Record<string, unknown>[]
-  role: string | null
-  capabilityTags: string[]
-  handoffPolicy: Record<string, unknown>
-  memoryPolicy: Record<string, unknown>
-  tools: AgentToolAttachment[]
-  mcpConnectors: string[]
-  metadata: Record<string, unknown>
-  createdAt: string
+  metadata: ResourceMetadata
+  spec: AgentSpec
+  status: {
+    agentId: string
+    version: number
+  }
 }
 
 export interface AgentMemory {
-  agentId: string
-  projectId: string
-  content: string
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
+  metadata: ResourceMetadata
+  spec: {
+    agentId: string
+    content: string
+    metadata: Record<string, unknown>
+  }
+  status: {
+    phase: ResourcePhase
+  }
 }
 
 export interface EnvironmentVersion {
-  id: string
-  environmentId: string
-  projectId: string
-  version: number
-  packages: EnvironmentPackage[]
-  variables: Record<string, EnvironmentVariable>
-  hostingMode: EnvironmentHostingMode
-  networkPolicy: EnvironmentNetworkPolicy
-  mcpPolicy: Record<string, unknown>
-  packageManagerPolicy: Record<string, unknown>
-  resourceLimits: Record<string, unknown>
-  runtimeConfig: Record<string, unknown>
-  metadata: Record<string, unknown>
-  createdAt: string
+  metadata: ResourceMetadata
+  spec: EnvironmentSpec
+  status: {
+    environmentId: string
+    version: number
+  }
 }
 
 // A provider is now a global model vendor (anthropic, openai, …); the catalog is
@@ -273,54 +286,64 @@ export interface CatalogRefreshResult {
   category?: string
 }
 
-export interface Vault {
-  id: string
-  projectId: string | null
-  name: string
-  description: string | null
+export interface VaultSpec {
+  organizationId: string
   scope: 'project' | 'organization'
   metadata: Record<string, unknown>
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
+}
+
+export interface Vault {
+  metadata: ResourceMetadata
+  spec: VaultSpec
+  status: {
+    phase: ResourcePhase
+  }
 }
 
 export interface MemoryStore {
-  id: string
-  projectId: string
-  name: string
-  description: string | null
-  metadata: Record<string, unknown>
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
+  metadata: ResourceMetadata
+  spec: {
+    metadata: Record<string, unknown>
+  }
+  status: {
+    phase: ResourcePhase
+  }
 }
 
 export interface MemoryStoreMemory {
-  id: string
-  storeId: string
-  projectId: string
-  path: string
-  content: string
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
+  metadata: ResourceMetadata
+  spec: {
+    storeId: string
+    path: string
+    content: string
+    metadata: Record<string, unknown>
+  }
+  status: {
+    phase: ResourcePhase
+  }
 }
 
 export interface VaultCredentialVersion {
-  id: string
+  metadata: ResourceMetadata
+  spec: VaultCredentialVersionSpec
+  status: VaultCredentialVersionStatus
+}
+
+export interface VaultCredentialVersionSpec {
   credentialId: string
   vaultId: string
-  projectId: string | null
+  organizationId: string
   version: number
   provider: 'ama'
   secretRef: string
   referenceName: string
-  state: 'active' | 'superseded' | 'revoked'
   hasSecret: boolean
   dataKeys: string[]
   metadata: Record<string, unknown>
-  createdAt: string
+}
+
+export interface VaultCredentialVersionStatus {
+  phase: 'active' | 'superseded' | 'revoked'
   supersededAt: string | null
   revokedAt: string | null
 }
@@ -334,20 +357,25 @@ export type CredentialType =
   | 'ama.dev/oauth-token'
 
 export interface VaultCredential {
-  id: string
+  metadata: ResourceMetadata
+  spec: VaultCredentialSpec
+  status: VaultCredentialStatus
+}
+
+export interface VaultCredentialSpec {
   vaultId: string
-  projectId: string | null
-  name: string
+  organizationId: string
   type: CredentialType
   metadata: Record<string, unknown>
-  state: 'active' | 'revoked'
+}
+
+export interface VaultCredentialStatus {
+  phase: 'active' | 'revoked'
   activeVersionId: string | null
   activeVersion: VaultCredentialVersion | null
   revokedAt: string | null
   revokedByUserId: string | null
   revokeReason: string | null
-  createdAt: string
-  updatedAt: string
 }
 
 export interface ConnectorTool {
@@ -520,7 +548,7 @@ export interface EnvironmentInput {
 }
 
 export interface TriggerInput {
-  type?: Trigger['type']
+  type?: TriggerSpec['type']
   agentId?: string
   environmentId?: string
   runtime?: RuntimeName
@@ -536,7 +564,7 @@ export interface TriggerInput {
 }
 
 export interface CreateTriggerInput {
-  type?: Trigger['type']
+  type?: TriggerSpec['type']
   agentId: string
   environmentId?: string
   runtime: RuntimeName
@@ -839,7 +867,7 @@ export const api = {
       }),
     ),
   rotateVaultCredential: (vaultId: string, credentialId: string, secret: VaultCredentialSecretInput) =>
-    rpcRequest<VaultCredentialVersion>(
+    rpcRequest<VaultCredential>(
       v1.vaults[':vaultId'].credentials[':credentialId'].versions.$post({
         param: { vaultId, credentialId },
         json: secret as RpcJson<(typeof v1.vaults)[':vaultId']['credentials'][':credentialId']['versions']['$post']>,

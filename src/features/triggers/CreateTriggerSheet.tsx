@@ -99,8 +99,8 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
   useEffect(() => {
     if (!open) return
     setForm((current) => {
-      const nextAgentId = current.agentId || agents[0]?.id || ''
-      const nextEnvironmentId = current.environmentId || environments[0]?.id || ''
+      const nextAgentId = current.agentId || agents[0]?.metadata.uid || ''
+      const nextEnvironmentId = current.environmentId || environments[0]?.metadata.uid || ''
       if (current.agentId === nextAgentId && current.environmentId === nextEnvironmentId) {
         return current
       }
@@ -161,8 +161,8 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
                   <SelectContent>
                     <SelectGroup>
                       {agents.map((agent) => (
-                        <SelectItem key={agent.id} value={agent.id}>
-                          {agent.name}
+                        <SelectItem key={agent.metadata.uid} value={agent.metadata.uid}>
+                          {agent.metadata.name}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -182,8 +182,8 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
                   <SelectContent>
                     <SelectGroup>
                       {environments.map((environment) => (
-                        <SelectItem key={environment.id} value={environment.id}>
-                          {environment.name}
+                        <SelectItem key={environment.metadata.uid} value={environment.metadata.uid}>
+                          {environment.metadata.name}
                         </SelectItem>
                       ))}
                     </SelectGroup>

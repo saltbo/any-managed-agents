@@ -254,8 +254,8 @@ export function SessionForm({
 }) {
   const activeAgents = agents.filter((agent) => !isArchived(agent))
   const activeEnvironments = environments.filter((environment) => !isArchived(environment))
-  const selectedAgent = activeAgents.find((agent) => agent.id === value.agentId)
-  const selectedEnvironment = activeEnvironments.find((environment) => environment.id === value.environmentId)
+  const selectedAgent = activeAgents.find((agent) => agent.metadata.uid === value.agentId)
+  const selectedEnvironment = activeEnvironments.find((environment) => environment.metadata.uid === value.environmentId)
   const canSubmit = Boolean(value.agentId && value.environmentId)
 
   return (
@@ -270,8 +270,8 @@ export function SessionForm({
             <SelectContent>
               <SelectGroup>
                 {activeAgents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
+                  <SelectItem key={agent.metadata.uid} value={agent.metadata.uid}>
+                    {agent.metadata.name}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -279,7 +279,7 @@ export function SessionForm({
           </Select>
           <FieldDescription>
             {selectedAgent
-              ? `Agent provider/model: ${selectedAgent.providerId ?? 'None'} / ${selectedAgent.model ?? 'None'}`
+              ? `Agent provider/model: ${selectedAgent.spec.providerId ?? 'None'} / ${selectedAgent.spec.model ?? 'None'}`
               : 'The session will run the current version of this agent.'}
           </FieldDescription>
         </Field>
@@ -292,8 +292,8 @@ export function SessionForm({
             <SelectContent>
               <SelectGroup>
                 {activeEnvironments.map((environment) => (
-                  <SelectItem key={environment.id} value={environment.id}>
-                    {environment.name}
+                  <SelectItem key={environment.metadata.uid} value={environment.metadata.uid}>
+                    {environment.metadata.name}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -301,7 +301,7 @@ export function SessionForm({
           </Select>
           <FieldDescription>
             {selectedEnvironment
-              ? `Hosting mode: ${hostingModeLabel(selectedEnvironment.hostingMode)}`
+              ? `Hosting mode: ${hostingModeLabel(selectedEnvironment.spec.hostingMode)}`
               : 'Select the hosting and policy environment for this session.'}
           </FieldDescription>
         </Field>
@@ -408,24 +408,26 @@ function MemoryStoreAttachmentField({
       <FieldLabel>Memory stores</FieldLabel>
       <div className="space-y-2 rounded-md border p-3">
         {memoryStores.map((store) => {
-          const attached = memoryVolumes.find((volume) => volume.memoryRef === memoryRefForStore(store.id))
+          const attached = memoryVolumes.find((volume) => volume.memoryRef === memoryRefForStore(store.metadata.uid))
           return (
-            <div key={store.id} className="flex flex-wrap items-center gap-3">
+            <div key={store.metadata.uid} className="flex flex-wrap items-center gap-3">
               <Checkbox
-                id={`memory-store-${store.id}`}
+                id={`memory-store-${store.metadata.uid}`}
                 checked={Boolean(attached)}
-                onCheckedChange={(checked) => updateMemoryStore(store.id, checked)}
+                onCheckedChange={(checked) => updateMemoryStore(store.metadata.uid, checked)}
               />
-              <label htmlFor={`memory-store-${store.id}`} className="min-w-0 flex-1 text-sm font-medium">
-                <span className="block truncate">{store.name}</span>
-                {store.description ? (
-                  <span className="block truncate text-xs font-normal text-muted-foreground">{store.description}</span>
+              <label htmlFor={`memory-store-${store.metadata.uid}`} className="min-w-0 flex-1 text-sm font-medium">
+                <span className="block truncate">{store.metadata.name}</span>
+                {store.metadata.description ? (
+                  <span className="block truncate text-xs font-normal text-muted-foreground">
+                    {store.metadata.description}
+                  </span>
                 ) : null}
               </label>
               <Select
                 value={attached?.access === 'read_write' ? 'read_write' : 'read_only'}
                 disabled={!attached}
-                onValueChange={(access) => updateAccess(store.id, access as MemoryStoreAccess)}
+                onValueChange={(access) => updateAccess(store.metadata.uid, access as MemoryStoreAccess)}
               >
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -472,7 +474,7 @@ function memoryRefForStore(storeId: string) {
   return `ama://memories/${encodeURIComponent(storeId)}`
 }
 
-function hostingModeLabel(value: Environment['hostingMode']) {
+function hostingModeLabel(value: Environment['spec']['hostingMode']) {
   return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
 }
 

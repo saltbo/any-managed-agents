@@ -27,7 +27,8 @@ async function createSelfHostedEnvironment(authorization: string) {
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string }
+  const environment = (await res.json()) as { metadata: { uid: string } }
+  return { id: environment.metadata.uid }
 }
 
 async function createAgent(authorization: string) {
@@ -42,7 +43,8 @@ async function createAgent(authorization: string) {
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string }
+  const agent = (await res.json()) as { metadata: { uid: string } }
+  return { id: agent.metadata.uid }
 }
 
 async function createSessionEnvFrom(authorization: string) {
@@ -51,8 +53,8 @@ async function createSessionEnvFrom(authorization: string) {
     body: JSON.stringify({ name: `Runner runtime secrets ${crypto.randomUUID()}` }),
   })
   expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'AK agent session key',
@@ -61,8 +63,8 @@ async function createSessionEnvFrom(authorization: string) {
     }),
   })
   expect(credentialRes.status).toBe(201)
-  const credential = (await credentialRes.json()) as { activeVersion: { secretRef: string } }
-  return [{ type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.activeVersion.secretRef }]
+  const credential = (await credentialRes.json()) as { status: { activeVersion: { spec: { secretRef: string } } } }
+  return [{ type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.status.activeVersion.spec.secretRef }]
 }
 
 async function createSelfHostedSession(
@@ -245,18 +247,17 @@ describe('[CF] /api/v1/leases', () => {
       body: JSON.stringify({ name: `Maintainer memory ${crypto.randomUUID()}` }),
     })
     expect(memoryStoreRes.status).toBe(201)
-    const memoryStore = (await memoryStoreRes.json()) as { id: string }
-    const memoryRes = await jsonFetch(`/api/v1/memory-stores/${memoryStore.id}/memories`, authorization, {
+    const memoryStore = (await memoryStoreRes.json()) as { metadata: { uid: string } }
+    const memoryStoreId = memoryStore.metadata.uid
+    const memoryRes = await jsonFetch(`/api/v1/memory-stores/${memoryStoreId}/memories`, authorization, {
       method: 'POST',
       body: JSON.stringify({ path: 'ak-maintainer-heartbeat.md', content: 'initial heartbeat\n' }),
     })
     expect(memoryRes.status).toBe(201)
     const runner = await registerActiveRunner(authorization, environment.id)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
-      volumes: [
-        { name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStore.id}`, access: 'read_write' },
-      ],
-      volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}` }],
+      volumes: [{ name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStoreId}`, access: 'read_write' }],
+      volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStoreId}` }],
     })
     const workItem = await availableWorkItem(authorization, session.id)
     const claimRes = await claimLease(authorization, workItem.id, runner.id)
@@ -271,7 +272,7 @@ describe('[CF] /api/v1/leases', () => {
           exitCode: 0,
           memoryStores: [
             {
-              memoryRef: `ama://memories/${memoryStore.id}`,
+              memoryRef: `ama://memories/${memoryStoreId}`,
               memories: [{ path: 'ak-maintainer-heartbeat.md', content: 'updated heartbeat\n' }],
             },
           ],
@@ -280,10 +281,14 @@ describe('[CF] /api/v1/leases', () => {
     })
     expect(completeRes.status).toBe(200)
 
-    const memoriesRes = await jsonFetch(`/api/v1/memory-stores/${memoryStore.id}/memories`, authorization)
+    const memoriesRes = await jsonFetch(`/api/v1/memory-stores/${memoryStoreId}/memories`, authorization)
     expect(memoriesRes.status).toBe(200)
     await expect(memoriesRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ path: 'ak-maintainer-heartbeat.md', content: 'updated heartbeat\n' })],
+      data: [
+        expect.objectContaining({
+          spec: expect.objectContaining({ path: 'ak-maintainer-heartbeat.md', content: 'updated heartbeat\n' }),
+        }),
+      ],
     })
   })
 
@@ -296,20 +301,19 @@ describe('[CF] /api/v1/leases', () => {
       body: JSON.stringify({ name: `Archived maintainer memory ${crypto.randomUUID()}` }),
     })
     expect(memoryStoreRes.status).toBe(201)
-    const memoryStore = (await memoryStoreRes.json()) as { id: string }
+    const memoryStore = (await memoryStoreRes.json()) as { metadata: { uid: string } }
+    const memoryStoreId = memoryStore.metadata.uid
     const runner = await registerActiveRunner(authorization, environment.id)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
-      volumes: [
-        { name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStore.id}`, access: 'read_write' },
-      ],
-      volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}` }],
+      volumes: [{ name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStoreId}`, access: 'read_write' }],
+      volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStoreId}` }],
     })
     const workItem = await availableWorkItem(authorization, session.id)
     const claimRes = await claimLease(authorization, workItem.id, runner.id)
     expect(claimRes.status).toBe(201)
     const lease = (await claimRes.json()) as { id: string }
 
-    const archiveRes = await jsonFetch(`/api/v1/memory-stores/${memoryStore.id}`, authorization, {
+    const archiveRes = await jsonFetch(`/api/v1/memory-stores/${memoryStoreId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })
@@ -323,7 +327,7 @@ describe('[CF] /api/v1/leases', () => {
           exitCode: 0,
           memoryStores: [
             {
-              memoryRef: `ama://memories/${memoryStore.id}`,
+              memoryRef: `ama://memories/${memoryStoreId}`,
               memories: [{ path: 'ak-maintainer-heartbeat.md', content: 'late heartbeat\n' }],
             },
           ],

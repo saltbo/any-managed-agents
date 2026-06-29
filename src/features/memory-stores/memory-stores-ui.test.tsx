@@ -5,6 +5,12 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import type { MemoryStore, MemoryStoreMemory } from '@/lib/api'
 import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
+import {
+  type MemoryOverrides,
+  type MemoryStoreOverrides,
+  memoryStore,
+  memory as resourceMemory,
+} from '@/test/resource-fixtures'
 import { MemoryStoreDetailPage } from './MemoryStoreDetailPage'
 import { CreateMemoryStoreSheet, MemoryEntrySheet } from './MemoryStoreForms'
 import { MemoryStoresPage } from './MemoryStoresPage'
@@ -13,32 +19,24 @@ function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
 }
 
-function store(overrides: Partial<MemoryStore> = {}): MemoryStore {
-  return {
+function store(overrides: MemoryStoreOverrides = {}): MemoryStore {
+  return memoryStore({
     id: 'memstore_1',
-    projectId: 'project_1',
     name: 'Team memory',
     description: 'Shared runbook',
-    metadata: {},
-    archivedAt: null,
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-02T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
-function memory(overrides: Partial<MemoryStoreMemory> = {}): MemoryStoreMemory {
-  return {
-    id: 'memory_1',
+function memory(overrides: MemoryOverrides = {}): MemoryStoreMemory {
+  return resourceMemory({
     storeId: 'memstore_1',
-    projectId: 'project_1',
-    path: 'guides/review.md',
-    content: 'Review checklist',
-    metadata: {},
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-02T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function renderWithClient(ui: ReactElement, initialEntries = ['/']) {
@@ -81,8 +79,11 @@ function setupMemoryStoreHandlers(stores: MemoryStore[] = [], memories: MemorySt
       return HttpResponse.json(
         memoryCollection.put({
           ...existing,
-          path: typeof patch.path === 'string' ? patch.path : existing.path,
-          content: typeof patch.content === 'string' ? patch.content : existing.content,
+          spec: {
+            ...existing.spec,
+            path: typeof patch.path === 'string' ? patch.path : existing.spec.path,
+            content: typeof patch.content === 'string' ? patch.content : existing.spec.content,
+          },
         }),
       )
     }),

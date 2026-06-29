@@ -45,34 +45,17 @@ function AgentDetailContent({
   const [selectedVersionId, setSelectedVersionId] = useState('')
 
   useEffect(() => {
-    setSelectedVersionId((current) => current || versions[0]?.id || '')
+    setSelectedVersionId((current) => current || versions[0]?.metadata.uid || '')
   }, [versions])
 
-  const agentSessions = sessions.filter((session) => session.spec.agentId === agent.id)
+  const agentSessions = sessions.filter((session) => session.spec.agentId === agent.metadata.uid)
   const currentVersion = useMemo(
-    () =>
-      versions.find((version) => version.id === selectedVersionId) ??
-      versions[0] ?? {
-        id: agent.currentVersionId ?? agent.id,
-        agentId: agent.id,
-        projectId: agent.projectId,
-        version: agent.version,
-        instructions: agent.instructions,
-        providerId: agent.providerId,
-        model: agent.model,
-        skills: agent.skills,
-        subagents: agent.subagents,
-        role: agent.role,
-        capabilityTags: agent.capabilityTags,
-        handoffPolicy: agent.handoffPolicy,
-        memoryPolicy: agent.memoryPolicy,
-        tools: agent.tools,
-        mcpConnectors: agent.mcpConnectors,
-        metadata: agent.metadata,
-        createdAt: agent.updatedAt,
-      },
-    [agent, selectedVersionId, versions],
+    () => versions.find((version) => version.metadata.uid === selectedVersionId) ?? versions[0] ?? null,
+    [selectedVersionId, versions],
   )
+  const currentSpec = currentVersion?.spec ?? agent.spec
+  const currentVersionNumber = currentVersion?.status.version ?? agent.status.version
+  const currentCreatedAt = currentVersion?.metadata.createdAt ?? agent.metadata.updatedAt
   return (
     <div>
       <Tabs defaultValue="agent">
@@ -88,15 +71,15 @@ function AgentDetailContent({
               <>
                 <StatusBadge value={archivedLabel(agent)} />
                 {versions.length > 0 ? (
-                  <Select value={currentVersion.id} onValueChange={setSelectedVersionId}>
+                  <Select value={currentVersion?.metadata.uid ?? ''} onValueChange={setSelectedVersionId}>
                     <SelectTrigger className="w-44">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
                         {versions.map((version) => (
-                          <SelectItem key={version.id} value={version.id}>
-                            v{version.version}
+                          <SelectItem key={version.metadata.uid} value={version.metadata.uid}>
+                            v{version.status.version}
                           </SelectItem>
                         ))}
                       </SelectGroup>
@@ -106,10 +89,10 @@ function AgentDetailContent({
                 {onArchive && !isArchived(agent) ? (
                   <ConfirmAction
                     title="Archive agent?"
-                    description={`Archive ${agent.name}. Existing sessions are not deleted, but this agent will no longer accept new sessions.`}
+                    description={`Archive ${agent.metadata.name}. Existing sessions are not deleted, but this agent will no longer accept new sessions.`}
                     confirmLabel="Archive agent"
                     destructive
-                    onConfirm={() => onArchive(agent.id)}
+                    onConfirm={() => onArchive(agent.metadata.uid)}
                   >
                     <Button type="button" variant="outline">
                       <Archive data-icon="inline-start" />
@@ -122,27 +105,24 @@ function AgentDetailContent({
           >
             <div className="grid gap-4">
               <MetaGrid>
-                <Meta label="Version" value={`v${currentVersion.version}`} />
-                <Meta label="Created" value={formatDate(currentVersion.createdAt)} />
-                <Meta label="Provider" value={currentVersion.providerId ?? 'None'} />
-                <Meta label="Model" value={currentVersion.model ?? 'None'} />
-                <Meta label="Skills" value={currentVersion.skills.join(', ') || 'None'} />
-                <Meta
-                  label="Allowed tools"
-                  value={currentVersion.tools.map((tool) => tool.name).join(', ') || 'None'}
-                />
-                <Meta label="MCP connectors" value={currentVersion.mcpConnectors.join(', ') || 'None'} />
-                <Meta label="Role" value={currentVersion.role ?? 'None'} />
-                <Meta label="Capability tags" value={currentVersion.capabilityTags.join(', ') || 'None'} />
-                <Meta label="Handoff policy" value={stringifyJson(currentVersion.handoffPolicy)} />
-                <Meta label="Memory policy" value={stringifyJson(currentVersion.memoryPolicy)} />
-                <Meta label="Metadata" value={stringifyJson(currentVersion.metadata)} />
+                <Meta label="Version" value={`v${currentVersionNumber}`} />
+                <Meta label="Created" value={formatDate(currentCreatedAt)} />
+                <Meta label="Provider" value={currentSpec.providerId ?? 'None'} />
+                <Meta label="Model" value={currentSpec.model ?? 'None'} />
+                <Meta label="Skills" value={currentSpec.skills.join(', ') || 'None'} />
+                <Meta label="Allowed tools" value={currentSpec.tools.map((tool) => tool.name).join(', ') || 'None'} />
+                <Meta label="MCP connectors" value={currentSpec.mcpConnectors.join(', ') || 'None'} />
+                <Meta label="Role" value={currentSpec.role ?? 'None'} />
+                <Meta label="Capability tags" value={currentSpec.capabilityTags.join(', ') || 'None'} />
+                <Meta label="Handoff policy" value={stringifyJson(currentSpec.handoffPolicy)} />
+                <Meta label="Memory policy" value={stringifyJson(currentSpec.memoryPolicy)} />
+                <Meta label="Metadata" value={stringifyJson(currentSpec.metadata)} />
               </MetaGrid>
               <JsonBlock
                 value={stringifyJson({
-                  instructions: currentVersion.instructions,
-                  providerId: currentVersion.providerId,
-                  model: currentVersion.model,
+                  instructions: currentSpec.instructions,
+                  providerId: currentSpec.providerId,
+                  model: currentSpec.model,
                 })}
               />
             </div>

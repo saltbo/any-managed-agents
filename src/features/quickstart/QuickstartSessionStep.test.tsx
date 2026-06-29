@@ -14,6 +14,12 @@ import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
 import type { Agent, Environment, Session, SessionConnection, SessionEvent } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import {
+  type AgentOverrides,
+  type EnvironmentOverrides,
+  agent as resourceAgent,
+  environment as resourceEnvironment,
+} from '@/test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { QuickstartSessionStep } from './QuickstartSessionStep'
 
@@ -25,58 +31,26 @@ function listEnvelope<T>(data: T[]) {
   return { data, pagination: { limit: 50, hasMore: false, nextCursor: null as string | null } }
 }
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({
     skills: [],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
     tools: [
       { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
       { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
     ],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  }
+  })
 }
 
-function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
-    description: null,
-    packages: [],
-    variables: {},
-    hostingMode: 'cloud',
+function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({
     networkPolicy: { mode: 'unrestricted' },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  }
+  })
 }
 
 const defaultAgentSnapshot: import('@/lib/api').SessionAgentSnapshot = {

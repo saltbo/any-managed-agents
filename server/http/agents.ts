@@ -1,4 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
+import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
+import type { Agent, AgentMemory, AgentVersion } from '@server/domain/agent'
 import { normalizeToolAttachments } from '@server/domain/agent'
 import { requireAuth } from '../auth/session'
 import {
@@ -19,13 +21,7 @@ import {
   type UpdateAgentPatch,
   updateAgent,
 } from '../usecases/agents'
-import {
-  AgentArchivedError,
-  type AgentMemoryRecord,
-  type AgentRecord,
-  AgentValidationError,
-  type AgentVersionRecord,
-} from '../usecases/ports'
+import { AgentArchivedError, AgentValidationError } from '../usecases/ports'
 import { requestId } from './request-context'
 
 type AgentRoutes = OpenAPIHono<DepsEnv>
@@ -49,9 +45,6 @@ const SubagentSchema = z
   .object({ username: z.string().optional(), role: z.string().optional() })
   .catchall(z.unknown())
   .openapi('AgentSubagent')
-type HandoffPolicy = z.infer<typeof HandoffPolicySchema>
-type MemoryPolicy = z.infer<typeof MemoryPolicySchema>
-type Subagent = z.infer<typeof SubagentSchema>
 
 const TOOL_APPROVAL_MODES = ['none', 'per_call', 'always_required', 'project_policy'] as const
 
@@ -78,14 +71,9 @@ const AgentToolAttachmentInputSchema = z
   .strict()
   .openapi('AgentToolAttachmentInput')
 
-const AgentSchema = z
+const AgentSpecSchema = z
   .object({
-    id: z.string().openapi({ example: 'agent_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    name: z.string().openapi({ example: 'Research assistant' }),
-    description: z.string().nullable().openapi({ example: 'Answers with citations.' }),
     instructions: z.string().nullable().openapi({ example: 'Answer with citations.' }),
-    // null = resolve the project default provider at session start.
     providerId: z.string().nullable().openapi({ example: 'provider_abc123' }),
     model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
@@ -97,33 +85,35 @@ const AgentSchema = z
     tools: z.array(AgentToolAttachmentSchema),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
+  })
+  .openapi('AgentSpec')
+
+const AgentStatusSchema = z
+  .object({
+    phase: ResourcePhaseSchema,
     currentVersionId: z.string().nullable().openapi({ example: 'agentver_abc123' }),
     version: z.number().int().openapi({ example: 1 }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+  })
+  .openapi('AgentStatus')
+
+const AgentSchema = z
+  .object({
+    metadata: ResourceMetadataSchema,
+    spec: AgentSpecSchema,
+    status: AgentStatusSchema,
   })
   .openapi('Agent')
 
 const AgentVersionSchema = z
   .object({
-    id: z.string().openapi({ example: 'agentver_abc123' }),
-    agentId: z.string().openapi({ example: 'agent_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    version: z.number().int().openapi({ example: 1 }),
-    instructions: z.string().nullable().openapi({ example: 'Answer with citations.' }),
-    providerId: z.string().nullable().openapi({ example: 'provider_abc123' }),
-    model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
-    skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
-    subagents: z.array(SubagentSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
-    role: z.string().nullable().openapi({ example: 'maintainer' }),
-    capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
-    handoffPolicy: HandoffPolicySchema,
-    memoryPolicy: MemoryPolicySchema,
-    tools: z.array(AgentToolAttachmentSchema),
-    mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+    metadata: ResourceMetadataSchema,
+    spec: AgentSpecSchema,
+    status: z
+      .object({
+        agentId: z.string().openapi({ example: 'agent_abc123' }),
+        version: z.number().int().openapi({ example: 1 }),
+      })
+      .openapi('AgentVersionStatus'),
   })
   .openapi('AgentVersion')
 
@@ -212,12 +202,15 @@ const AgentHandoffCandidateListResponseSchema = listResponseSchema(
 )
 const AgentMemorySchema = z
   .object({
-    agentId: z.string().openapi({ example: 'agent_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    content: z.string().openapi({ example: 'Previous heartbeat checked open PRs and deferred billing export.' }),
-    metadata: JsonObjectSchema.openapi({ example: { format: 'markdown' } }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+    metadata: ResourceMetadataSchema,
+    spec: z
+      .object({
+        agentId: z.string().openapi({ example: 'agent_abc123' }),
+        content: z.string().openapi({ example: 'Previous heartbeat checked open PRs and deferred billing export.' }),
+        metadata: JsonObjectSchema.openapi({ example: { format: 'markdown' } }),
+      })
+      .openapi('AgentMemorySpec'),
+    status: z.object({ phase: ResourcePhaseSchema }).openapi('AgentMemoryStatus'),
   })
   .openapi('AgentMemory')
 const ReplaceAgentMemorySchema = z
@@ -234,65 +227,16 @@ function domainValidation(message: string, fields: Record<string, string>) {
   return { error: { type: 'validation_error', message, details: { fields } } } as const
 }
 
-// The DTO that crosses the wire mirrors AgentRecord; serialization is identity
-// plus the version field that the record already carries.
-function serializeAgent(record: AgentRecord) {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    name: record.name,
-    description: record.description,
-    instructions: record.instructions,
-    providerId: record.providerId,
-    model: record.model,
-    skills: record.skills,
-    subagents: record.subagents as Subagent[],
-    role: record.role,
-    capabilityTags: record.capabilityTags,
-    handoffPolicy: record.handoffPolicy as HandoffPolicy,
-    memoryPolicy: record.memoryPolicy as MemoryPolicy,
-    tools: record.tools,
-    mcpConnectors: record.mcpConnectors,
-    metadata: record.metadata,
-    archivedAt: record.archivedAt,
-    currentVersionId: record.currentVersionId,
-    version: record.version,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
+function serializeAgent(record: Agent) {
+  return record
 }
 
-function serializeAgentVersion(record: AgentVersionRecord) {
-  return {
-    id: record.id,
-    agentId: record.agentId,
-    projectId: record.projectId,
-    version: record.version,
-    instructions: record.instructions,
-    providerId: record.providerId,
-    model: record.model,
-    skills: record.skills,
-    subagents: record.subagents as Subagent[],
-    role: record.role,
-    capabilityTags: record.capabilityTags,
-    handoffPolicy: record.handoffPolicy as HandoffPolicy,
-    memoryPolicy: record.memoryPolicy as MemoryPolicy,
-    tools: record.tools,
-    mcpConnectors: record.mcpConnectors,
-    metadata: record.metadata,
-    createdAt: record.createdAt,
-  }
+function serializeAgentVersion(record: AgentVersion) {
+  return record
 }
 
-function serializeAgentMemory(record: AgentMemoryRecord) {
-  return {
-    agentId: record.agentId,
-    projectId: record.projectId,
-    content: record.content,
-    metadata: record.metadata,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
+function serializeAgentMemory(record: AgentMemory) {
+  return record
 }
 
 const listAgentsRoute = createRoute({
@@ -484,7 +428,8 @@ export function registerAgentRoutes(routes: AgentRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         {
           data: page.rows.map(serializeAgent),
@@ -548,16 +493,16 @@ export function registerAgentRoutes(routes: AgentRoutes) {
             outcome: 'success',
             requestId: requestId(c),
             before: serializeAgent(before),
-            after: { archivedAt: result.agent.archivedAt },
+            after: { archivedAt: result.agent.metadata.archivedAt },
           })
-        } else if (before.archivedAt && result.agent.archivedAt === null) {
+        } else if (before.metadata.archivedAt && result.agent.metadata.archivedAt === null) {
           await deps.audit.record(scope, {
             action: 'agent.unarchive',
             resourceType: 'agent',
             resourceId: agentId,
             outcome: 'success',
             requestId: requestId(c),
-            before: { archivedAt: before.archivedAt },
+            before: { archivedAt: before.metadata.archivedAt },
             after: { archivedAt: null },
           })
         }
@@ -642,7 +587,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!agent) {
         return notFound(c)
       }
-      if (!memoryEnabled(agent.memoryPolicy)) {
+      if (!memoryEnabled(agent.spec.memoryPolicy)) {
         return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
       }
       const memory = await readAgentMemory(deps, auth.project.id, agent)
@@ -660,7 +605,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!agent) {
         return notFound(c)
       }
-      if (!memoryEnabled(agent.memoryPolicy)) {
+      if (!memoryEnabled(agent.spec.memoryPolicy)) {
         return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
       }
       try {

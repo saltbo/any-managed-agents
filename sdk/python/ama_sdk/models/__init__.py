@@ -7,9 +7,13 @@ from .agent_handoff_policy import AgentHandoffPolicy
 from .agent_handoff_target import AgentHandoffTarget
 from .agent_list_response import AgentListResponse
 from .agent_memory import AgentMemory
-from .agent_memory_metadata import AgentMemoryMetadata
 from .agent_memory_policy import AgentMemoryPolicy
-from .agent_metadata import AgentMetadata
+from .agent_memory_spec import AgentMemorySpec
+from .agent_memory_spec_metadata import AgentMemorySpecMetadata
+from .agent_memory_status import AgentMemoryStatus
+from .agent_spec import AgentSpec
+from .agent_spec_metadata import AgentSpecMetadata
+from .agent_status import AgentStatus
 from .agent_subagent import AgentSubagent
 from .agent_tool_attachment import AgentToolAttachment
 from .agent_tool_attachment_approval_mode import AgentToolAttachmentApprovalMode
@@ -21,7 +25,7 @@ from .agent_tool_attachment_input_schema import AgentToolAttachmentInputSchema
 from .agent_tool_attachment_policy_metadata import AgentToolAttachmentPolicyMetadata
 from .agent_version import AgentVersion
 from .agent_version_list_response import AgentVersionListResponse
-from .agent_version_metadata import AgentVersionMetadata
+from .agent_version_status import AgentVersionStatus
 from .audit_record import AuditRecord
 from .audit_record_actor_type import AuditRecordActorType
 from .audit_record_after import AuditRecordAfter
@@ -117,24 +121,20 @@ from .environment_mcp_policy import EnvironmentMcpPolicy
 from .environment_mcp_policy_connector_approval_modes import EnvironmentMcpPolicyConnectorApprovalModes
 from .environment_mcp_policy_connector_approval_modes_additional_property import EnvironmentMcpPolicyConnectorApprovalModesAdditionalProperty
 from .environment_mcp_policy_default_effect import EnvironmentMcpPolicyDefaultEffect
-from .environment_metadata import EnvironmentMetadata
 from .environment_network_policy import EnvironmentNetworkPolicy
 from .environment_network_policy_mode import EnvironmentNetworkPolicyMode
-from .environment_package_manager_policy import EnvironmentPackageManagerPolicy
-from .environment_packages_item import EnvironmentPackagesItem
-from .environment_resource_limits import EnvironmentResourceLimits
-from .environment_runtime_config import EnvironmentRuntimeConfig
-from .environment_variables import EnvironmentVariables
-from .environment_variables_additional_property import EnvironmentVariablesAdditionalProperty
+from .environment_spec import EnvironmentSpec
+from .environment_spec_metadata import EnvironmentSpecMetadata
+from .environment_spec_package_manager_policy import EnvironmentSpecPackageManagerPolicy
+from .environment_spec_packages_item import EnvironmentSpecPackagesItem
+from .environment_spec_resource_limits import EnvironmentSpecResourceLimits
+from .environment_spec_runtime_config import EnvironmentSpecRuntimeConfig
+from .environment_spec_variables import EnvironmentSpecVariables
+from .environment_spec_variables_additional_property import EnvironmentSpecVariablesAdditionalProperty
+from .environment_status import EnvironmentStatus
 from .environment_version import EnvironmentVersion
 from .environment_version_list_response import EnvironmentVersionListResponse
-from .environment_version_metadata import EnvironmentVersionMetadata
-from .environment_version_package_manager_policy import EnvironmentVersionPackageManagerPolicy
-from .environment_version_packages_item import EnvironmentVersionPackagesItem
-from .environment_version_resource_limits import EnvironmentVersionResourceLimits
-from .environment_version_runtime_config import EnvironmentVersionRuntimeConfig
-from .environment_version_variables import EnvironmentVersionVariables
-from .environment_version_variables_additional_property import EnvironmentVersionVariablesAdditionalProperty
+from .environment_version_status import EnvironmentVersionStatus
 from .error_response import ErrorResponse
 from .error_response_error import ErrorResponseError
 from .error_response_error_details import ErrorResponseErrorDetails
@@ -170,8 +170,12 @@ from .memory_store import MemoryStore
 from .memory_store_list_response import MemoryStoreListResponse
 from .memory_store_memory import MemoryStoreMemory
 from .memory_store_memory_list_response import MemoryStoreMemoryListResponse
-from .memory_store_memory_metadata import MemoryStoreMemoryMetadata
-from .memory_store_metadata import MemoryStoreMetadata
+from .memory_store_memory_spec import MemoryStoreMemorySpec
+from .memory_store_memory_spec_metadata import MemoryStoreMemorySpecMetadata
+from .memory_store_memory_status import MemoryStoreMemoryStatus
+from .memory_store_spec import MemoryStoreSpec
+from .memory_store_spec_metadata import MemoryStoreSpecMetadata
+from .memory_store_status import MemoryStoreStatus
 from .memory_volume import MemoryVolume
 from .memory_volume_access import MemoryVolumeAccess
 from .memory_volume_type import MemoryVolumeType
@@ -200,6 +204,10 @@ from .put_runner_heartbeat_request_state import PutRunnerHeartbeatRequestState
 from .read_usage_summary_group_by import ReadUsageSummaryGroupBy
 from .replace_agent_memory_request import ReplaceAgentMemoryRequest
 from .replace_agent_memory_request_metadata import ReplaceAgentMemoryRequestMetadata
+from .resource_metadata import ResourceMetadata
+from .resource_metadata_annotations import ResourceMetadataAnnotations
+from .resource_metadata_labels import ResourceMetadataLabels
+from .resource_phase import ResourcePhase
 from .runner import Runner
 from .runner_auth_mode import RunnerAuthMode
 from .runner_channel_message import RunnerChannelMessage
@@ -311,16 +319,20 @@ from .session_status_phase import SessionStatusPhase
 from .session_steer_frame import SessionSteerFrame
 from .session_steer_frame_type import SessionSteerFrameType
 from .trigger import Trigger
-from .trigger_env import TriggerEnv
 from .trigger_list_response import TriggerListResponse
-from .trigger_metadata import TriggerMetadata
 from .trigger_run import TriggerRun
 from .trigger_run_list_response import TriggerRunListResponse
-from .trigger_run_metadata import TriggerRunMetadata
-from .trigger_run_state import TriggerRunState
+from .trigger_run_spec import TriggerRunSpec
+from .trigger_run_spec_metadata import TriggerRunSpecMetadata
+from .trigger_run_status import TriggerRunStatus
+from .trigger_run_status_phase import TriggerRunStatusPhase
 from .trigger_schedule_type_0 import TriggerScheduleType0
 from .trigger_schedule_type_0_type import TriggerScheduleType0Type
-from .trigger_type import TriggerType
+from .trigger_spec import TriggerSpec
+from .trigger_spec_env import TriggerSpecEnv
+from .trigger_spec_metadata import TriggerSpecMetadata
+from .trigger_spec_type import TriggerSpecType
+from .trigger_status import TriggerStatus
 from .update_agent_request import UpdateAgentRequest
 from .update_agent_request_metadata import UpdateAgentRequestMetadata
 from .update_budget_request import UpdateBudgetRequest
@@ -374,17 +386,23 @@ from .usage_summary_totals import UsageSummaryTotals
 from .vault import Vault
 from .vault_credential import VaultCredential
 from .vault_credential_list_response import VaultCredentialListResponse
-from .vault_credential_metadata import VaultCredentialMetadata
-from .vault_credential_state import VaultCredentialState
-from .vault_credential_type import VaultCredentialType
+from .vault_credential_spec import VaultCredentialSpec
+from .vault_credential_spec_metadata import VaultCredentialSpecMetadata
+from .vault_credential_spec_type import VaultCredentialSpecType
+from .vault_credential_status import VaultCredentialStatus
+from .vault_credential_status_phase import VaultCredentialStatusPhase
 from .vault_credential_version_list_response import VaultCredentialVersionListResponse
+from .vault_credential_version_spec import VaultCredentialVersionSpec
+from .vault_credential_version_spec_provider import VaultCredentialVersionSpecProvider
+from .vault_credential_version_status import VaultCredentialVersionStatus
+from .vault_credential_version_status_phase import VaultCredentialVersionStatusPhase
 from .vault_credential_version_type_0 import VaultCredentialVersionType0
-from .vault_credential_version_type_0_provider import VaultCredentialVersionType0Provider
-from .vault_credential_version_type_0_state import VaultCredentialVersionType0State
 from .vault_json_object import VaultJsonObject
 from .vault_list_response import VaultListResponse
-from .vault_metadata import VaultMetadata
-from .vault_scope import VaultScope
+from .vault_spec import VaultSpec
+from .vault_spec_metadata import VaultSpecMetadata
+from .vault_spec_scope import VaultSpecScope
+from .vault_status import VaultStatus
 from .volume_mount import VolumeMount
 from .work_item import WorkItem
 from .work_item_error_type_0 import WorkItemErrorType0
@@ -401,9 +419,13 @@ __all__ = (
     "AgentHandoffTarget",
     "AgentListResponse",
     "AgentMemory",
-    "AgentMemoryMetadata",
     "AgentMemoryPolicy",
-    "AgentMetadata",
+    "AgentMemorySpec",
+    "AgentMemorySpecMetadata",
+    "AgentMemoryStatus",
+    "AgentSpec",
+    "AgentSpecMetadata",
+    "AgentStatus",
     "AgentSubagent",
     "AgentToolAttachment",
     "AgentToolAttachmentApprovalMode",
@@ -415,7 +437,7 @@ __all__ = (
     "AgentToolAttachmentPolicyMetadata",
     "AgentVersion",
     "AgentVersionListResponse",
-    "AgentVersionMetadata",
+    "AgentVersionStatus",
     "AuditRecord",
     "AuditRecordActorType",
     "AuditRecordAfter",
@@ -511,24 +533,20 @@ __all__ = (
     "EnvironmentMcpPolicyConnectorApprovalModes",
     "EnvironmentMcpPolicyConnectorApprovalModesAdditionalProperty",
     "EnvironmentMcpPolicyDefaultEffect",
-    "EnvironmentMetadata",
     "EnvironmentNetworkPolicy",
     "EnvironmentNetworkPolicyMode",
-    "EnvironmentPackageManagerPolicy",
-    "EnvironmentPackagesItem",
-    "EnvironmentResourceLimits",
-    "EnvironmentRuntimeConfig",
-    "EnvironmentVariables",
-    "EnvironmentVariablesAdditionalProperty",
+    "EnvironmentSpec",
+    "EnvironmentSpecMetadata",
+    "EnvironmentSpecPackageManagerPolicy",
+    "EnvironmentSpecPackagesItem",
+    "EnvironmentSpecResourceLimits",
+    "EnvironmentSpecRuntimeConfig",
+    "EnvironmentSpecVariables",
+    "EnvironmentSpecVariablesAdditionalProperty",
+    "EnvironmentStatus",
     "EnvironmentVersion",
     "EnvironmentVersionListResponse",
-    "EnvironmentVersionMetadata",
-    "EnvironmentVersionPackageManagerPolicy",
-    "EnvironmentVersionPackagesItem",
-    "EnvironmentVersionResourceLimits",
-    "EnvironmentVersionRuntimeConfig",
-    "EnvironmentVersionVariables",
-    "EnvironmentVersionVariablesAdditionalProperty",
+    "EnvironmentVersionStatus",
     "ErrorResponse",
     "ErrorResponseError",
     "ErrorResponseErrorDetails",
@@ -564,8 +582,12 @@ __all__ = (
     "MemoryStoreListResponse",
     "MemoryStoreMemory",
     "MemoryStoreMemoryListResponse",
-    "MemoryStoreMemoryMetadata",
-    "MemoryStoreMetadata",
+    "MemoryStoreMemorySpec",
+    "MemoryStoreMemorySpecMetadata",
+    "MemoryStoreMemoryStatus",
+    "MemoryStoreSpec",
+    "MemoryStoreSpecMetadata",
+    "MemoryStoreStatus",
     "MemoryVolume",
     "MemoryVolumeAccess",
     "MemoryVolumeType",
@@ -594,6 +616,10 @@ __all__ = (
     "ReadUsageSummaryGroupBy",
     "ReplaceAgentMemoryRequest",
     "ReplaceAgentMemoryRequestMetadata",
+    "ResourceMetadata",
+    "ResourceMetadataAnnotations",
+    "ResourceMetadataLabels",
+    "ResourcePhase",
     "Runner",
     "RunnerAuthMode",
     "RunnerChannelMessage",
@@ -705,16 +731,20 @@ __all__ = (
     "SessionSteerFrame",
     "SessionSteerFrameType",
     "Trigger",
-    "TriggerEnv",
     "TriggerListResponse",
-    "TriggerMetadata",
     "TriggerRun",
     "TriggerRunListResponse",
-    "TriggerRunMetadata",
-    "TriggerRunState",
+    "TriggerRunSpec",
+    "TriggerRunSpecMetadata",
+    "TriggerRunStatus",
+    "TriggerRunStatusPhase",
     "TriggerScheduleType0",
     "TriggerScheduleType0Type",
-    "TriggerType",
+    "TriggerSpec",
+    "TriggerSpecEnv",
+    "TriggerSpecMetadata",
+    "TriggerSpecType",
+    "TriggerStatus",
     "UpdateAgentRequest",
     "UpdateAgentRequestMetadata",
     "UpdateBudgetRequest",
@@ -768,17 +798,23 @@ __all__ = (
     "Vault",
     "VaultCredential",
     "VaultCredentialListResponse",
-    "VaultCredentialMetadata",
-    "VaultCredentialState",
-    "VaultCredentialType",
+    "VaultCredentialSpec",
+    "VaultCredentialSpecMetadata",
+    "VaultCredentialSpecType",
+    "VaultCredentialStatus",
+    "VaultCredentialStatusPhase",
     "VaultCredentialVersionListResponse",
+    "VaultCredentialVersionSpec",
+    "VaultCredentialVersionSpecProvider",
+    "VaultCredentialVersionStatus",
+    "VaultCredentialVersionStatusPhase",
     "VaultCredentialVersionType0",
-    "VaultCredentialVersionType0Provider",
-    "VaultCredentialVersionType0State",
     "VaultJsonObject",
     "VaultListResponse",
-    "VaultMetadata",
-    "VaultScope",
+    "VaultSpec",
+    "VaultSpecMetadata",
+    "VaultSpecScope",
+    "VaultStatus",
     "VolumeMount",
     "WorkItem",
     "WorkItemErrorType0",

@@ -32,10 +32,15 @@ Feature: API contracts
     When the handled fields are compared to the OpenAPI create and update schemas
     Then the handled fields match the published create schema plus the lifecycle archive transition
 
+  @api-contracts/resource-entities @api
+  Scenario: Publish standard resource entity responses
+    Given the Worker app is initialized
+    When the OpenAPI document is requested
+    Then agent, environment, vault, memory, trigger, and child-resource responses use metadata, spec, and status
+    And every resource response exposes its stable uid in metadata.uid
+
   # ── Pagination and filtering (e2e: cross-stack list contracts) ──
-  # Steps below bind to test/e2e/list-contracts.steps.ts; the e2e runner executes
-  # these for real (pnpm test:e2e --tags @e2e). Keep the step wording in sync with
-  # the step definitions.
+  # Native Playwright e2e specs execute these scenarios for real through `pnpm run e2e`.
 
   @api-contracts/pagination @e2e
   Scenario: Page through API resources

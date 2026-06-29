@@ -107,7 +107,7 @@ Run browser e2e against the local dev server in local development and CI. This
 path must not consume real model quota or depend on deployed origins:
 
 ```bash
-pnpm run test:e2e
+pnpm run e2e
 ```
 
 Run the full AMA smoke on a host that has at least one supported runtime CLI

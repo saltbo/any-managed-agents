@@ -1,7 +1,9 @@
+import { resourceMetadata } from '@server/domain/resource'
 import type { Session, SessionMessage } from '@server/domain/session'
+import type { Trigger } from '@server/domain/trigger'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
-import type { AuthScope, ClaimedRun, DueTrigger, TriggerRecord } from './ports'
+import type { AuthScope, ClaimedRun, DueTrigger } from './ports'
 
 // dispatchDueScheduledTriggers now calls the runtime createSession usecase
 // directly (the SessionRuntimeGateway indirection was removed). Mock that module
@@ -55,32 +57,48 @@ function dueTrigger(overrides: Partial<DueTrigger> = {}): DueTrigger {
   }
 }
 
-function httpTrigger(overrides: Partial<TriggerRecord> = {}): TriggerRecord {
+function httpTrigger(
+  overrides: {
+    metadata?: Partial<Trigger['metadata']>
+    spec?: Partial<Trigger['spec']>
+    status?: Partial<Trigger['status']>
+  } = {},
+): Trigger {
+  const timestamp = '2026-01-01T00:00:00.000Z'
   return {
-    id: 'trigger_http',
-    organizationId: 'org_1',
-    projectId: 'project_1',
-    type: 'http',
-    name: 'HTTP Agent',
-    agentId: 'agent_1',
-    environmentId: 'env_1',
-    runtime: 'ama',
-    promptTemplate: 'Handle {{ body.ticket.id }} from {{ query.source }}',
-    env: {},
-    envFrom: [],
-    volumes: [],
-    volumeMounts: [],
-    schedule: null,
-    enabled: true,
-    nextDueAt: null,
-    lastDispatchedAt: null,
-    lastRunId: null,
-    metadata: {},
-    createdByUserId: 'user_1',
-    archivedAt: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
+    metadata: {
+      ...resourceMetadata({
+        uid: 'trigger_http',
+        pid: 'project_1',
+        name: 'HTTP Agent',
+        createdBy: 'user_1',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      ...overrides.metadata,
+    },
+    spec: {
+      type: 'http',
+      agentId: 'agent_1',
+      environmentId: 'env_1',
+      runtime: 'ama',
+      promptTemplate: 'Handle {{ body.ticket.id }} from {{ query.source }}',
+      env: {},
+      envFrom: [],
+      volumes: [],
+      volumeMounts: [],
+      schedule: null,
+      enabled: true,
+      metadata: {},
+      ...overrides.spec,
+    },
+    status: {
+      phase: 'active',
+      nextDueAt: null,
+      lastDispatchedAt: null,
+      lastRunId: null,
+      ...overrides.status,
+    },
   }
 }
 
@@ -762,7 +780,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     })
 
     await dispatchHttpTrigger(deps, auth, {
-      trigger: httpTrigger({ metadata: { labels: { maintainerId: 'maintainer_1' }, retained: true } }),
+      trigger: httpTrigger({ spec: { metadata: { labels: { maintainerId: 'maintainer_1' }, retained: true } } }),
       context: {
         body: {
           key: 'github:owner/repo:issue:123',
@@ -826,7 +844,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
       },
     })
     const result = await dispatchHttpTrigger(deps, auth, {
-      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      trigger: httpTrigger({ metadata: { uid: 'http_trigger_1' } }),
       context: {
         body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
         query: { source: 'portal' },
@@ -862,7 +880,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     })
 
     await dispatchHttpTrigger(deps, auth, {
-      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      trigger: httpTrigger({ metadata: { uid: 'http_trigger_1' } }),
       context: {
         body: {
           key: 'github:owner/repo:pull:456',
@@ -925,7 +943,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     })
 
     const result = await dispatchHttpTrigger(deps, auth, {
-      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      trigger: httpTrigger({ metadata: { uid: 'http_trigger_1' } }),
       context: {
         body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
         query: { source: 'portal' },
@@ -982,7 +1000,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     }))
 
     const result = await dispatchHttpTrigger(deps, auth, {
-      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      trigger: httpTrigger({ metadata: { uid: 'http_trigger_1' } }),
       context: {
         body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
         query: { source: 'portal' },
@@ -1009,8 +1027,10 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
       },
     ]
     const trigger = httpTrigger({
-      env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
-      envFrom,
+      spec: {
+        env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
+        envFrom,
+      },
     })
     let capturedOptions: Record<string, unknown> | null = null
     const deps = fakeDeps({
@@ -1029,7 +1049,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
         headers: {},
       },
     })
-    expect(capturedOptions).toMatchObject({ env: trigger.env, envFrom })
+    expect(capturedOptions).toMatchObject({ env: trigger.spec.env, envFrom })
   })
 
   it('records the HTTP session key on newly created trigger run metadata', async () => {
@@ -1043,7 +1063,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     })
 
     await dispatchHttpTrigger(deps, auth, {
-      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      trigger: httpTrigger({ metadata: { uid: 'http_trigger_1' } }),
       context: {
         body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
         query: { source: 'portal' },
@@ -1080,7 +1100,9 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
   it('rejects scheduled triggers at the HTTP dispatch entry', async () => {
     await expect(
       dispatchHttpTrigger(fakeDeps(), auth, {
-        trigger: { ...httpTrigger(), type: 'scheduled', schedule: { intervalSeconds: 3600, windowSeconds: 0 } },
+        trigger: httpTrigger({
+          spec: { type: 'scheduled', schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 } },
+        }),
         context: { body: {}, query: {}, headers: {} },
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError' })
@@ -1089,7 +1111,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
   it('rejects disabled HTTP triggers', async () => {
     await expect(
       dispatchHttpTrigger(fakeDeps(), auth, {
-        trigger: httpTrigger({ enabled: false }),
+        trigger: httpTrigger({ spec: { enabled: false } }),
         context: { body: {}, query: {}, headers: {} },
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError' })
@@ -1098,7 +1120,10 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
   it('rejects archived HTTP triggers', async () => {
     await expect(
       dispatchHttpTrigger(fakeDeps(), auth, {
-        trigger: httpTrigger({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+        trigger: httpTrigger({
+          metadata: { archivedAt: '2026-01-02T00:00:00.000Z' },
+          status: { phase: 'archived' },
+        }),
         context: { body: {}, query: {}, headers: {} },
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError' })

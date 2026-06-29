@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { agent, credential, environment, vault } from '@/test/resource-fixtures'
 import { ApiError, api } from './api'
 
 describe('shared API client [spec: web-console/rpc-client]', () => {
@@ -292,29 +293,18 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   // Agents API
   // ---------------------------------------------------------------------------
   describe('agents API', () => {
-    const agentFixture = {
+    const agentFixture = agent({
       id: 'agent_1',
-      projectId: 'p1',
       name: 'Test Agent',
-      description: null,
       instructions: null,
       providerId: null,
       model: null,
       skills: [],
-      subagents: [],
-      role: null,
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: {},
       tools: [],
-      mcpConnectors: [],
-      metadata: {},
-      archivedAt: null,
       currentVersionId: null,
-      version: 1,
       createdAt: '',
       updatedAt: '',
-    }
+    })
 
     it('readAgent calls GET /api/v1/agents/:agentId', async () => {
       const fetchMock = makeJsonFetch(agentFixture)
@@ -322,7 +312,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const result = await api.readAgent('agent_1')
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/agents/agent_1')
-      expect(result.id).toBe('agent_1')
+      expect(result.metadata.uid).toBe('agent_1')
     })
 
     it('createAgent posts JSON', async () => {
@@ -342,10 +332,10 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
 
     it('archiveAgent patches with archived:true', async () => {
-      const fetchMock = makeJsonFetch({ ...agentFixture, archivedAt: '2026-01-01' })
+      const fetchMock = makeJsonFetch(agent({ id: 'agent_1', archivedAt: '2026-01-01' }))
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.archiveAgent('agent_1')
-      expect(result.archivedAt).toBeTruthy()
+      expect(result.metadata.archivedAt).toBeTruthy()
     })
 
     it('listAgentVersions calls the versions sub-resource', async () => {
@@ -357,33 +347,25 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
 
     it('readAgentMemory calls the memory sub-resource', async () => {
-      const memory = {
-        agentId: 'agent_1',
-        projectId: 'p1',
-        content: 'facts',
-        metadata: {},
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(memory)
+      const fetchMock = makeJsonFetch({
+        metadata: { ...agentFixture.metadata, uid: 'agentmem_1', name: 'Agent memory' },
+        spec: { agentId: 'agent_1', content: 'facts', metadata: {} },
+        status: { phase: 'active' },
+      })
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.readAgentMemory('agent_1')
-      expect(result.content).toBe('facts')
+      expect(result.spec.content).toBe('facts')
     })
 
     it('replaceAgentMemory puts new content', async () => {
-      const memory = {
-        agentId: 'agent_1',
-        projectId: 'p1',
-        content: 'new facts',
-        metadata: {},
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(memory)
+      const fetchMock = makeJsonFetch({
+        metadata: { ...agentFixture.metadata, uid: 'agentmem_1', name: 'Agent memory' },
+        spec: { agentId: 'agent_1', content: 'new facts', metadata: {} },
+        status: { phase: 'active' },
+      })
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.replaceAgentMemory('agent_1', { content: 'new facts' })
-      expect(result.content).toBe('new facts')
+      expect(result.spec.content).toBe('new facts')
     })
   })
 
@@ -391,26 +373,14 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   // Environments API
   // ---------------------------------------------------------------------------
   describe('environments API', () => {
-    const envFixture = {
+    const envFixture = environment({
       id: 'env_1',
-      projectId: 'p1',
       name: 'Prod',
-      description: null,
-      packages: [],
-      variables: {},
-      hostingMode: 'cloud' as const,
-      networkPolicy: { mode: 'unrestricted' as const },
-      mcpPolicy: {},
-      packageManagerPolicy: {},
-      resourceLimits: {},
-      runtimeConfig: {},
-      metadata: {},
-      archivedAt: null,
+      networkPolicy: { mode: 'unrestricted' },
       currentVersionId: null,
-      version: 1,
       createdAt: '',
       updatedAt: '',
-    }
+    })
 
     it('listEnvironments calls /api/v1/environments', async () => {
       const fetchMock = makeJsonFetch(listPage)
@@ -424,7 +394,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const fetchMock = makeJsonFetch(envFixture)
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.readEnvironment('env_1')
-      expect(result.id).toBe('env_1')
+      expect(result.metadata.uid).toBe('env_1')
     })
 
     it('createEnvironment posts JSON', async () => {
@@ -444,10 +414,10 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
 
     it('archiveEnvironment patches with archived:true', async () => {
-      const fetchMock = makeJsonFetch({ ...envFixture, archivedAt: '2026-01-01' })
+      const fetchMock = makeJsonFetch(environment({ id: 'env_1', archivedAt: '2026-01-01' }))
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.archiveEnvironment('env_1')
-      expect(result.archivedAt).toBeTruthy()
+      expect(result.metadata.archivedAt).toBeTruthy()
     })
 
     it('listEnvironmentVersions calls the versions sub-resource', async () => {
@@ -664,17 +634,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   // Vaults API
   // ---------------------------------------------------------------------------
   describe('vaults API', () => {
-    const vaultFixture = {
-      id: 'vault_1',
-      projectId: 'p1',
-      name: 'My Vault',
-      description: null,
-      scope: 'project' as const,
-      metadata: {},
-      archivedAt: null,
-      createdAt: '',
-      updatedAt: '',
-    }
+    const vaultFixture = vault({ id: 'vault_1', name: 'My Vault', createdAt: '', updatedAt: '' })
 
     it('listVaults calls /api/v1/vaults', async () => {
       const fetchMock = makeJsonFetch(listPage)
@@ -688,7 +648,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const fetchMock = makeJsonFetch(vaultFixture)
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.readVault('vault_1')
-      expect(result.id).toBe('vault_1')
+      expect(result.metadata.uid).toBe('vault_1')
     })
 
     it('createVault posts JSON', async () => {
@@ -700,10 +660,10 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
 
     it('archiveVault patches with archived:true', async () => {
-      const fetchMock = makeJsonFetch({ ...vaultFixture, archivedAt: '2026-01-01' })
+      const fetchMock = makeJsonFetch(vault({ id: 'vault_1', archivedAt: '2026-01-01' }))
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.archiveVault('vault_1')
-      expect(result.archivedAt).toBeTruthy()
+      expect(result.metadata.archivedAt).toBeTruthy()
     })
 
     it('listVaultCredentials calls the credentials sub-resource', async () => {
@@ -716,23 +676,9 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
 
     it('createVaultCredential posts to credentials sub-resource', async () => {
-      const cred = {
-        id: 'cred_1',
-        vaultId: 'vault_1',
-        projectId: 'p1',
-        name: 'API Key',
-        type: 'opaque',
-        metadata: {},
-        state: 'active' as const,
-        activeVersionId: null,
-        activeVersion: null,
-        revokedAt: null,
-        revokedByUserId: null,
-        revokeReason: null,
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(cred)
+      const fetchMock = makeJsonFetch(
+        credential({ id: 'cred_1', vaultId: 'vault_1', name: 'API Key', activeVersion: null }),
+      )
       vi.stubGlobal('fetch', fetchMock)
       await api.createVaultCredential('vault_1', {
         name: 'API Key',
@@ -744,74 +690,76 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
 
     it('rotateVaultCredential posts to versions sub-resource', async () => {
-      const version = {
-        id: 'ver_1',
-        credentialId: 'cred_1',
+      const rotated = credential({
+        id: 'cred_1',
         vaultId: 'vault_1',
-        projectId: 'p1',
-        version: 2,
-        provider: 'ama' as const,
-        secretRef: 'ref',
-        referenceName: 'ref',
-        state: 'active' as const,
-        hasSecret: true,
-        metadata: {},
-        createdAt: '',
-        supersededAt: null,
-        revokedAt: null,
-      }
-      const fetchMock = makeJsonFetch(version)
+        activeVersionId: 'ver_1',
+        activeVersion: {
+          metadata: {
+            uid: 'ver_1',
+            pid: 'project_1',
+            name: 'Credential v2',
+            description: null,
+            labels: {},
+            annotations: {},
+            createdBy: 'user_1',
+            createdAt: '',
+            updatedAt: '',
+            archivedAt: null,
+          },
+          spec: {
+            credentialId: 'cred_1',
+            vaultId: 'vault_1',
+            organizationId: 'org_1',
+            version: 2,
+            provider: 'ama',
+            secretRef: 'ref',
+            referenceName: 'ref',
+            hasSecret: true,
+            dataKeys: ['value'],
+            metadata: {},
+          },
+          status: { phase: 'active', supersededAt: null, revokedAt: null },
+        },
+      })
+      const fetchMock = makeJsonFetch(rotated)
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.rotateVaultCredential('vault_1', 'cred_1', { stringData: { value: 'newsecret' } })
-      expect(result.id).toBe('ver_1')
+      expect(result.status.activeVersion?.metadata.uid).toBe('ver_1')
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/vaults/vault_1/credentials/cred_1/versions')
     })
 
     it('revokeVaultCredential patches with state:revoked', async () => {
-      const cred = {
-        id: 'cred_1',
-        vaultId: 'vault_1',
-        projectId: 'p1',
-        name: 'API Key',
-        type: 'opaque',
-        metadata: {},
-        state: 'revoked' as const,
-        activeVersionId: null,
-        activeVersion: null,
-        revokedAt: '2026-01-01',
-        revokedByUserId: null,
-        revokeReason: null,
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(cred)
+      const fetchMock = makeJsonFetch(
+        credential({
+          id: 'cred_1',
+          vaultId: 'vault_1',
+          name: 'API Key',
+          phase: 'revoked',
+          activeVersion: null,
+          revokedAt: '2026-01-01',
+        }),
+      )
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.revokeVaultCredential('vault_1', 'cred_1', 'no longer needed')
-      expect(result.state).toBe('revoked')
+      expect(result.status.phase).toBe('revoked')
     })
 
     it('revokeVaultCredential works without a revokeReason', async () => {
-      const cred = {
-        id: 'cred_1',
-        vaultId: 'vault_1',
-        projectId: 'p1',
-        name: 'API Key',
-        type: 'opaque',
-        metadata: {},
-        state: 'revoked' as const,
-        activeVersionId: null,
-        activeVersion: null,
-        revokedAt: '2026-01-01',
-        revokedByUserId: null,
-        revokeReason: null,
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(cred)
+      const fetchMock = makeJsonFetch(
+        credential({
+          id: 'cred_1',
+          vaultId: 'vault_1',
+          name: 'API Key',
+          phase: 'revoked',
+          activeVersion: null,
+          revokedAt: '2026-01-01',
+        }),
+      )
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.revokeVaultCredential('vault_1', 'cred_1')
-      expect(result.state).toBe('revoked')
+      expect(result.status.phase).toBe('revoked')
     })
   })
 

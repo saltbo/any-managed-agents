@@ -1,16 +1,17 @@
 import type {
+  Environment,
   EnvironmentConfig,
   EnvironmentHostingMode,
   EnvironmentPackage,
   EnvironmentVariable,
+  EnvironmentVersion,
 } from '@server/domain/environment'
+import { resourceMetadata, resourcePhase } from '@server/domain/resource'
 import type {
   CreateEnvironmentInput,
   EnvironmentListPage,
   EnvironmentListQuery,
-  EnvironmentRecord,
   EnvironmentRepo,
-  EnvironmentVersionRecord,
   UpdateEnvironmentFields,
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
@@ -75,29 +76,40 @@ async function versionNumberOf(db: Db, environmentId: string, versionId: string 
   return row?.version ?? 0
 }
 
-function environmentRecordFrom(row: EnvironmentRow, version: number): EnvironmentRecord {
+function environmentRecordFrom(row: EnvironmentRow, version: number): Environment {
   return {
-    id: row.id,
-    projectId: row.projectId,
-    name: row.name,
-    description: row.description,
-    archivedAt: row.archivedAt,
-    currentVersionId: row.currentVersionId,
-    version,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    ...configFromRow(row),
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.name,
+      description: row.description,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.archivedAt,
+    }),
+    spec: configFromRow(row),
+    status: {
+      phase: resourcePhase(row.archivedAt),
+      currentVersionId: row.currentVersionId,
+      version,
+    },
   }
 }
 
-function versionRecordFrom(row: EnvironmentVersionRow): EnvironmentVersionRecord {
+function versionRecordFrom(row: EnvironmentVersionRow): EnvironmentVersion {
   return {
-    id: row.id,
-    environmentId: row.environmentId,
-    projectId: row.projectId,
-    version: row.version,
-    createdAt: row.createdAt,
-    ...configFromRow(row),
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: `v${row.version}`,
+      createdAt: row.createdAt,
+      updatedAt: row.createdAt,
+    }),
+    spec: configFromRow(row),
+    status: {
+      environmentId: row.environmentId,
+      version: row.version,
+    },
   }
 }
 
@@ -143,18 +155,18 @@ export function createEnvironmentRepo(db: Db): EnvironmentRepo {
       return environmentRecordFrom(row, await versionNumberOf(db, row.id, row.currentVersionId))
     },
 
-    async insertVersion(environment, config, createdAt): Promise<EnvironmentVersionRecord> {
+    async insertVersion(environment, config, createdAt): Promise<EnvironmentVersion> {
       const latest = await db
         .select({ version: environmentVersions.version })
         .from(environmentVersions)
-        .where(eq(environmentVersions.environmentId, environment.id))
+        .where(eq(environmentVersions.environmentId, environment.metadata.uid))
         .orderBy(desc(environmentVersions.version))
         .limit(1)
         .get()
       const row = {
         id: newId('envver'),
-        environmentId: environment.id,
-        projectId: environment.projectId,
+        environmentId: environment.metadata.uid,
+        projectId: environment.metadata.pid ?? '',
         version: (latest?.version ?? 0) + 1,
         createdAt,
         ...configColumns(config),
@@ -187,7 +199,7 @@ export function createEnvironmentRepo(db: Db): EnvironmentRepo {
       return row ? versionRecordFrom(row) : null
     },
 
-    async insert(input: CreateEnvironmentInput, createdAt): Promise<EnvironmentRecord> {
+    async insert(input: CreateEnvironmentInput, createdAt): Promise<Environment> {
       const row = {
         id: newId('env'),
         projectId: input.projectId,

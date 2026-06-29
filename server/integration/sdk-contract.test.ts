@@ -28,49 +28,7 @@ const operations: Array<{ path: string; operationId: string }> = Object.entries(
 type Json = Record<string, unknown>
 type SdkList = { data: Json[]; pagination: { limit: number; hasMore: boolean; nextCursor: string | null } }
 
-const STANDARD_AGENT_FIELDS = new Set([
-  'id',
-  'projectId',
-  'name',
-  'description',
-  'instructions',
-  'providerId',
-  'model',
-  'skills',
-  'subagents',
-  'role',
-  'capabilityTags',
-  'handoffPolicy',
-  'memoryPolicy',
-  'tools',
-  'mcpConnectors',
-  'metadata',
-  'archivedAt',
-  'currentVersionId',
-  'version',
-  'createdAt',
-  'updatedAt',
-])
-const STANDARD_ENVIRONMENT_FIELDS = new Set([
-  'id',
-  'projectId',
-  'name',
-  'description',
-  'packages',
-  'variables',
-  'hostingMode',
-  'networkPolicy',
-  'mcpPolicy',
-  'packageManagerPolicy',
-  'resourceLimits',
-  'runtimeConfig',
-  'metadata',
-  'archivedAt',
-  'currentVersionId',
-  'version',
-  'createdAt',
-  'updatedAt',
-])
+const STANDARD_RESOURCE_FIELDS = new Set(['metadata', 'spec', 'status'])
 
 // The external product owns these workflow ids; AMA only ever sees them as opaque metadata.
 function externalRefs(runId: string) {
@@ -82,6 +40,12 @@ function externalMetadata(refs: ReturnType<typeof externalRefs>): Json {
 function obj(value: unknown): Json {
   expect(value && typeof value === 'object' && !Array.isArray(value)).toBe(true)
   return value as Json
+}
+function resourceUid(resource: Json) {
+  return String(obj(obj(resource).metadata).uid)
+}
+function resourceSpec(resource: Json) {
+  return obj(obj(resource).spec)
 }
 
 // The integration auth helper hands back a full `Bearer e2e:<runId>` header; the
@@ -122,8 +86,8 @@ async function createSessionThroughSdk(
   extra: Json,
 ) {
   const created = (await ama.sessions.create({
-    agentId: String(obj(agent).id),
-    environmentId: String(obj(environment).id),
+    agentId: resourceUid(agent),
+    environmentId: resourceUid(environment),
     runtime: 'ama',
     name: `${runId} external session`,
     metadata: externalMetadata(refs),
@@ -154,30 +118,32 @@ describe('[CF] generated SDK contract', () => {
     const refs = externalRefs(runId)
 
     const createdAgent = await createAgentThroughSdk(ama, runId, refs)
-    const updatedAgent = (await ama.agents.update(String(createdAgent.id), {
+    const createdAgentId = resourceUid(createdAgent)
+    const updatedAgent = (await ama.agents.update(createdAgentId, {
       description: 'Updated by the external product through the SDK.',
     })) as Json
     const createdEnv = await createEnvironmentThroughSdk(ama, runId, refs)
+    const createdEnvId = resourceUid(createdEnv)
 
     // AMA stores only standard resource fields; external ids survive only in metadata.
-    const agent = (await ama.agents.get(String(obj(updatedAgent).id))) as Json
+    const agent = (await ama.agents.get(resourceUid(updatedAgent))) as Json
     for (const key of Object.keys(agent)) {
-      expect(STANDARD_AGENT_FIELDS.has(key), `agent field "${key}" is not standard`).toBe(true)
+      expect(STANDARD_RESOURCE_FIELDS.has(key), `agent field "${key}" is not standard`).toBe(true)
     }
-    const environment = (await ama.environments.get(String(obj(createdEnv).id))) as Json
+    const environment = (await ama.environments.get(createdEnvId)) as Json
     for (const key of Object.keys(environment)) {
-      expect(STANDARD_ENVIRONMENT_FIELDS.has(key), `environment field "${key}" is not standard`).toBe(true)
+      expect(STANDARD_RESOURCE_FIELDS.has(key), `environment field "${key}" is not standard`).toBe(true)
     }
-    expect(obj(agent.metadata).externalTaskId).toBe(refs.taskId)
-    expect(obj(environment.metadata).externalBoardId).toBe(refs.boardId)
-    expect(agent.description).toBe('Updated by the external product through the SDK.')
+    expect(obj(resourceSpec(agent).metadata).externalTaskId).toBe(refs.taskId)
+    expect(obj(resourceSpec(environment).metadata).externalBoardId).toBe(refs.boardId)
+    expect(obj(agent.metadata).description).toBe('Updated by the external product through the SDK.')
 
     // No product-workflow references leak outside metadata.
     for (const resource of [agent, environment]) {
       for (const key of Object.keys(resource)) {
         expect(/external|board|task|review|pull/i.test(key), `"${key}" looks like a workflow field`).toBe(false)
       }
-      const { metadata: _m, ...standard } = resource
+      const { spec: _spec, ...standard } = resource
       const serialized = JSON.stringify(standard)
       expect(serialized.includes(refs.taskId)).toBe(false)
       expect(serialized.includes(refs.boardId)).toBe(false)
@@ -185,10 +151,14 @@ describe('[CF] generated SDK contract', () => {
 
     // The product keeps its own mapping; AMA ids resolve back through it.
     const productRecords = new Map<string, string>()
-    productRecords.set(refs.taskId, String(agent.id))
-    productRecords.set(refs.boardId, String(environment.id))
-    expect(((await ama.agents.get(productRecords.get(refs.taskId) as string)) as Json).id).toBe(agent.id)
-    expect(((await ama.environments.get(productRecords.get(refs.boardId) as string)) as Json).id).toBe(environment.id)
+    productRecords.set(refs.taskId, resourceUid(agent))
+    productRecords.set(refs.boardId, resourceUid(environment))
+    expect(resourceUid((await ama.agents.get(productRecords.get(refs.taskId) as string)) as Json)).toBe(
+      resourceUid(agent),
+    )
+    expect(resourceUid((await ama.environments.get(productRecords.get(refs.boardId) as string)) as Json)).toBe(
+      resourceUid(environment),
+    )
 
     // The SDK inventory exposes no product-workflow concepts.
     const asyncTaskResource = /[a-z]+-tasks(\/|\b)/i
@@ -223,10 +193,10 @@ describe('[CF] generated SDK contract', () => {
 
     // Snapshots pin the selected agent/environment and are immutable after creation.
     const before = await readSession(ama, sessionId)
-    expect(obj(obj(obj(obj(before.status).bindings).agent).snapshot).agentId).toBe(obj(agent).id)
+    expect(obj(obj(obj(obj(before.status).bindings).agent).snapshot).agentId).toBe(resourceUid(agent))
     expect(typeof obj(obj(obj(obj(before.status).bindings).agent).snapshot).version).toBe('number')
-    expect(obj(obj(obj(obj(before.status).bindings).environment).snapshot).environmentId).toBe(obj(environment).id)
-    await ama.agents.update(String(obj(agent).id), {
+    expect(obj(obj(obj(obj(before.status).bindings).environment).snapshot).environmentId).toBe(resourceUid(environment))
+    await ama.agents.update(resourceUid(agent), {
       instructions: 'Changed after session creation — the snapshot must not follow.',
     })
     const after = await readSession(ama, sessionId)

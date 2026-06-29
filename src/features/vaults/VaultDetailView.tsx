@@ -45,19 +45,19 @@ export function VaultDetailView({
     <div className="grid gap-4">
       <DetailSection
         title="Vault profile"
-        description={vault.description ?? 'No description'}
+        description={vault.metadata.description ?? 'No description'}
         actions={
           <>
             <StatusBadge value={archivedLabel(vault)} />
-            <StatusBadge value={vault.scope} />
+            <StatusBadge value={vault.spec.scope} />
           </>
         }
       >
         <MetaGrid>
-          <Meta label="Vault id" value={vault.id} />
-          <Meta label="Metadata" value={stringifyJson(vault.metadata)} />
-          <Meta label="Created" value={formatDate(vault.createdAt)} />
-          <Meta label="Archived" value={formatDate(vault.archivedAt)} />
+          <Meta label="Vault id" value={vault.metadata.uid} />
+          <Meta label="Metadata" value={stringifyJson(vault.spec.metadata)} />
+          <Meta label="Created" value={formatDate(vault.metadata.createdAt)} />
+          <Meta label="Archived" value={formatDate(vault.metadata.archivedAt)} />
         </MetaGrid>
       </DetailSection>
       <DetailSection
@@ -102,23 +102,25 @@ export function VaultDetailView({
             </TableHeader>
             <TableBody>
               {credentials.map((credential) => (
-                <TableRow key={credential.id}>
-                  <TableCell className="font-medium">{credential.name}</TableCell>
-                  <TableCell>{credential.type}</TableCell>
+                <TableRow key={credential.metadata.uid}>
+                  <TableCell className="font-medium">{credential.metadata.name}</TableCell>
+                  <TableCell>{credential.spec.type}</TableCell>
                   <TableCell>
-                    <StatusBadge value={credential.state} />
+                    <StatusBadge value={credential.status.phase} />
                   </TableCell>
-                  <TableCell>{credential.activeVersion ? `v${credential.activeVersion.version}` : 'None'}</TableCell>
+                  <TableCell>
+                    {credential.status.activeVersion ? `v${credential.status.activeVersion.spec.version}` : 'None'}
+                  </TableCell>
                   <TableCell className="max-w-64 truncate">
-                    {credential.activeVersion?.referenceName ?? 'Not returned'}
+                    {credential.status.activeVersion?.spec.referenceName ?? 'Not returned'}
                   </TableCell>
                   <TableCell className="max-w-72 truncate">
-                    {credential.activeVersion?.dataKeys.join(', ') || 'None'}
+                    {credential.status.activeVersion?.spec.dataKeys.join(', ') || 'None'}
                   </TableCell>
                   {vaultActive ? (
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        {credential.state === 'active' ? (
+                        {credential.status.phase === 'active' ? (
                           <>
                             <Button
                               type="button"
@@ -131,7 +133,7 @@ export function VaultDetailView({
                             </Button>
                             <ConfirmAction
                               title="Revoke credential?"
-                              description={`Revoke ${credential.name}. Future runtime resolution is blocked; version references stay auditable.`}
+                              description={`Revoke ${credential.metadata.name}. Future runtime resolution is blocked; version references stay auditable.`}
                               confirmLabel="Revoke credential"
                               destructive
                               onConfirm={() => onRevoke(credential)}

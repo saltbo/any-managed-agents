@@ -114,16 +114,16 @@ export const SANDBOX_TOOLS = ['sandbox.exec', 'sandbox.read', 'sandbox.write'] a
 export const DEFAULT_SANDBOX_SKILL = 'ama@coding-agent'
 
 export function agentHasSandboxExecution(agent: Agent) {
-  const names = agent.tools.map((tool) => tool.name)
+  const names = agent.spec.tools.map((tool) => tool.name)
   return names.length === 0 || names.includes('*') || names.includes('sandbox.exec')
 }
 
 export function sandboxAgentInput(agent: Agent): Partial<AgentInput> {
-  const existing = agent.tools.map((tool) => tool.name)
+  const existing = agent.spec.tools.map((tool) => tool.name)
   const merged = [...new Set([...existing, ...SANDBOX_TOOLS])]
   return {
     tools: merged.map((name) => ({ name })),
-    skills: agent.skills.length > 0 ? agent.skills : [DEFAULT_SANDBOX_SKILL],
+    skills: agent.spec.skills.length > 0 ? agent.spec.skills : [DEFAULT_SANDBOX_SKILL],
   }
 }
 

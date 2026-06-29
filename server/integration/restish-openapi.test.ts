@@ -80,7 +80,11 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
       }),
     })
     expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string; currentVersionId: string }
+    const environment = (await environmentRes.json()) as {
+      metadata: { uid: string }
+      status: { currentVersionId: string }
+    }
+    const environmentId = environment.metadata.uid
 
     const agentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
@@ -92,11 +96,12 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
       }),
     })
     expect(agentRes.status).toBe(201)
-    const agent = (await agentRes.json()) as { id: string; currentVersionId: string }
+    const agent = (await agentRes.json()) as { metadata: { uid: string }; status: { currentVersionId: string } }
+    const agentId = agent.metadata.uid
 
     const sessionRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({ agentId, environmentId, runtime: 'ama' }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {
@@ -112,12 +117,12 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
     }
 
     expect(session).toMatchObject({
-      spec: { agentId: agent.id, environmentId: environment.id },
+      spec: { agentId, environmentId },
       status: {
         phase: 'idle',
         bindings: {
-          agent: { versionId: agent.currentVersionId },
-          environment: { versionId: environment.currentVersionId },
+          agent: { versionId: agent.status.currentVersionId },
+          environment: { versionId: environment.status.currentVersionId },
         },
       },
     })

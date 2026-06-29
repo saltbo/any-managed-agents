@@ -1,4 +1,5 @@
 import {
+  type Environment,
   type EnvironmentConfig,
   hasSecretMaterial,
   mcpPolicyConnectorIds,
@@ -6,7 +7,7 @@ import {
   validateSecretFreeObjects,
 } from '@server/domain/environment'
 import type { Deps } from './deps'
-import { type AuthScope, EnvironmentArchivedError, type EnvironmentRecord, EnvironmentValidationError } from './ports'
+import { type AuthScope, EnvironmentArchivedError, EnvironmentValidationError } from './ports'
 
 // Validates the config against sibling resources (MCP catalog entries) and the
 // secret-free-object rules. Throws
@@ -40,7 +41,7 @@ export async function createEnvironment(
   deps: Deps,
   auth: AuthScope,
   input: { name: string; description: string | null; config: EnvironmentConfig },
-): Promise<EnvironmentRecord> {
+): Promise<Environment> {
   await validateConfig(deps, auth, input.config)
   const createdAt = new Date().toISOString()
   const environment = await deps.environments.insert(
@@ -48,8 +49,11 @@ export async function createEnvironment(
     createdAt,
   )
   const version = await deps.environments.insertVersion(environment, input.config, createdAt)
-  await deps.environments.setCurrentVersion(environment.id, version.id)
-  return { ...environment, currentVersionId: version.id, version: version.version }
+  await deps.environments.setCurrentVersion(environment.metadata.uid, version.metadata.uid)
+  return {
+    ...environment,
+    status: { ...environment.status, currentVersionId: version.metadata.uid, version: version.status.version },
+  }
 }
 
 export interface UpdateEnvironmentPatch {
@@ -68,7 +72,7 @@ export interface UpdateEnvironmentPatch {
 }
 
 export interface UpdateEnvironmentResult {
-  environment: EnvironmentRecord
+  environment: Environment
   archived: boolean
   unarchived: boolean
 }
@@ -80,36 +84,44 @@ export interface UpdateEnvironmentResult {
 export async function updateEnvironment(
   deps: Deps,
   auth: AuthScope,
-  environment: EnvironmentRecord,
+  environment: Environment,
   patch: UpdateEnvironmentPatch,
 ): Promise<UpdateEnvironmentResult> {
   const { archived, name: _n, description: _d, ...configFields } = patch
   const hasFieldUpdates =
     patch.name !== undefined || patch.description !== undefined || Object.keys(configFields).length > 0
 
-  if (environment.archivedAt) {
+  if (environment.metadata.archivedAt) {
     if (hasFieldUpdates) {
       throw new EnvironmentArchivedError()
     }
     if (archived === false) {
       const updatedAt = new Date().toISOString()
-      await deps.environments.unarchive(auth.project.id, environment.id, updatedAt)
-      return { environment: { ...environment, archivedAt: null, updatedAt }, archived: false, unarchived: true }
+      await deps.environments.unarchive(auth.project.id, environment.metadata.uid, updatedAt)
+      return {
+        environment: {
+          ...environment,
+          metadata: { ...environment.metadata, archivedAt: null, updatedAt },
+          status: { ...environment.status, phase: 'active' },
+        },
+        archived: false,
+        unarchived: true,
+      }
     }
     // archived: true (idempotent) or empty patch — no change.
     return { environment, archived: false, unarchived: false }
   }
 
   const next: EnvironmentConfig = {
-    packages: configFields.packages ?? environment.packages,
-    variables: configFields.variables ?? environment.variables,
-    hostingMode: configFields.hostingMode ?? environment.hostingMode,
-    networkPolicy: configFields.networkPolicy ?? environment.networkPolicy,
-    mcpPolicy: configFields.mcpPolicy ?? environment.mcpPolicy,
-    packageManagerPolicy: configFields.packageManagerPolicy ?? environment.packageManagerPolicy,
-    resourceLimits: configFields.resourceLimits ?? environment.resourceLimits,
-    runtimeConfig: configFields.runtimeConfig ?? environment.runtimeConfig,
-    metadata: configFields.metadata ?? environment.metadata,
+    packages: configFields.packages ?? environment.spec.packages,
+    variables: configFields.variables ?? environment.spec.variables,
+    hostingMode: configFields.hostingMode ?? environment.spec.hostingMode,
+    networkPolicy: configFields.networkPolicy ?? environment.spec.networkPolicy,
+    mcpPolicy: configFields.mcpPolicy ?? environment.spec.mcpPolicy,
+    packageManagerPolicy: configFields.packageManagerPolicy ?? environment.spec.packageManagerPolicy,
+    resourceLimits: configFields.resourceLimits ?? environment.spec.resourceLimits,
+    runtimeConfig: configFields.runtimeConfig ?? environment.spec.runtimeConfig,
+    metadata: configFields.metadata ?? environment.spec.metadata,
   }
   await validateConfig(deps, auth, next)
 
@@ -118,27 +130,28 @@ export async function updateEnvironment(
   // A runtime change snapshots a new immutable version; otherwise the current
   // version (id + number) is retained.
   const version = runtimeChanged ? await deps.environments.insertVersion(environment, next, updatedAt) : null
-  const archivedAt = archived === true ? updatedAt : environment.archivedAt
-  const name = patch.name ?? environment.name
-  const description = patch.description !== undefined ? patch.description : environment.description
-  const currentVersionId = version?.id ?? environment.currentVersionId
+  const archivedAt = archived === true ? updatedAt : environment.metadata.archivedAt
+  const name = patch.name ?? environment.metadata.name
+  const description = patch.description !== undefined ? patch.description : environment.metadata.description
+  const currentVersionId = version?.metadata.uid ?? environment.status.currentVersionId
 
   await deps.environments.update(
     auth.project.id,
-    environment.id,
+    environment.metadata.uid,
     { name, description, config: next, archivedAt, currentVersionId },
     updatedAt,
   )
 
-  const updated: EnvironmentRecord = {
+  const updated: Environment = {
     ...environment,
-    ...next,
-    name,
-    description,
-    archivedAt,
-    currentVersionId,
-    version: version?.version ?? environment.version,
-    updatedAt,
+    metadata: { ...environment.metadata, name, description, archivedAt, updatedAt },
+    spec: next,
+    status: {
+      ...environment.status,
+      phase: archivedAt ? 'archived' : 'active',
+      currentVersionId,
+      version: version?.status.version ?? environment.status.version,
+    },
   }
   return { environment: updated, archived: archived === true, unarchived: false }
 }

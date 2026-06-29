@@ -6,6 +6,12 @@ import { formatTime } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { type Agent, ApiError, type Environment, type Session, type SessionEvent } from '@/lib/api'
+import {
+  type AgentOverrides,
+  type EnvironmentOverrides,
+  agent as resourceAgent,
+  environment as resourceEnvironment,
+} from '@/test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { formatCreateSessionError } from './CreateSessionSheet'
 import { SessionDetailView } from './SessionDetailView'
@@ -22,58 +28,22 @@ function buildSession(overrides: TestSessionOverrides = {}): Session {
   return buildTestSession({ name: 'First run workflow', ...overrides })
 }
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [
-      { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-    ],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
-function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
-    description: null,
+function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({
     packages: [{ name: 'tsx', version: 'latest' }],
-    variables: {},
-    hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function buildPersistedEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {

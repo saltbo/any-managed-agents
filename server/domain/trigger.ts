@@ -3,6 +3,65 @@
 // interval-based next-due computation, and the constrained HTTP prompt template
 // renderer.
 
+import type { ResourceMetadata, ResourcePhase } from './resource'
+import type { SessionSpec } from './session'
+
+export type TriggerType = 'scheduled' | 'http'
+export type TriggerRunPhase = 'claimed' | 'dispatched' | 'failed'
+export type TriggerSessionTemplate = Pick<
+  SessionSpec,
+  'agentId' | 'environmentId' | 'runtime' | 'env' | 'envFrom' | 'volumes' | 'volumeMounts'
+>
+
+export interface TriggerSchedule {
+  type: 'interval'
+  intervalSeconds: number
+  windowSeconds: number
+}
+
+export interface Trigger {
+  metadata: ResourceMetadata
+  spec: TriggerSpec
+  status: TriggerStatus
+}
+
+export interface TriggerSpec extends TriggerSessionTemplate {
+  type: TriggerType
+  promptTemplate: string
+  schedule: TriggerSchedule | null
+  enabled: boolean
+  metadata: Record<string, unknown>
+}
+
+export interface TriggerStatus {
+  phase: ResourcePhase
+  nextDueAt: string | null
+  lastDispatchedAt: string | null
+  lastRunId: string | null
+}
+
+export interface TriggerRun {
+  metadata: ResourceMetadata
+  spec: TriggerRunSpec
+  status: TriggerRunStatus
+}
+
+export interface TriggerRunSpec {
+  triggerId: string
+  scheduledFor: string | null
+  idempotencyKey: string
+  correlationId: string
+  metadata: Record<string, unknown>
+}
+
+export interface TriggerRunStatus {
+  phase: TriggerRunPhase
+  heartbeatAt: string | null
+  triggeredAt: string
+  sessionId: string | null
+  errorMessage: string | null
+}
+
 export class PromptTemplateRenderError extends Error {
   readonly field: string
   constructor(message: string, field: string) {

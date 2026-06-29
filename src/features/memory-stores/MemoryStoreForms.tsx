@@ -81,13 +81,13 @@ export function MemoryEntrySheet({
   const [content, setContent] = useState('')
   useEffect(() => {
     if (!open) return
-    setPath(memory?.path ?? '')
-    setContent(memory?.content ?? '')
+    setPath(memory?.spec.path ?? '')
+    setContent(memory?.spec.content ?? '')
   }, [memory, open])
   const saveMemory = useMutation({
     mutationFn: () =>
       memory
-        ? api.updateMemoryStoreMemory(storeId, memory.id, { path, content })
+        ? api.updateMemoryStoreMemory(storeId, memory.metadata.uid, { path, content })
         : api.createMemoryStoreMemory(storeId, { path, content }),
     onSuccess: () => {
       onOpenChange(false)

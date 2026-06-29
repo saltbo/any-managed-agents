@@ -1190,23 +1190,89 @@
       "Agent": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "agent_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
-          "projectId": {
+          "spec": {
+            "$ref": "#/components/schemas/AgentSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "ResourceMetadata": {
+        "type": "object",
+        "properties": {
+          "uid": {
             "type": "string",
+            "example": "resource_abc123"
+          },
+          "pid": {
+            "type": "string",
+            "nullable": true,
             "example": "project_abc123"
           },
           "name": {
             "type": "string",
-            "example": "Research assistant"
+            "example": "Default resource"
           },
           "description": {
             "type": "string",
             "nullable": true,
-            "example": "Answers with citations."
+            "example": "Default project resource."
           },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "createdBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archivedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "uid",
+          "pid",
+          "name",
+          "description",
+          "labels",
+          "annotations",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "archivedAt"
+        ]
+      },
+      "AgentSpec": {
+        "type": "object",
+        "properties": {
           "instructions": {
             "type": "string",
             "nullable": true,
@@ -1287,38 +1353,9 @@
             "example": {
               "owner": "platform"
             }
-          },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": null
-          },
-          "currentVersionId": {
-            "type": "string",
-            "nullable": true,
-            "example": "agentver_abc123"
-          },
-          "version": {
-            "type": "integer",
-            "example": 1
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
-          "projectId",
-          "name",
-          "description",
           "instructions",
           "providerId",
           "model",
@@ -1330,12 +1367,7 @@
           "memoryPolicy",
           "tools",
           "mcpConnectors",
-          "metadata",
-          "archivedAt",
-          "currentVersionId",
-          "version",
-          "createdAt",
-          "updatedAt"
+          "metadata"
         ]
       },
       "AgentSubagent": {
@@ -1452,6 +1484,35 @@
           "inputSchema",
           "approvalMode",
           "policyMetadata"
+        ]
+      },
+      "AgentStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/ResourcePhase"
+          },
+          "currentVersionId": {
+            "type": "string",
+            "nullable": true,
+            "example": "agentver_abc123"
+          },
+          "version": {
+            "type": "integer",
+            "example": 1
+          }
+        },
+        "required": [
+          "phase",
+          "currentVersionId",
+          "version"
+        ]
+      },
+      "ResourcePhase": {
+        "type": "string",
+        "enum": [
+          "active",
+          "archived"
         ]
       },
       "CreateAgentRequest": {
@@ -1767,127 +1828,37 @@
       "AgentVersion": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "agentver_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
+          "spec": {
+            "$ref": "#/components/schemas/AgentSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentVersionStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "AgentVersionStatus": {
+        "type": "object",
+        "properties": {
           "agentId": {
             "type": "string",
             "example": "agent_abc123"
           },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
-          },
           "version": {
             "type": "integer",
             "example": 1
-          },
-          "instructions": {
-            "type": "string",
-            "nullable": true,
-            "example": "Answer with citations."
-          },
-          "providerId": {
-            "type": "string",
-            "nullable": true,
-            "example": "provider_abc123"
-          },
-          "model": {
-            "type": "string",
-            "nullable": true,
-            "example": "@cf/moonshotai/kimi-k2.6"
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "example": [
-              "ama@code-review"
-            ]
-          },
-          "subagents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentSubagent"
-            },
-            "example": [
-              {
-                "username": "reviewer",
-                "role": "reviewer"
-              }
-            ]
-          },
-          "role": {
-            "type": "string",
-            "nullable": true,
-            "example": "maintainer"
-          },
-          "capabilityTags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "example": [
-              "issue-triage",
-              "code-review"
-            ]
-          },
-          "handoffPolicy": {
-            "$ref": "#/components/schemas/AgentHandoffPolicy"
-          },
-          "memoryPolicy": {
-            "$ref": "#/components/schemas/AgentMemoryPolicy"
-          },
-          "tools": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentToolAttachment"
-            }
-          },
-          "mcpConnectors": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "example": [
-              "github"
-            ]
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
           "agentId",
-          "projectId",
-          "version",
-          "instructions",
-          "providerId",
-          "model",
-          "skills",
-          "subagents",
-          "role",
-          "capabilityTags",
-          "handoffPolicy",
-          "memoryPolicy",
-          "tools",
-          "mcpConnectors",
-          "metadata",
-          "createdAt"
+          "version"
         ]
       },
       "AgentHandoffCandidateListResponse": {
@@ -1944,13 +1915,28 @@
       "AgentMemory": {
         "type": "object",
         "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/AgentMemorySpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentMemoryStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "AgentMemorySpec": {
+        "type": "object",
+        "properties": {
           "agentId": {
             "type": "string",
             "example": "agent_abc123"
-          },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
           },
           "content": {
             "type": "string",
@@ -1964,25 +1950,23 @@
             "example": {
               "format": "markdown"
             }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
           }
         },
         "required": [
           "agentId",
-          "projectId",
           "content",
-          "metadata",
-          "createdAt",
-          "updatedAt"
+          "metadata"
+        ]
+      },
+      "AgentMemoryStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/ResourcePhase"
+          }
+        },
+        "required": [
+          "phase"
         ]
       },
       "ReplaceAgentMemoryRequest": {
@@ -2029,23 +2013,25 @@
       "Environment": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "env_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
+          "spec": {
+            "$ref": "#/components/schemas/EnvironmentSpec"
           },
-          "name": {
-            "type": "string",
-            "example": "Node workspace"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "example": "Default Node.js environment."
-          },
+          "status": {
+            "$ref": "#/components/schemas/EnvironmentStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "EnvironmentSpec": {
+        "type": "object",
+        "properties": {
           "packages": {
             "type": "array",
             "items": {
@@ -2154,38 +2140,9 @@
             "example": {
               "owner": "platform"
             }
-          },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": null
-          },
-          "currentVersionId": {
-            "type": "string",
-            "nullable": true,
-            "example": "envver_abc123"
-          },
-          "version": {
-            "type": "integer",
-            "example": 1
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
-          "projectId",
-          "name",
-          "description",
           "packages",
           "variables",
           "hostingMode",
@@ -2194,12 +2151,7 @@
           "packageManagerPolicy",
           "resourceLimits",
           "runtimeConfig",
-          "metadata",
-          "archivedAt",
-          "currentVersionId",
-          "version",
-          "createdAt",
-          "updatedAt"
+          "metadata"
         ]
       },
       "EnvironmentHostingMode": {
@@ -2306,6 +2258,28 @@
             "github"
           ]
         }
+      },
+      "EnvironmentStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/ResourcePhase"
+          },
+          "currentVersionId": {
+            "type": "string",
+            "nullable": true,
+            "example": "envver_abc123"
+          },
+          "version": {
+            "type": "integer",
+            "example": 1
+          }
+        },
+        "required": [
+          "phase",
+          "currentVersionId",
+          "version"
+        ]
       },
       "CreateEnvironmentRequest": {
         "type": "object",
@@ -2592,151 +2566,37 @@
       "EnvironmentVersion": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "envver_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
+          "spec": {
+            "$ref": "#/components/schemas/EnvironmentSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EnvironmentVersionStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "EnvironmentVersionStatus": {
+        "type": "object",
+        "properties": {
           "environmentId": {
             "type": "string",
             "example": "env_abc123"
           },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
-          },
           "version": {
             "type": "integer",
             "example": 1
-          },
-          "packages": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                },
-                "version": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                }
-              },
-              "required": [
-                "name"
-              ]
-            },
-            "example": [
-              {
-                "name": "tsx"
-              }
-            ]
-          },
-          "variables": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "object",
-              "properties": {
-                "description": {
-                  "type": "string",
-                  "maxLength": 500
-                },
-                "required": {
-                  "type": "boolean"
-                }
-              }
-            },
-            "example": {
-              "NODE_ENV": {
-                "required": true
-              }
-            }
-          },
-          "hostingMode": {
-            "$ref": "#/components/schemas/EnvironmentHostingMode"
-          },
-          "networkPolicy": {
-            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
-          },
-          "mcpPolicy": {
-            "$ref": "#/components/schemas/EnvironmentMcpPolicy"
-          },
-          "packageManagerPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "allowedRegistries": [
-                "registry.npmjs.org"
-              ]
-            }
-          },
-          "resourceLimits": {
-            "type": "object",
-            "properties": {
-              "cpuMs": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "memoryMb": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "timeoutSeconds": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "memoryMb": 512
-            }
-          },
-          "runtimeConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "image": "node:24"
-            }
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-22T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
           "environmentId",
-          "projectId",
-          "version",
-          "packages",
-          "variables",
-          "hostingMode",
-          "networkPolicy",
-          "mcpPolicy",
-          "packageManagerPolicy",
-          "resourceLimits",
-          "runtimeConfig",
-          "metadata",
-          "createdAt"
+          "version"
         ]
       },
       "ProviderListResponse": {
@@ -4467,14 +4327,25 @@
       "Trigger": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "trigger_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
+          "spec": {
+            "$ref": "#/components/schemas/TriggerSpec"
           },
+          "status": {
+            "$ref": "#/components/schemas/TriggerStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "TriggerSpec": {
+        "type": "object",
+        "properties": {
           "type": {
             "type": "string",
             "enum": [
@@ -4494,10 +4365,6 @@
           },
           "runtime": {
             "$ref": "#/components/schemas/Runtime"
-          },
-          "name": {
-            "type": "string",
-            "example": "Daily research heartbeat"
           },
           "promptTemplate": {
             "type": "string",
@@ -4552,55 +4419,11 @@
             ]
           },
           "schedule": {
-            "type": "object",
-            "nullable": true,
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "interval"
-                ]
-              },
-              "intervalSeconds": {
-                "type": "integer",
-                "example": 86400
-              },
-              "windowSeconds": {
-                "type": "integer",
-                "example": 0
-              }
-            },
-            "required": [
-              "type",
-              "intervalSeconds",
-              "windowSeconds"
-            ],
-            "example": {
-              "type": "interval",
-              "intervalSeconds": 86400,
-              "windowSeconds": 0
-            }
+            "$ref": "#/components/schemas/TriggerSchedule"
           },
           "enabled": {
             "type": "boolean",
             "example": true
-          },
-          "nextDueAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": "2026-05-26T12:00:00.000Z"
-          },
-          "lastDispatchedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": null
-          },
-          "lastRunId": {
-            "type": "string",
-            "nullable": true,
-            "example": "trigrun_abc123"
           },
           "metadata": {
             "type": "object",
@@ -4610,35 +4433,13 @@
             "example": {
               "owner": "growth"
             }
-          },
-          "createdByUserId": {
-            "type": "string",
-            "nullable": true,
-            "example": "user_abc123"
-          },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": null
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
-          "id",
-          "projectId",
           "type",
           "agentId",
           "environmentId",
           "runtime",
-          "name",
           "promptTemplate",
           "env",
           "envFrom",
@@ -4646,14 +4447,7 @@
           "volumeMounts",
           "schedule",
           "enabled",
-          "nextDueAt",
-          "lastDispatchedAt",
-          "lastRunId",
-          "metadata",
-          "createdByUserId",
-          "archivedAt",
-          "createdAt",
-          "updatedAt"
+          "metadata"
         ]
       },
       "Runtime": {
@@ -4860,6 +4654,67 @@
           "mountPath"
         ],
         "additionalProperties": false
+      },
+      "TriggerSchedule": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "interval"
+            ]
+          },
+          "intervalSeconds": {
+            "type": "integer",
+            "example": 86400
+          },
+          "windowSeconds": {
+            "type": "integer",
+            "example": 0
+          }
+        },
+        "required": [
+          "type",
+          "intervalSeconds",
+          "windowSeconds"
+        ],
+        "example": {
+          "type": "interval",
+          "intervalSeconds": 86400,
+          "windowSeconds": 0
+        }
+      },
+      "TriggerStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/ResourcePhase"
+          },
+          "nextDueAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-05-26T12:00:00.000Z"
+          },
+          "lastDispatchedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": null
+          },
+          "lastRunId": {
+            "type": "string",
+            "nullable": true,
+            "example": "trigrun_abc123"
+          }
+        },
+        "required": [
+          "phase",
+          "nextDueAt",
+          "lastDispatchedAt",
+          "lastRunId"
+        ]
       },
       "CreateTriggerRequest": {
         "type": "object",
@@ -5156,14 +5011,25 @@
       "TriggerRun": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "trigrun_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
+          "spec": {
+            "$ref": "#/components/schemas/TriggerRunSpec"
           },
+          "status": {
+            "$ref": "#/components/schemas/TriggerRunStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "TriggerRunSpec": {
+        "type": "object",
+        "properties": {
           "triggerId": {
             "type": "string",
             "example": "trigger_abc123"
@@ -5173,6 +5039,44 @@
             "nullable": true,
             "format": "date-time",
             "example": "2026-05-26T12:00:00.000Z"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "example": "trigger_abc123:2026-05-26T12:00:00.000Z"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "schedule:trigger_abc123:2026-05-26T12:00:00.000Z"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "source": "trigger"
+            }
+          }
+        },
+        "required": [
+          "triggerId",
+          "scheduledFor",
+          "idempotencyKey",
+          "correlationId",
+          "metadata"
+        ]
+      },
+      "TriggerRunStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "claimed",
+              "dispatched",
+              "failed"
+            ],
+            "example": "dispatched"
           },
           "heartbeatAt": {
             "type": "string",
@@ -5185,66 +5089,23 @@
             "format": "date-time",
             "example": "2026-05-26T12:01:00.000Z"
           },
-          "state": {
-            "type": "string",
-            "enum": [
-              "claimed",
-              "dispatched",
-              "failed"
-            ],
-            "example": "dispatched"
-          },
-          "idempotencyKey": {
-            "type": "string",
-            "example": "trigger_abc123:2026-05-26T12:00:00.000Z"
-          },
           "sessionId": {
             "type": "string",
             "nullable": true,
             "example": "session_abc123"
           },
-          "correlationId": {
-            "type": "string",
-            "example": "schedule:trigger_abc123:2026-05-26T12:00:00.000Z"
-          },
           "errorMessage": {
             "type": "string",
             "nullable": true,
             "example": null
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "source": "trigger"
-            }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
-          "id",
-          "projectId",
-          "triggerId",
-          "scheduledFor",
+          "phase",
           "heartbeatAt",
           "triggeredAt",
-          "state",
-          "idempotencyKey",
           "sessionId",
-          "correlationId",
-          "errorMessage",
-          "metadata",
-          "createdAt",
-          "updatedAt"
+          "errorMessage"
         ]
       },
       "CreateHttpTriggerRunRequest": {
@@ -6301,23 +6162,25 @@
       "MemoryStore": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "memstore_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
+          "spec": {
+            "$ref": "#/components/schemas/MemoryStoreSpec"
           },
-          "name": {
-            "type": "string",
-            "example": "Team conventions"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "example": "Shared repository and review preferences."
-          },
+          "status": {
+            "$ref": "#/components/schemas/MemoryStoreStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "MemoryStoreSpec": {
+        "type": "object",
+        "properties": {
           "metadata": {
             "type": "object",
             "additionalProperties": {
@@ -6326,33 +6189,21 @@
             "example": {
               "owner": "platform"
             }
-          },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": null
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-06-25T00:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-06-25T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
-          "projectId",
-          "name",
-          "description",
-          "metadata",
-          "archivedAt",
-          "createdAt",
-          "updatedAt"
+          "metadata"
+        ]
+      },
+      "MemoryStoreStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/ResourcePhase"
+          }
+        },
+        "required": [
+          "phase"
         ]
       },
       "CreateMemoryStoreRequest": {
@@ -6433,17 +6284,28 @@
       "MemoryStoreMemory": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "memory_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
+          "spec": {
+            "$ref": "#/components/schemas/MemoryStoreMemorySpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MemoryStoreMemoryStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "MemoryStoreMemorySpec": {
+        "type": "object",
+        "properties": {
           "storeId": {
             "type": "string",
             "example": "memstore_abc123"
-          },
-          "projectId": {
-            "type": "string",
-            "example": "project_abc123"
           },
           "path": {
             "type": "string",
@@ -6459,27 +6321,24 @@
               "nullable": true
             },
             "example": {}
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-06-25T00:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-06-25T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
           "storeId",
-          "projectId",
           "path",
           "content",
-          "metadata",
-          "createdAt",
-          "updatedAt"
+          "metadata"
+        ]
+      },
+      "MemoryStoreMemoryStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/ResourcePhase"
+          }
+        },
+        "required": [
+          "phase"
         ]
       },
       "CreateMemoryStoreMemoryRequest": {
@@ -6553,23 +6412,28 @@
       "Vault": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "vault_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
-          "projectId": {
-            "type": "string",
-            "nullable": true,
-            "example": "project_abc123"
+          "spec": {
+            "$ref": "#/components/schemas/VaultSpec"
           },
-          "name": {
+          "status": {
+            "$ref": "#/components/schemas/VaultStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "VaultSpec": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
             "type": "string",
-            "example": "Provider credentials"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "example": "Credentials used by runtime sessions."
+            "example": "org_abc123"
           },
           "scope": {
             "type": "string",
@@ -6587,34 +6451,23 @@
             "example": {
               "owner": "platform"
             }
-          },
-          "archivedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time",
-            "example": null
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-24T00:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-24T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
-          "projectId",
-          "name",
-          "description",
+          "organizationId",
           "scope",
-          "metadata",
-          "archivedAt",
-          "createdAt",
-          "updatedAt"
+          "metadata"
+        ]
+      },
+      "VaultStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/ResourcePhase"
+          }
+        },
+        "required": [
+          "phase"
         ]
       },
       "CreateVaultRequest": {
@@ -6711,22 +6564,32 @@
       "VaultCredential": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "vaultcred_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
+          "spec": {
+            "$ref": "#/components/schemas/VaultCredentialSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VaultCredentialStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "VaultCredentialSpec": {
+        "type": "object",
+        "properties": {
           "vaultId": {
             "type": "string",
             "example": "vault_abc123"
           },
-          "projectId": {
+          "organizationId": {
             "type": "string",
-            "nullable": true,
-            "example": "project_abc123"
-          },
-          "name": {
-            "type": "string",
-            "example": "Workers AI token"
+            "example": "org_abc123"
           },
           "type": {
             "type": "string",
@@ -6756,8 +6619,19 @@
             "example": {
               "owner": "platform"
             }
-          },
-          "state": {
+          }
+        },
+        "required": [
+          "vaultId",
+          "organizationId",
+          "type",
+          "metadata"
+        ]
+      },
+      "VaultCredentialStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
             "type": "string",
             "enum": [
               "active",
@@ -6788,43 +6662,40 @@
             "type": "string",
             "nullable": true,
             "example": null
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-24T00:00:00.000Z"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-24T00:00:00.000Z"
           }
         },
         "required": [
-          "id",
-          "vaultId",
-          "projectId",
-          "name",
-          "type",
-          "metadata",
-          "state",
+          "phase",
           "activeVersionId",
           "activeVersion",
           "revokedAt",
           "revokedByUserId",
-          "revokeReason",
-          "createdAt",
-          "updatedAt"
+          "revokeReason"
         ]
       },
       "VaultCredentialVersion": {
         "type": "object",
         "nullable": true,
         "properties": {
-          "id": {
-            "type": "string",
-            "example": "vaultver_abc123"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceMetadata"
           },
+          "spec": {
+            "$ref": "#/components/schemas/VaultCredentialVersionSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VaultCredentialVersionStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "VaultCredentialVersionSpec": {
+        "type": "object",
+        "properties": {
           "credentialId": {
             "type": "string",
             "example": "vaultcred_abc123"
@@ -6833,10 +6704,9 @@
             "type": "string",
             "example": "vault_abc123"
           },
-          "projectId": {
+          "organizationId": {
             "type": "string",
-            "nullable": true,
-            "example": "project_abc123"
+            "example": "org_abc123"
           },
           "version": {
             "type": "integer",
@@ -6857,15 +6727,6 @@
             "type": "string",
             "example": "AMA_PROJECT_ABC123_TOKEN_V2"
           },
-          "state": {
-            "type": "string",
-            "enum": [
-              "active",
-              "superseded",
-              "revoked"
-            ],
-            "example": "active"
-          },
           "hasSecret": {
             "type": "boolean",
             "example": true
@@ -6881,11 +6742,41 @@
           },
           "metadata": {
             "$ref": "#/components/schemas/VaultJsonObject"
-          },
-          "createdAt": {
+          }
+        },
+        "required": [
+          "credentialId",
+          "vaultId",
+          "organizationId",
+          "version",
+          "provider",
+          "secretRef",
+          "referenceName",
+          "hasSecret",
+          "dataKeys",
+          "metadata"
+        ]
+      },
+      "VaultJsonObject": {
+        "type": "object",
+        "additionalProperties": {
+          "nullable": true
+        },
+        "example": {
+          "rotatedBy": "operator"
+        }
+      },
+      "VaultCredentialVersionStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
             "type": "string",
-            "format": "date-time",
-            "example": "2026-05-24T00:00:00.000Z"
+            "enum": [
+              "active",
+              "superseded",
+              "revoked"
+            ],
+            "example": "active"
           },
           "supersededAt": {
             "type": "string",
@@ -6901,31 +6792,10 @@
           }
         },
         "required": [
-          "id",
-          "credentialId",
-          "vaultId",
-          "projectId",
-          "version",
-          "provider",
-          "secretRef",
-          "referenceName",
-          "state",
-          "hasSecret",
-          "dataKeys",
-          "metadata",
-          "createdAt",
+          "phase",
           "supersededAt",
           "revokedAt"
         ]
-      },
-      "VaultJsonObject": {
-        "type": "object",
-        "additionalProperties": {
-          "nullable": true
-        },
-        "example": {
-          "rotatedBy": "operator"
-        }
       },
       "CreateVaultCredentialRequest": {
         "type": "object",

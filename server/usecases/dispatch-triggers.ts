@@ -2,17 +2,11 @@ import {
   type HttpTriggerTemplateContext,
   PromptTemplateRenderError,
   renderHttpPromptTemplate,
+  type Trigger,
 } from '@server/domain/trigger'
 import { redactSensitiveValue } from '@server/redaction'
 import type { Deps } from './deps'
-import {
-  type AuthScope,
-  type ClaimedRun,
-  type DueTrigger,
-  TriggerConflictError,
-  type TriggerRecord,
-  TriggerValidationError,
-} from './ports'
+import { type AuthScope, type ClaimedRun, type DueTrigger, TriggerConflictError, TriggerValidationError } from './ports'
 import { createSession } from './runtime/sessions'
 import { sendSessionMessage } from './sessions'
 
@@ -89,14 +83,14 @@ async function recordDispatch(
 async function recordHttpDispatch(
   deps: Deps,
   auth: AuthScope,
-  trigger: TriggerRecord,
+  trigger: Trigger,
   run: ClaimedRun,
   outcome: { ok: true; sessionId: string } | { ok: false; message: string },
 ) {
   await deps.audit.record(auth, {
     action: 'http_trigger.dispatch',
     resourceType: 'trigger',
-    resourceId: trigger.id,
+    resourceId: trigger.metadata.uid,
     outcome: outcome.ok ? 'success' : 'failure',
     correlationId: run.correlationId,
     ...(outcome.ok ? { sessionId: outcome.sessionId } : {}),
@@ -251,7 +245,7 @@ export async function dispatchDueScheduledTriggers(
 }
 
 export interface HttpTriggerDispatchInput {
-  trigger: TriggerRecord
+  trigger: Trigger
   context: HttpTriggerTemplateContext
   idempotencyKey?: string | null
 }
@@ -269,20 +263,20 @@ export async function dispatchHttpTrigger(
   errorMessage: string | null
 }> {
   const { trigger } = input
-  if (trigger.type !== 'http') {
+  if (trigger.spec.type !== 'http') {
     throw new TriggerConflictError('Only HTTP triggers can create runs from requests')
   }
-  if (trigger.archivedAt !== null) {
+  if (trigger.metadata.archivedAt !== null) {
     throw new TriggerConflictError('Archived triggers cannot be dispatched')
   }
-  if (!trigger.enabled) {
+  if (!trigger.spec.enabled) {
     throw new TriggerConflictError('Disabled triggers cannot be dispatched')
   }
 
   const triggeredAt = new Date().toISOString()
   let renderedPrompt: string
   try {
-    renderedPrompt = renderHttpPromptTemplate(trigger.promptTemplate, input.context)
+    renderedPrompt = renderHttpPromptTemplate(trigger.spec.promptTemplate, input.context)
   } catch (error) {
     if (error instanceof PromptTemplateRenderError) {
       throw new TriggerValidationError('Invalid trigger prompt template', { promptTemplate: error.message })
@@ -290,26 +284,26 @@ export async function dispatchHttpTrigger(
     throw error
   }
 
-  const run = await deps.triggerDispatch.claimHttpRun(trigger, triggeredAt, input.idempotencyKey ?? null)
+  const run = await deps.triggerDispatch.claimHttpRun(auth, trigger, triggeredAt, input.idempotencyKey ?? null)
   if (!run) {
     throw new TriggerConflictError('HTTP trigger run already exists for this idempotency key')
   }
 
   const requestMetadata = httpTriggerBodyMetadata(input.context.body)
-  const labels = mergeLabels(trigger.metadata.labels, requestMetadata.labels)
+  const labels = mergeLabels(trigger.spec.metadata.labels, requestMetadata.labels)
   const sessionMetadata = {
-    ...trigger.metadata,
+    ...trigger.spec.metadata,
     ...requestMetadata,
     ...(labels ? { labels } : {}),
     source: 'http-trigger',
-    httpTriggerId: trigger.id,
+    httpTriggerId: trigger.metadata.uid,
     httpRunId: run.id,
     triggeredAt,
     correlationId: run.correlationId,
   }
   const key = httpTriggerSessionKey(input.context.body)
   const existingSession = key
-    ? await deps.sessions.findActiveHttpTriggerSession(auth.project.id, trigger.id, key)
+    ? await deps.sessions.findActiveHttpTriggerSession(auth.project.id, trigger.metadata.uid, key)
     : null
 
   if (existingSession) {
@@ -334,7 +328,7 @@ export async function dispatchHttpTrigger(
       await recordHttpDispatch(deps, auth, trigger, run, { ok: false, message })
       return {
         runId: run.id,
-        triggerId: trigger.id,
+        triggerId: trigger.metadata.uid,
         triggeredAt,
         state: 'failed',
         sessionId: null,
@@ -350,7 +344,7 @@ export async function dispatchHttpTrigger(
     await recordHttpDispatch(deps, auth, trigger, run, { ok: true, sessionId: existingSession.id })
     return {
       runId: run.id,
-      triggerId: trigger.id,
+      triggerId: trigger.metadata.uid,
       triggeredAt,
       state: 'dispatched',
       sessionId: existingSession.id,
@@ -359,17 +353,17 @@ export async function dispatchHttpTrigger(
   }
 
   const result = await createSession(deps, auth, {
-    agentId: trigger.agentId,
-    environmentId: trigger.environmentId,
+    agentId: trigger.spec.agentId,
+    environmentId: trigger.spec.environmentId,
     options: {
-      name: trigger.name,
+      name: trigger.metadata.name,
       metadata: key ? { ...sessionMetadata, key } : sessionMetadata,
-      runtime: trigger.runtime,
+      runtime: trigger.spec.runtime,
       initialPrompt: renderedPrompt,
-      env: trigger.env,
-      envFrom: trigger.envFrom,
-      volumes: trigger.volumes,
-      volumeMounts: trigger.volumeMounts,
+      env: trigger.spec.env,
+      envFrom: trigger.spec.envFrom,
+      volumes: trigger.spec.volumes,
+      volumeMounts: trigger.spec.volumeMounts,
     },
     requestId: run.correlationId,
   })
@@ -380,7 +374,7 @@ export async function dispatchHttpTrigger(
     await recordHttpDispatch(deps, auth, trigger, run, { ok: false, message })
     return {
       runId: run.id,
-      triggerId: trigger.id,
+      triggerId: trigger.metadata.uid,
       triggeredAt,
       state: 'failed',
       sessionId: null,
@@ -397,7 +391,7 @@ export async function dispatchHttpTrigger(
   await recordHttpDispatch(deps, auth, trigger, run, { ok: true, sessionId: result.value.metadata.uid })
   return {
     runId: run.id,
-    triggerId: trigger.id,
+    triggerId: trigger.metadata.uid,
     triggeredAt,
     state: 'dispatched',
     sessionId: result.value.metadata.uid,

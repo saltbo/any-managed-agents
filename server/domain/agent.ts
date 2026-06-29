@@ -1,5 +1,7 @@
 // Pure agent business rules. Zero outward imports — directly unit-testable.
 
+import type { ResourceMetadata, ResourcePhase } from './resource'
+
 export const BLOCKED_TOOLS = new Set(['secrets.read', 'filesystem.host', 'network.raw'])
 export const TOOL_APPROVAL_MODES = ['none', 'per_call', 'always_required', 'project_policy'] as const
 
@@ -37,6 +39,45 @@ export interface AgentConfig {
   tools: AgentToolAttachment[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
+}
+
+export interface Agent {
+  metadata: ResourceMetadata
+  spec: AgentConfig
+  status: AgentStatus
+}
+
+export interface AgentStatus {
+  phase: ResourcePhase
+  currentVersionId: string | null
+  version: number
+}
+
+export interface AgentVersion {
+  metadata: ResourceMetadata
+  spec: AgentConfig
+  status: AgentVersionStatus
+}
+
+export interface AgentVersionStatus {
+  agentId: string
+  version: number
+}
+
+export interface AgentMemory {
+  metadata: ResourceMetadata
+  spec: AgentMemorySpec
+  status: AgentMemoryStatus
+}
+
+export interface AgentMemorySpec {
+  agentId: string
+  content: string
+  metadata: Record<string, unknown>
+}
+
+export interface AgentMemoryStatus {
+  phase: ResourcePhase
 }
 
 // Validation failures are keyed by the field that caused them; the http layer

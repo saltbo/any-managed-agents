@@ -20,22 +20,22 @@ test('lists a seeded session and opens its detail page [spec: web-console/routed
         model: '@cf/moonshotai/kimi-k2.6',
       },
     })
-  ).json()) as { id: string }
+  ).json()) as { metadata: { uid: string } }
   const environment = (await (
     await api.post('/api/v1/environments', {
       data: { name: `s-env-${runId}`, runtimeConfig: { image: 'ama-pi-runtime' } },
     })
-  ).json()) as { id: string }
+  ).json()) as { metadata: { uid: string } }
   const title = `ui-session-${runId}`
   const res = await api.post('/api/v1/sessions', {
-    data: { agentId: agent.id, environmentId: environment.id, runtime: 'ama', name: title },
+    data: { agentId: agent.metadata.uid, environmentId: environment.metadata.uid, runtime: 'ama', name: title },
   })
   expect(res.status(), 'seed session').toBe(201)
-  const session = (await res.json()) as { id: string }
+  const session = (await res.json()) as { metadata: { uid: string } }
 
   await gotoAuthed(page, token, '/sessions')
   await expect(page.getByText(title)).toBeVisible()
 
-  await page.goto(`/sessions/${session.id}`)
-  await expect(page).toHaveURL(new RegExp(`/sessions/${session.id}$`))
+  await page.goto(`/sessions/${session.metadata.uid}`)
+  await expect(page).toHaveURL(new RegExp(`/sessions/${session.metadata.uid}$`))
 })

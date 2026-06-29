@@ -30,8 +30,8 @@ export function EnvironmentsPage() {
     () =>
       allEnvironments.filter(
         (environment) =>
-          matchesSearch(search, environment.name, environment.description) &&
-          (hosting === 'all' || environment.hostingMode === hosting) &&
+          matchesSearch(search, environment.metadata.name, environment.metadata.description) &&
+          (hosting === 'all' || environment.spec.hostingMode === hosting) &&
           (status === 'all' || archivedLabel(environment) === status),
       ),
     [allEnvironments, search, hosting, status],

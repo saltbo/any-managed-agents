@@ -72,12 +72,12 @@ Feature: Agents
     Then it includes the agents collection, item, memory, and versions paths
     And the role, handoff, and memory contract is exposed through OpenAPI and generated SDKs
 
-  @agents/api-pagination @api
-  Scenario: List agents with pagination, filters, and tenant scope
-    Given a project has active and archived agents created across dates
-    When the user lists agents with a page size
-    Then the response includes data, hasMore, firstId, and lastId
-    And archived agents are hidden unless includeArchived is true
+	  @agents/api-pagination @api
+	  Scenario: List agents with pagination, filters, and tenant scope
+	    Given a project has active and archived agents created across dates
+	    When the user lists agents with a page size
+	    Then the response includes data and cursor pagination metadata
+	    And archived agents are hidden unless archived filtering is requested
     And created-date filters and project scope are respected
 
   @agents/api-archive @api

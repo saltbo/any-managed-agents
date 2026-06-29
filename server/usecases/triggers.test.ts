@@ -1,12 +1,8 @@
+import { resourceMetadata } from '@server/domain/resource'
+import type { Trigger } from '@server/domain/trigger'
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
-import {
-  type AuthScope,
-  type TriggerConfig,
-  TriggerConflictError,
-  type TriggerRecord,
-  TriggerValidationError,
-} from './ports'
+import { type AuthScope, type TriggerConfig, TriggerConflictError, TriggerValidationError } from './ports'
 import { createTrigger, deleteTrigger, updateTrigger } from './triggers'
 
 const auth: AuthScope = {
@@ -37,19 +33,49 @@ function baseConfig(overrides: Partial<TriggerConfig> = {}): TriggerConfig {
   }
 }
 
-function triggerRecord(overrides: Partial<TriggerRecord> = {}): TriggerRecord {
+function triggerRecord(
+  overrides: {
+    metadata?: Partial<Trigger['metadata']>
+    spec?: Partial<Trigger['spec']>
+    status?: Partial<Trigger['status']>
+  } = {},
+): Trigger {
+  const base = baseConfig()
+  const timestamp = '2026-01-01T00:00:00.000Z'
   return {
-    ...baseConfig(),
-    id: 'trigger_1',
-    organizationId: 'org_1',
-    projectId: 'project_1',
-    lastDispatchedAt: null,
-    lastRunId: null,
-    createdByUserId: 'user_1',
-    archivedAt: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
+    metadata: {
+      ...resourceMetadata({
+        uid: 'trigger_1',
+        pid: 'project_1',
+        name: base.name,
+        createdBy: 'user_1',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      ...overrides.metadata,
+    },
+    spec: {
+      type: base.type,
+      agentId: base.agentId,
+      environmentId: base.environmentId,
+      runtime: base.runtime,
+      promptTemplate: base.promptTemplate,
+      env: base.env,
+      envFrom: base.envFrom,
+      volumes: base.volumes,
+      volumeMounts: base.volumeMounts,
+      schedule: base.schedule ? { type: 'interval', ...base.schedule } : null,
+      enabled: base.enabled,
+      metadata: base.metadata,
+      ...overrides.spec,
+    },
+    status: {
+      phase: 'active',
+      nextDueAt: base.nextDueAt,
+      lastDispatchedAt: null,
+      lastRunId: null,
+      ...overrides.status,
+    },
   }
 }
 
@@ -57,9 +83,51 @@ function fakeDeps(repo: Partial<Deps['triggers']> = {}): Deps {
   const triggers: Deps['triggers'] = {
     list: async () => ({ rows: [], hasMore: false }),
     find: async () => null,
-    insert: async (input, timestamp) => triggerRecord({ ...input.config, createdAt: timestamp, updatedAt: timestamp }),
+    insert: async (input, timestamp) =>
+      triggerRecord({
+        metadata: {
+          uid: 'trigger_1',
+          pid: input.projectId,
+          name: input.config.name,
+          createdBy: input.createdByUserId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        spec: {
+          type: input.config.type,
+          agentId: input.config.agentId,
+          environmentId: input.config.environmentId,
+          runtime: input.config.runtime,
+          promptTemplate: input.config.promptTemplate,
+          env: input.config.env,
+          envFrom: input.config.envFrom,
+          volumes: input.config.volumes,
+          volumeMounts: input.config.volumeMounts,
+          schedule: input.config.schedule ? { type: 'interval', ...input.config.schedule } : null,
+          enabled: input.config.enabled,
+          metadata: input.config.metadata,
+        },
+        status: { nextDueAt: input.config.nextDueAt },
+      }),
     update: async (_p, id, fields, updatedAt) =>
-      triggerRecord({ id, ...fields.config, archivedAt: fields.archivedAt, updatedAt }),
+      triggerRecord({
+        metadata: { uid: id, name: fields.config.name, archivedAt: fields.archivedAt, updatedAt },
+        spec: {
+          type: fields.config.type,
+          agentId: fields.config.agentId,
+          environmentId: fields.config.environmentId,
+          runtime: fields.config.runtime,
+          promptTemplate: fields.config.promptTemplate,
+          env: fields.config.env,
+          envFrom: fields.config.envFrom,
+          volumes: fields.config.volumes,
+          volumeMounts: fields.config.volumeMounts,
+          schedule: fields.config.schedule ? { type: 'interval', ...fields.config.schedule } : null,
+          enabled: fields.config.enabled,
+          metadata: fields.config.metadata,
+        },
+        status: { phase: fields.archivedAt ? 'archived' : 'active', nextDueAt: fields.config.nextDueAt },
+      }),
     delete: async () => true,
     listRuns: async () => ({ rows: [], hasMore: false }),
     findRun: async () => null,
@@ -77,8 +145,8 @@ describe('[spec: triggers/create] createTrigger', () => {
       environmentId: 'env_1',
       config: { ...baseConfig(), nextDueAt: '2026-05-26T12:00:00.000Z' },
     })
-    expect(trigger.agentId).toBe('agent_1')
-    expect(trigger.nextDueAt).toBe('2026-05-26T12:00:00.000Z')
+    expect(trigger.spec.agentId).toBe('agent_1')
+    expect(trigger.status.nextDueAt).toBe('2026-05-26T12:00:00.000Z')
   })
 
   it('creates an HTTP trigger without schedule timing [spec: triggers/http-create]', async () => {
@@ -87,9 +155,9 @@ describe('[spec: triggers/create] createTrigger', () => {
       environmentId: 'env_1',
       config: { ...baseConfig({ type: 'http', schedule: null, nextDueAt: null }), nextDueAt: null },
     })
-    expect(trigger.type).toBe('http')
-    expect(trigger.schedule).toBeNull()
-    expect(trigger.nextDueAt).toBeNull()
+    expect(trigger.spec.type).toBe('http')
+    expect(trigger.spec.schedule).toBeNull()
+    expect(trigger.status.nextDueAt).toBeNull()
   })
 
   it('derives nextDueAt from the interval when omitted', async () => {
@@ -98,7 +166,7 @@ describe('[spec: triggers/create] createTrigger', () => {
       environmentId: 'env_1',
       config: { ...baseConfig(), nextDueAt: null },
     })
-    expect(trigger.nextDueAt).toEqual(expect.any(String))
+    expect(trigger.status.nextDueAt).toEqual(expect.any(String))
   })
 
   it('rejects scheduled triggers without schedule timing', async () => {
@@ -172,28 +240,34 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
       name: 'Renamed',
       schedule: { intervalSeconds: 1800 },
     })
-    expect(result.trigger.name).toBe('Renamed')
-    expect(result.trigger.schedule?.intervalSeconds).toBe(1800)
+    expect(result.trigger.metadata.name).toBe('Renamed')
+    expect(result.trigger.spec.schedule?.intervalSeconds).toBe(1800)
     expect(result.archived).toBe(false)
   })
 
   it('archives and reports the transition', async () => {
     const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), { archived: true })
     expect(result.archived).toBe(true)
-    expect(result.trigger.archivedAt).toEqual(expect.any(String))
+    expect(result.trigger.metadata.archivedAt).toEqual(expect.any(String))
   })
 
   it('rejects field updates on an archived trigger', async () => {
-    const archived = triggerRecord({ archivedAt: '2026-02-01T00:00:00.000Z' })
+    const archived = triggerRecord({
+      metadata: { archivedAt: '2026-02-01T00:00:00.000Z' },
+      status: { phase: 'archived' },
+    })
     await expect(updateTrigger(fakeDeps(), auth, archived, { name: 'nope' })).rejects.toBeInstanceOf(
       TriggerConflictError,
     )
   })
 
   it('restores an archived trigger', async () => {
-    const archived = triggerRecord({ archivedAt: '2026-02-01T00:00:00.000Z' })
+    const archived = triggerRecord({
+      metadata: { archivedAt: '2026-02-01T00:00:00.000Z' },
+      status: { phase: 'archived' },
+    })
     const result = await updateTrigger(fakeDeps(), auth, archived, { archived: false })
-    expect(result.trigger.archivedAt).toBeNull()
+    expect(result.trigger.metadata.archivedAt).toBeNull()
     expect(result.archived).toBe(false)
   })
 
@@ -207,16 +281,21 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
 
   it('converts a scheduled trigger to HTTP and clears timing', async () => {
     const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), { type: 'http', schedule: null })
-    expect(result.trigger.type).toBe('http')
-    expect(result.trigger.schedule).toBeNull()
-    expect(result.trigger.nextDueAt).toBeNull()
+    expect(result.trigger.spec.type).toBe('http')
+    expect(result.trigger.spec.schedule).toBeNull()
+    expect(result.trigger.status.nextDueAt).toBeNull()
   })
 
   it('rejects an HTTP trigger update with schedule timing', async () => {
     await expect(
-      updateTrigger(fakeDeps(), auth, triggerRecord({ type: 'http', schedule: null, nextDueAt: null }), {
-        schedule: { intervalSeconds: 60 },
-      }),
+      updateTrigger(
+        fakeDeps(),
+        auth,
+        triggerRecord({ spec: { type: 'http', schedule: null }, status: { nextDueAt: null } }),
+        {
+          schedule: { intervalSeconds: 60 },
+        },
+      ),
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
 

@@ -1,4 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
+import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
+import type { Memory, MemoryStore } from '@server/domain/memory-store'
 import { normalizeMemoryPath } from '@server/domain/memory-store'
 import { requireAuth } from '../auth/session'
 import {
@@ -10,7 +12,7 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
-import type { MemoryStoreMemoryRecord, MemoryStoreRecord, MemoryStoreRepo } from '../usecases/ports'
+import type { MemoryStoreRepo } from '../usecases/ports'
 import { requestId } from './request-context'
 
 type MemoryStoreRoutes = OpenAPIHono<DepsEnv>
@@ -19,27 +21,26 @@ const JsonObjectSchema = z.record(z.string(), z.unknown())
 
 const MemoryStoreSchema = z
   .object({
-    id: z.string().openapi({ example: 'memstore_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    name: z.string().openapi({ example: 'Team conventions' }),
-    description: z.string().nullable().openapi({ example: 'Shared repository and review preferences.' }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
-    createdAt: z.string().datetime().openapi({ example: '2026-06-25T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-06-25T00:00:00.000Z' }),
+    metadata: ResourceMetadataSchema,
+    spec: z
+      .object({ metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }) })
+      .openapi('MemoryStoreSpec'),
+    status: z.object({ phase: ResourcePhaseSchema }).openapi('MemoryStoreStatus'),
   })
   .openapi('MemoryStore')
 
 const MemoryStoreMemorySchema = z
   .object({
-    id: z.string().openapi({ example: 'memory_abc123' }),
-    storeId: z.string().openapi({ example: 'memstore_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    path: z.string().openapi({ example: 'guides/review.md' }),
-    content: z.string().openapi({ example: 'Review for correctness first.' }),
-    metadata: JsonObjectSchema.openapi({ example: {} }),
-    createdAt: z.string().datetime().openapi({ example: '2026-06-25T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-06-25T00:00:00.000Z' }),
+    metadata: ResourceMetadataSchema,
+    spec: z
+      .object({
+        storeId: z.string().openapi({ example: 'memstore_abc123' }),
+        path: z.string().openapi({ example: 'guides/review.md' }),
+        content: z.string().openapi({ example: 'Review for correctness first.' }),
+        metadata: JsonObjectSchema.openapi({ example: {} }),
+      })
+      .openapi('MemoryStoreMemorySpec'),
+    status: z.object({ phase: ResourcePhaseSchema }).openapi('MemoryStoreMemoryStatus'),
   })
   .openapi('MemoryStoreMemory')
 
@@ -102,11 +103,11 @@ function notFound(message: string) {
   return { error: { type: 'not_found', message } } as const
 }
 
-function serializeStore(record: MemoryStoreRecord) {
+function serializeStore(record: MemoryStore) {
   return { ...record }
 }
 
-function serializeMemory(record: MemoryStoreMemoryRecord) {
+function serializeMemory(record: Memory) {
   return { ...record }
 }
 
@@ -292,7 +293,8 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         { data: page.rows.map(serializeStore), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
@@ -316,7 +318,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
       await deps.audit.record(auth, {
         action: 'memory_store.create',
         resourceType: 'memory_store',
-        resourceId: store.id,
+        resourceId: store.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
         after: serializeStore(store),
@@ -347,10 +349,10 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
         auth.project.id,
         storeId,
         {
-          name: body.name ?? current.name,
-          description: body.description !== undefined ? body.description : current.description,
-          metadata: body.metadata ?? current.metadata,
-          archivedAt: body.archived === undefined ? current.archivedAt : body.archived ? updatedAt : null,
+          name: body.name ?? current.metadata.name,
+          description: body.description !== undefined ? body.description : current.metadata.description,
+          metadata: body.metadata ?? current.spec.metadata,
+          archivedAt: body.archived === undefined ? current.metadata.archivedAt : body.archived ? updatedAt : null,
         },
         updatedAt,
       )
@@ -384,7 +386,8 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
       }
       const page = await memoryStores.listMemories({ projectId: auth.project.id, storeId, limit, cursor: parsedCursor })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         { data: page.rows.map(serializeMemory), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
@@ -398,7 +401,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
       const { storeId } = c.req.valid('param')
       const body = c.req.valid('json')
       const store = await memoryStores.find(auth.project.id, storeId)
-      if (!store || store.archivedAt) return c.json(notFound('Memory store not found'), 404)
+      if (!store || store.metadata.archivedAt) return c.json(notFound('Memory store not found'), 404)
       const normalized = normalizePathInput(body.path)
       if ('error' in normalized) return c.json(validation('Invalid memory path', { path: normalized.error }), 400)
       try {
@@ -418,7 +421,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
           resourceId: storeId,
           outcome: 'success',
           requestId: requestId(c),
-          after: { id: memory.id, path: memory.path },
+          after: { id: memory.metadata.uid, path: memory.spec.path },
         })
         return c.json(serializeMemory(memory), 201)
       } catch (error) {
@@ -435,7 +438,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
       const body = c.req.valid('json')
       const current = await memoryStores.findMemory(auth.project.id, storeId, memoryId)
       if (!current) return c.json(notFound('Memory not found'), 404)
-      let path = current.path
+      let path = current.spec.path
       if (body.path !== undefined) {
         const normalized = normalizePathInput(body.path)
         if ('error' in normalized) return c.json(validation('Invalid memory path', { path: normalized.error }), 400)
@@ -448,8 +451,8 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
           memoryId,
           {
             path,
-            content: body.content ?? current.content,
-            metadata: body.metadata ?? current.metadata,
+            content: body.content ?? current.spec.content,
+            metadata: body.metadata ?? current.spec.metadata,
           },
           new Date().toISOString(),
         )
@@ -461,8 +464,8 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
           resourceId: storeId,
           outcome: 'success',
           requestId: requestId(c),
-          before: { id: current.id, path: current.path },
-          after: { id: updated.id, path: updated.path },
+          before: { id: current.metadata.uid, path: current.spec.path },
+          after: { id: updated.metadata.uid, path: updated.spec.path },
         })
         return c.json(serializeMemory(updated), 200)
       } catch (error) {
@@ -485,7 +488,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
         resourceId: storeId,
         outcome: 'success',
         requestId: requestId(c),
-        before: { id: current.id, path: current.path },
+        before: { id: current.metadata.uid, path: current.spec.path },
       })
       return c.body(null, 204)
     })

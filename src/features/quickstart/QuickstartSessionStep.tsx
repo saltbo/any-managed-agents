@@ -36,7 +36,7 @@ export function QuickstartSessionStep({
       /* v8 ignore start -- button is disabled when agent is null; guard is defensive */
       if (!agent) throw new Error('Create an agent before enabling sandbox execution')
       /* v8 ignore stop */
-      return api.updateAgent(agent.id, sandboxAgentInput(agent))
+      return api.updateAgent(agent.metadata.uid, sandboxAgentInput(agent))
     },
     onSuccess: async () => {
       toast.success('Sandbox execution enabled')
@@ -53,10 +53,10 @@ export function QuickstartSessionStep({
       if (!agent || !environment) throw new Error('Quickstart needs an active agent and environment first')
       /* v8 ignore stop */
       return api.createSession({
-        agentId: agent.id,
-        environmentId: environment.id,
+        agentId: agent.metadata.uid,
+        environmentId: environment.metadata.uid,
         runtime: 'ama',
-        name: `${agent.name} quickstart session`,
+        name: `${agent.metadata.name} quickstart session`,
       })
     },
     onSuccess: async (session) => {
@@ -72,10 +72,17 @@ export function QuickstartSessionStep({
   return (
     <div className="grid gap-4">
       <MetaGrid>
-        <Meta label="Agent" value={agent ? `${agent.name} · ${agent.id} · v${agent.version}` : 'No active agent yet'} />
+        <Meta
+          label="Agent"
+          value={
+            agent ? `${agent.metadata.name} · ${agent.metadata.uid} · v${agent.status.version}` : 'No active agent yet'
+          }
+        />
         <Meta
           label="Environment"
-          value={environment ? `${environment.name} · ${environment.id}` : 'No active environment yet'}
+          value={
+            environment ? `${environment.metadata.name} · ${environment.metadata.uid}` : 'No active environment yet'
+          }
         />
       </MetaGrid>
       <div className="grid gap-2 rounded-md bg-muted/40 p-3">

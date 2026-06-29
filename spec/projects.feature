@@ -14,9 +14,7 @@ Feature: Projects
     And an explicitly created project is inserted in the caller organization
 
   # ── External product as substrate (e2e: real SDK + Worker + D1) ──
-  # Steps below bind to test/e2e/external-product-sdk.steps.ts; the e2e runner
-  # executes these for real (pnpm test:e2e --tags @e2e). Keep the step wording in
-  # sync with the step definitions.
+  # Native Playwright e2e specs execute these scenarios for real through `pnpm run e2e`.
 
   @projects/external-resources @e2e
   Scenario: External product manages standard AMA resources through the SDK

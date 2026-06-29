@@ -32,6 +32,8 @@ Repo-local generated SDK scaffolds use this repository's OpenAPI document as the
 
 SDKs are fully typed and generated end to end from the OpenAPI document — typed operations and typed request/response models, not a thin untyped operation registry. Hand-written code is allowed only where the contract cannot express it (for example the Go runtime-session WebSocket helper that connects to an AMA session channel); everything REST-shaped is generated. Release ownership may move to separate repositories later, but this repository currently owns the reproducible generated layout.
 
+Standard mutable product resources returned by the SDK use the same resource entity shape as Session: `{ metadata, spec, status }`. This applies to agents, agent versions, agent memory, environments, environment versions, vaults, credentials, credential versions, memory stores, memories, triggers, and trigger runs. Callers use `resource.metadata.uid` as the stable id for follow-up calls. Create and update request models remain business-shaped DTOs; SDKs must not add compatibility aliases for old top-level `id`, `name`, `description`, `archivedAt`, or `version` response fields.
+
 ## Repo-Local Generated Layout
 
 The generated SDK layout is:
@@ -96,7 +98,7 @@ The platform uses sandbox capabilities internally to provide filesystem, shell, 
 ## Product Model
 
 - `Agent` is a managed definition: persona, instructions, policy, provider, model, tools, MCP connectors, governance rules, and versions.
-- `Environment` is a long-lived hosting and runtime configuration, not a running sandbox or runner. `hostingMode` is `cloud` or `self_hosted`; `runtime` is `ama`, `claude-code`, `codex`, or `copilot`.
+- `Environment` is a long-lived hosting and workspace configuration, not a running sandbox or runner. `hostingMode` is `cloud` or `self_hosted`; Session and Trigger `runtime` is `ama`, `claude-code`, `codex`, or `copilot`.
 - `Sandbox` is a per-session cloud workspace instance created from an environment snapshot when the selected hosting/runtime combination requires it.
 - `Session` is a concrete run of an agent, binding an agent version snapshot, environment snapshot, validated runtime/provider/model combination, runtime endpoint, canonical events, transcript, tool calls, and status.
 

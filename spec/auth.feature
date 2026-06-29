@@ -71,9 +71,7 @@ Feature: Auth
     Then the app redirects to login and returns to the original page after sign-in
 
   # ── Cross-stack sign-in (e2e: real SPA + Worker + D1 + OIDC) ──
-  # Steps below bind to test/e2e/auth-session.steps.ts; the e2e runner executes
-  # this scenario for real (pnpm test:e2e --tags @e2e). Keep the step wording in
-  # sync with the step definitions.
+  # Native Playwright e2e specs execute this scenario for real through `pnpm run e2e`.
 
   @auth/e2e-sign-in @e2e
   Scenario: Complete sign in

@@ -74,11 +74,11 @@ export function AgentDetailPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow="Agent"
-        title={agent?.name ?? 'Agent detail'}
+        title={agent?.metadata.name ?? 'Agent detail'}
         titleAccessory={agent ? <StatusBadge value={archivedLabel(agent)} /> : null}
         description={
           agent
-            ? `${agent.description ?? 'No description'} · Created ${formatDate(agent.createdAt)} · Updated ${formatDate(agent.updatedAt)}`
+            ? `${agent.metadata.description ?? 'No description'} · Created ${formatDate(agent.metadata.createdAt)} · Updated ${formatDate(agent.metadata.updatedAt)}`
             : 'Inspect agent model configuration, version snapshot, and related sessions.'
         }
         actions={
@@ -105,7 +105,7 @@ export function AgentDetailPage() {
       />
       <CreateSessionSheet
         open={creatingSession}
-        agentId={agent?.id}
+        agentId={agent?.metadata.uid}
         onOpenChange={(open) => setCreatingSession(open)}
       />
       <Sheet open={editing} onOpenChange={setEditing}>
@@ -140,14 +140,14 @@ export function AgentDetailPage() {
 
 function agentToForm(agent: Agent): AgentFormState {
   return {
-    name: agent.name,
-    description: agent.description ?? '',
-    instructions: agent.instructions ?? '',
-    provider: agent.providerId ?? '',
-    model: agent.model ?? '',
-    skills: agent.skills.join('\n'),
-    allowedTools: agent.tools.map((tool) => tool.name).join('\n'),
-    mcpConnectors: agent.mcpConnectors.join('\n'),
-    metadata: stringifyJson(agent.metadata),
+    name: agent.metadata.name,
+    description: agent.metadata.description ?? '',
+    instructions: agent.spec.instructions ?? '',
+    provider: agent.spec.providerId ?? '',
+    model: agent.spec.model ?? '',
+    skills: agent.spec.skills.join('\n'),
+    allowedTools: agent.spec.tools.map((tool) => tool.name).join('\n'),
+    mcpConnectors: agent.spec.mcpConnectors.join('\n'),
+    metadata: stringifyJson(agent.spec.metadata),
   }
 }

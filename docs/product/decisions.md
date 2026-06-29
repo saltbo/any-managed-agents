@@ -4,12 +4,12 @@ These decisions define the intended end state for Any Managed Agents.
 
 ## Environment and Sandbox
 
-- `Environment` is a long-lived sandbox and runtime configuration, not a running sandbox.
+- `Environment` is a long-lived sandbox hosting and workspace configuration, not a running sandbox.
 - `Environment.hostingMode` is exactly `cloud` or `self_hosted`.
-- `Environment.runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
-- Environments own hosting mode, runtime, workspace setup, safe secret references, network policy, resource limits, and runtime configuration.
-- The Environment API surface is `hostingMode`, `runtime`, and `runtimeConfig`; compatibility aliases for hosting or runtime image fields are not part of the public contract.
-- `Sandbox` is an ephemeral workspace/runtime instance created from an environment snapshot when the selected hosting mode and runtime require Cloudflare Sandbox.
+- Session and Trigger `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
+- Environments own hosting mode, workspace setup, safe secret references, network policy, resource limits, and runtime configuration.
+- The Environment API surface is `hostingMode` and `runtimeConfig`; compatibility aliases for hosting or runtime image fields are not part of the public contract.
+- `Sandbox` is an ephemeral workspace/runtime instance created from an environment snapshot when the selected hosting mode and session runtime require Cloudflare Sandbox.
 - Each running `cloud` `Session` that requires Cloudflare Sandbox owns exactly one sandbox.
 - Sandbox instances follow the session lifecycle and are not reused across sessions.
 - Cloudflare Sandbox owns filesystem, shell, process isolation, and the per-session execution environment.
@@ -18,14 +18,14 @@ These decisions define the intended end state for Any Managed Agents.
 
 ## Runtime Boundary
 
-- All agent products run as Environment-selected runtimes behind the same AMA control plane and canonical session event surface.
+- All agent products run as Session-selected runtimes behind the same AMA control plane and canonical session event surface.
 - The `ama` runtime is the first-party AMA/Pi runtime owned by the cloud control plane.
 - `claude-code`, `codex`, and `copilot` are external agent runtimes launched, managed, observed, and translated by self-hosted `ama-runner` processes.
 - `Agent` owns persona, instructions, policy, provider, model, skills, tools, and MCP connector configuration.
-- `Environment` owns hosting mode, runtime, workspace, secrets, network, resource limits, and runtime config.
-- `Session` snapshots the selected Agent and Environment and validates the exact runtime, provider, and model combination before any runtime work starts.
+- `Environment` owns hosting mode, workspace, secrets, network, resource limits, and runtime config.
+- `Session` owns runtime selection, snapshots the selected Agent and Environment, and validates the exact runtime, provider, and model combination before any runtime work starts.
 - Session creation must fail before workspace allocation when the selected session runtime does not support the Agent's exact provider/model.
-- `cloud` environments run first-party AMA runtime execution through AMA-managed Cloudflare infrastructure. `self_hosted` environments run external agent runtimes through registered self-hosted runtime runners.
+- `cloud` environments run selected runtime execution through AMA-managed Cloudflare infrastructure. `self_hosted` environments run selected runtimes through registered self-hosted runtime runners.
 - Self-hosted runners are registered runtime hosts for `self_hosted` environments. They heartbeat safe capability/load metadata, claim session leases, renew or finish leases, open one outbound WebSocket per claimed session, execute runtime/tool work locally, and stream canonical AMA session events/results through AMA.
 - Runner HTTP queue and lease APIs are for dispatch, ownership, heartbeat, expiry, recovery, and audit. A claimed self-hosted session uses its runner-owned session WebSocket as the real-time runtime/tool execution path.
 - A claimed self-hosted session becomes active only after AMA authenticates and accepts the runner session WebSocket. Duplicate, stale, or mismatched runner channels cannot submit tool or runtime results.
@@ -78,7 +78,7 @@ These decisions define the intended end state for Any Managed Agents.
   - Restrictive string states (`disabled`, `deny`, `offline`, e.g. `sandboxPolicy.network`) are sticky once set by a broader scope.
   - Numeric limits (budget policy values) take the minimum across scopes.
   - Nested objects (e.g. `connectorApprovalModes`) shallow-merge with the most specific scope last; any other scalar takes the most specific scope's value.
-- Declarative governance configuration is applied through `POST /api/governance/config` (with `/validate` and `/preview` companions). Validation rejects unknown providers, teams, projects, tools, and MCP connectors and invalid budgets with field-level errors; nothing partial applies. Sections present in the document are authoritative for their scope (declared provider access rules and budgets replace the project's existing set); omitted sections are left unchanged. Apply is atomic across governance policies, provider access rules, and budgets, and the audit record carries the config version and a safe summary.
+- Governance and budget data is managed through the public CRUD resources that remain in `/api/v1`; the removed `/api/governance/*` import/preview/validate surface is not part of v1.
 - A team referenced by the configuration is known when it is declared in the document's `teams` section or asserted by the submitting operator's OIDC `teams` claim.
 - Historical sessions keep their immutable agent and environment snapshots and their recorded events after policy changes; new runtime work on any session is evaluated against the current effective policy.
 
@@ -91,5 +91,5 @@ These decisions define the intended end state for Any Managed Agents.
 ## Specs
 
 - Gherkin is the product spec format.
-- Cucumber is the executable spec runner.
-- E2E specs use Cucumber step definitions backed by Playwright.
+- `.feature` files under `spec/` are documentation and traceability only.
+- E2E specs use native Playwright tests carrying `[spec: id]` breadcrumbs.

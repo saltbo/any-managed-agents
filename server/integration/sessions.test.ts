@@ -46,7 +46,11 @@ async function createEnvironment(authorization: string, data: Record<string, unk
   if (res.status !== 201) {
     throw new Error(`Expected environment creation to return 201, got ${res.status}: ${await res.text()}`)
   }
-  return (await res.json()) as { id: string; hostingMode?: string }
+  const environment = (await res.json()) as {
+    metadata: { uid: string }
+    spec: { hostingMode?: string }
+  }
+  return { id: environment.metadata.uid, hostingMode: environment.spec.hostingMode }
 }
 
 async function createAgent(authorization: string, data: Record<string, unknown> = {}) {
@@ -67,7 +71,12 @@ async function createAgent(authorization: string, data: Record<string, unknown> 
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string; currentVersionId: string; skills: string[] }
+  const agent = (await res.json()) as {
+    metadata: { uid: string }
+    spec: { skills: string[] }
+    status: { currentVersionId: string }
+  }
+  return { id: agent.metadata.uid, currentVersionId: agent.status.currentVersionId, skills: agent.spec.skills }
 }
 
 // Providers are a global vendor catalog now; seed an external vendor + model row
@@ -136,8 +145,8 @@ async function connectMcp(authorization: string, connectorId: string) {
     body: JSON.stringify({ name: `${connectorId} credentials` }),
   })
   expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: `${connectorId} token`,
@@ -147,11 +156,20 @@ async function connectMcp(authorization: string, connectorId: string) {
   })
   expect(credentialRes.status).toBe(201)
   const credential = (await credentialRes.json()) as {
-    id: string
-    activeVersionId: string
-    activeVersion: { id: string; secretRef: string }
+    metadata: { uid: string }
+    status: {
+      activeVersionId: string
+      activeVersion: { metadata: { uid: string }; spec: { secretRef: string } }
+    }
   }
-  return credential
+  return {
+    id: credential.metadata.uid,
+    activeVersionId: credential.status.activeVersionId,
+    activeVersion: {
+      id: credential.status.activeVersion.metadata.uid,
+      secretRef: credential.status.activeVersion.spec.secretRef,
+    },
+  }
 }
 
 async function createVault(authorization: string, name = `Runtime credentials ${crypto.randomUUID()}`) {
@@ -160,7 +178,8 @@ async function createVault(authorization: string, name = `Runtime credentials ${
     body: JSON.stringify({ name }),
   })
   expect(vaultRes.status).toBe(201)
-  return (await vaultRes.json()) as { id: string }
+  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
+  return { id: vault.metadata.uid }
 }
 
 async function createCredential(
@@ -177,10 +196,20 @@ async function createCredential(
     }),
   })
   expect(credentialRes.status).toBe(201)
-  return (await credentialRes.json()) as {
-    id: string
-    name: string
-    activeVersion: { id: string; secretRef: string; dataKeys: string[] }
+  const credential = (await credentialRes.json()) as {
+    metadata: { uid: string; name: string }
+    status: {
+      activeVersion: { metadata: { uid: string }; spec: { secretRef: string; dataKeys: string[] } }
+    }
+  }
+  return {
+    id: credential.metadata.uid,
+    name: credential.metadata.name,
+    activeVersion: {
+      id: credential.status.activeVersion.metadata.uid,
+      secretRef: credential.status.activeVersion.spec.secretRef,
+      dataKeys: credential.status.activeVersion.spec.dataKeys,
+    },
   }
 }
 
@@ -634,8 +663,9 @@ describe('[CF] /api/v1/sessions', () => {
       body: JSON.stringify({ name: 'Team memory', description: 'Review conventions' }),
     })
     expect(memoryStoreRes.status).toBe(201)
-    const memoryStore = (await memoryStoreRes.json()) as { id: string }
-    const memoryRes = await jsonFetch(`/api/v1/memory-stores/${memoryStore.id}/memories`, authorization, {
+    const memoryStore = (await memoryStoreRes.json()) as { metadata: { uid: string } }
+    const memoryStoreId = memoryStore.metadata.uid
+    const memoryRes = await jsonFetch(`/api/v1/memory-stores/${memoryStoreId}/memories`, authorization, {
       method: 'POST',
       body: JSON.stringify({ path: 'guides/review.md', content: 'Review for correctness first.' }),
     })
@@ -649,11 +679,11 @@ describe('[CF] /api/v1/sessions', () => {
         runtime: 'ama',
         volumes: [
           { name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git', ref: 'main' },
-          { name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStore.id}`, access: 'read_write' },
+          { name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStoreId}`, access: 'read_write' },
         ],
         volumeMounts: [
           { name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' },
-          { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}` },
+          { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStoreId}` },
         ],
         envFrom: [
           {
@@ -683,14 +713,14 @@ describe('[CF] /api/v1/sessions', () => {
     expect(created.spec.volumes).toContainEqual(
       expect.objectContaining({
         type: 'memory',
-        memoryRef: `ama://memories/${memoryStore.id}`,
+        memoryRef: `ama://memories/${memoryStoreId}`,
         name: 'memory',
         access: 'read_write',
       }),
     )
     expect(created.spec.volumeMounts).toContainEqual({
       name: 'memory',
-      mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}`,
+      mountPath: `/workspace/.ama/memory-stores/${memoryStoreId}`,
       readOnly: true,
     })
     expect(created).toMatchObject({
@@ -757,7 +787,7 @@ describe('[CF] /api/v1/sessions', () => {
       {
         name: 'memory',
         type: 'memory',
-        memoryRef: `ama://memories/${memoryStore.id}`,
+        memoryRef: `ama://memories/${memoryStoreId}`,
         storeName: 'Team memory',
         description: 'Review conventions',
         access: 'read_write',
@@ -766,14 +796,14 @@ describe('[CF] /api/v1/sessions', () => {
     ])
     expect(storedPayload.volumeMounts).toEqual([
       { name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban', readOnly: true },
-      { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}`, readOnly: true },
+      { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStoreId}`, readOnly: true },
     ])
     expect(storedPayload.agentSnapshot.instructions).toContain('Workspace layout:')
     expect(storedPayload.agentSnapshot.instructions).toContain(
       'https://github.com/saltbo/agent-kanban.git at repos/saltbo/agent-kanban',
     )
     expect(storedPayload.agentSnapshot.instructions).toContain('Team memory')
-    expect(storedPayload.agentSnapshot.instructions).toContain(`.ama/memory-stores/${memoryStore.id}`)
+    expect(storedPayload.agentSnapshot.instructions).toContain(`.ama/memory-stores/${memoryStoreId}`)
     expect(storedPayload.agentSnapshot.instructions).not.toContain('Review for correctness first.')
     expect(storedPayload.provider).toBe('workers-ai')
     expect(storedPayload.env).not.toHaveProperty('AK_AGENT_KEY')

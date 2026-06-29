@@ -10,60 +10,23 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Agent, Environment, Session, SessionEvent } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import {
+  type AgentOverrides,
+  type EnvironmentOverrides,
+  agent as resourceAgent,
+  environment as resourceEnvironment,
+} from '@/test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { AgentBuilderPage } from './AgentBuilderPage'
 
 const now = '2026-05-23T00:00:00.000Z'
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: [],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({ skills: [], tools: [], createdAt: now, updatedAt: now, ...overrides })
 }
 
-function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
-    description: null,
-    packages: [],
-    variables: {},
-    hostingMode: 'cloud',
-    networkPolicy: { mode: 'restricted', allowedHosts: [] },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({ createdAt: now, updatedAt: now, ...overrides })
 }
 
 function buildSession(overrides: TestSessionOverrides = {}): Session {

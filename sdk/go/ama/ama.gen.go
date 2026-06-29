@@ -793,6 +793,24 @@ func (e PutRunnerHeartbeatRequestState) Valid() bool {
 	}
 }
 
+// Defines values for ResourcePhase.
+const (
+	ResourcePhaseActive   ResourcePhase = "active"
+	ResourcePhaseArchived ResourcePhase = "archived"
+)
+
+// Valid indicates whether the value is a known member of the ResourcePhase enum.
+func (e ResourcePhase) Valid() bool {
+	switch e {
+	case ResourcePhaseActive:
+		return true
+	case ResourcePhaseArchived:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunnerAuthMode.
 const (
 	Bearer    RunnerAuthMode = "bearer"
@@ -1447,6 +1465,27 @@ func (e SessionSteerFrameType) Valid() bool {
 	}
 }
 
+// Defines values for TriggerRunStatusPhase.
+const (
+	TriggerRunStatusPhaseClaimed    TriggerRunStatusPhase = "claimed"
+	TriggerRunStatusPhaseDispatched TriggerRunStatusPhase = "dispatched"
+	TriggerRunStatusPhaseFailed     TriggerRunStatusPhase = "failed"
+)
+
+// Valid indicates whether the value is a known member of the TriggerRunStatusPhase enum.
+func (e TriggerRunStatusPhase) Valid() bool {
+	switch e {
+	case TriggerRunStatusPhaseClaimed:
+		return true
+	case TriggerRunStatusPhaseDispatched:
+		return true
+	case TriggerRunStatusPhaseFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TriggerScheduleType.
 const (
 	TriggerScheduleTypeInterval TriggerScheduleType = "interval"
@@ -1462,39 +1501,18 @@ func (e TriggerScheduleType) Valid() bool {
 	}
 }
 
-// Defines values for TriggerType.
+// Defines values for TriggerSpecType.
 const (
-	TriggerTypeHttp      TriggerType = "http"
-	TriggerTypeScheduled TriggerType = "scheduled"
+	TriggerSpecTypeHttp      TriggerSpecType = "http"
+	TriggerSpecTypeScheduled TriggerSpecType = "scheduled"
 )
 
-// Valid indicates whether the value is a known member of the TriggerType enum.
-func (e TriggerType) Valid() bool {
+// Valid indicates whether the value is a known member of the TriggerSpecType enum.
+func (e TriggerSpecType) Valid() bool {
 	switch e {
-	case TriggerTypeHttp:
+	case TriggerSpecTypeHttp:
 		return true
-	case TriggerTypeScheduled:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TriggerRunState.
-const (
-	TriggerRunStateClaimed    TriggerRunState = "claimed"
-	TriggerRunStateDispatched TriggerRunState = "dispatched"
-	TriggerRunStateFailed     TriggerRunState = "failed"
-)
-
-// Valid indicates whether the value is a known member of the TriggerRunState enum.
-func (e TriggerRunState) Valid() bool {
-	switch e {
-	case TriggerRunStateClaimed:
-		return true
-	case TriggerRunStateDispatched:
-		return true
-	case TriggerRunStateFailed:
+	case TriggerSpecTypeScheduled:
 		return true
 	default:
 		return false
@@ -1735,54 +1753,18 @@ func (e UsageSummaryGroupBy) Valid() bool {
 	}
 }
 
-// Defines values for VaultScope.
+// Defines values for VaultCredentialSpecType.
 const (
-	VaultScopeOrganization VaultScope = "organization"
-	VaultScopeProject      VaultScope = "project"
+	VaultCredentialTypeBasicAuth     VaultCredentialSpecType = "ama.dev/basic-auth"
+	VaultCredentialTypeOauthToken    VaultCredentialSpecType = "ama.dev/oauth-token"
+	VaultCredentialTypeOpaque        VaultCredentialSpecType = "opaque"
+	VaultCredentialTypePrivateKeyJwk VaultCredentialSpecType = "ama.dev/private-key-jwk"
+	VaultCredentialTypeSshAuth       VaultCredentialSpecType = "ama.dev/ssh-auth"
+	VaultCredentialTypeTls           VaultCredentialSpecType = "ama.dev/tls"
 )
 
-// Valid indicates whether the value is a known member of the VaultScope enum.
-func (e VaultScope) Valid() bool {
-	switch e {
-	case VaultScopeOrganization:
-		return true
-	case VaultScopeProject:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for VaultCredentialState.
-const (
-	VaultCredentialStateActive  VaultCredentialState = "active"
-	VaultCredentialStateRevoked VaultCredentialState = "revoked"
-)
-
-// Valid indicates whether the value is a known member of the VaultCredentialState enum.
-func (e VaultCredentialState) Valid() bool {
-	switch e {
-	case VaultCredentialStateActive:
-		return true
-	case VaultCredentialStateRevoked:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for VaultCredentialType.
-const (
-	VaultCredentialTypeBasicAuth     VaultCredentialType = "ama.dev/basic-auth"
-	VaultCredentialTypeOauthToken    VaultCredentialType = "ama.dev/oauth-token"
-	VaultCredentialTypeOpaque        VaultCredentialType = "opaque"
-	VaultCredentialTypePrivateKeyJwk VaultCredentialType = "ama.dev/private-key-jwk"
-	VaultCredentialTypeSshAuth       VaultCredentialType = "ama.dev/ssh-auth"
-	VaultCredentialTypeTls           VaultCredentialType = "ama.dev/tls"
-)
-
-// Valid indicates whether the value is a known member of the VaultCredentialType enum.
-func (e VaultCredentialType) Valid() bool {
+// Valid indicates whether the value is a known member of the VaultCredentialSpecType enum.
+func (e VaultCredentialSpecType) Valid() bool {
 	switch e {
 	case VaultCredentialTypeBasicAuth:
 		return true
@@ -1801,36 +1783,72 @@ func (e VaultCredentialType) Valid() bool {
 	}
 }
 
-// Defines values for VaultCredentialVersionProvider.
+// Defines values for VaultCredentialStatusPhase.
 const (
-	VaultCredentialVersionProviderAma VaultCredentialVersionProvider = "ama"
+	VaultCredentialStatusPhaseActive  VaultCredentialStatusPhase = "active"
+	VaultCredentialStatusPhaseRevoked VaultCredentialStatusPhase = "revoked"
 )
 
-// Valid indicates whether the value is a known member of the VaultCredentialVersionProvider enum.
-func (e VaultCredentialVersionProvider) Valid() bool {
+// Valid indicates whether the value is a known member of the VaultCredentialStatusPhase enum.
+func (e VaultCredentialStatusPhase) Valid() bool {
 	switch e {
-	case VaultCredentialVersionProviderAma:
+	case VaultCredentialStatusPhaseActive:
+		return true
+	case VaultCredentialStatusPhaseRevoked:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for VaultCredentialVersionState.
+// Defines values for VaultCredentialVersionSpecProvider.
 const (
-	VaultCredentialVersionStateActive     VaultCredentialVersionState = "active"
-	VaultCredentialVersionStateRevoked    VaultCredentialVersionState = "revoked"
-	VaultCredentialVersionStateSuperseded VaultCredentialVersionState = "superseded"
+	VaultCredentialVersionSpecProviderAma VaultCredentialVersionSpecProvider = "ama"
 )
 
-// Valid indicates whether the value is a known member of the VaultCredentialVersionState enum.
-func (e VaultCredentialVersionState) Valid() bool {
+// Valid indicates whether the value is a known member of the VaultCredentialVersionSpecProvider enum.
+func (e VaultCredentialVersionSpecProvider) Valid() bool {
 	switch e {
-	case VaultCredentialVersionStateActive:
+	case VaultCredentialVersionSpecProviderAma:
 		return true
-	case VaultCredentialVersionStateRevoked:
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultCredentialVersionStatusPhase.
+const (
+	VaultCredentialVersionStatusPhaseActive     VaultCredentialVersionStatusPhase = "active"
+	VaultCredentialVersionStatusPhaseRevoked    VaultCredentialVersionStatusPhase = "revoked"
+	VaultCredentialVersionStatusPhaseSuperseded VaultCredentialVersionStatusPhase = "superseded"
+)
+
+// Valid indicates whether the value is a known member of the VaultCredentialVersionStatusPhase enum.
+func (e VaultCredentialVersionStatusPhase) Valid() bool {
+	switch e {
+	case VaultCredentialVersionStatusPhaseActive:
 		return true
-	case VaultCredentialVersionStateSuperseded:
+	case VaultCredentialVersionStatusPhaseRevoked:
+		return true
+	case VaultCredentialVersionStatusPhaseSuperseded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultSpecScope.
+const (
+	VaultSpecScopeOrganization VaultSpecScope = "organization"
+	VaultSpecScopeProject      VaultSpecScope = "project"
+)
+
+// Valid indicates whether the value is a known member of the VaultSpecScope enum.
+func (e VaultSpecScope) Valid() bool {
+	switch e {
+	case VaultSpecScopeOrganization:
+		return true
+	case VaultSpecScopeProject:
 		return true
 	default:
 		return false
@@ -2280,19 +2298,19 @@ func (e ListVaultCredentialsParamsState) Valid() bool {
 
 // Defines values for ListVaultCredentialVersionsParamsState.
 const (
-	Active     ListVaultCredentialVersionsParamsState = "active"
-	Revoked    ListVaultCredentialVersionsParamsState = "revoked"
-	Superseded ListVaultCredentialVersionsParamsState = "superseded"
+	ListVaultCredentialVersionsParamsStateActive     ListVaultCredentialVersionsParamsState = "active"
+	ListVaultCredentialVersionsParamsStateRevoked    ListVaultCredentialVersionsParamsState = "revoked"
+	ListVaultCredentialVersionsParamsStateSuperseded ListVaultCredentialVersionsParamsState = "superseded"
 )
 
 // Valid indicates whether the value is a known member of the ListVaultCredentialVersionsParamsState enum.
 func (e ListVaultCredentialVersionsParamsState) Valid() bool {
 	switch e {
-	case Active:
+	case ListVaultCredentialVersionsParamsStateActive:
 		return true
-	case Revoked:
+	case ListVaultCredentialVersionsParamsStateRevoked:
 		return true
-	case Superseded:
+	case ListVaultCredentialVersionsParamsStateSuperseded:
 		return true
 	default:
 		return false
@@ -2328,27 +2346,9 @@ func (e ListWorkItemsParamsState) Valid() bool {
 
 // Agent defines model for Agent.
 type Agent struct {
-	ArchivedAt       *time.Time             `json:"archivedAt"`
-	CapabilityTags   []string               `json:"capabilityTags"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	CurrentVersionId *string                `json:"currentVersionId"`
-	Description      *string                `json:"description"`
-	HandoffPolicy    AgentHandoffPolicy     `json:"handoffPolicy"`
-	Id               string                 `json:"id"`
-	Instructions     *string                `json:"instructions"`
-	McpConnectors    []string               `json:"mcpConnectors"`
-	MemoryPolicy     AgentMemoryPolicy      `json:"memoryPolicy"`
-	Metadata         map[string]interface{} `json:"metadata"`
-	Model            *string                `json:"model"`
-	Name             string                 `json:"name"`
-	ProjectId        string                 `json:"projectId"`
-	ProviderId       *string                `json:"providerId"`
-	Role             *string                `json:"role"`
-	Skills           []string               `json:"skills"`
-	Subagents        []AgentSubagent        `json:"subagents"`
-	Tools            []AgentToolAttachment  `json:"tools"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
-	Version          int                    `json:"version"`
+	Metadata ResourceMetadata `json:"metadata"`
+	Spec     AgentSpec        `json:"spec"`
+	Status   AgentStatus      `json:"status"`
 }
 
 // AgentHandoffCandidate defines model for AgentHandoffCandidate.
@@ -2387,12 +2387,9 @@ type AgentListResponse struct {
 
 // AgentMemory defines model for AgentMemory.
 type AgentMemory struct {
-	AgentId   string                 `json:"agentId"`
-	Content   string                 `json:"content"`
-	CreatedAt time.Time              `json:"createdAt"`
-	Metadata  map[string]interface{} `json:"metadata"`
-	ProjectId string                 `json:"projectId"`
-	UpdatedAt time.Time              `json:"updatedAt"`
+	Metadata ResourceMetadata  `json:"metadata"`
+	Spec     AgentMemorySpec   `json:"spec"`
+	Status   AgentMemoryStatus `json:"status"`
 }
 
 // AgentMemoryPolicy defines model for AgentMemoryPolicy.
@@ -2401,6 +2398,41 @@ type AgentMemoryPolicy struct {
 	Mode                 *string                `json:"mode,omitempty"`
 	Scope                *string                `json:"scope,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// AgentMemorySpec defines model for AgentMemorySpec.
+type AgentMemorySpec struct {
+	AgentId  string                 `json:"agentId"`
+	Content  string                 `json:"content"`
+	Metadata map[string]interface{} `json:"metadata"`
+}
+
+// AgentMemoryStatus defines model for AgentMemoryStatus.
+type AgentMemoryStatus struct {
+	Phase ResourcePhase `json:"phase"`
+}
+
+// AgentSpec defines model for AgentSpec.
+type AgentSpec struct {
+	CapabilityTags []string               `json:"capabilityTags"`
+	HandoffPolicy  AgentHandoffPolicy     `json:"handoffPolicy"`
+	Instructions   *string                `json:"instructions"`
+	McpConnectors  []string               `json:"mcpConnectors"`
+	MemoryPolicy   AgentMemoryPolicy      `json:"memoryPolicy"`
+	Metadata       map[string]interface{} `json:"metadata"`
+	Model          *string                `json:"model"`
+	ProviderId     *string                `json:"providerId"`
+	Role           *string                `json:"role"`
+	Skills         []string               `json:"skills"`
+	Subagents      []AgentSubagent        `json:"subagents"`
+	Tools          []AgentToolAttachment  `json:"tools"`
+}
+
+// AgentStatus defines model for AgentStatus.
+type AgentStatus struct {
+	CurrentVersionId *string       `json:"currentVersionId"`
+	Phase            ResourcePhase `json:"phase"`
+	Version          int           `json:"version"`
 }
 
 // AgentSubagent defines model for AgentSubagent.
@@ -2436,29 +2468,21 @@ type AgentToolAttachmentInputApprovalMode string
 
 // AgentVersion defines model for AgentVersion.
 type AgentVersion struct {
-	AgentId        string                 `json:"agentId"`
-	CapabilityTags []string               `json:"capabilityTags"`
-	CreatedAt      time.Time              `json:"createdAt"`
-	HandoffPolicy  AgentHandoffPolicy     `json:"handoffPolicy"`
-	Id             string                 `json:"id"`
-	Instructions   *string                `json:"instructions"`
-	McpConnectors  []string               `json:"mcpConnectors"`
-	MemoryPolicy   AgentMemoryPolicy      `json:"memoryPolicy"`
-	Metadata       map[string]interface{} `json:"metadata"`
-	Model          *string                `json:"model"`
-	ProjectId      string                 `json:"projectId"`
-	ProviderId     *string                `json:"providerId"`
-	Role           *string                `json:"role"`
-	Skills         []string               `json:"skills"`
-	Subagents      []AgentSubagent        `json:"subagents"`
-	Tools          []AgentToolAttachment  `json:"tools"`
-	Version        int                    `json:"version"`
+	Metadata ResourceMetadata   `json:"metadata"`
+	Spec     AgentSpec          `json:"spec"`
+	Status   AgentVersionStatus `json:"status"`
 }
 
 // AgentVersionListResponse defines model for AgentVersionListResponse.
 type AgentVersionListResponse struct {
 	Data       []AgentVersion `json:"data"`
 	Pagination ListPagination `json:"pagination"`
+}
+
+// AgentVersionStatus defines model for AgentVersionStatus.
+type AgentVersionStatus struct {
+	AgentId string `json:"agentId"`
+	Version int    `json:"version"`
 }
 
 // AuditRecord defines model for AuditRecord.
@@ -2846,34 +2870,9 @@ type EnvFromEntryType string
 
 // Environment defines model for Environment.
 type Environment struct {
-	ArchivedAt           *time.Time               `json:"archivedAt"`
-	CreatedAt            time.Time                `json:"createdAt"`
-	CurrentVersionId     *string                  `json:"currentVersionId"`
-	Description          *string                  `json:"description"`
-	HostingMode          EnvironmentHostingMode   `json:"hostingMode"`
-	Id                   string                   `json:"id"`
-	McpPolicy            EnvironmentMcpPolicy     `json:"mcpPolicy"`
-	Metadata             map[string]interface{}   `json:"metadata"`
-	Name                 string                   `json:"name"`
-	NetworkPolicy        EnvironmentNetworkPolicy `json:"networkPolicy"`
-	PackageManagerPolicy map[string]interface{}   `json:"packageManagerPolicy"`
-	Packages             []struct {
-		Name    string  `json:"name"`
-		Version *string `json:"version,omitempty"`
-	} `json:"packages"`
-	ProjectId      string `json:"projectId"`
-	ResourceLimits struct {
-		CpuMs          *int `json:"cpuMs,omitempty"`
-		MemoryMb       *int `json:"memoryMb,omitempty"`
-		TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
-	} `json:"resourceLimits"`
-	RuntimeConfig map[string]interface{} `json:"runtimeConfig"`
-	UpdatedAt     time.Time              `json:"updatedAt"`
-	Variables     map[string]struct {
-		Description *string `json:"description,omitempty"`
-		Required    *bool   `json:"required,omitempty"`
-	} `json:"variables"`
-	Version int `json:"version"`
+	Metadata ResourceMetadata  `json:"metadata"`
+	Spec     EnvironmentSpec   `json:"spec"`
+	Status   EnvironmentStatus `json:"status"`
 }
 
 // EnvironmentHostingMode defines model for EnvironmentHostingMode.
@@ -2910,12 +2909,9 @@ type EnvironmentNetworkPolicy struct {
 // EnvironmentNetworkPolicyMode defines model for EnvironmentNetworkPolicy.Mode.
 type EnvironmentNetworkPolicyMode string
 
-// EnvironmentVersion defines model for EnvironmentVersion.
-type EnvironmentVersion struct {
-	CreatedAt            time.Time                `json:"createdAt"`
-	EnvironmentId        string                   `json:"environmentId"`
+// EnvironmentSpec defines model for EnvironmentSpec.
+type EnvironmentSpec struct {
 	HostingMode          EnvironmentHostingMode   `json:"hostingMode"`
-	Id                   string                   `json:"id"`
 	McpPolicy            EnvironmentMcpPolicy     `json:"mcpPolicy"`
 	Metadata             map[string]interface{}   `json:"metadata"`
 	NetworkPolicy        EnvironmentNetworkPolicy `json:"networkPolicy"`
@@ -2924,7 +2920,6 @@ type EnvironmentVersion struct {
 		Name    string  `json:"name"`
 		Version *string `json:"version,omitempty"`
 	} `json:"packages"`
-	ProjectId      string `json:"projectId"`
 	ResourceLimits struct {
 		CpuMs          *int `json:"cpuMs,omitempty"`
 		MemoryMb       *int `json:"memoryMb,omitempty"`
@@ -2935,13 +2930,32 @@ type EnvironmentVersion struct {
 		Description *string `json:"description,omitempty"`
 		Required    *bool   `json:"required,omitempty"`
 	} `json:"variables"`
-	Version int `json:"version"`
+}
+
+// EnvironmentStatus defines model for EnvironmentStatus.
+type EnvironmentStatus struct {
+	CurrentVersionId *string       `json:"currentVersionId"`
+	Phase            ResourcePhase `json:"phase"`
+	Version          int           `json:"version"`
+}
+
+// EnvironmentVersion defines model for EnvironmentVersion.
+type EnvironmentVersion struct {
+	Metadata ResourceMetadata         `json:"metadata"`
+	Spec     EnvironmentSpec          `json:"spec"`
+	Status   EnvironmentVersionStatus `json:"status"`
 }
 
 // EnvironmentVersionListResponse defines model for EnvironmentVersionListResponse.
 type EnvironmentVersionListResponse struct {
 	Data       []EnvironmentVersion `json:"data"`
 	Pagination ListPagination       `json:"pagination"`
+}
+
+// EnvironmentVersionStatus defines model for EnvironmentVersionStatus.
+type EnvironmentVersionStatus struct {
+	EnvironmentId string `json:"environmentId"`
+	Version       int    `json:"version"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
@@ -3014,14 +3028,9 @@ type ListPagination struct {
 
 // MemoryStore defines model for MemoryStore.
 type MemoryStore struct {
-	ArchivedAt  *time.Time              `json:"archivedAt"`
-	CreatedAt   time.Time               `json:"createdAt"`
-	Description *string                 `json:"description"`
-	Id          string                  `json:"id"`
-	Metadata    map[string]*interface{} `json:"metadata"`
-	Name        string                  `json:"name"`
-	ProjectId   string                  `json:"projectId"`
-	UpdatedAt   time.Time               `json:"updatedAt"`
+	Metadata ResourceMetadata  `json:"metadata"`
+	Spec     MemoryStoreSpec   `json:"spec"`
+	Status   MemoryStoreStatus `json:"status"`
 }
 
 // MemoryStoreListResponse defines model for MemoryStoreListResponse.
@@ -3032,20 +3041,38 @@ type MemoryStoreListResponse struct {
 
 // MemoryStoreMemory defines model for MemoryStoreMemory.
 type MemoryStoreMemory struct {
-	Content   string                  `json:"content"`
-	CreatedAt time.Time               `json:"createdAt"`
-	Id        string                  `json:"id"`
-	Metadata  map[string]*interface{} `json:"metadata"`
-	Path      string                  `json:"path"`
-	ProjectId string                  `json:"projectId"`
-	StoreId   string                  `json:"storeId"`
-	UpdatedAt time.Time               `json:"updatedAt"`
+	Metadata ResourceMetadata        `json:"metadata"`
+	Spec     MemoryStoreMemorySpec   `json:"spec"`
+	Status   MemoryStoreMemoryStatus `json:"status"`
 }
 
 // MemoryStoreMemoryListResponse defines model for MemoryStoreMemoryListResponse.
 type MemoryStoreMemoryListResponse struct {
 	Data       []MemoryStoreMemory `json:"data"`
 	Pagination ListPagination      `json:"pagination"`
+}
+
+// MemoryStoreMemorySpec defines model for MemoryStoreMemorySpec.
+type MemoryStoreMemorySpec struct {
+	Content  string                  `json:"content"`
+	Metadata map[string]*interface{} `json:"metadata"`
+	Path     string                  `json:"path"`
+	StoreId  string                  `json:"storeId"`
+}
+
+// MemoryStoreMemoryStatus defines model for MemoryStoreMemoryStatus.
+type MemoryStoreMemoryStatus struct {
+	Phase ResourcePhase `json:"phase"`
+}
+
+// MemoryStoreSpec defines model for MemoryStoreSpec.
+type MemoryStoreSpec struct {
+	Metadata map[string]*interface{} `json:"metadata"`
+}
+
+// MemoryStoreStatus defines model for MemoryStoreStatus.
+type MemoryStoreStatus struct {
+	Phase ResourcePhase `json:"phase"`
 }
 
 // MemoryVolume defines model for MemoryVolume.
@@ -3193,6 +3220,23 @@ type ReplaceAgentMemoryRequest struct {
 	Content  string                  `json:"content"`
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 }
+
+// ResourceMetadata defines model for ResourceMetadata.
+type ResourceMetadata struct {
+	Annotations map[string]string `json:"annotations"`
+	ArchivedAt  *time.Time        `json:"archivedAt"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	CreatedBy   *string           `json:"createdBy"`
+	Description *string           `json:"description"`
+	Labels      map[string]string `json:"labels"`
+	Name        string            `json:"name"`
+	Pid         *string           `json:"pid"`
+	Uid         string            `json:"uid"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+}
+
+// ResourcePhase defines model for ResourcePhase.
+type ResourcePhase string
 
 // Runner defines model for Runner.
 type Runner struct {
@@ -3785,39 +3829,10 @@ type SessionSteerFrameType string
 
 // Trigger defines model for Trigger.
 type Trigger struct {
-	AgentId          string                 `json:"agentId"`
-	ArchivedAt       *time.Time             `json:"archivedAt"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	CreatedByUserId  *string                `json:"createdByUserId"`
-	Enabled          bool                   `json:"enabled"`
-	Env              map[string]string      `json:"env"`
-	EnvFrom          []EnvFromEntry         `json:"envFrom"`
-	EnvironmentId    *string                `json:"environmentId"`
-	Id               string                 `json:"id"`
-	LastDispatchedAt *time.Time             `json:"lastDispatchedAt"`
-	LastRunId        *string                `json:"lastRunId"`
-	Metadata         map[string]interface{} `json:"metadata"`
-	Name             string                 `json:"name"`
-	NextDueAt        *time.Time             `json:"nextDueAt"`
-	ProjectId        string                 `json:"projectId"`
-	PromptTemplate   string                 `json:"promptTemplate"`
-	Runtime          Runtime                `json:"runtime"`
-	Schedule         *struct {
-		IntervalSeconds int                 `json:"intervalSeconds"`
-		Type            TriggerScheduleType `json:"type"`
-		WindowSeconds   int                 `json:"windowSeconds"`
-	} `json:"schedule"`
-	Type         TriggerType   `json:"type"`
-	UpdatedAt    time.Time     `json:"updatedAt"`
-	VolumeMounts []VolumeMount `json:"volumeMounts"`
-	Volumes      []Volume      `json:"volumes"`
+	Metadata ResourceMetadata `json:"metadata"`
+	Spec     TriggerSpec      `json:"spec"`
+	Status   TriggerStatus    `json:"status"`
 }
-
-// TriggerScheduleType defines model for Trigger.Schedule.Type.
-type TriggerScheduleType string
-
-// TriggerType defines model for Trigger.Type.
-type TriggerType string
 
 // TriggerListResponse defines model for TriggerListResponse.
 type TriggerListResponse struct {
@@ -3827,29 +3842,73 @@ type TriggerListResponse struct {
 
 // TriggerRun defines model for TriggerRun.
 type TriggerRun struct {
-	CorrelationId  string                 `json:"correlationId"`
-	CreatedAt      time.Time              `json:"createdAt"`
-	ErrorMessage   *string                `json:"errorMessage"`
-	HeartbeatAt    *time.Time             `json:"heartbeatAt"`
-	Id             string                 `json:"id"`
-	IdempotencyKey string                 `json:"idempotencyKey"`
-	Metadata       map[string]interface{} `json:"metadata"`
-	ProjectId      string                 `json:"projectId"`
-	ScheduledFor   *time.Time             `json:"scheduledFor"`
-	SessionId      *string                `json:"sessionId"`
-	State          TriggerRunState        `json:"state"`
-	TriggerId      string                 `json:"triggerId"`
-	TriggeredAt    time.Time              `json:"triggeredAt"`
-	UpdatedAt      time.Time              `json:"updatedAt"`
+	Metadata ResourceMetadata `json:"metadata"`
+	Spec     TriggerRunSpec   `json:"spec"`
+	Status   TriggerRunStatus `json:"status"`
 }
-
-// TriggerRunState defines model for TriggerRun.State.
-type TriggerRunState string
 
 // TriggerRunListResponse defines model for TriggerRunListResponse.
 type TriggerRunListResponse struct {
 	Data       []TriggerRun   `json:"data"`
 	Pagination ListPagination `json:"pagination"`
+}
+
+// TriggerRunSpec defines model for TriggerRunSpec.
+type TriggerRunSpec struct {
+	CorrelationId  string                 `json:"correlationId"`
+	IdempotencyKey string                 `json:"idempotencyKey"`
+	Metadata       map[string]interface{} `json:"metadata"`
+	ScheduledFor   *time.Time             `json:"scheduledFor"`
+	TriggerId      string                 `json:"triggerId"`
+}
+
+// TriggerRunStatus defines model for TriggerRunStatus.
+type TriggerRunStatus struct {
+	ErrorMessage *string               `json:"errorMessage"`
+	HeartbeatAt  *time.Time            `json:"heartbeatAt"`
+	Phase        TriggerRunStatusPhase `json:"phase"`
+	SessionId    *string               `json:"sessionId"`
+	TriggeredAt  time.Time             `json:"triggeredAt"`
+}
+
+// TriggerRunStatusPhase defines model for TriggerRunStatus.Phase.
+type TriggerRunStatusPhase string
+
+// TriggerSchedule defines model for TriggerSchedule.
+type TriggerSchedule struct {
+	IntervalSeconds int                 `json:"intervalSeconds"`
+	Type            TriggerScheduleType `json:"type"`
+	WindowSeconds   int                 `json:"windowSeconds"`
+}
+
+// TriggerScheduleType defines model for TriggerSchedule.Type.
+type TriggerScheduleType string
+
+// TriggerSpec defines model for TriggerSpec.
+type TriggerSpec struct {
+	AgentId        string                 `json:"agentId"`
+	Enabled        bool                   `json:"enabled"`
+	Env            map[string]string      `json:"env"`
+	EnvFrom        []EnvFromEntry         `json:"envFrom"`
+	EnvironmentId  *string                `json:"environmentId"`
+	Metadata       map[string]interface{} `json:"metadata"`
+	PromptTemplate string                 `json:"promptTemplate"`
+	Runtime        Runtime                `json:"runtime"`
+	Schedule       *TriggerSchedule       `json:"schedule"`
+	Type           TriggerSpecType        `json:"type"`
+	VolumeMounts   []VolumeMount          `json:"volumeMounts"`
+	Volumes        []Volume               `json:"volumes"`
+}
+
+// TriggerSpecType defines model for TriggerSpec.Type.
+type TriggerSpecType string
+
+// TriggerStatus defines model for TriggerStatus.
+type TriggerStatus struct {
+	LastDispatchedAt *time.Time    `json:"lastDispatchedAt"`
+	LastRunId        *string       `json:"lastRunId"`
+	NextDueAt        *time.Time    `json:"nextDueAt"`
+	Phase            ResourcePhase `json:"phase"`
 }
 
 // UpdateAgentRequest defines model for UpdateAgentRequest.
@@ -4085,43 +4144,17 @@ type UsageSummaryTotals struct {
 
 // Vault defines model for Vault.
 type Vault struct {
-	ArchivedAt  *time.Time             `json:"archivedAt"`
-	CreatedAt   time.Time              `json:"createdAt"`
-	Description *string                `json:"description"`
-	Id          string                 `json:"id"`
-	Metadata    map[string]interface{} `json:"metadata"`
-	Name        string                 `json:"name"`
-	ProjectId   *string                `json:"projectId"`
-	Scope       VaultScope             `json:"scope"`
-	UpdatedAt   time.Time              `json:"updatedAt"`
+	Metadata ResourceMetadata `json:"metadata"`
+	Spec     VaultSpec        `json:"spec"`
+	Status   VaultStatus      `json:"status"`
 }
-
-// VaultScope defines model for Vault.Scope.
-type VaultScope string
 
 // VaultCredential defines model for VaultCredential.
 type VaultCredential struct {
-	ActiveVersion   *VaultCredentialVersion `json:"activeVersion"`
-	ActiveVersionId *string                 `json:"activeVersionId"`
-	CreatedAt       time.Time               `json:"createdAt"`
-	Id              string                  `json:"id"`
-	Metadata        map[string]interface{}  `json:"metadata"`
-	Name            string                  `json:"name"`
-	ProjectId       *string                 `json:"projectId"`
-	RevokeReason    *string                 `json:"revokeReason"`
-	RevokedAt       *time.Time              `json:"revokedAt"`
-	RevokedByUserId *string                 `json:"revokedByUserId"`
-	State           VaultCredentialState    `json:"state"`
-	Type            VaultCredentialType     `json:"type"`
-	UpdatedAt       time.Time               `json:"updatedAt"`
-	VaultId         string                  `json:"vaultId"`
+	Metadata ResourceMetadata      `json:"metadata"`
+	Spec     VaultCredentialSpec   `json:"spec"`
+	Status   VaultCredentialStatus `json:"status"`
 }
-
-// VaultCredentialState defines model for VaultCredential.State.
-type VaultCredentialState string
-
-// VaultCredentialType defines model for VaultCredential.Type.
-type VaultCredentialType string
 
 // VaultCredentialListResponse defines model for VaultCredentialListResponse.
 type VaultCredentialListResponse struct {
@@ -4129,36 +4162,69 @@ type VaultCredentialListResponse struct {
 	Pagination ListPagination    `json:"pagination"`
 }
 
-// VaultCredentialVersion defines model for VaultCredentialVersion.
-type VaultCredentialVersion struct {
-	CreatedAt     time.Time                      `json:"createdAt"`
-	CredentialId  string                         `json:"credentialId"`
-	DataKeys      []string                       `json:"dataKeys"`
-	HasSecret     bool                           `json:"hasSecret"`
-	Id            string                         `json:"id"`
-	Metadata      VaultJsonObject                `json:"metadata"`
-	ProjectId     *string                        `json:"projectId"`
-	Provider      VaultCredentialVersionProvider `json:"provider"`
-	ReferenceName string                         `json:"referenceName"`
-	RevokedAt     *time.Time                     `json:"revokedAt"`
-	SecretRef     string                         `json:"secretRef"`
-	State         VaultCredentialVersionState    `json:"state"`
-	SupersededAt  *time.Time                     `json:"supersededAt"`
-	VaultId       string                         `json:"vaultId"`
-	Version       int                            `json:"version"`
+// VaultCredentialSpec defines model for VaultCredentialSpec.
+type VaultCredentialSpec struct {
+	Metadata       map[string]interface{}  `json:"metadata"`
+	OrganizationId string                  `json:"organizationId"`
+	Type           VaultCredentialSpecType `json:"type"`
+	VaultId        string                  `json:"vaultId"`
 }
 
-// VaultCredentialVersionProvider defines model for VaultCredentialVersion.Provider.
-type VaultCredentialVersionProvider string
+// VaultCredentialSpecType defines model for VaultCredentialSpec.Type.
+type VaultCredentialSpecType string
 
-// VaultCredentialVersionState defines model for VaultCredentialVersion.State.
-type VaultCredentialVersionState string
+// VaultCredentialStatus defines model for VaultCredentialStatus.
+type VaultCredentialStatus struct {
+	ActiveVersion   *VaultCredentialVersion    `json:"activeVersion"`
+	ActiveVersionId *string                    `json:"activeVersionId"`
+	Phase           VaultCredentialStatusPhase `json:"phase"`
+	RevokeReason    *string                    `json:"revokeReason"`
+	RevokedAt       *time.Time                 `json:"revokedAt"`
+	RevokedByUserId *string                    `json:"revokedByUserId"`
+}
+
+// VaultCredentialStatusPhase defines model for VaultCredentialStatus.Phase.
+type VaultCredentialStatusPhase string
+
+// VaultCredentialVersion defines model for VaultCredentialVersion.
+type VaultCredentialVersion struct {
+	Metadata ResourceMetadata             `json:"metadata"`
+	Spec     VaultCredentialVersionSpec   `json:"spec"`
+	Status   VaultCredentialVersionStatus `json:"status"`
+}
 
 // VaultCredentialVersionListResponse defines model for VaultCredentialVersionListResponse.
 type VaultCredentialVersionListResponse struct {
 	Data       []*VaultCredentialVersion `json:"data"`
 	Pagination ListPagination            `json:"pagination"`
 }
+
+// VaultCredentialVersionSpec defines model for VaultCredentialVersionSpec.
+type VaultCredentialVersionSpec struct {
+	CredentialId   string                             `json:"credentialId"`
+	DataKeys       []string                           `json:"dataKeys"`
+	HasSecret      bool                               `json:"hasSecret"`
+	Metadata       VaultJsonObject                    `json:"metadata"`
+	OrganizationId string                             `json:"organizationId"`
+	Provider       VaultCredentialVersionSpecProvider `json:"provider"`
+	ReferenceName  string                             `json:"referenceName"`
+	SecretRef      string                             `json:"secretRef"`
+	VaultId        string                             `json:"vaultId"`
+	Version        int                                `json:"version"`
+}
+
+// VaultCredentialVersionSpecProvider defines model for VaultCredentialVersionSpec.Provider.
+type VaultCredentialVersionSpecProvider string
+
+// VaultCredentialVersionStatus defines model for VaultCredentialVersionStatus.
+type VaultCredentialVersionStatus struct {
+	Phase        VaultCredentialVersionStatusPhase `json:"phase"`
+	RevokedAt    *time.Time                        `json:"revokedAt"`
+	SupersededAt *time.Time                        `json:"supersededAt"`
+}
+
+// VaultCredentialVersionStatusPhase defines model for VaultCredentialVersionStatus.Phase.
+type VaultCredentialVersionStatusPhase string
 
 // VaultJsonObject defines model for VaultJsonObject.
 type VaultJsonObject map[string]interface{}
@@ -4167,6 +4233,21 @@ type VaultJsonObject map[string]interface{}
 type VaultListResponse struct {
 	Data       []Vault        `json:"data"`
 	Pagination ListPagination `json:"pagination"`
+}
+
+// VaultSpec defines model for VaultSpec.
+type VaultSpec struct {
+	Metadata       map[string]interface{} `json:"metadata"`
+	OrganizationId string                 `json:"organizationId"`
+	Scope          VaultSpecScope         `json:"scope"`
+}
+
+// VaultSpecScope defines model for VaultSpec.Scope.
+type VaultSpecScope string
+
+// VaultStatus defines model for VaultStatus.
+type VaultStatus struct {
+	Phase ResourcePhase `json:"phase"`
 }
 
 // Volume defines model for Volume.

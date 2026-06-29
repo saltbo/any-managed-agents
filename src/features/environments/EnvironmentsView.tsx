@@ -8,14 +8,14 @@ import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Environment } from '@/lib/api'
 
 function networkSummary(environment: Environment) {
-  if (environment.networkPolicy.mode === 'restricted') {
-    return `Restricted: ${environment.networkPolicy.allowedHosts.join(', ')}`
+  if (environment.spec.networkPolicy.mode === 'restricted') {
+    return `Restricted: ${environment.spec.networkPolicy.allowedHosts.join(', ')}`
   }
-  return environment.networkPolicy.mode
+  return environment.spec.networkPolicy.mode
 }
 
 function runtimeConfigSummary(environment: Environment) {
-  return String(environment.runtimeConfig.image ?? environment.runtimeConfig.mode ?? 'Default')
+  return String(environment.spec.runtimeConfig.image ?? environment.spec.runtimeConfig.mode ?? 'Default')
 }
 
 export function EnvironmentsView({
@@ -50,39 +50,40 @@ export function EnvironmentsView({
       </TableHeader>
       <TableBody>
         {environments.map((environment) => (
-          <TableRow key={environment.id}>
+          <TableRow key={environment.metadata.uid}>
             <TableCell className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <Link className="truncate font-medium hover:underline" to={`/environments/${environment.id}`}>
-                  {environment.name}
+                <Link className="truncate font-medium hover:underline" to={`/environments/${environment.metadata.uid}`}>
+                  {environment.metadata.name}
                 </Link>
                 <span className="truncate text-xs text-muted-foreground">
-                  {environment.description ?? environment.id}
+                  {environment.metadata.description ?? environment.metadata.uid}
                 </span>
               </div>
             </TableCell>
             <TableCell>
               <div className="flex gap-1">
                 <StatusBadge value={archivedLabel(environment)} />
-                <StatusBadge value={`v${environment.version}`} />
+                <StatusBadge value={`v${environment.status.version}`} />
               </div>
             </TableCell>
-            <TableCell>{environment.hostingMode}</TableCell>
+            <TableCell>{environment.spec.hostingMode}</TableCell>
             <TableCell className="max-w-48 truncate">{runtimeConfigSummary(environment)}</TableCell>
             <TableCell className="max-w-56 truncate">
-              {environment.packages.map((item) => `${item.name}${item.version ? `@${item.version}` : ''}`).join(', ') ||
-                'None'}
+              {environment.spec.packages
+                .map((item) => `${item.name}${item.version ? `@${item.version}` : ''}`)
+                .join(', ') || 'None'}
             </TableCell>
             <TableCell className="max-w-48 truncate">{networkSummary(environment)}</TableCell>
-            <TableCell>{formatDate(environment.updatedAt)}</TableCell>
+            <TableCell>{formatDate(environment.metadata.updatedAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end">
                 <ConfirmAction
                   title="Archive environment?"
-                  description={`Archive ${environment.name}. Agents can no longer start new sessions with this environment.`}
+                  description={`Archive ${environment.metadata.name}. Agents can no longer start new sessions with this environment.`}
                   confirmLabel="Archive environment"
                   destructive
-                  onConfirm={() => onArchive(environment.id)}
+                  onConfirm={() => onArchive(environment.metadata.uid)}
                 >
                   <Button type="button" variant="outline" size="icon" aria-label="Archive environment">
                     <Archive data-icon="inline-start" />

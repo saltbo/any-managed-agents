@@ -1,7 +1,7 @@
-import type { AgentConfig, AgentToolAttachment } from '@server/domain/agent'
+import type { Agent, AgentConfig, AgentMemory, AgentToolAttachment, AgentVersion } from '@server/domain/agent'
 import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool } from '@server/domain/connector'
-import type { EnvironmentConfig } from '@server/domain/environment'
-import type { MemoryStoreAccess } from '@server/domain/memory-store'
+import type { Environment, EnvironmentConfig, EnvironmentVersion } from '@server/domain/environment'
+import type { Memory, MemoryStore, MemoryStoreAccess } from '@server/domain/memory-store'
 import type { CatalogModel } from '@server/domain/model-catalog'
 import type { ModelAvailability, ModelCatalogState } from '@server/domain/provider'
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
@@ -16,12 +16,15 @@ import type {
   SessionMessage,
   SessionState,
 } from '@server/domain/session'
+import type { Trigger, TriggerRun, TriggerSchedule, TriggerType } from '@server/domain/trigger'
 import type {
+  Credential,
   CredentialState,
   CredentialType,
+  CredentialVersion,
   SecretMaterial,
-  SecretProvider,
   SecretReference,
+  Vault,
   VaultScope,
   VersionState,
 } from '@server/domain/vault'
@@ -72,35 +75,6 @@ export interface AuthScope {
 // http AuthIdentity satisfy it structurally, so neither needs a cast.
 export type OrgScope = Pick<AuthScope, 'organization'>
 
-export interface AgentRecord extends AgentConfig {
-  id: string
-  projectId: string
-  name: string
-  description: string | null
-  archivedAt: string | null
-  currentVersionId: string | null
-  version: number
-  createdAt: string
-  updatedAt: string
-}
-
-export interface AgentVersionRecord extends AgentConfig {
-  id: string
-  agentId: string
-  projectId: string
-  version: number
-  createdAt: string
-}
-
-export interface AgentMemoryRecord {
-  agentId: string
-  projectId: string
-  content: string
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
 export interface AgentHandoffCandidate {
   id: string
   name: string
@@ -119,7 +93,7 @@ export interface AgentListQuery {
 }
 
 export interface AgentListPage {
-  rows: AgentRecord[]
+  rows: Agent[]
   hasMore: boolean
 }
 
@@ -143,26 +117,22 @@ export interface UpdateAgentFields {
 // strings, no drizzle rows leak past this port.
 export interface AgentRepo {
   list(query: AgentListQuery): Promise<AgentListPage>
-  find(projectId: string, agentId: string): Promise<AgentRecord | null>
+  find(projectId: string, agentId: string): Promise<Agent | null>
   // Live (non-archived) agents in the project, newest first — handoff resolution.
-  liveAgents(projectId: string): Promise<AgentRecord[]>
+  liveAgents(projectId: string): Promise<Agent[]>
 
   latestVersionNumber(agentId: string): Promise<number | null>
-  insertVersion(
-    agent: { id: string; projectId: string },
-    config: AgentConfig,
-    createdAt: string,
-  ): Promise<AgentVersionRecord>
-  listVersions(projectId: string, agentId: string): Promise<AgentVersionRecord[]>
-  findVersion(projectId: string, agentId: string, version: number): Promise<AgentVersionRecord | null>
+  insertVersion(agent: Agent, config: AgentConfig, createdAt: string): Promise<AgentVersion>
+  listVersions(projectId: string, agentId: string): Promise<AgentVersion[]>
+  findVersion(projectId: string, agentId: string, version: number): Promise<AgentVersion | null>
 
-  insert(input: CreateAgentInput, createdAt: string): Promise<AgentRecord>
+  insert(input: CreateAgentInput, createdAt: string): Promise<Agent>
   setCurrentVersion(agentId: string, versionId: string): Promise<void>
   update(projectId: string, agentId: string, fields: UpdateAgentFields, updatedAt: string): Promise<void>
   unarchive(projectId: string, agentId: string, updatedAt: string): Promise<void>
 
-  findMemory(projectId: string, agentId: string): Promise<AgentMemoryRecord | null>
-  insertMemory(record: AgentMemoryRecord): Promise<void>
+  findMemory(projectId: string, agentId: string): Promise<AgentMemory | null>
+  insertMemory(record: AgentMemory): Promise<void>
   replaceMemory(
     projectId: string,
     agentId: string,
@@ -189,8 +159,8 @@ export interface AuditEntry {
   // a session). Persisted to the audit_records.session_id column.
   sessionId?: string | null
   policyCategory?: string | null
-  before?: Record<string, unknown> | null
-  after?: Record<string, unknown> | null
+  before?: unknown
+  after?: unknown
   metadata?: Record<string, unknown>
 }
 
@@ -304,26 +274,6 @@ export class EnvironmentArchivedError extends Error {
   }
 }
 
-export interface EnvironmentRecord extends EnvironmentConfig {
-  id: string
-  projectId: string
-  name: string
-  description: string | null
-  archivedAt: string | null
-  currentVersionId: string | null
-  version: number
-  createdAt: string
-  updatedAt: string
-}
-
-export interface EnvironmentVersionRecord extends EnvironmentConfig {
-  id: string
-  environmentId: string
-  projectId: string
-  version: number
-  createdAt: string
-}
-
 export interface EnvironmentListQuery {
   projectId: string
   archived: boolean
@@ -335,7 +285,7 @@ export interface EnvironmentListQuery {
 }
 
 export interface EnvironmentListPage {
-  rows: EnvironmentRecord[]
+  rows: Environment[]
   hasMore: boolean
 }
 
@@ -359,17 +309,13 @@ export interface UpdateEnvironmentFields {
 // return parsed records — no JSON strings, no drizzle rows leak past this port.
 export interface EnvironmentRepo {
   list(query: EnvironmentListQuery): Promise<EnvironmentListPage>
-  find(projectId: string, environmentId: string): Promise<EnvironmentRecord | null>
+  find(projectId: string, environmentId: string): Promise<Environment | null>
 
-  insertVersion(
-    environment: { id: string; projectId: string },
-    config: EnvironmentConfig,
-    createdAt: string,
-  ): Promise<EnvironmentVersionRecord>
-  listVersions(projectId: string, environmentId: string): Promise<EnvironmentVersionRecord[]>
-  findVersion(projectId: string, environmentId: string, version: number): Promise<EnvironmentVersionRecord | null>
+  insertVersion(environment: Environment, config: EnvironmentConfig, createdAt: string): Promise<EnvironmentVersion>
+  listVersions(projectId: string, environmentId: string): Promise<EnvironmentVersion[]>
+  findVersion(projectId: string, environmentId: string, version: number): Promise<EnvironmentVersion | null>
 
-  insert(input: CreateEnvironmentInput, createdAt: string): Promise<EnvironmentRecord>
+  insert(input: CreateEnvironmentInput, createdAt: string): Promise<Environment>
   setCurrentVersion(environmentId: string, versionId: string): Promise<void>
   update(projectId: string, environmentId: string, fields: UpdateEnvironmentFields, updatedAt: string): Promise<void>
   unarchive(projectId: string, environmentId: string, updatedAt: string): Promise<void>
@@ -479,56 +425,6 @@ export class VaultVersionReferencedError extends Error {
   }
 }
 
-export interface VaultRecord {
-  id: string
-  organizationId: string
-  projectId: string | null
-  name: string
-  description: string | null
-  scope: VaultScope
-  metadata: Record<string, unknown>
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CredentialRecord {
-  id: string
-  vaultId: string
-  organizationId: string
-  projectId: string | null
-  name: string
-  type: CredentialType
-  metadata: Record<string, unknown>
-  state: CredentialState
-  activeVersionId: string | null
-  revokedAt: string | null
-  revokedByUserId: string | null
-  revokeReason: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CredentialVersionRecord {
-  id: string
-  credentialId: string
-  vaultId: string
-  organizationId: string
-  projectId: string | null
-  version: number
-  provider: SecretProvider
-  secretRef: string
-  referenceName: string
-  state: VersionState
-  hasSecret: boolean
-  // Includes stored secret material (encryptedSecretData).
-  // Never serialize the raw metadata — strip stored secret keys first.
-  metadata: Record<string, unknown>
-  createdAt: string
-  supersededAt: string | null
-  revokedAt: string | null
-}
-
 export interface VaultListQuery {
   organizationId: string
   projectId: string
@@ -562,28 +458,6 @@ export interface VersionListQuery {
 export interface ListPageResult<T> {
   rows: T[]
   hasMore: boolean
-}
-
-export interface MemoryStoreRecord {
-  id: string
-  projectId: string
-  name: string
-  description: string | null
-  metadata: Record<string, unknown>
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface MemoryStoreMemoryRecord {
-  id: string
-  storeId: string
-  projectId: string
-  path: string
-  content: string
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
 }
 
 export interface ResolvedMemoryStoreResource {
@@ -642,13 +516,13 @@ export interface UpdateMemoryStoreMemoryFields {
 }
 
 export interface MemoryStoreRepo {
-  list(query: MemoryStoreListQuery): Promise<ListPageResult<MemoryStoreRecord>>
-  find(projectId: string, storeId: string): Promise<MemoryStoreRecord | null>
-  insert(input: CreateMemoryStoreInput, createdAt: string): Promise<MemoryStoreRecord>
+  list(query: MemoryStoreListQuery): Promise<ListPageResult<MemoryStore>>
+  find(projectId: string, storeId: string): Promise<MemoryStore | null>
+  insert(input: CreateMemoryStoreInput, createdAt: string): Promise<MemoryStore>
   update(projectId: string, storeId: string, fields: UpdateMemoryStoreFields, updatedAt: string): Promise<void>
-  listMemories(query: MemoryStoreMemoryListQuery): Promise<ListPageResult<MemoryStoreMemoryRecord>>
-  findMemory(projectId: string, storeId: string, memoryId: string): Promise<MemoryStoreMemoryRecord | null>
-  insertMemory(input: CreateMemoryStoreMemoryInput, createdAt: string): Promise<MemoryStoreMemoryRecord>
+  listMemories(query: MemoryStoreMemoryListQuery): Promise<ListPageResult<Memory>>
+  findMemory(projectId: string, storeId: string, memoryId: string): Promise<Memory | null>
+  insertMemory(input: CreateMemoryStoreMemoryInput, createdAt: string): Promise<Memory>
   updateMemory(
     projectId: string,
     storeId: string,
@@ -706,21 +580,21 @@ export interface InsertVersionInput {
 // lives in adapters/repos. Visibility (project|organization scope) is enforced
 // inside the repo.
 export interface VaultRepo {
-  list(query: VaultListQuery): Promise<ListPageResult<VaultRecord>>
-  find(vaultId: string, visibility: VaultVisibility): Promise<VaultRecord | null>
-  insert(input: CreateVaultInput, createdAt: string): Promise<VaultRecord>
+  list(query: VaultListQuery): Promise<ListPageResult<Vault>>
+  find(vaultId: string, visibility: VaultVisibility): Promise<Vault | null>
+  insert(input: CreateVaultInput, createdAt: string): Promise<Vault>
   update(vaultId: string, fields: UpdateVaultFields, updatedAt: string): Promise<void>
   hasCredentials(vaultId: string): Promise<boolean>
 
-  listCredentials(query: CredentialListQuery): Promise<ListPageResult<CredentialRecord>>
-  findCredential(vaultId: string, credentialId: string): Promise<CredentialRecord | null>
-  activeVersion(credential: CredentialRecord): Promise<CredentialVersionRecord | null>
+  listCredentials(query: CredentialListQuery): Promise<ListPageResult<Credential>>
+  findCredential(vaultId: string, credentialId: string): Promise<Credential | null>
+  activeVersion(credential: Credential): Promise<CredentialVersion | null>
   latestVersionNumber(credentialId: string): Promise<number>
   insertCredentialWithVersion(
     credential: CreateCredentialInput,
     version: InsertVersionInput,
     createdAt: string,
-  ): Promise<{ credential: CredentialRecord; version: CredentialVersionRecord }>
+  ): Promise<{ credential: Credential; version: CredentialVersion }>
   updateCredential(
     credentialId: string,
     fields: {
@@ -736,15 +610,15 @@ export interface VaultRepo {
     revokedAt: string,
   ): Promise<void>
 
-  listVersions(query: VersionListQuery): Promise<ListPageResult<CredentialVersionRecord>>
-  findVersion(credentialId: string, versionId: string): Promise<CredentialVersionRecord | null>
+  listVersions(query: VersionListQuery): Promise<ListPageResult<CredentialVersion>>
+  findVersion(credentialId: string, versionId: string): Promise<CredentialVersion | null>
   insertVersionRotation(
     version: InsertVersionInput,
     previousActiveVersionId: string | null,
     timestamp: string,
-  ): Promise<CredentialVersionRecord>
+  ): Promise<CredentialVersion>
   deleteVersion(versionId: string): Promise<void>
-  versionHasActiveReferences(version: CredentialVersionRecord): Promise<boolean>
+  versionHasActiveReferences(version: CredentialVersion): Promise<boolean>
 }
 
 // Secret-store boundary. Stores a secret value for a credential version and
@@ -1084,13 +958,6 @@ export class TriggerConflictError extends Error {
   }
 }
 
-export interface TriggerSchedule {
-  intervalSeconds: number
-  windowSeconds: number
-}
-
-export type TriggerType = 'scheduled' | 'http'
-
 export interface TriggerConfig {
   type: TriggerType
   agentId: string
@@ -1104,39 +971,10 @@ export interface TriggerConfig {
   envFrom: EnvFromEntry[]
   volumes: Volume[]
   volumeMounts: VolumeMount[]
-  schedule: TriggerSchedule | null
+  schedule: Omit<TriggerSchedule, 'type'> | null
   enabled: boolean
   nextDueAt: string | null
   metadata: Record<string, unknown>
-}
-
-export interface TriggerRecord extends TriggerConfig {
-  id: string
-  organizationId: string
-  projectId: string
-  lastDispatchedAt: string | null
-  lastRunId: string | null
-  createdByUserId: string | null
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface TriggerRunRecord {
-  id: string
-  projectId: string
-  triggerId: string
-  scheduledFor: string | null
-  heartbeatAt: string | null
-  triggeredAt: string
-  state: 'claimed' | 'dispatched' | 'failed'
-  idempotencyKey: string
-  sessionId: string | null
-  correlationId: string
-  errorMessage: string | null
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
 }
 
 export interface TriggerListQuery {
@@ -1176,16 +1014,16 @@ export interface UpdateTriggerFields {
 // DB boundary for triggers and their run sub-resource. The only implementation
 // lives in adapters/repos. Repos return parsed records — no JSON strings.
 export interface TriggerRepo {
-  list(query: TriggerListQuery): Promise<ListPageResult<TriggerRecord>>
-  find(projectId: string, triggerId: string): Promise<TriggerRecord | null>
-  insert(input: CreateTriggerInput, timestamp: string): Promise<TriggerRecord>
-  update(projectId: string, triggerId: string, fields: UpdateTriggerFields, updatedAt: string): Promise<TriggerRecord>
+  list(query: TriggerListQuery): Promise<ListPageResult<Trigger>>
+  find(projectId: string, triggerId: string): Promise<Trigger | null>
+  insert(input: CreateTriggerInput, timestamp: string): Promise<Trigger>
+  update(projectId: string, triggerId: string, fields: UpdateTriggerFields, updatedAt: string): Promise<Trigger>
   // Hard-deletes the trigger and its runs (the only FK to triggers.id). Returns
   // whether the trigger row existed so the caller can map a missing row to 404.
   delete(projectId: string, triggerId: string): Promise<boolean>
 
-  listRuns(query: TriggerRunListQuery): Promise<ListPageResult<TriggerRunRecord>>
-  findRun(projectId: string, triggerId: string, runId: string): Promise<TriggerRunRecord | null>
+  listRuns(query: TriggerRunListQuery): Promise<ListPageResult<TriggerRun>>
+  findRun(projectId: string, triggerId: string, runId: string): Promise<TriggerRun | null>
 
   // Reference validation against sibling resources, returning a stable status
   // when the agent/environment is missing (404) or unusable (409).
@@ -1236,11 +1074,16 @@ export interface TriggerDispatchRepo {
   dueTriggers(options: { heartbeatAt: string; projectId?: string; limit: number }): Promise<DueTrigger[]>
   // Returns null when the idempotency key collides (run already claimed).
   claimRun(trigger: DueTrigger, heartbeatAt: string): Promise<ClaimedRun | null>
-  claimHttpRun(trigger: TriggerRecord, triggeredAt: string, idempotencyKey: string | null): Promise<ClaimedRun | null>
+  claimHttpRun(
+    auth: AuthScope,
+    trigger: Trigger,
+    triggeredAt: string,
+    idempotencyKey: string | null,
+  ): Promise<ClaimedRun | null>
   projectName(projectId: string): Promise<string | null>
-  markRunFailed(trigger: DueTrigger | TriggerRecord, run: ClaimedRun, message: string): Promise<void>
+  markRunFailed(trigger: DueTrigger | Trigger, run: ClaimedRun, message: string): Promise<void>
   markRunDispatched(
-    trigger: DueTrigger | TriggerRecord,
+    trigger: DueTrigger | Trigger,
     run: ClaimedRun,
     sessionId: string,
     sessionMetadata: Record<string, unknown>,

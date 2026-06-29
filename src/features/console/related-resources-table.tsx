@@ -5,6 +5,10 @@ import { DetailSection, StatusBadge, TableEmpty, TableSurface } from '@/console/
 import { archivedLabel, formatDate } from '@/console/format'
 import type { Agent, Session } from '@/lib/api'
 
+function isAgent(item: Agent | Session): item is Agent {
+  return 'instructions' in item.spec
+}
+
 export function RelatedResourcesTable({
   title,
   empty,
@@ -36,32 +40,35 @@ export function RelatedResourcesTable({
             <TableEmpty colSpan={4}>{empty}</TableEmpty>
           ) : (
             items.map((item) => {
-              const isAgent = 'name' in item
-              const id = isAgent ? item.id : item.metadata.uid
-              const name = isAgent ? item.name : item.metadata.name
+              const agent = isAgent(item)
+              const id = item.metadata.uid
+              const name = item.metadata.name
+              const updated = agent
+                ? formatDate(item.metadata.updatedAt)
+                : item.status.startedAt
+                  ? formatDate(item.status.startedAt)
+                  : 'None'
               return (
                 <TableRow key={id}>
                   <TableCell className="min-w-0">
                     <Link
                       className="block truncate font-medium hover:underline"
-                      to={isAgent ? `/agents/${id}` : `/sessions/${id}`}
+                      to={agent ? `/agents/${id}` : `/sessions/${id}`}
                     >
                       {name}
                     </Link>
                     <span className="mt-1 block truncate text-xs text-muted-foreground">{id}</span>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge value={isAgent ? archivedLabel(item) : item.status.phase} />
+                    <StatusBadge value={agent ? archivedLabel(item) : item.status.phase} />
                   </TableCell>
                   <TableCell className="hidden min-w-0 md:table-cell">
-                    <span className="block truncate">
-                      {formatDate(isAgent ? item.updatedAt : item.status.startedAt)}
-                    </span>
+                    <span className="block truncate">{updated}</span>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     <div className="flex justify-end">
                       <Button asChild variant="outline" size="sm">
-                        <Link to={isAgent ? `/agents/${id}` : `/sessions/${id}`}>Open</Link>
+                        <Link to={agent ? `/agents/${id}` : `/sessions/${id}`}>Open</Link>
                       </Button>
                     </div>
                   </TableCell>

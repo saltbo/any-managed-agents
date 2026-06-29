@@ -40,32 +40,34 @@ export function VaultsView({
       </TableHeader>
       <TableBody>
         {vaults.map((vault) => (
-          <TableRow key={vault.id}>
+          <TableRow key={vault.metadata.uid}>
             <TableCell className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <Link className="truncate font-medium hover:underline" to={`/vaults/${vault.id}`}>
-                  {vault.name}
+                <Link className="truncate font-medium hover:underline" to={`/vaults/${vault.metadata.uid}`}>
+                  {vault.metadata.name}
                 </Link>
-                <span className="truncate text-xs text-muted-foreground">{vault.description ?? vault.id}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {vault.metadata.description ?? vault.metadata.uid}
+                </span>
               </div>
             </TableCell>
             <TableCell>
               <StatusBadge value={archivedLabel(vault)} />
             </TableCell>
             <TableCell>
-              <StatusBadge value={vault.scope} />
+              <StatusBadge value={vault.spec.scope} />
             </TableCell>
-            <TableCell className="max-w-48 truncate">{vault.projectId ?? 'Organization'}</TableCell>
-            <TableCell>{formatDate(vault.createdAt)}</TableCell>
-            <TableCell>{formatDate(vault.updatedAt)}</TableCell>
+            <TableCell className="max-w-48 truncate">{vault.metadata.pid ?? 'Organization'}</TableCell>
+            <TableCell>{formatDate(vault.metadata.createdAt)}</TableCell>
+            <TableCell>{formatDate(vault.metadata.updatedAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end">
                 <ConfirmAction
                   title="Archive vault?"
-                  description={`Archive ${vault.name}. Existing credential references remain auditable.`}
+                  description={`Archive ${vault.metadata.name}. Existing credential references remain auditable.`}
                   confirmLabel="Archive vault"
                   destructive
-                  onConfirm={() => onArchive(vault.id)}
+                  onConfirm={() => onArchive(vault.metadata.uid)}
                 >
                   <Button type="button" variant="outline" size="icon" aria-label="Archive vault">
                     <Archive data-icon="inline-start" />

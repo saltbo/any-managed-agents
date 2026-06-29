@@ -1,16 +1,22 @@
-import type { CredentialType, SecretProvider, VaultScope, VersionState } from '@server/domain/vault'
+import { resourceMetadata, resourcePhase } from '@server/domain/resource'
+import type {
+  Credential,
+  CredentialType,
+  CredentialVersion,
+  SecretProvider,
+  Vault,
+  VaultScope,
+  VersionState,
+} from '@server/domain/vault'
 import { secretRefPinsVersion } from '@server/domain/vault'
 import type {
   CreateCredentialInput,
   CreateVaultInput,
   CredentialListQuery,
-  CredentialRecord,
-  CredentialVersionRecord,
   InsertVersionInput,
   ListPageResult,
   UpdateVaultFields,
   VaultListQuery,
-  VaultRecord,
   VaultRepo,
   VaultVisibility,
   VersionListQuery,
@@ -46,59 +52,80 @@ function parseRefArray(value: string | null): unknown[] {
   return Array.isArray(parsed) ? (parsed as unknown[]) : []
 }
 
-function vaultRecordFrom(row: VaultRow): VaultRecord {
+function vaultRecordFrom(row: VaultRow): Vault {
   return {
-    id: row.id,
-    organizationId: row.organizationId,
-    projectId: row.projectId,
-    name: row.name,
-    description: row.description,
-    scope: row.scope as VaultScope,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
-    archivedAt: row.archivedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.name,
+      description: row.description,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.archivedAt,
+    }),
+    spec: {
+      organizationId: row.organizationId,
+      scope: row.scope as VaultScope,
+      metadata: parseJson<Record<string, unknown>>(row.metadata),
+    },
+    status: { phase: resourcePhase(row.archivedAt) },
   }
 }
 
-function credentialRecordFrom(row: CredentialRow): CredentialRecord {
+function credentialRecordFrom(row: CredentialRow): Credential {
   return {
-    id: row.id,
-    vaultId: row.vaultId,
-    organizationId: row.organizationId,
-    projectId: row.projectId,
-    name: row.name,
-    type: row.type as CredentialType,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
-    state: row.state as CredentialRecord['state'],
-    activeVersionId: row.activeVersionId,
-    revokedAt: row.revokedAt,
-    revokedByUserId: row.revokedByUserId,
-    revokeReason: row.revokeReason,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.name,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.revokedAt,
+    }),
+    spec: {
+      vaultId: row.vaultId,
+      organizationId: row.organizationId,
+      type: row.type as CredentialType,
+      metadata: parseJson<Record<string, unknown>>(row.metadata),
+    },
+    status: {
+      phase: row.state as Credential['status']['phase'],
+      activeVersionId: row.activeVersionId,
+      revokedAt: row.revokedAt,
+      revokedByUserId: row.revokedByUserId,
+      revokeReason: row.revokeReason,
+    },
   }
 }
 
 // The version record carries the full stored metadata (encryptedSecretData).
 // The http serializer strips stored secret keys before it crosses the wire.
-function versionRecordFrom(row: CredentialVersionRow): CredentialVersionRecord {
+function versionRecordFrom(row: CredentialVersionRow): CredentialVersion {
   return {
-    id: row.id,
-    credentialId: row.credentialId,
-    vaultId: row.vaultId,
-    organizationId: row.organizationId,
-    projectId: row.projectId,
-    version: row.version,
-    provider: row.provider as SecretProvider,
-    secretRef: row.secretRef,
-    referenceName: row.referenceName,
-    state: row.state as VersionState,
-    hasSecret: row.hasSecret,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
-    createdAt: row.createdAt,
-    supersededAt: row.supersededAt,
-    revokedAt: row.revokedAt,
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: `v${row.version}`,
+      createdAt: row.createdAt,
+      updatedAt: row.createdAt,
+      archivedAt: row.revokedAt,
+    }),
+    spec: {
+      credentialId: row.credentialId,
+      vaultId: row.vaultId,
+      organizationId: row.organizationId,
+      version: row.version,
+      provider: row.provider as SecretProvider,
+      secretRef: row.secretRef,
+      referenceName: row.referenceName,
+      hasSecret: row.hasSecret,
+      metadata: parseJson<Record<string, unknown>>(row.metadata),
+    },
+    status: {
+      phase: row.state as VersionState,
+      supersededAt: row.supersededAt,
+      revokedAt: row.revokedAt,
+    },
   }
 }
 
@@ -121,7 +148,7 @@ function versionColumns(version: InsertVersionInput) {
 
 export function createVaultRepo(db: Db): VaultRepo {
   return {
-    async list(query: VaultListQuery): Promise<ListPageResult<VaultRecord>> {
+    async list(query: VaultListQuery): Promise<ListPageResult<Vault>> {
       const filters = [
         visibilityFilter(query),
         query.archived ? isNotNull(vaults.archivedAt) : isNull(vaults.archivedAt),
@@ -154,7 +181,7 @@ export function createVaultRepo(db: Db): VaultRepo {
       return row ? vaultRecordFrom(row) : null
     },
 
-    async insert(input: CreateVaultInput, createdAt): Promise<VaultRecord> {
+    async insert(input: CreateVaultInput, createdAt): Promise<Vault> {
       const row = {
         id: newId('vault'),
         organizationId: input.organizationId,
@@ -196,7 +223,7 @@ export function createVaultRepo(db: Db): VaultRepo {
       return Boolean(credential)
     },
 
-    async listCredentials(query: CredentialListQuery): Promise<ListPageResult<CredentialRecord>> {
+    async listCredentials(query: CredentialListQuery): Promise<ListPageResult<Credential>> {
       const filters = [
         eq(vaultCredentials.vaultId, query.vaultId),
         query.state ? eq(vaultCredentials.state, query.state) : undefined,
@@ -230,7 +257,7 @@ export function createVaultRepo(db: Db): VaultRepo {
     },
 
     async activeVersion(credential) {
-      if (!credential.activeVersionId) {
+      if (!credential.status.activeVersionId) {
         return null
       }
       const row = await db
@@ -238,8 +265,8 @@ export function createVaultRepo(db: Db): VaultRepo {
         .from(vaultCredentialVersions)
         .where(
           and(
-            eq(vaultCredentialVersions.id, credential.activeVersionId),
-            eq(vaultCredentialVersions.credentialId, credential.id),
+            eq(vaultCredentialVersions.id, credential.status.activeVersionId),
+            eq(vaultCredentialVersions.credentialId, credential.metadata.uid),
           ),
         )
         .get()
@@ -324,7 +351,7 @@ export function createVaultRepo(db: Db): VaultRepo {
       }
     },
 
-    async listVersions(query: VersionListQuery): Promise<ListPageResult<CredentialVersionRecord>> {
+    async listVersions(query: VersionListQuery): Promise<ListPageResult<CredentialVersion>> {
       const filters = [
         eq(vaultCredentialVersions.credentialId, query.credentialId),
         query.state ? eq(vaultCredentialVersions.state, query.state) : undefined,
@@ -395,10 +422,10 @@ export function createVaultRepo(db: Db): VaultRepo {
       await db.delete(vaultCredentialVersions).where(eq(vaultCredentialVersions.id, versionId))
     },
 
-    async versionHasActiveReferences(version: CredentialVersionRecord) {
+    async versionHasActiveReferences(version: CredentialVersion) {
       const sessionFilters = [
-        eq(sessions.organizationId, version.organizationId),
-        version.projectId ? eq(sessions.projectId, version.projectId) : undefined,
+        eq(sessions.organizationId, version.spec.organizationId),
+        version.metadata.pid ? eq(sessions.projectId, version.metadata.pid) : undefined,
         or(eq(sessions.state, ACTIVE_SESSION_STATES[0]), eq(sessions.state, ACTIVE_SESSION_STATES[1])),
       ].filter((filter) => filter !== undefined)
       const sessionReferences = await db
@@ -412,11 +439,19 @@ export function createVaultRepo(db: Db): VaultRepo {
       return sessionReferences.some((row) => {
         const envFromPins = parseRefArray(row.envFrom).some((entry) => {
           const ref = entry && typeof entry === 'object' ? (entry as { secretRef?: unknown }).secretRef : null
-          return secretRefPinsVersion(ref, version)
+          return secretRefPinsVersion(ref, {
+            id: version.metadata.uid,
+            credentialId: version.spec.credentialId,
+            vaultId: version.spec.vaultId,
+          })
         })
         const volumePins = parseRefArray(row.volumes).some((entry) => {
           const ref = entry && typeof entry === 'object' ? (entry as { secretRef?: unknown }).secretRef : null
-          return secretRefPinsVersion(ref, version)
+          return secretRefPinsVersion(ref, {
+            id: version.metadata.uid,
+            credentialId: version.spec.credentialId,
+            vaultId: version.spec.vaultId,
+          })
         })
         if (envFromPins || volumePins) {
           return true

@@ -8,62 +8,22 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import type { Agent, Environment } from '@/lib/api'
 import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
+import {
+  type AgentOverrides,
+  type EnvironmentOverrides,
+  agent as resourceAgent,
+  environment as resourceEnvironment,
+} from '@/test/resource-fixtures'
 import { AgentsPage } from './AgentsPage'
 
 const now = '2026-05-23T00:00:00.000Z'
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [
-      { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-    ],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({ createdAt: now, updatedAt: now, ...overrides })
 }
 
-function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
-    description: null,
-    packages: [],
-    variables: {},
-    hostingMode: 'cloud',
-    networkPolicy: { mode: 'restricted', allowedHosts: [] },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({ createdAt: now, updatedAt: now, ...overrides })
 }
 
 const emptyList = { data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }

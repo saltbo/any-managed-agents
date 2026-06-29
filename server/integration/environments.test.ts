@@ -19,8 +19,8 @@ async function connectMcp(authorization: string) {
     body: JSON.stringify({ name: 'MCP credentials' }),
   })
   expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'GitHub token',
@@ -108,101 +108,105 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
-      id: string
-      currentVersionId: string
-      version: number
-      archivedAt: string | null
-      status?: unknown
+      metadata: { uid: string; name: string; archivedAt: string | null }
+      spec: { hostingMode: string; networkPolicy: Record<string, unknown> }
+      status: { currentVersionId: string; version: number; phase: string }
       credentials?: unknown
     }
-    expect(created.version).toBe(1)
-    expect(created.archivedAt).toBeNull()
-    expect(created.status).toBeUndefined()
+    const createdId = created.metadata.uid
+    expect(created.status.version).toBe(1)
+    expect(created.metadata.archivedAt).toBeNull()
+    expect(created.status.phase).toBe('active')
     expect(created.credentials).toBeUndefined()
 
-    const readRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
-      id: created.id,
-      version: 1,
-      name: 'Node workspace',
-      hostingMode: 'cloud',
-      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-      archivedAt: null,
+      metadata: { uid: createdId, name: 'Node workspace', archivedAt: null },
+      spec: { hostingMode: 'cloud', networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] } },
+      status: { version: 1 },
     })
 
-    const updateRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+    const updateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ packages: [{ name: 'vite' }] }),
     })
     expect(updateRes.status).toBe(200)
-    const updated = (await updateRes.json()) as { version: number; currentVersionId: string }
-    expect(updated.version).toBe(2)
-    expect(updated.currentVersionId).not.toBe(created.currentVersionId)
+    const updated = (await updateRes.json()) as { status: { version: number; currentVersionId: string } }
+    expect(updated.status.version).toBe(2)
+    expect(updated.status.currentVersionId).not.toBe(created.status.currentVersionId)
 
     // Renames do not touch runtime configuration, so the version is kept.
-    const renameRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+    const renameRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ name: 'Renamed workspace' }),
     })
     expect(renameRes.status).toBe(200)
-    await expect(renameRes.json()).resolves.toMatchObject({ name: 'Renamed workspace', version: 2 })
+    await expect(renameRes.json()).resolves.toMatchObject({
+      metadata: { name: 'Renamed workspace' },
+      status: { version: 2 },
+    })
 
-    const versionsRes = await jsonFetch(`/api/v1/environments/${created.id}/versions`, authorization)
+    const versionsRes = await jsonFetch(`/api/v1/environments/${createdId}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
-      data: Array<{ version: number; packages: Array<{ name: string }> }>
+      data: Array<{ spec: { packages: Array<{ name: string }> }; status: { version: number } }>
       pagination: Record<string, unknown>
     }
-    expect(versions.data.map((version) => version.version)).toEqual([2, 1])
-    expect(versions.data.find((version) => version.version === 1)?.packages).toEqual([
+    expect(versions.data.map((version) => version.status.version)).toEqual([2, 1])
+    expect(versions.data.find((version) => version.status.version === 1)?.spec.packages).toEqual([
       { name: 'tsx', version: 'latest' },
     ])
     expect(versions.pagination).not.toHaveProperty('firstId')
     expect(versions.pagination).not.toHaveProperty('lastId')
 
-    const versionItemRes = await jsonFetch(`/api/v1/environments/${created.id}/versions/1`, authorization)
+    const versionItemRes = await jsonFetch(`/api/v1/environments/${createdId}/versions/1`, authorization)
     expect(versionItemRes.status).toBe(200)
     await expect(versionItemRes.json()).resolves.toMatchObject({
-      environmentId: created.id,
-      version: 1,
-      packages: [{ name: 'tsx', version: 'latest' }],
+      status: { environmentId: createdId, version: 1 },
+      spec: { packages: [{ name: 'tsx', version: 'latest' }] },
     })
 
-    const missingVersionRes = await jsonFetch(`/api/v1/environments/${created.id}/versions/99`, authorization)
+    const missingVersionRes = await jsonFetch(`/api/v1/environments/${createdId}/versions/99`, authorization)
     expect(missingVersionRes.status).toBe(404)
 
-    const invalidVersionRes = await jsonFetch(`/api/v1/environments/${created.id}/versions/not-a-number`, authorization)
+    const invalidVersionRes = await jsonFetch(`/api/v1/environments/${createdId}/versions/not-a-number`, authorization)
     expect(invalidVersionRes.status).toBe(400)
 
     // Archive = PATCH {archived: true}; DELETE no longer exists.
-    const deleteRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, { method: 'DELETE' })
+    const deleteRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, { method: 'DELETE' })
     expect(deleteRes.status).toBe(404)
 
-    const archiveRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+    const archiveRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })
     expect(archiveRes.status).toBe(200)
-    await expect(archiveRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
+    await expect(archiveRes.json()).resolves.toMatchObject({ metadata: { archivedAt: expect.any(String) } })
 
     const listRes = await jsonFetch('/api/v1/environments', authorization)
-    const list = (await listRes.json()) as { data: Array<{ id: string }> }
-    expect(list.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
+    const list = (await listRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(list.data).not.toContainEqual(
+      expect.objectContaining({ metadata: expect.objectContaining({ uid: createdId }) }),
+    )
 
     const archivedListRes = await jsonFetch('/api/v1/environments?archived=true', authorization)
-    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; archivedAt: string | null }> }
+    const archivedList = (await archivedListRes.json()) as {
+      data: Array<{ metadata: { uid: string; archivedAt: string | null } }>
+    }
     expect(archivedList.data).toContainEqual(
-      expect.objectContaining({ id: created.id, archivedAt: expect.any(String) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ uid: createdId, archivedAt: expect.any(String) }),
+      }),
     )
 
     const auditRes = await jsonFetch('/api/v1/audit-records?action=environment.archive', authorization)
     expect(auditRes.status).toBe(200)
     await expect(auditRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ resourceId: created.id, outcome: 'success' })],
+      data: [expect.objectContaining({ resourceId: createdId, outcome: 'success' })],
     })
 
-    const archivedUpdateRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+    const archivedUpdateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ packages: [{ name: 'esbuild' }] }),
     })
@@ -212,20 +216,20 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     })
 
     // Archiving an archived environment is idempotent.
-    const reArchiveRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+    const reArchiveRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })
     expect(reArchiveRes.status).toBe(200)
 
-    const unarchiveRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+    const unarchiveRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: false }),
     })
     expect(unarchiveRes.status).toBe(200)
-    await expect(unarchiveRes.json()).resolves.toMatchObject({ archivedAt: null })
+    await expect(unarchiveRes.json()).resolves.toMatchObject({ metadata: { archivedAt: null } })
 
-    const unarchivedUpdateRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+    const unarchivedUpdateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ description: 'Updatable again' }),
     })
@@ -238,13 +242,15 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       method: 'POST',
       body: JSON.stringify({ name: 'Alpha workspace' }),
     })
-    const alpha = (await alphaRes.json()) as { id: string; createdAt: string }
+    const alpha = (await alphaRes.json()) as { metadata: { uid: string; createdAt: string } }
+    const alphaId = alpha.metadata.uid
     const betaRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Beta workspace' }),
     })
-    const beta = (await betaRes.json()) as { id: string; createdAt: string }
-    await jsonFetch(`/api/v1/environments/${alpha.id}`, authorization, {
+    const beta = (await betaRes.json()) as { metadata: { uid: string; createdAt: string } }
+    const betaId = beta.metadata.uid
+    await jsonFetch(`/api/v1/environments/${alphaId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })
@@ -252,26 +258,30 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const defaultListRes = await jsonFetch('/api/v1/environments?limit=1', authorization)
     expect(defaultListRes.status).toBe(200)
     const defaultList = (await defaultListRes.json()) as {
-      data: Array<{ id: string; archivedAt: string | null }>
+      data: Array<{ metadata: { uid: string; archivedAt: string | null } }>
       pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
     }
-    expect(defaultList.data).toEqual([expect.objectContaining({ id: beta.id, archivedAt: null })])
+    expect(defaultList.data).toEqual([
+      expect.objectContaining({ metadata: expect.objectContaining({ uid: betaId, archivedAt: null }) }),
+    ])
     expect(defaultList.pagination).toMatchObject({ limit: 1, hasMore: false, nextCursor: null })
 
     const archivedListRes = await jsonFetch('/api/v1/environments?archived=true', authorization)
-    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string }> }
-    expect(archivedList.data).toEqual([expect.objectContaining({ id: alpha.id })])
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(archivedList.data).toEqual([
+      expect.objectContaining({ metadata: expect.objectContaining({ uid: alphaId }) }),
+    ])
 
     const searchRes = await jsonFetch('/api/v1/environments?archived=true&search=Alpha', authorization)
-    const searchList = (await searchRes.json()) as { data: Array<{ id: string }> }
-    expect(searchList.data).toEqual([expect.objectContaining({ id: alpha.id })])
+    const searchList = (await searchRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(searchList.data).toEqual([expect.objectContaining({ metadata: expect.objectContaining({ uid: alphaId }) })])
 
     const dateRes = await jsonFetch(
-      `/api/v1/environments?createdFrom=${encodeURIComponent(alpha.createdAt)}&createdTo=${encodeURIComponent(beta.createdAt)}`,
+      `/api/v1/environments?createdFrom=${encodeURIComponent(alpha.metadata.createdAt)}&createdTo=${encodeURIComponent(beta.metadata.createdAt)}`,
       authorization,
     )
-    const dateList = (await dateRes.json()) as { data: Array<{ id: string }> }
-    expect(dateList.data.map((environment) => environment.id)).toEqual([beta.id])
+    const dateList = (await dateRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(dateList.data.map((environment) => environment.metadata.uid)).toEqual([betaId])
 
     await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
@@ -279,7 +289,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     })
     const firstPageRes = await jsonFetch('/api/v1/environments?limit=1', authorization)
     const firstPage = (await firstPageRes.json()) as {
-      data: Array<{ id: string }>
+      data: Array<{ metadata: { uid: string } }>
       pagination: { hasMore: boolean; nextCursor: string | null }
     }
     expect(firstPage.data).toHaveLength(1)
@@ -289,10 +299,10 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       `/api/v1/environments?limit=1&cursor=${firstPage.pagination.nextCursor}`,
       authorization,
     )
-    const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
+    const nextPage = (await nextPageRes.json()) as { data: Array<{ metadata: { uid: string } }> }
     expect(nextPage.data).toHaveLength(1)
-    expect(nextPage.data.map((environment) => environment.id)).not.toEqual(
-      firstPage.data.map((environment) => environment.id),
+    expect(nextPage.data.map((environment) => environment.metadata.uid)).not.toEqual(
+      firstPage.data.map((environment) => environment.metadata.uid),
     )
 
     const invalidCursorRes = await jsonFetch('/api/v1/environments?cursor=not-a-cursor', authorization)
@@ -368,7 +378,8 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       body: JSON.stringify({ name: 'Tenant workspace' }),
     })
     expect(createRes.status).toBe(201)
-    const environment = (await createRes.json()) as { id: string }
+    const environment = (await createRes.json()) as { metadata: { uid: string } }
+    const environmentId = environment.metadata.uid
 
     const otherAuthorization = await signIn({
       ...defaultClaims(),
@@ -377,10 +388,10 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       org_id: 'org_flare_456',
       org_name: 'Other Org',
     })
-    const crossReadRes = await jsonFetch(`/api/v1/environments/${environment.id}`, otherAuthorization)
+    const crossReadRes = await jsonFetch(`/api/v1/environments/${environmentId}`, otherAuthorization)
     expect(crossReadRes.status).toBe(404)
 
-    const crossUpdateRes = await jsonFetch(`/api/v1/environments/${environment.id}`, otherAuthorization, {
+    const crossUpdateRes = await jsonFetch(`/api/v1/environments/${environmentId}`, otherAuthorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })

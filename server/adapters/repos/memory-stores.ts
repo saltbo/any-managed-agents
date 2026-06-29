@@ -1,11 +1,11 @@
+import type { Memory, MemoryStore } from '@server/domain/memory-store'
+import { resourceMetadata, resourcePhase } from '@server/domain/resource'
 import type {
   CreateMemoryStoreInput,
   CreateMemoryStoreMemoryInput,
   ListPageResult,
   MemoryStoreListQuery,
   MemoryStoreMemoryListQuery,
-  MemoryStoreMemoryRecord,
-  MemoryStoreRecord,
   MemoryStoreRepo,
   UpdateMemoryStoreFields,
   UpdateMemoryStoreMemoryFields,
@@ -30,35 +30,44 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
-function storeRecordFrom(row: MemoryStoreRow): MemoryStoreRecord {
+function storeRecordFrom(row: MemoryStoreRow): MemoryStore {
   return {
-    id: row.id,
-    projectId: row.projectId,
-    name: row.name,
-    description: row.description,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
-    archivedAt: row.archivedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.name,
+      description: row.description,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.archivedAt,
+    }),
+    spec: { metadata: parseJson<Record<string, unknown>>(row.metadata) },
+    status: { phase: resourcePhase(row.archivedAt) },
   }
 }
 
-function memoryRecordFrom(row: MemoryRow): MemoryStoreMemoryRecord {
+function memoryRecordFrom(row: MemoryRow): Memory {
   return {
-    id: row.id,
-    storeId: row.storeId,
-    projectId: row.projectId,
-    path: row.path,
-    content: row.content,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.path,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }),
+    spec: {
+      storeId: row.storeId,
+      path: row.path,
+      content: row.content,
+      metadata: parseJson<Record<string, unknown>>(row.metadata),
+    },
+    status: { phase: 'active' },
   }
 }
 
 export function createMemoryStoreRepo(db: Db): MemoryStoreRepo {
   return {
-    async list(query: MemoryStoreListQuery): Promise<ListPageResult<MemoryStoreRecord>> {
+    async list(query: MemoryStoreListQuery): Promise<ListPageResult<MemoryStore>> {
       const filters = [
         eq(memoryStores.projectId, query.projectId),
         query.archived ? isNotNull(memoryStores.archivedAt) : isNull(memoryStores.archivedAt),
@@ -90,7 +99,7 @@ export function createMemoryStoreRepo(db: Db): MemoryStoreRepo {
       return row ? storeRecordFrom(row) : null
     },
 
-    async insert(input: CreateMemoryStoreInput, createdAt): Promise<MemoryStoreRecord> {
+    async insert(input: CreateMemoryStoreInput, createdAt): Promise<MemoryStore> {
       const row = {
         id: newId('memstore'),
         projectId: input.projectId,
@@ -118,7 +127,7 @@ export function createMemoryStoreRepo(db: Db): MemoryStoreRepo {
         .where(and(eq(memoryStores.id, storeId), eq(memoryStores.projectId, projectId)))
     },
 
-    async listMemories(query: MemoryStoreMemoryListQuery): Promise<ListPageResult<MemoryStoreMemoryRecord>> {
+    async listMemories(query: MemoryStoreMemoryListQuery): Promise<ListPageResult<Memory>> {
       const filters = [
         eq(memoryStoreMemories.projectId, query.projectId),
         eq(memoryStoreMemories.storeId, query.storeId),
@@ -156,7 +165,7 @@ export function createMemoryStoreRepo(db: Db): MemoryStoreRepo {
       return row ? memoryRecordFrom(row) : null
     },
 
-    async insertMemory(input: CreateMemoryStoreMemoryInput, createdAt): Promise<MemoryStoreMemoryRecord> {
+    async insertMemory(input: CreateMemoryStoreMemoryInput, createdAt): Promise<Memory> {
       const row = {
         id: newId('memory'),
         storeId: input.storeId,

@@ -1,16 +1,9 @@
-import type { AgentConfig } from '@server/domain/agent'
+import type { Agent, AgentConfig, AgentMemory, AgentVersion } from '@server/domain/agent'
+import { resourceMetadata } from '@server/domain/resource'
 import { describe, expect, it } from 'vitest'
 import { createAgent, readAgentMemory, replaceAgentMemory, resolveHandoffCandidates, updateAgent } from './agents'
 import type { Deps } from './deps'
-import {
-  AgentArchivedError,
-  type AgentMemoryRecord,
-  type AgentRecord,
-  AgentValidationError,
-  type AgentVersionRecord,
-  type AuditEntry,
-  type AuthScope,
-} from './ports'
+import { AgentArchivedError, AgentValidationError, type AuditEntry, type AuthScope } from './ports'
 
 const auth: AuthScope = {
   organization: { id: 'org_1', name: 'Org' },
@@ -38,19 +31,62 @@ function config(overrides: Partial<AgentConfig> = {}): AgentConfig {
   }
 }
 
-function agentRecord(overrides: Partial<AgentRecord> = {}): AgentRecord {
+function agentRecord(
+  overrides: {
+    metadata?: Partial<Agent['metadata']>
+    spec?: Partial<Agent['spec']>
+    status?: Partial<Agent['status']>
+  } = {},
+): Agent {
+  const timestamp = '2026-01-01T00:00:00.000Z'
   return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Agent',
-    description: null,
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...config(),
-    ...overrides,
+    metadata: {
+      ...resourceMetadata({
+        uid: 'agent_1',
+        pid: 'project_1',
+        name: 'Agent',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      ...overrides.metadata,
+    },
+    spec: { ...config(), ...overrides.spec },
+    status: { phase: 'active', currentVersionId: 'agentver_1', version: 1, ...overrides.status },
+  }
+}
+
+function agentVersion(
+  agent: Agent,
+  cfg: AgentConfig,
+  createdAt: string,
+  values: Partial<AgentVersion> = {},
+): AgentVersion {
+  return {
+    metadata: resourceMetadata({
+      uid: 'agentver_new',
+      pid: agent.metadata.pid,
+      name: 'v2',
+      createdAt,
+      updatedAt: createdAt,
+    }),
+    spec: cfg,
+    status: { agentId: agent.metadata.uid, version: 2 },
+    ...values,
+  }
+}
+
+function memoryRecord(content: string, metadata: Record<string, unknown> = {}): AgentMemory {
+  const timestamp = '2026-01-01T00:00:00.000Z'
+  return {
+    metadata: resourceMetadata({
+      uid: 'agent_1',
+      pid: 'project_1',
+      name: 'memory',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }),
+    spec: { agentId: 'agent_1', content, metadata },
+    status: { phase: 'active' },
   }
 }
 
@@ -64,26 +100,20 @@ function fakeDeps(
     find: async () => null,
     liveAgents: async () => [],
     latestVersionNumber: async () => null,
-    insertVersion: async (agent, cfg, createdAt): Promise<AgentVersionRecord> => ({
-      id: 'agentver_new',
-      agentId: agent.id,
-      projectId: agent.projectId,
-      version: 2,
-      createdAt,
-      ...cfg,
-    }),
+    insertVersion: async (agent, cfg, createdAt): Promise<AgentVersion> => agentVersion(agent, cfg, createdAt),
     listVersions: async () => [],
     findVersion: async () => null,
-    insert: async (input, createdAt): Promise<AgentRecord> =>
+    insert: async (input, createdAt): Promise<Agent> =>
       agentRecord({
-        id: 'agent_new',
-        currentVersionId: null,
-        version: 0,
-        name: input.name,
-        description: input.description,
-        createdAt,
-        updatedAt: createdAt,
-        ...input.config,
+        metadata: {
+          uid: 'agent_new',
+          name: input.name,
+          description: input.description,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        spec: input.config,
+        status: { currentVersionId: null, version: 0 },
       }),
     setCurrentVersion: async () => {},
     update: async () => {},
@@ -160,8 +190,8 @@ describe('[spec: agents/create] createAgent', () => {
       repo: { setCurrentVersion: async (_agentId, versionId) => void setCurrent.push(versionId) },
     })
     const agent = await createAgent(deps, auth, { name: 'Research', description: null, config: config() })
-    expect(agent.currentVersionId).toBe('agentver_new')
-    expect(agent.version).toBe(2)
+    expect(agent.status.currentVersionId).toBe('agentver_new')
+    expect(agent.status.version).toBe(2)
     expect(setCurrent).toEqual(['agentver_new'])
   })
 
@@ -180,7 +210,7 @@ describe('[spec: agents/create] createAgent', () => {
       description: null,
       config: config({ providerId: 'provider_x', model: 'opus' }),
     })
-    expect(agent.model).toBe('opus')
+    expect(agent.spec.model).toBe('opus')
   })
 
   it('rejects a disconnected mcp connector', async () => {
@@ -299,8 +329,8 @@ describe('[spec: agents/create] createAgent', () => {
       description: null,
       config: config({ providerId: 'provider_x', model: 'gpt-4' }),
     })
-    expect(agent.providerId).toBe('provider_x')
-    expect(agent.model).toBe('gpt-4')
+    expect(agent.spec.providerId).toBe('provider_x')
+    expect(agent.spec.model).toBe('gpt-4')
   })
 
   it('passes validation when a non-empty mcpConnectors list contains only catalog connectors', async () => {
@@ -309,7 +339,7 @@ describe('[spec: agents/create] createAgent', () => {
       description: null,
       config: config({ mcpConnectors: ['github'] }),
     })
-    expect(agent.mcpConnectors).toEqual(['github'])
+    expect(agent.spec.mcpConnectors).toEqual(['github'])
   })
 })
 
@@ -320,15 +350,23 @@ describe('[spec: agents/update] updateAgent', () => {
       repo: {
         insertVersion: async (agent, cfg, createdAt) => {
           inserted.push(cfg)
-          return { id: 'agentver_2', agentId: agent.id, projectId: agent.projectId, version: 2, createdAt, ...cfg }
+          return agentVersion(agent, cfg, createdAt, {
+            metadata: resourceMetadata({
+              uid: 'agentver_2',
+              pid: agent.metadata.pid,
+              name: 'v2',
+              createdAt,
+              updatedAt: createdAt,
+            }),
+          })
         },
       },
     })
     const result = await updateAgent(deps, auth, agentRecord(), { instructions: 'New' })
     expect(inserted).toHaveLength(1)
-    expect(result.agent.version).toBe(2)
-    expect(result.agent.currentVersionId).toBe('agentver_2')
-    expect(result.agent.instructions).toBe('New')
+    expect(result.agent.status.version).toBe(2)
+    expect(result.agent.status.currentVersionId).toBe('agentver_2')
+    expect(result.agent.spec.instructions).toBe('New')
   })
 
   it('does not snapshot when only name/description change', async () => {
@@ -337,40 +375,55 @@ describe('[spec: agents/update] updateAgent', () => {
       repo: {
         insertVersion: async (agent, cfg, createdAt) => {
           versioned = true
-          return { id: 'x', agentId: agent.id, projectId: agent.projectId, version: 2, createdAt, ...cfg }
+          return agentVersion(agent, cfg, createdAt)
         },
       },
     })
     const result = await updateAgent(deps, auth, agentRecord(), { description: 'Just a description' })
     expect(versioned).toBe(false)
-    expect(result.agent.version).toBe(1)
-    expect(result.agent.description).toBe('Just a description')
+    expect(result.agent.status.version).toBe(1)
+    expect(result.agent.metadata.description).toBe('Just a description')
   })
 
   it('archives via {archived:true} and reports the transition', async () => {
     const result = await updateAgent(deps(), auth, agentRecord(), { archived: true })
     expect(result.archived).toBe(true)
-    expect(result.agent.archivedAt).toEqual(expect.any(String))
+    expect(result.agent.metadata.archivedAt).toEqual(expect.any(String))
   })
 
   it('rejects field updates on an archived agent', async () => {
     await expect(
-      updateAgent(deps(), auth, agentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }), { description: 'x' }),
+      updateAgent(
+        deps(),
+        auth,
+        agentRecord({ metadata: { archivedAt: '2026-01-02T00:00:00.000Z' }, status: { phase: 'archived' } }),
+        { description: 'x' },
+      ),
     ).rejects.toBeInstanceOf(AgentArchivedError)
   })
 
   it('unarchives an archived agent via {archived:false}', async () => {
-    const result = await updateAgent(deps(), auth, agentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }), {
-      archived: false,
-    })
-    expect(result.agent.archivedAt).toBeNull()
+    const result = await updateAgent(
+      deps(),
+      auth,
+      agentRecord({ metadata: { archivedAt: '2026-01-02T00:00:00.000Z' }, status: { phase: 'archived' } }),
+      {
+        archived: false,
+      },
+    )
+    expect(result.agent.metadata.archivedAt).toBeNull()
   })
 
   it('merges metadata, dropping keys set to null', async () => {
-    const result = await updateAgent(deps(), auth, agentRecord({ metadata: { owner: 'platform', remove: 'stale' } }), {
-      metadata: { owner: 'runtime', remove: null },
-    })
-    expect(result.agent.metadata).toEqual({ owner: 'runtime' })
+    const result = await updateAgent(
+      deps(),
+      auth,
+      agentRecord({ spec: { metadata: { owner: 'platform', remove: 'stale' } } }),
+      {
+        metadata: { owner: 'runtime', remove: null },
+      },
+    )
+    expect(result.agent.spec.metadata).toEqual({ owner: 'runtime' })
   })
 
   function deps() {
@@ -379,26 +432,40 @@ describe('[spec: agents/update] updateAgent', () => {
 })
 
 describe('[spec: agents/handoff] resolveHandoffCandidates', () => {
-  const worker = agentRecord({ id: 'agent_worker', role: 'worker', capabilityTags: ['implementation'] })
-  const reviewer = agentRecord({ id: 'agent_reviewer', role: 'reviewer' })
+  const worker = agentRecord({
+    metadata: { uid: 'agent_worker' },
+    spec: { role: 'worker', capabilityTags: ['implementation'] },
+  })
+  const reviewer = agentRecord({ metadata: { uid: 'agent_reviewer' }, spec: { role: 'reviewer' } })
 
   it('resolves by an explicit requested role', async () => {
     const deps = fakeDeps({ repo: { liveAgents: async () => [worker, reviewer] } })
-    const candidates = await resolveHandoffCandidates(deps, 'project_1', agentRecord({ id: 'agent_lead' }), {
-      role: 'worker',
-    })
+    const candidates = await resolveHandoffCandidates(
+      deps,
+      'project_1',
+      agentRecord({ metadata: { uid: 'agent_lead' } }),
+      {
+        role: 'worker',
+      },
+    )
     expect(candidates.map((candidate) => candidate.id)).toEqual(['agent_worker'])
   })
 
   it('falls back to policy targets when no target is requested', async () => {
     const deps = fakeDeps({ repo: { liveAgents: async () => [worker, reviewer] } })
-    const lead = agentRecord({ id: 'agent_lead', handoffPolicy: { targets: [{ capability: 'implementation' }] } })
+    const lead = agentRecord({
+      metadata: { uid: 'agent_lead' },
+      spec: { handoffPolicy: { targets: [{ capability: 'implementation' }] } },
+    })
     const candidates = await resolveHandoffCandidates(deps, 'project_1', lead, {})
     expect(candidates.map((candidate) => candidate.id)).toEqual(['agent_worker'])
   })
 
   it('excludes the requesting agent from its own candidates', async () => {
-    const self = agentRecord({ id: 'agent_self', role: 'worker', capabilityTags: ['implementation'] })
+    const self = agentRecord({
+      metadata: { uid: 'agent_self' },
+      spec: { role: 'worker', capabilityTags: ['implementation'] },
+    })
     const deps = fakeDeps({ repo: { liveAgents: async () => [self, worker] } })
     const candidates = await resolveHandoffCandidates(deps, 'project_1', self, { role: 'worker' })
     expect(candidates.map((candidate) => candidate.id)).toEqual(['agent_worker'])
@@ -413,29 +480,22 @@ describe('[spec: agents/handoff] resolveHandoffCandidates', () => {
 
 describe('[spec: agents/memory] memory', () => {
   it('materializes an empty memory singleton on first read', async () => {
-    const inserted: AgentMemoryRecord[] = []
+    const inserted: AgentMemory[] = []
     const deps = fakeDeps({ repo: { insertMemory: async (record) => void inserted.push(record) } })
     const memory = await readAgentMemory(deps, 'project_1', agentRecord())
-    expect(memory.content).toBe('')
+    expect(memory.spec.content).toBe('')
     expect(inserted).toHaveLength(1)
   })
 
   it('replaces the whole singleton on PUT', async () => {
-    const existing: AgentMemoryRecord = {
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      content: 'old',
-      metadata: { keep: 'no' },
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    }
+    const existing = memoryRecord('old', { keep: 'no' })
     const deps = fakeDeps({ repo: { findMemory: async () => existing } })
     const memory = await replaceAgentMemory(deps, 'project_1', agentRecord(), {
       content: 'new',
       metadata: { fresh: 'yes' },
     })
-    expect(memory.content).toBe('new')
-    expect(memory.metadata).toEqual({ fresh: 'yes' })
+    expect(memory.spec.content).toBe('new')
+    expect(memory.spec.metadata).toEqual({ fresh: 'yes' })
   })
 
   it('rejects secret material in memory metadata', async () => {
@@ -448,14 +508,7 @@ describe('[spec: agents/memory] memory', () => {
   })
 
   it('returns the existing memory record without inserting on read when it already exists', async () => {
-    const existing: AgentMemoryRecord = {
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      content: 'stored content',
-      metadata: { version: '2' },
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    }
+    const existing = memoryRecord('stored content', { version: '2' })
     let insertCalled = false
     const deps = fakeDeps({
       repo: {
@@ -466,12 +519,12 @@ describe('[spec: agents/memory] memory', () => {
       },
     })
     const memory = await readAgentMemory(deps, 'project_1', agentRecord())
-    expect(memory.content).toBe('stored content')
+    expect(memory.spec.content).toBe('stored content')
     expect(insertCalled).toBe(false)
   })
 
   it('inserts and returns a new singleton on first replace when no memory exists', async () => {
-    const inserted: AgentMemoryRecord[] = []
+    const inserted: AgentMemory[] = []
     const deps = fakeDeps({
       repo: {
         findMemory: async () => null,
@@ -482,45 +535,59 @@ describe('[spec: agents/memory] memory', () => {
       content: 'initial',
       metadata: { created: true },
     })
-    expect(memory.content).toBe('initial')
-    expect(memory.metadata).toEqual({ created: true })
+    expect(memory.spec.content).toBe('initial')
+    expect(memory.spec.metadata).toEqual({ created: true })
     expect(inserted).toHaveLength(1)
-    expect(inserted[0]!.content).toBe('initial')
+    expect(inserted[0]!.spec.content).toBe('initial')
   })
 })
 
 describe('[spec: agents/update] updateAgent — archived idempotent', () => {
   it('is a no-op when patching an archived agent with archived:true', async () => {
-    const archived = agentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const archived = agentRecord({
+      metadata: { archivedAt: '2026-01-02T00:00:00.000Z' },
+      status: { phase: 'archived' },
+    })
     const result = await updateAgent(fakeDeps(), auth, archived, { archived: true })
-    expect(result.agent.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.agent.metadata.archivedAt).toBe('2026-01-02T00:00:00.000Z')
     expect(result.archived).toBe(false)
   })
 
   it('is a no-op when patching an archived agent with an empty patch', async () => {
-    const archived = agentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const archived = agentRecord({
+      metadata: { archivedAt: '2026-01-02T00:00:00.000Z' },
+      status: { phase: 'archived' },
+    })
     const result = await updateAgent(fakeDeps(), auth, archived, {})
-    expect(result.agent.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.agent.metadata.archivedAt).toBe('2026-01-02T00:00:00.000Z')
     expect(result.archived).toBe(false)
   })
 
   it('updates providerId, model, and role when explicitly patched', async () => {
-    const result = await updateAgent(fakeDeps(), auth, agentRecord({ providerId: null, model: null, role: null }), {
+    const result = await updateAgent(fakeDeps(), auth, agentRecord(), {
       providerId: 'provider_new',
       model: 'gpt-4',
       role: 'analyst',
     })
-    expect(result.agent.providerId).toBe('provider_new')
-    expect(result.agent.model).toBe('gpt-4')
-    expect(result.agent.role).toBe('analyst')
+    expect(result.agent.spec.providerId).toBe('provider_new')
+    expect(result.agent.spec.model).toBe('gpt-4')
+    expect(result.agent.spec.role).toBe('analyst')
   })
 
   it('resolves a handoff by an explicit capability', async () => {
-    const worker = agentRecord({ id: 'agent_worker', role: 'worker', capabilityTags: ['build'] })
-    const deps = fakeDeps({ repo: { liveAgents: async () => [worker] } })
-    const candidates = await resolveHandoffCandidates(deps, 'project_1', agentRecord({ id: 'agent_lead' }), {
-      capability: 'build',
+    const worker = agentRecord({
+      metadata: { uid: 'agent_worker' },
+      spec: { role: 'worker', capabilityTags: ['build'] },
     })
+    const deps = fakeDeps({ repo: { liveAgents: async () => [worker] } })
+    const candidates = await resolveHandoffCandidates(
+      deps,
+      'project_1',
+      agentRecord({ metadata: { uid: 'agent_lead' } }),
+      {
+        capability: 'build',
+      },
+    )
     expect(candidates.map((c) => c.id)).toEqual(['agent_worker'])
   })
 })

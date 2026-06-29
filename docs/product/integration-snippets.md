@@ -9,7 +9,7 @@ export AMA_ORIGIN="https://ama.example.com"
 curl -fsS "$AMA_ORIGIN/api/openapi.json"
 ```
 
-The document contains `/api/v1` paths for agents, environments, sessions, providers, vaults, governance, usage, audit, MCP, auth, and health. It is the source of truth for request fields, response fields, auth, and machine-readable output.
+The document contains `/api/v1` paths for agents, environments, sessions, providers, vaults, budgets, usage, audit, connectors, auth, and health. It is the source of truth for request fields, response fields, auth, and machine-readable output.
 
 ## curl
 
@@ -21,12 +21,12 @@ curl -fsS "$AMA_ORIGIN/api/v1/health"
 curl -fsS "$AMA_ORIGIN/api/v1/environments" \
   -H "content-type: application/json" \
   -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
-  -d '{"name":"Node workspace","hostingMode":"cloud","runtime":"ama","runtimeConfig":{"image":"node:24"},"packages":[{"name":"tsx","version":"latest"}]}'
+  -d '{"name":"Node workspace","hostingMode":"cloud","runtimeConfig":{"image":"node:24"},"packages":[{"name":"tsx","version":"latest"}]}'
 
 curl -fsS "$AMA_ORIGIN/api/v1/agents" \
   -H "content-type: application/json" \
   -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
-  -d '{"name":"Research assistant","instructions":"Answer with citations.","provider":"workers-ai","model":"@cf/moonshotai/kimi-k2.6"}'
+  -d '{"name":"Research assistant","instructions":"Answer with citations.","providerId":"workers-ai","model":"@cf/moonshotai/kimi-k2.6"}'
 
 curl -fsS "$AMA_ORIGIN/api/v1/sessions" \
   -H "content-type: application/json" \
@@ -42,9 +42,9 @@ Configure restish from the deployment OpenAPI document and keep JSON output enab
 restish api configure ama "$AMA_ORIGIN/api/openapi.json"
 restish ama get-health
 restish ama list-agents --rsh-output-format json
-printf '%s\n' '{"name":"Node workspace","hostingMode":"cloud","runtime":"ama","runtimeConfig":{"image":"node:24"},"packages":[{"name":"tsx","version":"latest"}]}' \
+printf '%s\n' '{"name":"Node workspace","hostingMode":"cloud","runtimeConfig":{"image":"node:24"},"packages":[{"name":"tsx","version":"latest"}]}' \
   | restish ama create-environment --rsh-output-format json
-printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations.","provider":"workers-ai","model":"@cf/moonshotai/kimi-k2.6"}' \
+printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations.","providerId":"workers-ai","model":"@cf/moonshotai/kimi-k2.6"}' \
   | restish ama create-agent --rsh-output-format json
 printf '%s\n' '{"agentId":"agent_abc123","environmentId":"env_abc123"}' \
   | restish ama create-session --rsh-output-format json
@@ -53,7 +53,7 @@ printf '%s\n' '{"agentId":"agent_abc123","environmentId":"env_abc123"}' \
 The local e2e check exercises actual restish discovery plus create environment, create agent, and create session serialization:
 
 ```bash
-pnpm run test:e2e
+pnpm run e2e
 ```
 
 Common control-plane workflows map to these OpenAPI operations:
@@ -67,10 +67,12 @@ Common control-plane workflows map to these OpenAPI operations:
 | Providers | `listProviders`, `listModels`, `refreshCatalog`, `readProvider`, `listProviderModels` | `/api/v1/providers` |
 | Vaults | `listVaults`, `createVault`, `readVault`, `updateVault`, credential and version operations | `/api/v1/vaults` |
 | Budgets | budget operations | `/api/v1/budgets` |
-| Usage | `listUsageRecords`, `readUsageRecord`, `readUsageSummary` | `/api/v1/usage` |
+| Usage | `listUsageRecords`, `readUsageRecord`, `readUsageSummary` | `/api/v1/usage-records`, `/api/v1/usage-summary` |
 | Audit | `listAuditRecords`, `readAuditRecord` | `/api/v1/audit-records` |
 
-Archive and stop flows use the resource `update*` operations with the relevant state fields. Confirm the target id before destructive updates or delete operations such as policy deletes and vault credential version deletes.
+Archive and stop flows use the resource `update*` operations with the relevant state fields. Confirm the target id before destructive updates or delete operations such as budget deletes and vault credential version deletes.
+
+Standard resource responses for agents, environments, vaults, memory stores, triggers, and their child resources use `{ metadata, spec, status }`. Use `resource.metadata.uid` as the stable id in follow-up calls.
 
 ## Generated SDK Shape
 
@@ -86,7 +88,6 @@ const client = createAmaClient({
 const environment = await client.environments.create({
   name: 'Node workspace',
   hostingMode: 'cloud',
-  runtime: 'ama',
   runtimeConfig: { image: 'node:24' },
   packages: [{ name: 'tsx', version: 'latest' }],
 })
@@ -94,13 +95,14 @@ const environment = await client.environments.create({
 const agent = await client.agents.create({
   name: 'Research assistant',
   instructions: 'Answer with citations.',
-  provider: 'workers-ai',
+  providerId: 'workers-ai',
   model: '@cf/moonshotai/kimi-k2.6',
 })
 
 const session = await client.sessions.create({
-  agentId: agent.id,
-  environmentId: environment.id,
+  agentId: agent.metadata.uid,
+  environmentId: environment.metadata.uid,
+  runtime: 'ama',
   volumes: [
     {
       name: 'source',
@@ -124,7 +126,7 @@ The stable facade is split by audience:
 - `createAmaClient` / `ama.New` / `create_ama_client` expose public control-plane resources.
 - `createAmaRunnerClient` / `ama.NewRunner` / `create_ama_runner_client` expose runner protocol resources: runner channel, runner heartbeat, work items, leases, and runner-side session event ingestion.
 
-Runtime task interaction is separate from restish control-plane automation. Use the `runtimeEndpointPath` returned by session reads with AMA runtime helpers. Do not define a new CLI-level runtime protocol.
+Runtime task interaction is separate from restish control-plane automation. Use the session connection resource (`readSessionConnection`) and AMA runtime helpers. Do not define a new CLI-level runtime protocol.
 
 Regenerate repo-local SDK scaffolds from the Hono-generated OpenAPI document before publishing SDK changes:
 

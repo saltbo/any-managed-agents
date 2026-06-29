@@ -98,11 +98,11 @@ Any Managed Agents is an operational control plane. The product UI must feel qui
 
 Before adding or changing a page:
 
-1. Add or update the relevant `specs/product/*.feature` scenario.
+1. Add or update the relevant `spec/*.feature` scenario.
 2. Use a route in `src/app/router.tsx`.
 3. Put route orchestration in `src/features/<feature>/`.
 4. Keep feature mutations in the owning feature module; do not add page operations to shared console context.
 5. Use React Query for server state.
 6. Compose from shadcn primitives and shared AMA product components.
-7. Verify with `pnpm run test:e2e`, `pnpm run test`, `pnpm run typecheck`, `pnpm run lint`, and `pnpm run build`.
+7. Verify with `pnpm run e2e`, `pnpm run test`, `pnpm run typecheck`, `pnpm run lint`, and `pnpm run build`.
 8. For visible UI changes, verify desktop and 390px mobile screenshots with Playwright.

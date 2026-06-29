@@ -21,10 +21,10 @@ export function formatInterval(intervalSeconds: number) {
 }
 
 function triggerTiming(trigger: Trigger) {
-  if (trigger.type === 'http') {
+  if (trigger.spec.type === 'http') {
     return 'HTTP POST'
   }
-  return trigger.schedule ? formatInterval(trigger.schedule.intervalSeconds) : '—'
+  return trigger.spec.schedule ? formatInterval(trigger.spec.schedule.intervalSeconds) : '—'
 }
 
 export function TriggersView({
@@ -62,31 +62,33 @@ export function TriggersView({
       </TableHeader>
       <TableBody>
         {triggers.map((trigger) => (
-          <TableRow key={trigger.id}>
+          <TableRow key={trigger.metadata.uid}>
             <TableCell className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <Link className="truncate font-medium hover:underline" to={`/triggers/${trigger.id}`}>
-                  {trigger.name}
+                <Link className="truncate font-medium hover:underline" to={`/triggers/${trigger.metadata.uid}`}>
+                  {trigger.metadata.name}
                 </Link>
-                <span className="truncate text-xs text-muted-foreground">{trigger.id}</span>
+                <span className="truncate text-xs text-muted-foreground">{trigger.metadata.uid}</span>
               </div>
             </TableCell>
-            <TableCell className="max-w-48 truncate">{trigger.agentId}</TableCell>
+            <TableCell className="max-w-48 truncate">{trigger.spec.agentId}</TableCell>
             <TableCell>{triggerTiming(trigger)}</TableCell>
             <TableCell>
-              <StatusBadge value={trigger.enabled ? 'active' : 'paused'} />
+              <StatusBadge value={trigger.spec.enabled ? 'active' : 'paused'} />
             </TableCell>
-            <TableCell>{trigger.nextDueAt ? formatRelativeTime(trigger.nextDueAt) : '—'}</TableCell>
-            <TableCell>{trigger.lastDispatchedAt ? formatRelativeTime(trigger.lastDispatchedAt) : '—'}</TableCell>
+            <TableCell>{trigger.status.nextDueAt ? formatRelativeTime(trigger.status.nextDueAt) : '—'}</TableCell>
+            <TableCell>
+              {trigger.status.lastDispatchedAt ? formatRelativeTime(trigger.status.lastDispatchedAt) : '—'}
+            </TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">
-                {trigger.enabled ? (
+                {trigger.spec.enabled ? (
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     aria-label="Pause trigger"
-                    onClick={() => onPause(trigger.id)}
+                    onClick={() => onPause(trigger.metadata.uid)}
                   >
                     <Pause data-icon="inline-start" />
                   </Button>
@@ -96,17 +98,17 @@ export function TriggersView({
                     variant="outline"
                     size="icon"
                     aria-label="Resume trigger"
-                    onClick={() => onResume(trigger.id)}
+                    onClick={() => onResume(trigger.metadata.uid)}
                   >
                     <Play data-icon="inline-start" />
                   </Button>
                 )}
                 <ConfirmAction
                   title="Delete trigger?"
-                  description={`Permanently delete ${trigger.name} and its run history. This cannot be undone.`}
+                  description={`Permanently delete ${trigger.metadata.name} and its run history. This cannot be undone.`}
                   confirmLabel="Delete trigger"
                   destructive
-                  onConfirm={() => onDelete(trigger.id)}
+                  onConfirm={() => onDelete(trigger.metadata.uid)}
                 >
                   <Button type="button" variant="outline" size="icon" aria-label="Delete trigger">
                     <Trash2 data-icon="inline-start" />

@@ -25,7 +25,8 @@ async function createEnvironment(authorization: string) {
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string }
+  const environment = (await res.json()) as { metadata: { uid: string } }
+  return { id: environment.metadata.uid }
 }
 
 async function createAgent(authorization: string) {
@@ -39,7 +40,8 @@ async function createAgent(authorization: string) {
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string }
+  const agent = (await res.json()) as { metadata: { uid: string } }
+  return { id: agent.metadata.uid }
 }
 
 async function createRuntimeCredential(authorization: string) {
@@ -48,8 +50,8 @@ async function createRuntimeCredential(authorization: string) {
     body: JSON.stringify({ name: `Trigger runtime secrets ${crypto.randomUUID()}` }),
   })
   expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'AK agent session key',
@@ -58,7 +60,15 @@ async function createRuntimeCredential(authorization: string) {
     }),
   })
   expect(credentialRes.status).toBe(201)
-  return (await credentialRes.json()) as { id: string; activeVersionId: string; activeVersion: { secretRef: string } }
+  const credential = (await credentialRes.json()) as {
+    metadata: { uid: string }
+    status: { activeVersionId: string; activeVersion: { spec: { secretRef: string } } }
+  }
+  return {
+    id: credential.metadata.uid,
+    activeVersionId: credential.status.activeVersionId,
+    activeVersion: { secretRef: credential.status.activeVersion.spec.secretRef },
+  }
 }
 
 async function registerActiveRunner(authorization: string, environmentId: string) {
@@ -103,18 +113,19 @@ async function createTrigger(
   })
   expect(res.status).toBe(201)
   return (await res.json()) as {
-    id: string
-    type: 'scheduled' | 'http'
-    name: string
-    nextDueAt: string | null
-    enabled: boolean
-    archivedAt: string | null
-    metadata: Record<string, unknown>
-    volumes: Record<string, unknown>[]
-    volumeMounts: Record<string, unknown>[]
-    env: Record<string, string>
-    envFrom: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
-    schedule: { intervalSeconds: number; windowSeconds: number } | null
+    metadata: { uid: string; name: string; archivedAt: string | null }
+    spec: {
+      type: 'scheduled' | 'http'
+      promptTemplate: string
+      enabled: boolean
+      metadata: Record<string, unknown>
+      volumes: Record<string, unknown>[]
+      volumeMounts: Record<string, unknown>[]
+      env: Record<string, string>
+      envFrom: Array<{ type: 'secret'; name: string; secretRef: string }>
+      schedule: { intervalSeconds: number; windowSeconds: number } | null
+    }
+    status: { nextDueAt: string | null; phase: string }
   }
 }
 
@@ -136,9 +147,9 @@ describe('[CF] /api/v1/triggers', () => {
       name: 'Alpha heartbeat',
       metadata: { lane: 'alpha' },
     })
-    expect(first.enabled).toBe(true)
-    expect(first.archivedAt).toBeNull()
-    expect(first).not.toHaveProperty('status')
+    const firstId = first.metadata.uid
+    expect(first.spec.enabled).toBe(true)
+    expect(first.metadata.archivedAt).toBeNull()
     expect(first).not.toHaveProperty('organizationId')
     const second = await createTrigger(authorization, agent.id, environment.id, {
       name: 'Beta heartbeat',
@@ -146,12 +157,13 @@ describe('[CF] /api/v1/triggers', () => {
       schedule: { intervalSeconds: 7200, windowSeconds: 300 },
       enabled: false,
     })
-    expect(second.enabled).toBe(false)
+    const secondId = second.metadata.uid
+    expect(second.spec.enabled).toBe(false)
 
     const listRes = await jsonFetch('/api/v1/triggers?limit=1', authorization)
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as {
-      data: Array<{ id: string; name: string }>
+      data: Array<{ metadata: { uid: string; name: string } }>
       pagination: { hasMore: boolean; nextCursor: string | null }
     }
     expect(list.data).toHaveLength(1)
@@ -159,30 +171,39 @@ describe('[CF] /api/v1/triggers', () => {
 
     const nextPageRes = await jsonFetch(`/api/v1/triggers?limit=1&cursor=${list.pagination.nextCursor}`, authorization)
     expect(nextPageRes.status).toBe(200)
-    const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
-    expect(nextPage.data.map((trigger) => trigger.id)).not.toEqual(list.data.map((trigger) => trigger.id))
+    const nextPage = (await nextPageRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(nextPage.data.map((trigger) => trigger.metadata.uid)).not.toEqual(
+      list.data.map((trigger) => trigger.metadata.uid),
+    )
 
     const searchRes = await jsonFetch('/api/v1/triggers?search=Alpha', authorization)
     expect(searchRes.status).toBe(200)
     await expect(searchRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ id: first.id, name: 'Alpha heartbeat' })],
+      data: [expect.objectContaining({ metadata: expect.objectContaining({ uid: firstId, name: 'Alpha heartbeat' }) })],
     })
 
     const pausedRes = await jsonFetch('/api/v1/triggers?enabled=false', authorization)
     expect(pausedRes.status).toBe(200)
     await expect(pausedRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ id: second.id, enabled: false })],
+      data: [
+        expect.objectContaining({
+          metadata: expect.objectContaining({ uid: secondId }),
+          spec: expect.objectContaining({ enabled: false }),
+        }),
+      ],
     })
 
-    const readRes = await jsonFetch(`/api/v1/triggers/${second.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/triggers/${secondId}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
-      id: second.id,
-      schedule: { intervalSeconds: 7200, windowSeconds: 300 },
-      metadata: { lane: 'beta' },
+      metadata: { uid: secondId },
+      spec: {
+        schedule: { intervalSeconds: 7200, windowSeconds: 300 },
+        metadata: { lane: 'beta' },
+      },
     })
 
-    const patchRes = await jsonFetch(`/api/v1/triggers/${second.id}`, authorization, {
+    const patchRes = await jsonFetch(`/api/v1/triggers/${secondId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({
         name: 'Beta heartbeat updated',
@@ -194,46 +215,47 @@ describe('[CF] /api/v1/triggers', () => {
     })
     expect(patchRes.status).toBe(200)
     await expect(patchRes.json()).resolves.toMatchObject({
-      id: second.id,
-      name: 'Beta heartbeat updated',
-      enabled: true,
-      nextDueAt: '2026-05-26T13:00:00.000Z',
-      schedule: { intervalSeconds: 1800, windowSeconds: 60 },
-      metadata: { lane: 'beta', updated: true },
+      metadata: { uid: secondId, name: 'Beta heartbeat updated' },
+      spec: {
+        enabled: true,
+        schedule: { intervalSeconds: 1800, windowSeconds: 60 },
+        metadata: { lane: 'beta', updated: true },
+      },
+      status: { nextDueAt: '2026-05-26T13:00:00.000Z' },
     })
 
-    const invalidPatchRes = await jsonFetch(`/api/v1/triggers/${first.id}`, authorization, {
+    const invalidPatchRes = await jsonFetch(`/api/v1/triggers/${firstId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ schedule: { intervalSeconds: 30 } }),
     })
     expect(invalidPatchRes.status).toBe(400)
 
-    const archiveRes = await jsonFetch(`/api/v1/triggers/${first.id}`, authorization, {
+    const archiveRes = await jsonFetch(`/api/v1/triggers/${firstId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })
     expect(archiveRes.status).toBe(200)
     await expect(archiveRes.json()).resolves.toMatchObject({
-      id: first.id,
-      archivedAt: expect.any(String),
+      metadata: { uid: firstId, archivedAt: expect.any(String) },
     })
 
-    const archivedReadRes = await jsonFetch(`/api/v1/triggers/${first.id}`, authorization)
+    const archivedReadRes = await jsonFetch(`/api/v1/triggers/${firstId}`, authorization)
     expect(archivedReadRes.status).toBe(200)
     await expect(archivedReadRes.json()).resolves.toMatchObject({
-      id: first.id,
-      archivedAt: expect.any(String),
+      metadata: { uid: firstId, archivedAt: expect.any(String) },
     })
 
     const defaultListRes = await jsonFetch('/api/v1/triggers', authorization)
-    const defaultList = (await defaultListRes.json()) as { data: Array<{ id: string }> }
-    expect(defaultList.data).not.toContainEqual(expect.objectContaining({ id: first.id }))
+    const defaultList = (await defaultListRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(defaultList.data).not.toContainEqual(expect.objectContaining({ metadata: { uid: firstId } }))
 
     const archivedListRes = await jsonFetch('/api/v1/triggers?archived=true', authorization)
-    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string }> }
-    expect(archivedList.data).toContainEqual(expect.objectContaining({ id: first.id }))
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(archivedList.data).toContainEqual(
+      expect.objectContaining({ metadata: expect.objectContaining({ uid: firstId }) }),
+    )
 
-    const updateArchivedRes = await jsonFetch(`/api/v1/triggers/${first.id}`, authorization, {
+    const updateArchivedRes = await jsonFetch(`/api/v1/triggers/${firstId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ name: 'Cannot touch this' }),
     })
@@ -242,21 +264,21 @@ describe('[CF] /api/v1/triggers', () => {
       error: { type: 'conflict', message: 'Archived triggers cannot be updated' },
     })
 
-    const restoreRes = await jsonFetch(`/api/v1/triggers/${first.id}`, authorization, {
+    const restoreRes = await jsonFetch(`/api/v1/triggers/${firstId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: false }),
     })
     expect(restoreRes.status).toBe(200)
-    await expect(restoreRes.json()).resolves.toMatchObject({ id: first.id, archivedAt: null })
+    await expect(restoreRes.json()).resolves.toMatchObject({ metadata: { uid: firstId, archivedAt: null } })
 
     const auditRes = await jsonFetch('/api/v1/audit-records?action=trigger', authorization)
     expect(auditRes.status).toBe(200)
     const audit = (await auditRes.json()) as { data: Array<{ action: string; resourceId: string }> }
     expect(audit.data).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ action: 'trigger.create', resourceId: first.id }),
-        expect.objectContaining({ action: 'trigger.update', resourceId: second.id }),
-        expect.objectContaining({ action: 'trigger.archive', resourceId: first.id }),
+        expect.objectContaining({ action: 'trigger.create', resourceId: firstId }),
+        expect.objectContaining({ action: 'trigger.update', resourceId: secondId }),
+        expect.objectContaining({ action: 'trigger.archive', resourceId: firstId }),
       ]),
     )
   })
@@ -322,7 +344,8 @@ describe('[CF] /api/v1/triggers', () => {
       name: 'Safe metadata heartbeat',
       metadata: { owner: 'platform' },
     })
-    const updateRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, authorization, {
+    const triggerId = trigger.metadata.uid
+    const updateRes = await jsonFetch(`/api/v1/triggers/${triggerId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({
         metadata: {
@@ -344,11 +367,11 @@ describe('[CF] /api/v1/triggers', () => {
       },
     })
 
-    const readRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/triggers/${triggerId}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
-      id: trigger.id,
-      metadata: { owner: 'platform' },
+      metadata: { uid: triggerId },
+      spec: { metadata: { owner: 'platform' } },
     })
   })
 
@@ -385,25 +408,34 @@ describe('[CF] /api/v1/triggers', () => {
     })
     expect(createRes.status).toBe(201)
     const trigger = (await createRes.json()) as {
-      id: string
-      nextDueAt: string
-      enabled: boolean
-      schedule: { intervalSeconds: number }
+      metadata: { uid: string }
+      spec: {
+        enabled: boolean
+        schedule: { intervalSeconds: number }
+        volumes: Record<string, unknown>[]
+        volumeMounts: Record<string, unknown>[]
+        env: Record<string, string>
+        envFrom: Array<{ type: 'secret'; name: string; secretRef: string }>
+      }
+      status: { nextDueAt: string }
     }
+    const triggerId = trigger.metadata.uid
     expect(trigger).toMatchObject({
-      enabled: true,
-      nextDueAt: dueAt,
-      volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
-      volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
-      env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
-      envFrom: [
-        {
-          type: 'secret',
-          name: 'AK_AGENT_KEY',
-          secretRef: credential.activeVersion.secretRef,
-        },
-      ],
-      schedule: { intervalSeconds: 3600 },
+      spec: {
+        enabled: true,
+        volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
+        volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
+        env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
+        envFrom: [
+          {
+            type: 'secret',
+            name: 'AK_AGENT_KEY',
+            secretRef: credential.activeVersion.secretRef,
+          },
+        ],
+        schedule: { intervalSeconds: 3600 },
+      },
+      status: { nextDueAt: dueAt },
     })
 
     const dispatchRes = await jsonFetch('/api/v1/e2e/scheduled-agent-triggers/dispatch', authorization, {
@@ -436,53 +468,58 @@ describe('[CF] /api/v1/triggers', () => {
       runs: [],
     })
 
-    const runsRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
+    const runsRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs`, authorization)
     expect(runsRes.status).toBe(200)
     const runs = (await runsRes.json()) as {
       data: Array<{
-        id: string
-        sessionId: string
-        state: string
-        scheduledFor: string
-        triggeredAt: string
-        correlationId: string
-        idempotencyKey: string
+        metadata: { uid: string }
+        spec: {
+          triggerId: string
+          scheduledFor: string
+          correlationId: string
+          idempotencyKey: string
+        }
+        status: { sessionId: string; phase: string; triggeredAt: string }
       }>
     }
     expect(runs.data).toHaveLength(1)
     expect(runs.data[0]).toMatchObject({
-      sessionId,
-      state: 'dispatched',
-      scheduledFor: dueAt,
-      triggeredAt: heartbeatAt,
-      correlationId: `schedule:${trigger.id}:${dueAt}`,
-      idempotencyKey: `${trigger.id}:${dueAt}`,
+      spec: {
+        triggerId,
+        scheduledFor: dueAt,
+        correlationId: `schedule:${triggerId}:${dueAt}`,
+        idempotencyKey: `${triggerId}:${dueAt}`,
+      },
+      status: { sessionId, phase: 'dispatched', triggeredAt: heartbeatAt },
     })
-    expect(runs.data[0]).not.toHaveProperty('status')
 
-    const runItemRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs/${runs.data[0].id}`, authorization)
+    const runItemRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs/${runs.data[0].metadata.uid}`, authorization)
     expect(runItemRes.status).toBe(200)
     await expect(runItemRes.json()).resolves.toMatchObject({
-      id: runs.data[0].id,
-      triggerId: trigger.id,
-      sessionId,
-      state: 'dispatched',
+      metadata: { uid: runs.data[0].metadata.uid },
+      spec: { triggerId },
+      status: { sessionId, phase: 'dispatched' },
     })
 
-    const missingRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs/trigrun_missing`, authorization)
+    const missingRunRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs/trigrun_missing`, authorization)
     expect(missingRunRes.status).toBe(404)
 
     const filteredRunsRes = await jsonFetch(
-      `/api/v1/triggers/${trigger.id}/runs?state=dispatched&search=${encodeURIComponent(trigger.id)}&limit=1`,
+      `/api/v1/triggers/${triggerId}/runs?state=dispatched&search=${encodeURIComponent(triggerId)}&limit=1`,
       authorization,
     )
     expect(filteredRunsRes.status).toBe(200)
     await expect(filteredRunsRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ sessionId, state: 'dispatched' })],
+      data: [
+        expect.objectContaining({
+          spec: expect.objectContaining({ triggerId }),
+          status: expect.objectContaining({ sessionId, phase: 'dispatched' }),
+        }),
+      ],
       pagination: expect.objectContaining({ hasMore: false }),
     })
 
-    const failedRunsRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?state=failed`, authorization)
+    const failedRunsRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs?state=failed`, authorization)
     expect(failedRunsRes.status).toBe(200)
     await expect(failedRunsRes.json()).resolves.toMatchObject({ data: [] })
   })
@@ -498,47 +535,38 @@ describe('[CF] /api/v1/triggers', () => {
       schedule: null,
       nextDueAt: undefined,
     })
+    const triggerId = trigger.metadata.uid
     expect(trigger).toMatchObject({
-      type: 'http',
-      schedule: null,
-      nextDueAt: null,
+      spec: { type: 'http', schedule: null },
+      status: { nextDueAt: null },
     })
 
-    const runRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?source=portal`, authorization, {
+    const runRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs?source=portal`, authorization, {
       method: 'POST',
       headers: { 'x-source': 'zendesk', 'idempotency-key': 'ticket-123' },
       body: JSON.stringify({ ticket: { id: 'T-123' } }),
     })
     expect(runRes.status).toBe(201)
     const run = (await runRes.json()) as {
-      id: string
-      triggerId: string
-      state: string
-      sessionId: string | null
-      scheduledFor: string | null
-      heartbeatAt: string | null
-      triggeredAt: string
-      correlationId: string
-      idempotencyKey: string
+      metadata: { uid: string }
+      spec: { triggerId: string; scheduledFor: string | null; idempotencyKey: string }
+      status: { phase: string; sessionId: string | null; heartbeatAt: string | null; triggeredAt: string }
     }
     expect(run).toMatchObject({
-      triggerId: trigger.id,
-      state: 'dispatched',
-      scheduledFor: null,
-      heartbeatAt: null,
-      idempotencyKey: `http:${trigger.id}:ticket-123`,
+      spec: { triggerId, scheduledFor: null, idempotencyKey: `http:${triggerId}:ticket-123` },
+      status: { phase: 'dispatched', heartbeatAt: null },
     })
-    expect(run.sessionId).toEqual(expect.any(String))
-    expect(run.triggeredAt).toEqual(expect.any(String))
+    expect(run.status.sessionId).toEqual(expect.any(String))
+    expect(run.status.triggeredAt).toEqual(expect.any(String))
 
-    const duplicateRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?source=portal`, authorization, {
+    const duplicateRunRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs?source=portal`, authorization, {
       method: 'POST',
       headers: { 'x-source': 'zendesk', 'idempotency-key': 'ticket-123' },
       body: JSON.stringify({ ticket: { id: 'T-123' } }),
     })
     expect(duplicateRunRes.status).toBe(409)
 
-    const invalidRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?source=portal`, authorization, {
+    const invalidRunRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs?source=portal`, authorization, {
       method: 'POST',
       headers: { 'x-source': 'zendesk' },
       body: JSON.stringify({ ticket: {} }),
@@ -560,8 +588,9 @@ describe('[CF] /api/v1/triggers', () => {
       schedule: null,
       nextDueAt: undefined,
     })
+    const triggerId = trigger.metadata.uid
 
-    const firstRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization, {
+    const firstRunRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs`, authorization, {
       method: 'POST',
       headers: { 'idempotency-key': 'delivery-1' },
       body: JSON.stringify({
@@ -571,9 +600,9 @@ describe('[CF] /api/v1/triggers', () => {
       }),
     })
     expect(firstRunRes.status).toBe(201)
-    const firstRun = (await firstRunRes.json()) as { sessionId: string | null }
+    const firstRun = (await firstRunRes.json()) as { status: { sessionId: string | null } }
 
-    const secondRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization, {
+    const secondRunRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs`, authorization, {
       method: 'POST',
       headers: { 'idempotency-key': 'delivery-2' },
       body: JSON.stringify({
@@ -583,10 +612,10 @@ describe('[CF] /api/v1/triggers', () => {
       }),
     })
     expect(secondRunRes.status).toBe(201)
-    const secondRun = (await secondRunRes.json()) as { sessionId: string | null }
+    const secondRun = (await secondRunRes.json()) as { status: { sessionId: string | null } }
 
-    expect(firstRun.sessionId).toEqual(expect.any(String))
-    expect(secondRun.sessionId).toBe(firstRun.sessionId)
+    expect(firstRun.status.sessionId).toEqual(expect.any(String))
+    expect(secondRun.status.sessionId).toBe(firstRun.status.sessionId)
   })
 
   it('does not dispatch paused or archived triggers [spec: triggers/inactive]', async () => {
@@ -607,7 +636,8 @@ describe('[CF] /api/v1/triggers', () => {
       promptTemplate: 'Do not run either.',
       nextDueAt: dueAt,
     })
-    const archiveRes = await jsonFetch(`/api/v1/triggers/${archived.id}`, authorization, {
+    const archivedId = archived.metadata.uid
+    const archiveRes = await jsonFetch(`/api/v1/triggers/${archivedId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })
@@ -620,9 +650,9 @@ describe('[CF] /api/v1/triggers', () => {
     expect(dispatchRes.status).toBe(200)
     await expect(dispatchRes.json()).resolves.toMatchObject({ claimed: 0, dispatched: 0 })
 
-    const pausedRunsRes = await jsonFetch(`/api/v1/triggers/${paused.id}/runs`, authorization)
+    const pausedRunsRes = await jsonFetch(`/api/v1/triggers/${paused.metadata.uid}/runs`, authorization)
     await expect(pausedRunsRes.json()).resolves.toMatchObject({ data: [] })
-    const archivedRunsRes = await jsonFetch(`/api/v1/triggers/${archived.id}/runs`, authorization)
+    const archivedRunsRes = await jsonFetch(`/api/v1/triggers/${archivedId}/runs`, authorization)
     await expect(archivedRunsRes.json()).resolves.toMatchObject({ data: [] })
   })
 
@@ -645,8 +675,8 @@ describe('[CF] /api/v1/triggers', () => {
       }),
     })
     expect(createRes.status).toBe(201)
-    const trigger = (await createRes.json()) as { id: string; environmentId: string | null }
-    expect(trigger.environmentId).toBeNull()
+    const trigger = (await createRes.json()) as { metadata: { uid: string }; spec: { environmentId: string | null } }
+    expect(trigger.spec.environmentId).toBeNull()
 
     const dispatchRes = await jsonFetch('/api/v1/e2e/scheduled-agent-triggers/dispatch', authorization, {
       method: 'POST',
@@ -685,7 +715,8 @@ describe('[CF] /api/v1/triggers', () => {
       }),
     })
     expect(createRes.status).toBe(201)
-    const trigger = (await createRes.json()) as { id: string }
+    const trigger = (await createRes.json()) as { metadata: { uid: string } }
+    const triggerId = trigger.metadata.uid
 
     const dispatchRes = await jsonFetch('/api/v1/e2e/scheduled-agent-triggers/dispatch', authorization, {
       method: 'POST',
@@ -702,8 +733,10 @@ describe('[CF] /api/v1/triggers', () => {
     // with its "no runner environment" message.
     expect(dispatch.runs[0]?.errorMessage).toContain('No environment has an active runner')
 
-    const runsRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
-    await expect(runsRes.json()).resolves.toMatchObject({ data: [expect.objectContaining({ state: 'failed' })] })
+    const runsRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs`, authorization)
+    await expect(runsRes.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ status: expect.objectContaining({ phase: 'failed' }) })],
+    })
   })
 
   it('permanently deletes a trigger and its runs and audits it [spec: triggers/delete]', async () => {
@@ -714,6 +747,7 @@ describe('[CF] /api/v1/triggers', () => {
       name: 'Disposable heartbeat',
       nextDueAt: '2026-05-26T12:00:00.000Z',
     })
+    const triggerId = trigger.metadata.uid
 
     const dispatchRes = await jsonFetch('/api/v1/e2e/scheduled-agent-triggers/dispatch', authorization, {
       method: 'POST',
@@ -722,27 +756,27 @@ describe('[CF] /api/v1/triggers', () => {
     expect(dispatchRes.status).toBe(200)
     await expect(dispatchRes.json()).resolves.toMatchObject({ claimed: 1, dispatched: 1 })
 
-    const runsBeforeRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
-    const runsBefore = (await runsBeforeRes.json()) as { data: Array<{ id: string }> }
+    const runsBeforeRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs`, authorization)
+    const runsBefore = (await runsBeforeRes.json()) as { data: Array<{ metadata: { uid: string } }> }
     expect(runsBefore.data).toHaveLength(1)
 
-    const deleteRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, authorization, { method: 'DELETE' })
+    const deleteRes = await jsonFetch(`/api/v1/triggers/${triggerId}`, authorization, { method: 'DELETE' })
     expect(deleteRes.status).toBe(204)
     expect(await deleteRes.text()).toBe('')
 
-    const readAfterRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, authorization)
+    const readAfterRes = await jsonFetch(`/api/v1/triggers/${triggerId}`, authorization)
     expect(readAfterRes.status).toBe(404)
 
-    const runsAfterRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
+    const runsAfterRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs`, authorization)
     expect(runsAfterRes.status).toBe(404)
 
     const archivedListRes = await jsonFetch('/api/v1/triggers?archived=true', authorization)
-    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string }> }
-    expect(archivedList.data).not.toContainEqual(expect.objectContaining({ id: trigger.id }))
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ metadata: { uid: string } }> }
+    expect(archivedList.data).not.toContainEqual(expect.objectContaining({ metadata: { uid: triggerId } }))
 
     const auditRes = await jsonFetch('/api/v1/audit-records?action=trigger', authorization)
     const audit = (await auditRes.json()) as { data: Array<{ action: string; resourceId: string }> }
-    expect(audit.data).toContainEqual(expect.objectContaining({ action: 'trigger.delete', resourceId: trigger.id }))
+    expect(audit.data).toContainEqual(expect.objectContaining({ action: 'trigger.delete', resourceId: triggerId }))
 
     const missingDeleteRes = await jsonFetch('/api/v1/triggers/trigger_missing', authorization, { method: 'DELETE' })
     expect(missingDeleteRes.status).toBe(404)
@@ -753,12 +787,13 @@ describe('[CF] /api/v1/triggers', () => {
     const agent = await createAgent(owner)
     const environment = await createEnvironment(owner)
     const trigger = await createTrigger(owner, agent.id, environment.id, { name: 'Tenant-scoped heartbeat' })
+    const triggerId = trigger.metadata.uid
 
     const intruder = await signInUser('trigger-delete-foreign')
-    const foreignDeleteRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, intruder, { method: 'DELETE' })
+    const foreignDeleteRes = await jsonFetch(`/api/v1/triggers/${triggerId}`, intruder, { method: 'DELETE' })
     expect(foreignDeleteRes.status).toBe(404)
 
-    const stillThereRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, owner)
+    const stillThereRes = await jsonFetch(`/api/v1/triggers/${triggerId}`, owner)
     expect(stillThereRes.status).toBe(200)
   })
 })

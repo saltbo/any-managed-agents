@@ -44,7 +44,7 @@ export function VaultDetailPage() {
   })
   /* v8 ignore stop */
   const revokeCredential = useMutation({
-    mutationFn: (credential: VaultCredential) => api.revokeVaultCredential(vaultId as string, credential.id),
+    mutationFn: (credential: VaultCredential) => api.revokeVaultCredential(vaultId as string, credential.metadata.uid),
     /* v8 ignore start -- react-query schedules onSuccess/onError via microtask; side effects are tested but v8 can't attribute the lines */
     onSuccess: () => {
       toast.success('Credential revoked')
@@ -58,8 +58,8 @@ export function VaultDetailPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow="Vault"
-        title={vault?.name ?? 'Vault detail'}
-        description={vault?.description ?? 'Inspect credential metadata and safe reference state.'}
+        title={vault?.metadata.name ?? 'Vault detail'}
+        description={vault?.metadata.description ?? 'Inspect credential metadata and safe reference state.'}
       />
       <VaultDetailView
         vault={vault}

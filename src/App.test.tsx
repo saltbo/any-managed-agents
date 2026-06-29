@@ -15,6 +15,17 @@ import type {
   Vault,
   VaultCredential,
 } from './lib/api'
+import {
+  type AgentOverrides,
+  agentVersion,
+  type EnvironmentOverrides,
+  agent as resourceAgent,
+  credential as resourceCredential,
+  environment as resourceEnvironment,
+  vault as resourceVault,
+  type VaultCredentialOverrides,
+  type VaultOverrides,
+} from './test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from './testing/session'
 
 const now = '2026-05-23T00:00:00.000Z'
@@ -104,28 +115,16 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
   return { sentCommands, socketUrls }
 }
 
-function environment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
+function environment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({
     description: 'Runtime',
     packages: [{ name: 'tsx', version: 'latest' }],
     variables: { NODE_ENV: { description: 'mode', required: false } },
-    hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  }
+  })
 }
 
 function sessionEnvironmentSnapshot(overrides: Partial<SessionEnvironmentSnapshot> = {}): SessionEnvironmentSnapshot {
@@ -148,34 +147,8 @@ function sessionEnvironmentSnapshot(overrides: Partial<SessionEnvironmentSnapsho
   }
 }
 
-function agent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: 'Runs work',
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [
-      { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-    ],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function agent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({ description: 'Runs work', createdAt: now, updatedAt: now, ...overrides })
 }
 
 function session(overrides: TestSessionOverrides = {}): Session {
@@ -215,55 +188,12 @@ function provider(overrides: Partial<Provider> = {}): Provider {
   }
 }
 
-function vault(overrides: Partial<Vault> = {}): Vault {
-  return {
-    id: 'vault_1',
-    projectId: 'project_1',
-    name: 'Provider credentials',
-    description: 'Secrets',
-    scope: 'project',
-    metadata: {},
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function vault(overrides: VaultOverrides = {}): Vault {
+  return resourceVault({ description: 'Secrets', createdAt: now, updatedAt: now, ...overrides })
 }
 
-function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
-  return {
-    id: 'vaultcred_1',
-    vaultId: 'vault_1',
-    projectId: 'project_1',
-    name: 'Workers token',
-    type: 'opaque',
-    metadata: {},
-    state: 'active',
-    activeVersionId: 'vaultver_1',
-    activeVersion: {
-      id: 'vaultver_1',
-      credentialId: 'vaultcred_1',
-      vaultId: 'vault_1',
-      projectId: 'project_1',
-      version: 1,
-      provider: 'ama',
-      secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1',
-      referenceName: 'WORKERS_AI',
-      state: 'active',
-      hasSecret: true,
-      dataKeys: ['value'],
-      metadata: {},
-      createdAt: now,
-      supersededAt: null,
-      revokedAt: null,
-    },
-    revokedAt: null,
-    revokedByUserId: null,
-    revokeReason: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function credential(overrides: VaultCredentialOverrides = {}): VaultCredential {
+  return resourceCredential({ name: 'Workers token', createdAt: now, updatedAt: now, ...overrides })
 }
 
 function mcpConnector(overrides: Partial<Connector> = {}): Connector {
@@ -463,7 +393,7 @@ function mockConsoleApi(seed?: {
       return vaultId === 'vault_1' ? jsonResponse({ data: state.credentials }) : jsonResponse({ data: [] })
     }
     if (url.startsWith('/api/v1/vaults/') && method === 'GET') {
-      const found = state.vaults.find((item) => url === `/api/v1/vaults/${item.id}`)
+      const found = state.vaults.find((item) => url === `/api/v1/vaults/${item.metadata.uid}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Vault not found' } }, 404)
     }
     if (url === '/api/v1/connectors' && method === 'GET') {
@@ -484,7 +414,7 @@ function mockConsoleApi(seed?: {
       return jsonResponse(created)
     }
     if (url.startsWith('/api/v1/environments/') && method === 'GET') {
-      const found = state.environments.find((item) => url === `/api/v1/environments/${item.id}`)
+      const found = state.environments.find((item) => url === `/api/v1/environments/${item.metadata.uid}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Environment not found' } }, 404)
     }
     if (url === '/api/v1/agents' && method === 'GET') {
@@ -496,9 +426,9 @@ function mockConsoleApi(seed?: {
       return jsonResponse(created)
     }
     if (url.startsWith('/api/v1/agents/') && url.endsWith('/versions') && method === 'GET') {
-      const found = state.agents.find((item) => url === `/api/v1/agents/${item.id}/versions`)
+      const found = state.agents.find((item) => url === `/api/v1/agents/${item.metadata.uid}/versions`)
       return found
-        ? jsonResponse({ data: [session({ agentId: found.id }).status.bindings.agent.snapshot] })
+        ? jsonResponse({ data: [agentVersion({ agentId: found.metadata.uid, ...found.spec })] })
         : jsonResponse({ data: [] })
     }
     if (url === '/api/v1/sessions' && method === 'POST') {
@@ -520,7 +450,7 @@ function mockConsoleApi(seed?: {
       return jsonResponse(created)
     }
     if (url.startsWith('/api/v1/agents/') && method === 'GET') {
-      const found = state.agents.find((item) => url === `/api/v1/agents/${item.id}`)
+      const found = state.agents.find((item) => url === `/api/v1/agents/${item.metadata.uid}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Agent not found' } }, 404)
     }
     if (url === '/api/v1/sessions' && method === 'GET') {
@@ -1067,52 +997,8 @@ describe('App', () => {
   })
 })
 
-const environmentFixture = {
-  id: 'env_1',
-  projectId: 'project_1',
-  name: 'Node workspace',
-  description: 'Runtime',
-  packages: [{ name: 'tsx', version: 'latest' }],
-  variables: { NODE_ENV: { description: 'mode', required: false } },
-  hostingMode: 'cloud',
-  networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-  mcpPolicy: {},
-  packageManagerPolicy: {},
-  resourceLimits: { memoryMb: 1024 },
-  runtimeConfig: { image: 'node:24' },
-  metadata: {},
-  archivedAt: null,
-  currentVersionId: 'envver_1',
-  version: 1,
-  createdAt: '2026-05-23T00:00:00.000Z',
-  updatedAt: '2026-05-23T00:00:00.000Z',
-}
+const environmentFixture = environment()
 
-const agentFixture = {
-  id: 'agent_1',
-  projectId: 'project_1',
-  name: 'Coding agent',
-  description: 'Runs work',
-  instructions: 'Do the work',
-  providerId: 'workers-ai',
-  model: '@cf/moonshotai/kimi-k2.6',
-  skills: ['ama@coding-agent'],
-  subagents: [],
-  role: null,
-  capabilityTags: [],
-  handoffPolicy: {},
-  memoryPolicy: { enabled: false },
-  tools: [
-    { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-    { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-  ],
-  mcpConnectors: [],
-  metadata: {},
-  archivedAt: null,
-  currentVersionId: 'agentver_1',
-  version: 1,
-  createdAt: '2026-05-23T00:00:00.000Z',
-  updatedAt: '2026-05-23T00:00:00.000Z',
-}
+const agentFixture = agent()
 
 const sessionFixture = session({ id: 'session_1', environmentSnapshot: null })

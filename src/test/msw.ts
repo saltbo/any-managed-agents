@@ -8,7 +8,13 @@ import { setupServer } from 'msw/node'
 // a create's post-mutation refetch converges instead of flapping on a fixed body.
 export const server = setupServer()
 
-export interface Collection<T extends { id: string }> {
+type CollectionItem = { id: string } | { metadata: { uid: string } }
+
+function recordId(record: CollectionItem) {
+  return 'id' in record ? record.id : record.metadata.uid
+}
+
+export interface Collection<T extends CollectionItem> {
   readonly items: Map<string, T>
   list(): T[]
   get(id: string): T | undefined
@@ -17,14 +23,14 @@ export interface Collection<T extends { id: string }> {
   reset(): void
 }
 
-export function createCollection<T extends { id: string }>(seed: T[] = []): Collection<T> {
-  const items = new Map<string, T>(seed.map((record) => [record.id, record]))
+export function createCollection<T extends CollectionItem>(seed: T[] = []): Collection<T> {
+  const items = new Map<string, T>(seed.map((record) => [recordId(record), record]))
   return {
     items,
     list: () => [...items.values()],
     get: (id) => items.get(id),
     put: (record) => {
-      items.set(record.id, record)
+      items.set(recordId(record), record)
       return record
     },
     remove: (id) => {
@@ -44,7 +50,7 @@ const notFound = () => HttpResponse.json({ error: { type: 'not_found', message: 
 // Standard REST handlers for a top-level collection that serves the canonical
 // `{ data, pagination }` list envelope. `make` builds the stored record from a
 // POST body (so created rows carry server-shaped fields the UI reads back).
-export function resourceHandlers<T extends { id: string }>(
+export function resourceHandlers<T extends CollectionItem>(
   path: string,
   collection: Collection<T>,
   make: (body: Record<string, unknown>, index: number) => T,

@@ -71,8 +71,8 @@ export function CreateSessionSheet({
     const activeAgent = agents.find((agent) => !isArchived(agent))
     const activeEnvironment = environments.find((environment) => !isArchived(environment))
     setForm((current) => {
-      const nextAgentId = agentId || current.agentId || activeAgent?.id || ''
-      const nextEnvironmentId = current.environmentId || activeEnvironment?.id || ''
+      const nextAgentId = agentId || current.agentId || activeAgent?.metadata.uid || ''
+      const nextEnvironmentId = current.environmentId || activeEnvironment?.metadata.uid || ''
       if (current.agentId === nextAgentId && current.environmentId === nextEnvironmentId) {
         return current
       }

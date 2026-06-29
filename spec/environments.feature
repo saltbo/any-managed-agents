@@ -56,12 +56,12 @@ Feature: Environments
     And secret references are returned only as safe names and references
     And invalid network, MCP, package, host-pattern, and credential references return field-level details
 
-  @environments/api-pagination @api
-  Scenario: List environments with pagination, filters, and tenant scope
-    Given a project has active and archived environments created across multiple dates
-    When the user lists environments with a page size
-    Then the response includes data, hasMore, firstId, and lastId
-    And archived environments are hidden unless includeArchived is true
+	  @environments/api-pagination @api
+	  Scenario: List environments with pagination, filters, and tenant scope
+	    Given a project has active and archived environments created across multiple dates
+	    When the user lists environments with a page size
+	    Then the response includes data and cursor pagination metadata
+	    And archived environments are hidden unless archived filtering is requested
     And created-date filters and project scope are respected
 
   @environments/api-openapi @api

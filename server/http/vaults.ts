@@ -1,11 +1,15 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
+import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
 import {
   CREDENTIAL_STATES,
   CREDENTIAL_TYPES,
+  type Credential,
+  type CredentialVersion,
   credentialDataKeys,
   SECRET_PROVIDERS,
   stripStoredSecretMetadata,
   VAULT_SCOPES,
+  type Vault,
   VERSION_STATES,
 } from '@server/domain/vault'
 import { requireAuth } from '../auth/session'
@@ -18,13 +22,7 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
-import {
-  type CredentialRecord,
-  type CredentialVersionRecord,
-  type VaultRecord,
-  VaultSecretError,
-  VaultVersionReferencedError,
-} from '../usecases/ports'
+import { VaultSecretError, VaultVersionReferencedError } from '../usecases/ports'
 import { createCredential, deleteCredentialVersion, rotateCredential } from '../usecases/vaults'
 import { requestId } from './request-context'
 
@@ -37,56 +35,68 @@ const CredentialTypeSchema = z.enum(CREDENTIAL_TYPES)
 
 const VaultSchema = z
   .object({
-    id: z.string().openapi({ example: 'vault_abc123' }),
-    projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
-    name: z.string().openapi({ example: 'Provider credentials' }),
-    description: z.string().nullable().openapi({ example: 'Credentials used by runtime sessions.' }),
-    scope: z.enum(VAULT_SCOPES).openapi({ example: 'project' }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
+    metadata: ResourceMetadataSchema,
+    spec: z
+      .object({
+        organizationId: z.string().openapi({ example: 'org_abc123' }),
+        scope: z.enum(VAULT_SCOPES).openapi({ example: 'project' }),
+        metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
+      })
+      .openapi('VaultSpec'),
+    status: z.object({ phase: ResourcePhaseSchema }).openapi('VaultStatus'),
   })
   .openapi('Vault')
 
 const CredentialVersionSchema = z
   .object({
-    id: z.string().openapi({ example: 'vaultver_abc123' }),
-    credentialId: z.string().openapi({ example: 'vaultcred_abc123' }),
-    vaultId: z.string().openapi({ example: 'vault_abc123' }),
-    projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
-    version: z.number().int().openapi({ example: 2 }),
-    provider: SecretProviderSchema.openapi({ example: 'ama' }),
-    secretRef: z
-      .string()
-      .openapi({ example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123' }),
-    referenceName: z.string().openapi({ example: 'AMA_PROJECT_ABC123_TOKEN_V2' }),
-    state: z.enum(VERSION_STATES).openapi({ example: 'active' }),
-    hasSecret: z.boolean().openapi({ example: true }),
-    dataKeys: z.array(z.string()).openapi({ example: ['token'] }),
-    metadata: VaultJsonObjectSchema.openapi({ example: { rotatedBy: 'operator' } }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
-    supersededAt: z.string().datetime().nullable().openapi({ example: '2026-05-24T01:00:00.000Z' }),
-    revokedAt: z.string().datetime().nullable().openapi({ example: null }),
+    metadata: ResourceMetadataSchema,
+    spec: z
+      .object({
+        credentialId: z.string().openapi({ example: 'vaultcred_abc123' }),
+        vaultId: z.string().openapi({ example: 'vault_abc123' }),
+        organizationId: z.string().openapi({ example: 'org_abc123' }),
+        version: z.number().int().openapi({ example: 2 }),
+        provider: SecretProviderSchema.openapi({ example: 'ama' }),
+        secretRef: z
+          .string()
+          .openapi({ example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123' }),
+        referenceName: z.string().openapi({ example: 'AMA_PROJECT_ABC123_TOKEN_V2' }),
+        hasSecret: z.boolean().openapi({ example: true }),
+        dataKeys: z.array(z.string()).openapi({ example: ['token'] }),
+        metadata: VaultJsonObjectSchema.openapi({ example: { rotatedBy: 'operator' } }),
+      })
+      .openapi('VaultCredentialVersionSpec'),
+    status: z
+      .object({
+        phase: z.enum(VERSION_STATES).openapi({ example: 'active' }),
+        supersededAt: z.string().datetime().nullable().openapi({ example: '2026-05-24T01:00:00.000Z' }),
+        revokedAt: z.string().datetime().nullable().openapi({ example: null }),
+      })
+      .openapi('VaultCredentialVersionStatus'),
   })
   .openapi('VaultCredentialVersion')
 
 const CredentialSchema = z
   .object({
-    id: z.string().openapi({ example: 'vaultcred_abc123' }),
-    vaultId: z.string().openapi({ example: 'vault_abc123' }),
-    projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
-    name: z.string().openapi({ example: 'Workers AI token' }),
-    type: CredentialTypeSchema.openapi({ example: 'opaque' }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    state: z.enum(CREDENTIAL_STATES).openapi({ example: 'active' }),
-    activeVersionId: z.string().nullable().openapi({ example: 'vaultver_abc123' }),
-    activeVersion: CredentialVersionSchema.nullable(),
-    revokedAt: z.string().datetime().nullable().openapi({ example: null }),
-    revokedByUserId: z.string().nullable().openapi({ example: null }),
-    revokeReason: z.string().nullable().openapi({ example: null }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
+    metadata: ResourceMetadataSchema,
+    spec: z
+      .object({
+        vaultId: z.string().openapi({ example: 'vault_abc123' }),
+        organizationId: z.string().openapi({ example: 'org_abc123' }),
+        type: CredentialTypeSchema.openapi({ example: 'opaque' }),
+        metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
+      })
+      .openapi('VaultCredentialSpec'),
+    status: z
+      .object({
+        phase: z.enum(CREDENTIAL_STATES).openapi({ example: 'active' }),
+        activeVersionId: z.string().nullable().openapi({ example: 'vaultver_abc123' }),
+        activeVersion: CredentialVersionSchema.nullable(),
+        revokedAt: z.string().datetime().nullable().openapi({ example: null }),
+        revokedByUserId: z.string().nullable().openapi({ example: null }),
+        revokeReason: z.string().nullable().openapi({ example: null }),
+      })
+      .openapi('VaultCredentialStatus'),
   })
   .openapi('VaultCredential')
 
@@ -174,59 +184,28 @@ function domainValidation(message: string, fields: Record<string, string>) {
   return { error: { type: 'validation_error', message, details: { fields } } } as const
 }
 
-function serializeVault(record: VaultRecord) {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    name: record.name,
-    description: record.description,
-    scope: record.scope,
-    metadata: record.metadata,
-    archivedAt: record.archivedAt,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  }
+function serializeVault(record: Vault) {
+  return record
 }
 
 // Stored secret material (ciphertext, legacy local values) lives only in the
 // version record metadata. It must never leave through API responses or audit
 // snapshots.
-function serializeVersion(record: CredentialVersionRecord) {
+function serializeVersion(record: CredentialVersion) {
   return {
-    id: record.id,
-    credentialId: record.credentialId,
-    vaultId: record.vaultId,
-    projectId: record.projectId,
-    version: record.version,
-    provider: record.provider,
-    secretRef: record.secretRef,
-    referenceName: record.referenceName,
-    state: record.state,
-    hasSecret: record.hasSecret,
-    dataKeys: credentialDataKeys(record.metadata),
-    metadata: stripStoredSecretMetadata(record.metadata),
-    createdAt: record.createdAt,
-    supersededAt: record.supersededAt,
-    revokedAt: record.revokedAt,
+    ...record,
+    spec: {
+      ...record.spec,
+      dataKeys: credentialDataKeys(record.spec.metadata),
+      metadata: stripStoredSecretMetadata(record.spec.metadata),
+    },
   }
 }
 
-function serializeCredential(record: CredentialRecord, activeVersion: CredentialVersionRecord | null) {
+function serializeCredential(record: Credential, activeVersion: CredentialVersion | null) {
   return {
-    id: record.id,
-    vaultId: record.vaultId,
-    projectId: record.projectId,
-    name: record.name,
-    type: record.type,
-    metadata: record.metadata,
-    state: record.state,
-    activeVersionId: record.activeVersionId,
-    activeVersion: activeVersion ? serializeVersion(activeVersion) : null,
-    revokedAt: record.revokedAt,
-    revokedByUserId: record.revokedByUserId,
-    revokeReason: record.revokeReason,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
+    ...record,
+    status: { ...record.status, activeVersion: activeVersion ? serializeVersion(activeVersion) : null },
   }
 }
 
@@ -477,7 +456,8 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         { data: page.rows.map(serializeVault), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
@@ -506,7 +486,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       await deps.audit.record(auth, {
         action: 'vault.create',
         resourceType: 'vault',
-        resourceId: vault.id,
+        resourceId: vault.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
         after: serialized,
@@ -538,8 +518,8 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       if (!vault) {
         return vaultNotFound(c)
       }
-      const scope = body.scope ?? vault.scope
-      if (scope !== vault.scope && (await deps.vaults.hasCredentials(vault.id))) {
+      const scope = body.scope ?? vault.spec.scope
+      if (scope !== vault.spec.scope && (await deps.vaults.hasCredentials(vault.metadata.uid))) {
         return c.json(
           { error: { type: 'conflict', message: 'Vault scope cannot change after credentials exist' } },
           409,
@@ -547,21 +527,37 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       }
       const timestamp = new Date().toISOString()
       const archivedAt =
-        body.archived === true ? (vault.archivedAt ?? timestamp) : body.archived === false ? null : vault.archivedAt
+        body.archived === true
+          ? (vault.metadata.archivedAt ?? timestamp)
+          : body.archived === false
+            ? null
+            : vault.metadata.archivedAt
       const fields = {
-        name: body.name ?? vault.name,
-        description: body.description ?? vault.description,
+        name: body.name ?? vault.metadata.name,
+        description: body.description ?? vault.metadata.description,
         scope,
         projectId: scope === 'project' ? auth.project.id : null,
-        metadata: body.metadata ?? vault.metadata,
+        metadata: body.metadata ?? vault.spec.metadata,
         archivedAt,
       }
-      await deps.vaults.update(vault.id, fields, timestamp)
-      const serialized = serializeVault({ ...vault, ...fields, updatedAt: timestamp })
+      await deps.vaults.update(vault.metadata.uid, fields, timestamp)
+      const serialized = serializeVault({
+        ...vault,
+        metadata: {
+          ...vault.metadata,
+          pid: fields.projectId,
+          name: fields.name,
+          description: fields.description,
+          archivedAt: fields.archivedAt,
+          updatedAt: timestamp,
+        },
+        spec: { ...vault.spec, scope: fields.scope, metadata: fields.metadata },
+        status: { phase: fields.archivedAt ? 'archived' : 'active' },
+      })
       await deps.audit.record(auth, {
-        action: body.archived === true && vault.archivedAt === null ? 'vault.archive' : 'vault.update',
+        action: body.archived === true && vault.metadata.archivedAt === null ? 'vault.archive' : 'vault.update',
         resourceType: 'vault',
-        resourceId: vault.id,
+        resourceId: vault.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
         before: serializeVault(vault),
@@ -588,7 +584,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
       }
       const page = await deps.vaults.listCredentials({
-        vaultId: vault.id,
+        vaultId: vault.metadata.uid,
         ...(state ? { state } : {}),
         ...(search ? { search } : {}),
         ...(createdFrom ? { createdFrom } : {}),
@@ -600,7 +596,8 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         page.rows.map(async (row) => serializeCredential(row, await deps.vaults.activeVersion(row))),
       )
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json({ data, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
     })
     .openapi(createCredentialRoute, async (c) => {
@@ -615,7 +612,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       if (!vault) {
         return vaultNotFound(c)
       }
-      if (vault.archivedAt !== null) {
+      if (vault.metadata.archivedAt !== null) {
         return c.json({ error: { type: 'conflict', message: 'Vault is archived' } }, 409)
       }
       let result: Awaited<ReturnType<typeof createCredential>>
@@ -633,10 +630,10 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       await deps.audit.record(auth, {
         action: 'vault_credential.create',
         resourceType: 'vault_credential',
-        resourceId: result.credential.id,
+        resourceId: result.credential.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        metadata: { vaultId: vault.id },
+        metadata: { vaultId: vault.metadata.uid },
         after: serialized,
       })
       return c.json(serialized, 201)
@@ -649,7 +646,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return auth
       }
       const vault = await deps.vaults.find(vaultId, visibility(auth))
-      const credential = vault ? await deps.vaults.findCredential(vault.id, credentialId) : null
+      const credential = vault ? await deps.vaults.findCredential(vault.metadata.uid, credentialId) : null
       if (!vault || !credential) {
         return credentialNotFound(c)
       }
@@ -664,32 +661,43 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return auth
       }
       const vault = await deps.vaults.find(vaultId, visibility(auth))
-      const credential = vault ? await deps.vaults.findCredential(vault.id, credentialId) : null
+      const credential = vault ? await deps.vaults.findCredential(vault.metadata.uid, credentialId) : null
       if (!vault || !credential) {
         return credentialNotFound(c)
       }
       const timestamp = new Date().toISOString()
       const revoking = body.state === 'revoked'
       const fields = {
-        metadata: body.metadata ?? credential.metadata,
-        state: body.state ?? credential.state,
-        activeVersionId: revoking ? null : credential.activeVersionId,
-        revokedAt: revoking ? timestamp : credential.revokedAt,
-        revokedByUserId: revoking ? auth.user.id : credential.revokedByUserId,
-        revokeReason: revoking ? (body.revokeReason ?? null) : credential.revokeReason,
+        metadata: body.metadata ?? credential.spec.metadata,
+        state: body.state ?? credential.status.phase,
+        activeVersionId: revoking ? null : credential.status.activeVersionId,
+        revokedAt: revoking ? timestamp : credential.status.revokedAt,
+        revokedByUserId: revoking ? auth.user.id : credential.status.revokedByUserId,
+        revokeReason: revoking ? (body.revokeReason ?? null) : credential.status.revokeReason,
       }
       const before = serializeCredential(credential, await deps.vaults.activeVersion(credential))
-      await deps.vaults.updateCredential(credential.id, fields, timestamp, revoking, timestamp)
-      const updated = { ...credential, ...fields, updatedAt: timestamp }
+      await deps.vaults.updateCredential(credential.metadata.uid, fields, timestamp, revoking, timestamp)
+      const updated: Credential = {
+        ...credential,
+        metadata: { ...credential.metadata, updatedAt: timestamp },
+        spec: { ...credential.spec, metadata: fields.metadata },
+        status: {
+          phase: fields.state,
+          activeVersionId: fields.activeVersionId,
+          revokedAt: fields.revokedAt,
+          revokedByUserId: fields.revokedByUserId,
+          revokeReason: fields.revokeReason,
+        },
+      }
       const serializedActiveVersion = revoking ? null : await deps.vaults.activeVersion(updated)
       const serialized = serializeCredential(updated, serializedActiveVersion)
       await deps.audit.record(auth, {
         action: revoking ? 'vault_credential.revoke' : 'vault_credential.update',
         resourceType: 'vault_credential',
-        resourceId: credential.id,
+        resourceId: credential.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        metadata: { vaultId: vault.id },
+        metadata: { vaultId: vault.metadata.uid },
         before,
         after: serialized,
       })
@@ -704,7 +712,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return auth
       }
       const vault = await deps.vaults.find(vaultId, visibility(auth))
-      const credential = vault ? await deps.vaults.findCredential(vault.id, credentialId) : null
+      const credential = vault ? await deps.vaults.findCredential(vault.metadata.uid, credentialId) : null
       if (!vault || !credential) {
         return credentialNotFound(c)
       }
@@ -715,7 +723,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
       }
       const page = await deps.vaults.listVersions({
-        credentialId: credential.id,
+        credentialId: credential.metadata.uid,
         ...(state ? { state } : {}),
         ...(createdFrom ? { createdFrom } : {}),
         ...(createdTo ? { createdTo } : {}),
@@ -723,7 +731,8 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         { data: page.rows.map(serializeVersion), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
@@ -738,11 +747,11 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return auth
       }
       const vault = await deps.vaults.find(vaultId, visibility(auth))
-      const credential = vault ? await deps.vaults.findCredential(vault.id, credentialId) : null
+      const credential = vault ? await deps.vaults.findCredential(vault.metadata.uid, credentialId) : null
       if (!vault || !credential) {
         return credentialNotFound(c)
       }
-      if (vault.archivedAt !== null || credential.state !== 'active') {
+      if (vault.metadata.archivedAt !== null || credential.status.phase !== 'active') {
         return c.json({ error: { type: 'conflict', message: 'Credential is not active' } }, 409)
       }
       const before = serializeCredential(credential, await deps.vaults.activeVersion(credential))
@@ -756,10 +765,10 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       await deps.audit.record(auth, {
         action: 'vault_credential.rotate',
         resourceType: 'vault_credential',
-        resourceId: credential.id,
+        resourceId: credential.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        metadata: { vaultId: vault.id, versionId: result.version.id },
+        metadata: { vaultId: vault.metadata.uid, versionId: result.version.metadata.uid },
         before,
         after: serialized,
       })
@@ -773,8 +782,8 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return auth
       }
       const vault = await deps.vaults.find(vaultId, visibility(auth))
-      const credential = vault ? await deps.vaults.findCredential(vault.id, credentialId) : null
-      const version = credential ? await deps.vaults.findVersion(credential.id, versionId) : null
+      const credential = vault ? await deps.vaults.findCredential(vault.metadata.uid, credentialId) : null
+      const version = credential ? await deps.vaults.findVersion(credential.metadata.uid, versionId) : null
       if (!vault || !credential || !version) {
         return versionNotFound(c)
       }
@@ -788,8 +797,8 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         return auth
       }
       const vault = await deps.vaults.find(vaultId, visibility(auth))
-      const credential = vault ? await deps.vaults.findCredential(vault.id, credentialId) : null
-      const version = credential ? await deps.vaults.findVersion(credential.id, versionId) : null
+      const credential = vault ? await deps.vaults.findCredential(vault.metadata.uid, credentialId) : null
+      const version = credential ? await deps.vaults.findVersion(credential.metadata.uid, versionId) : null
       if (!vault || !credential || !version) {
         return versionNotFound(c)
       }
@@ -804,10 +813,10 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       await deps.audit.record(auth, {
         action: 'vault_credential_version.delete',
         resourceType: 'vault_credential_version',
-        resourceId: version.id,
+        resourceId: version.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        metadata: { vaultId: vault.id, credentialId: credential.id },
+        metadata: { vaultId: vault.metadata.uid, credentialId: credential.metadata.uid },
         before: serializeVersion(version),
       })
       return c.body(null, 204)

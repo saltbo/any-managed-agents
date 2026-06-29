@@ -46,11 +46,11 @@ Feature: Triggers
 
   @triggers/api-crud @api
   Scenario: Create, list, read, update, pause, archive, restore, and audit triggers over the API
-    Given a signed-in user with an active agent and environment
-    When the user drives the triggers API end to end
-    Then create, paginated list, search, enabled filter, read, update, archive, and restore are supported
-    And trigger create, update, and archive actions are recorded in audit history
-    And triggers never expose status or tenancy fields
+	    Given a signed-in user with an active agent and environment
+	    When the user drives the triggers API end to end
+	    Then create, paginated list, search, enabled filter, read, update, archive, and restore are supported
+	    And trigger create, update, and archive actions are recorded in audit history
+	    And triggers expose safe metadata, spec, and status without raw tenancy fields
 
   @triggers/dispatch @api
   Scenario: Heartbeat dispatch creates one scheduled session per due occurrence

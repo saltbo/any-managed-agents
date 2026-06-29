@@ -5,6 +5,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { useClientPagination } from '@/console/use-client-pagination'
 import type { AuditRecord, Vault, VaultCredential } from '@/lib/api'
 import { createCollection, HttpResponse, http, server } from '@/test/msw'
+import {
+  credential as resourceCredential,
+  vault as resourceVault,
+  type VaultCredentialOverrides,
+  type VaultOverrides,
+  vaultCredentialVersion,
+} from '@/test/resource-fixtures'
 import { AddCredentialSheet } from './AddCredentialSheet'
 import { CreateVaultSheet } from './CreateVaultSheet'
 import { RotateCredentialSheet } from './RotateCredentialSheet'
@@ -35,55 +42,27 @@ function pagination<T>(items: T[]) {
   }
 }
 
-function vault(overrides: Partial<Vault> = {}): Vault {
-  return {
-    id: 'vault_1',
-    projectId: 'project_1',
-    name: 'Provider credentials',
-    description: 'Model provider tokens',
-    scope: 'project',
-    metadata: {},
-    archivedAt: null,
+function vault(overrides: VaultOverrides = {}): Vault {
+  return resourceVault({
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
-function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
-  return {
-    id: 'vaultcred_1',
-    vaultId: 'vault_1',
-    projectId: 'project_1',
-    name: 'OpenAI key',
-    type: 'opaque',
-    metadata: {},
-    state: 'active',
-    activeVersionId: 'vaultver_1',
-    activeVersion: {
+function credential(overrides: VaultCredentialOverrides = {}): VaultCredential {
+  return resourceCredential({
+    activeVersion: vaultCredentialVersion({
       id: 'vaultver_1',
-      credentialId: 'vaultcred_1',
-      vaultId: 'vault_1',
-      projectId: 'project_1',
       version: 2,
-      provider: 'ama',
       secretRef: 'ama://vaults/vault_1/credentials/vaultcred_1/versions/vaultver_2',
       referenceName: 'AMA_VAULTCRED_1_V2',
-      state: 'active',
-      hasSecret: true,
-      dataKeys: ['value'],
-      metadata: {},
       createdAt: '2026-05-23T00:00:00.000Z',
-      supersededAt: null,
-      revokedAt: null,
-    },
-    revokedAt: null,
-    revokedByUserId: null,
-    revokeReason: null,
+    }),
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function auditRecord(overrides: Partial<AuditRecord> = {}): AuditRecord {
@@ -199,8 +178,8 @@ describe('[spec: vaults/console-list] VaultsView', () => {
     expect(screen.getByText('organization')).toBeInTheDocument()
   })
 
-  it('shows Organization in project cell when projectId is null', () => {
-    const vaults = [vault({ projectId: null })]
+  it('shows Organization in project cell when project metadata has no project id', () => {
+    const vaults = [vault({ pid: null })]
     render(
       <MemoryRouter>
         <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={vi.fn()} />
@@ -490,7 +469,7 @@ describe('[spec: vaults/console-list] VaultDetailView', () => {
   })
 
   it('does not show rotate/revoke buttons for revoked credential', () => {
-    const cred = credential({ state: 'revoked' })
+    const cred = credential({ phase: 'revoked' })
     render(
       <MemoryRouter>
         <VaultDetailView
@@ -1194,7 +1173,10 @@ describe('[spec: vaults/console-detail-page] VaultDetailPage', () => {
       http.patch('*/api/v1/vaults/:vaultId/credentials/:credentialId', ({ params }) => {
         const cred = credentials.get(String(params.credentialId))
         if (!cred) return HttpResponse.json({ error: 'not found' }, { status: 404 })
-        const revoked: VaultCredential = { ...cred, state: 'revoked', revokedAt: new Date().toISOString() }
+        const revoked: VaultCredential = {
+          ...cred,
+          status: { ...cred.status, phase: 'revoked', revokedAt: new Date().toISOString() },
+        }
         credentials.put(revoked)
         return HttpResponse.json(revoked)
       }),
@@ -1265,7 +1247,7 @@ describe('[spec: vaults/console-detail-page] VaultDetailPage', () => {
     await waitFor(() => expect(screen.getByText('Revoke credential?')).toBeInTheDocument())
     const confirmBtns = screen.getAllByRole('button', { name: 'Revoke credential', hidden: true })
     fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
-    await waitFor(() => expect(credentials.get('vaultcred_1')?.state).toBe('revoked'))
+    await waitFor(() => expect(credentials.get('vaultcred_1')?.status.phase).toBe('revoked'))
   })
 
   it('closes RotateCredentialSheet after successful rotation', async () => {

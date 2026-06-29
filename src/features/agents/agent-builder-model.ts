@@ -210,18 +210,18 @@ export function apiErrorToBuilder(error: unknown): { errors: BuilderFieldErrors;
 
 export function agentApiExamples(origin: string, agent: Agent) {
   const body = JSON.stringify({
-    name: agent.name,
-    ...(agent.description ? { description: agent.description } : {}),
-    ...(agent.instructions ? { instructions: agent.instructions } : {}),
-    providerId: agent.providerId,
-    model: agent.model,
-    skills: agent.skills,
-    tools: agent.tools.map((tool) => ({ name: tool.name })),
-    mcpConnectors: agent.mcpConnectors,
-    ...(agent.role ? { role: agent.role } : {}),
-    capabilityTags: agent.capabilityTags,
-    handoffPolicy: agent.handoffPolicy,
-    memoryPolicy: agent.memoryPolicy,
+    name: agent.metadata.name,
+    ...(agent.metadata.description ? { description: agent.metadata.description } : {}),
+    ...(agent.spec.instructions ? { instructions: agent.spec.instructions } : {}),
+    providerId: agent.spec.providerId,
+    model: agent.spec.model,
+    skills: agent.spec.skills,
+    tools: agent.spec.tools.map((tool) => ({ name: tool.name })),
+    mcpConnectors: agent.spec.mcpConnectors,
+    ...(agent.spec.role ? { role: agent.spec.role } : {}),
+    capabilityTags: agent.spec.capabilityTags,
+    handoffPolicy: agent.spec.handoffPolicy,
+    memoryPolicy: agent.spec.memoryPolicy,
   })
   const curl = [
     `curl -X POST "${origin}/api/v1/agents" \\`,
@@ -231,7 +231,7 @@ export function agentApiExamples(origin: string, agent: Agent) {
   ].join('\n')
   const restish = [
     `printf '%s\\n' '${body}' | restish post ${origin}/api/v1/agents -H "Authorization: Bearer $AMA_ACCESS_TOKEN"`,
-    `restish get ${origin}/api/v1/agents/${agent.id} -H "Authorization: Bearer $AMA_ACCESS_TOKEN"`,
+    `restish get ${origin}/api/v1/agents/${agent.metadata.uid} -H "Authorization: Bearer $AMA_ACCESS_TOKEN"`,
   ].join('\n')
   return { curl, restish }
 }

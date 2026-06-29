@@ -7,6 +7,14 @@ import type { ClientPagination } from '@/console/use-client-pagination'
 import { useClientPagination } from '@/console/use-client-pagination'
 import type { Agent, Environment, Trigger } from '@/lib/api'
 import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
+import {
+  type AgentOverrides,
+  type EnvironmentOverrides,
+  agent as resourceAgent,
+  environment as resourceEnvironment,
+  trigger as resourceTrigger,
+  type TriggerOverrides,
+} from '@/test/resource-fixtures'
 import { CreateTriggerSheet } from './CreateTriggerSheet'
 import { TriggersPage } from './TriggersPage'
 import { formatInterval, TriggersView } from './TriggersView'
@@ -14,32 +22,12 @@ import { useTriggerActions } from './use-trigger-actions'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-function trigger(overrides: Partial<Trigger> = {}): Trigger {
-  return {
-    id: 'trigger_1',
-    projectId: 'project_1',
-    type: 'scheduled',
-    agentId: 'agent_1',
-    environmentId: 'env_1',
-    runtime: 'codex',
-    name: 'Daily research heartbeat',
-    promptTemplate: 'Research current offers.',
-    env: {},
-    envFrom: [],
-    volumes: [],
-    volumeMounts: [],
-    schedule: { type: 'interval', intervalSeconds: 86400, windowSeconds: 0 },
-    enabled: true,
-    nextDueAt: '2026-06-19T12:00:00.000Z',
-    lastDispatchedAt: '2026-06-18T12:00:00.000Z',
-    lastRunId: 'trigrun_1',
-    metadata: {},
-    createdByUserId: 'user_1',
-    archivedAt: null,
+function trigger(overrides: TriggerOverrides = {}): Trigger {
+  return resourceTrigger({
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-18T12:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function pagination<T>(items: T[]): ClientPagination<T> {
@@ -77,55 +65,23 @@ function listEnvelope<T>(data: T[]) {
   return { data, pagination: { limit: 50, hasMore: false, nextCursor: null } }
 }
 
-function agent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
-    name: 'Coding agent',
-    description: null,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
+function agent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({
     skills: [],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
     tools: [],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-01T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
-function environment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Node workspace',
-    description: null,
-    packages: [],
-    variables: {},
-    hostingMode: 'cloud',
+function environment(overrides: EnvironmentOverrides = {}): Environment {
+  return resourceEnvironment({
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: { memoryMb: 1024 },
-    runtimeConfig: { image: 'node:24' },
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-01T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 // ─── formatInterval ──────────────────────────────────────────────────────────

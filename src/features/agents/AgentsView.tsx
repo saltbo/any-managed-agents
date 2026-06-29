@@ -40,44 +40,46 @@ export function AgentsView({
       </TableHeader>
       <TableBody>
         {agents.map((agent) => (
-          <TableRow key={agent.id}>
+          <TableRow key={agent.metadata.uid}>
             <TableCell className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <Link className="truncate font-medium hover:underline" to={`/agents/${agent.id}`}>
-                  {agent.name}
+                <Link className="truncate font-medium hover:underline" to={`/agents/${agent.metadata.uid}`}>
+                  {agent.metadata.name}
                 </Link>
-                <span className="truncate text-xs text-muted-foreground">{agent.description ?? agent.id}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {agent.metadata.description ?? agent.metadata.uid}
+                </span>
               </div>
             </TableCell>
             <TableCell>
               <div className="flex gap-1">
                 <StatusBadge value={archivedLabel(agent)} />
-                <StatusBadge value={`v${agent.version}`} />
+                <StatusBadge value={`v${agent.status.version}`} />
               </div>
             </TableCell>
-            <TableCell className="max-w-64 truncate">{`${agent.providerId ?? 'None'} / ${agent.model ?? 'None'}`}</TableCell>
-            <TableCell className="max-w-48 truncate">{agent.skills.join(', ') || 'None'}</TableCell>
+            <TableCell className="max-w-64 truncate">{`${agent.spec.providerId ?? 'None'} / ${agent.spec.model ?? 'None'}`}</TableCell>
+            <TableCell className="max-w-48 truncate">{agent.spec.skills.join(', ') || 'None'}</TableCell>
             <TableCell className="max-w-48 truncate">
-              {agent.tools.map((tool) => tool.name).join(', ') || 'None'}
+              {agent.spec.tools.map((tool) => tool.name).join(', ') || 'None'}
             </TableCell>
-            <TableCell>{formatDate(agent.updatedAt)}</TableCell>
+            <TableCell>{formatDate(agent.metadata.updatedAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
-                  onClick={() => onCreateSession(agent.id)}
+                  onClick={() => onCreateSession(agent.metadata.uid)}
                   aria-label="Create session"
                 >
                   <Play data-icon="inline-start" />
                 </Button>
                 <ConfirmAction
                   title="Archive agent?"
-                  description={`Archive ${agent.name}. Existing active sessions are not deleted, but this agent will leave the active list.`}
+                  description={`Archive ${agent.metadata.name}. Existing active sessions are not deleted, but this agent will leave the active list.`}
                   confirmLabel="Archive agent"
                   destructive
-                  onConfirm={() => onArchive(agent.id)}
+                  onConfirm={() => onArchive(agent.metadata.uid)}
                 >
                   <Button type="button" variant="outline" size="icon" aria-label="Archive agent">
                     <Archive data-icon="inline-start" />

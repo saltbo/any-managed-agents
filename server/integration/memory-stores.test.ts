@@ -25,47 +25,68 @@ describe('[CF] /api/v1/memory-stores', () => {
       body: JSON.stringify({ name: 'Team memory', description: 'Review conventions' }),
     })
     expect(createRes.status).toBe(201)
-    const store = (await createRes.json()) as { id: string; name: string; description: string }
-    expect(store).toMatchObject({ name: 'Team memory', description: 'Review conventions' })
+    const store = (await createRes.json()) as {
+      metadata: { uid: string; name: string; description: string | null; archivedAt: string | null }
+      spec: { metadata: Record<string, unknown> }
+      status: { phase: string }
+    }
+    expect(store).toMatchObject({
+      metadata: { name: 'Team memory', description: 'Review conventions', archivedAt: null },
+      spec: { metadata: {} },
+      status: { phase: 'active' },
+    })
 
-    const memoryRes = await jsonFetch(`/api/v1/memory-stores/${store.id}/memories`, authorization, {
+    const memoryRes = await jsonFetch(`/api/v1/memory-stores/${store.metadata.uid}/memories`, authorization, {
       method: 'POST',
       body: JSON.stringify({ path: 'guides/review.md', content: 'Review for correctness first.' }),
     })
     expect(memoryRes.status).toBe(201)
-    const memory = (await memoryRes.json()) as { id: string; path: string; content: string }
-    expect(memory).toMatchObject({ path: 'guides/review.md', content: 'Review for correctness first.' })
+    const memory = (await memoryRes.json()) as {
+      metadata: { uid: string }
+      spec: { path: string; content: string }
+      status: { phase: string }
+    }
+    expect(memory).toMatchObject({
+      spec: { path: 'guides/review.md', content: 'Review for correctness first.' },
+      status: { phase: 'active' },
+    })
 
-    const duplicateRes = await jsonFetch(`/api/v1/memory-stores/${store.id}/memories`, authorization, {
+    const duplicateRes = await jsonFetch(`/api/v1/memory-stores/${store.metadata.uid}/memories`, authorization, {
       method: 'POST',
       body: JSON.stringify({ path: 'guides/review.md', content: 'Duplicate' }),
     })
     expect(duplicateRes.status).toBe(409)
 
-    const unsafeRes = await jsonFetch(`/api/v1/memory-stores/${store.id}/memories`, authorization, {
+    const unsafeRes = await jsonFetch(`/api/v1/memory-stores/${store.metadata.uid}/memories`, authorization, {
       method: 'POST',
       body: JSON.stringify({ path: '../escape.md', content: 'Invalid' }),
     })
     expect(unsafeRes.status).toBe(400)
 
-    const updateRes = await jsonFetch(`/api/v1/memory-stores/${store.id}/memories/${memory.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ path: 'guides/updated.md', content: 'Updated content.' }),
-    })
+    const updateRes = await jsonFetch(
+      `/api/v1/memory-stores/${store.metadata.uid}/memories/${memory.metadata.uid}`,
+      authorization,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ path: 'guides/updated.md', content: 'Updated content.' }),
+      },
+    )
     expect(updateRes.status).toBe(200)
-    await expect(updateRes.json()).resolves.toMatchObject({ path: 'guides/updated.md', content: 'Updated content.' })
+    await expect(updateRes.json()).resolves.toMatchObject({
+      spec: { path: 'guides/updated.md', content: 'Updated content.' },
+    })
 
-    const listRes = await jsonFetch(`/api/v1/memory-stores/${store.id}/memories`, authorization)
+    const listRes = await jsonFetch(`/api/v1/memory-stores/${store.metadata.uid}/memories`, authorization)
     expect(listRes.status).toBe(200)
     await expect(listRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ path: 'guides/updated.md' })],
+      data: [expect.objectContaining({ spec: expect.objectContaining({ path: 'guides/updated.md' }) })],
     })
 
-    const archiveRes = await jsonFetch(`/api/v1/memory-stores/${store.id}`, authorization, {
+    const archiveRes = await jsonFetch(`/api/v1/memory-stores/${store.metadata.uid}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ archived: true }),
     })
     expect(archiveRes.status).toBe(200)
-    await expect(archiveRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
+    await expect(archiveRes.json()).resolves.toMatchObject({ metadata: { archivedAt: expect.any(String) } })
   })
 })

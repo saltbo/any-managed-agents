@@ -9,10 +9,11 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from typing import cast
-import datetime
 
 if TYPE_CHECKING:
-  from ..models.memory_store_memory_metadata import MemoryStoreMemoryMetadata
+  from ..models.memory_store_memory_spec import MemoryStoreMemorySpec
+  from ..models.memory_store_memory_status import MemoryStoreMemoryStatus
+  from ..models.resource_metadata import ResourceMetadata
 
 
 
@@ -26,24 +27,14 @@ T = TypeVar("T", bound="MemoryStoreMemory")
 class MemoryStoreMemory:
     """ 
         Attributes:
-            id (str):  Example: memory_abc123.
-            store_id (str):  Example: memstore_abc123.
-            project_id (str):  Example: project_abc123.
-            path (str):  Example: guides/review.md.
-            content (str):  Example: Review for correctness first..
-            metadata (MemoryStoreMemoryMetadata):
-            created_at (datetime.datetime):  Example: 2026-06-25T00:00:00.000Z.
-            updated_at (datetime.datetime):  Example: 2026-06-25T00:00:00.000Z.
+            metadata (ResourceMetadata):
+            spec (MemoryStoreMemorySpec):
+            status (MemoryStoreMemoryStatus):
      """
 
-    id: str
-    store_id: str
-    project_id: str
-    path: str
-    content: str
-    metadata: MemoryStoreMemoryMetadata
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    metadata: ResourceMetadata
+    spec: MemoryStoreMemorySpec
+    status: MemoryStoreMemoryStatus
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -51,35 +42,22 @@ class MemoryStoreMemory:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.memory_store_memory_metadata import MemoryStoreMemoryMetadata
-        id = self.id
-
-        store_id = self.store_id
-
-        project_id = self.project_id
-
-        path = self.path
-
-        content = self.content
-
+        from ..models.memory_store_memory_spec import MemoryStoreMemorySpec
+        from ..models.memory_store_memory_status import MemoryStoreMemoryStatus
+        from ..models.resource_metadata import ResourceMetadata
         metadata = self.metadata.to_dict()
 
-        created_at = self.created_at.isoformat()
+        spec = self.spec.to_dict()
 
-        updated_at = self.updated_at.isoformat()
+        status = self.status.to_dict()
 
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
-            "id": id,
-            "storeId": store_id,
-            "projectId": project_id,
-            "path": path,
-            "content": content,
             "metadata": metadata,
-            "createdAt": created_at,
-            "updatedAt": updated_at,
+            "spec": spec,
+            "status": status,
         })
 
         return field_dict
@@ -88,42 +66,29 @@ class MemoryStoreMemory:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.memory_store_memory_metadata import MemoryStoreMemoryMetadata
+        from ..models.memory_store_memory_spec import MemoryStoreMemorySpec
+        from ..models.memory_store_memory_status import MemoryStoreMemoryStatus
+        from ..models.resource_metadata import ResourceMetadata
         d = dict(src_dict)
-        id = d.pop("id")
-
-        store_id = d.pop("storeId")
-
-        project_id = d.pop("projectId")
-
-        path = d.pop("path")
-
-        content = d.pop("content")
-
-        metadata = MemoryStoreMemoryMetadata.from_dict(d.pop("metadata"))
+        metadata = ResourceMetadata.from_dict(d.pop("metadata"))
 
 
 
 
-        created_at = datetime.datetime.fromisoformat(d.pop("createdAt"))
+        spec = MemoryStoreMemorySpec.from_dict(d.pop("spec"))
 
 
 
 
-        updated_at = datetime.datetime.fromisoformat(d.pop("updatedAt"))
+        status = MemoryStoreMemoryStatus.from_dict(d.pop("status"))
 
 
 
 
         memory_store_memory = cls(
-            id=id,
-            store_id=store_id,
-            project_id=project_id,
-            path=path,
-            content=content,
             metadata=metadata,
-            created_at=created_at,
-            updated_at=updated_at,
+            spec=spec,
+            status=status,
         )
 
 

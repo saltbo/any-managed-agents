@@ -1,14 +1,9 @@
-import type { EnvironmentConfig } from '@server/domain/environment'
+import type { Environment, EnvironmentConfig, EnvironmentVersion } from '@server/domain/environment'
+import { resourceMetadata } from '@server/domain/resource'
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
 import { createEnvironment, updateEnvironment } from './environments'
-import {
-  type AuthScope,
-  EnvironmentArchivedError,
-  type EnvironmentRecord,
-  EnvironmentValidationError,
-  type EnvironmentVersionRecord,
-} from './ports'
+import { type AuthScope, EnvironmentArchivedError, EnvironmentValidationError } from './ports'
 
 const auth: AuthScope = {
   organization: { id: 'org_1', name: 'Org' },
@@ -33,19 +28,47 @@ function config(overrides: Partial<EnvironmentConfig> = {}): EnvironmentConfig {
   }
 }
 
-function environmentRecord(overrides: Partial<EnvironmentRecord> = {}): EnvironmentRecord {
+function environmentRecord(
+  overrides: {
+    metadata?: Partial<Environment['metadata']>
+    spec?: Partial<Environment['spec']>
+    status?: Partial<Environment['status']>
+  } = {},
+): Environment {
+  const timestamp = '2026-01-01T00:00:00.000Z'
   return {
-    id: 'env_1',
-    projectId: 'project_1',
-    name: 'Workspace',
-    description: null,
-    archivedAt: null,
-    currentVersionId: 'envver_1',
-    version: 1,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...config(),
-    ...overrides,
+    metadata: {
+      ...resourceMetadata({
+        uid: 'env_1',
+        pid: 'project_1',
+        name: 'Workspace',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      ...overrides.metadata,
+    },
+    spec: { ...config(), ...overrides.spec },
+    status: { phase: 'active', currentVersionId: 'envver_1', version: 1, ...overrides.status },
+  }
+}
+
+function environmentVersion(
+  environment: Environment,
+  cfg: EnvironmentConfig,
+  createdAt: string,
+  values: Partial<EnvironmentVersion> = {},
+): EnvironmentVersion {
+  return {
+    metadata: resourceMetadata({
+      uid: 'envver_new',
+      pid: environment.metadata.pid,
+      name: 'v2',
+      createdAt,
+      updatedAt: createdAt,
+    }),
+    spec: cfg,
+    status: { environmentId: environment.metadata.uid, version: 2 },
+    ...values,
   }
 }
 
@@ -53,26 +76,21 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
   const repo: Deps['environments'] = {
     list: async () => ({ rows: [], hasMore: false }),
     find: async () => null,
-    insertVersion: async (environment, cfg, createdAt): Promise<EnvironmentVersionRecord> => ({
-      id: 'envver_new',
-      environmentId: environment.id,
-      projectId: environment.projectId,
-      version: 2,
-      createdAt,
-      ...cfg,
-    }),
+    insertVersion: async (environment, cfg, createdAt): Promise<EnvironmentVersion> =>
+      environmentVersion(environment, cfg, createdAt),
     listVersions: async () => [],
     findVersion: async () => null,
-    insert: async (input, createdAt): Promise<EnvironmentRecord> =>
+    insert: async (input, createdAt): Promise<Environment> =>
       environmentRecord({
-        id: 'env_new',
-        currentVersionId: null,
-        version: 0,
-        name: input.name,
-        description: input.description,
-        createdAt,
-        updatedAt: createdAt,
-        ...input.config,
+        metadata: {
+          uid: 'env_new',
+          name: input.name,
+          description: input.description,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        spec: input.config,
+        status: { currentVersionId: null, version: 0 },
       }),
     setCurrentVersion: async () => {},
     update: async () => {},
@@ -143,8 +161,8 @@ describe('[spec: environments/create] createEnvironment', () => {
       repo: { setCurrentVersion: async (_id, versionId) => void setCurrent.push(versionId) },
     })
     const environment = await createEnvironment(deps, auth, { name: 'Node', description: null, config: config() })
-    expect(environment.currentVersionId).toBe('envver_new')
-    expect(environment.version).toBe(2)
+    expect(environment.status.currentVersionId).toBe('envver_new')
+    expect(environment.status.version).toBe(2)
     expect(setCurrent).toEqual(['envver_new'])
   })
 
@@ -177,21 +195,22 @@ describe('[spec: environments/update] updateEnvironment', () => {
       repo: {
         insertVersion: async (environment, cfg, createdAt) => {
           inserted.push(cfg)
-          return {
-            id: 'envver_2',
-            environmentId: environment.id,
-            projectId: environment.projectId,
-            version: 2,
-            createdAt,
-            ...cfg,
-          }
+          return environmentVersion(environment, cfg, createdAt, {
+            metadata: resourceMetadata({
+              uid: 'envver_2',
+              pid: environment.metadata.pid,
+              name: 'v2',
+              createdAt,
+              updatedAt: createdAt,
+            }),
+          })
         },
       },
     })
     const result = await updateEnvironment(deps, auth, environmentRecord(), { packages: [{ name: 'vite' }] })
     expect(inserted).toHaveLength(1)
-    expect(result.environment.version).toBe(2)
-    expect(result.environment.currentVersionId).toBe('envver_2')
+    expect(result.environment.status.version).toBe(2)
+    expect(result.environment.status.currentVersionId).toBe('envver_2')
   })
 
   it('does not snapshot when only name/description change', async () => {
@@ -200,34 +219,32 @@ describe('[spec: environments/update] updateEnvironment', () => {
       repo: {
         insertVersion: async (environment, cfg, createdAt) => {
           versioned = true
-          return {
-            id: 'x',
-            environmentId: environment.id,
-            projectId: environment.projectId,
-            version: 2,
-            createdAt,
-            ...cfg,
-          }
+          return environmentVersion(environment, cfg, createdAt)
         },
       },
     })
     const result = await updateEnvironment(deps, auth, environmentRecord(), { name: 'Renamed' })
     expect(versioned).toBe(false)
-    expect(result.environment.version).toBe(1)
-    expect(result.environment.name).toBe('Renamed')
+    expect(result.environment.status.version).toBe(1)
+    expect(result.environment.metadata.name).toBe('Renamed')
   })
 
   it('archives via {archived:true} and reports the transition', async () => {
     const result = await updateEnvironment(fakeDeps(), auth, environmentRecord(), { archived: true })
     expect(result.archived).toBe(true)
-    expect(result.environment.archivedAt).toEqual(expect.any(String))
+    expect(result.environment.metadata.archivedAt).toEqual(expect.any(String))
   })
 
   it('rejects field updates on an archived environment', async () => {
     await expect(
-      updateEnvironment(fakeDeps(), auth, environmentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }), {
-        packages: [{ name: 'x' }],
-      }),
+      updateEnvironment(
+        fakeDeps(),
+        auth,
+        environmentRecord({ metadata: { archivedAt: '2026-01-02T00:00:00.000Z' }, status: { phase: 'archived' } }),
+        {
+          packages: [{ name: 'x' }],
+        },
+      ),
     ).rejects.toBeInstanceOf(EnvironmentArchivedError)
   })
 
@@ -235,27 +252,33 @@ describe('[spec: environments/update] updateEnvironment', () => {
     const result = await updateEnvironment(
       fakeDeps(),
       auth,
-      environmentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+      environmentRecord({ metadata: { archivedAt: '2026-01-02T00:00:00.000Z' }, status: { phase: 'archived' } }),
       {
         archived: false,
       },
     )
-    expect(result.environment.archivedAt).toBeNull()
+    expect(result.environment.metadata.archivedAt).toBeNull()
     expect(result.unarchived).toBe(true)
   })
 
   it('is a no-op when patching an archived environment with archived:true', async () => {
-    const archived = environmentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const archived = environmentRecord({
+      metadata: { archivedAt: '2026-01-02T00:00:00.000Z' },
+      status: { phase: 'archived' },
+    })
     const result = await updateEnvironment(fakeDeps(), auth, archived, { archived: true })
-    expect(result.environment.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.environment.metadata.archivedAt).toBe('2026-01-02T00:00:00.000Z')
     expect(result.archived).toBe(false)
     expect(result.unarchived).toBe(false)
   })
 
   it('is a no-op when patching an archived environment with an empty patch', async () => {
-    const archived = environmentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const archived = environmentRecord({
+      metadata: { archivedAt: '2026-01-02T00:00:00.000Z' },
+      status: { phase: 'archived' },
+    })
     const result = await updateEnvironment(fakeDeps(), auth, archived, {})
-    expect(result.environment.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.environment.metadata.archivedAt).toBe('2026-01-02T00:00:00.000Z')
     expect(result.unarchived).toBe(false)
   })
 })
@@ -279,22 +302,27 @@ describe('[spec: environments/create] createEnvironment — secret variables', (
       description: null,
       config: config({ mcpPolicy: { allowedConnectors: ['linear'] } }),
     })
-    expect(environment.mcpPolicy).toMatchObject({ allowedConnectors: ['linear'] })
+    expect(environment.spec.mcpPolicy).toMatchObject({ allowedConnectors: ['linear'] })
   })
 })
 
 describe('[spec: environments/update] updateEnvironment — description branch', () => {
   it('explicitly sets description to null when provided in patch', async () => {
-    const result = await updateEnvironment(fakeDeps(), auth, environmentRecord({ description: 'old desc' }), {
-      description: null,
-    })
-    expect(result.environment.description).toBeNull()
+    const result = await updateEnvironment(
+      fakeDeps(),
+      auth,
+      environmentRecord({ metadata: { description: 'old desc' } }),
+      {
+        description: null,
+      },
+    )
+    expect(result.environment.metadata.description).toBeNull()
   })
 
   it('explicitly sets description to a string when provided in patch', async () => {
-    const result = await updateEnvironment(fakeDeps(), auth, environmentRecord({ description: null }), {
+    const result = await updateEnvironment(fakeDeps(), auth, environmentRecord({ metadata: { description: null } }), {
       description: 'new desc',
     })
-    expect(result.environment.description).toBe('new desc')
+    expect(result.environment.metadata.description).toBe('new desc')
   })
 })

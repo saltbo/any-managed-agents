@@ -29,6 +29,7 @@ type OpenApiDocument = {
 type JSONSchema = {
   properties?: Record<string, JSONSchema>
   enum?: string[]
+  $ref?: string
   [key: string]: unknown
 }
 
@@ -94,7 +95,7 @@ async function routeGeneratedOpenApi() {
 }
 
 function stabilizeSdkSchemaNames(document: OpenApiDocument) {
-  setPropertyEnumNames(document, 'VaultCredential', 'type', [
+  setPropertyEnumNames(document, 'VaultCredential', ['spec', 'type'], [
     'VaultCredentialTypeOpaque',
     'VaultCredentialTypeBasicAuth',
     'VaultCredentialTypeSshAuth',
@@ -102,7 +103,7 @@ function stabilizeSdkSchemaNames(document: OpenApiDocument) {
     'VaultCredentialTypePrivateKeyJwk',
     'VaultCredentialTypeOauthToken',
   ])
-  setPropertyEnumNames(document, 'CreateVaultCredentialRequest', 'type', [
+  setPropertyEnumNames(document, 'CreateVaultCredentialRequest', ['type'], [
     'CreateVaultCredentialRequestTypeOpaque',
     'CreateVaultCredentialRequestTypeBasicAuth',
     'CreateVaultCredentialRequestTypeSshAuth',
@@ -112,15 +113,30 @@ function stabilizeSdkSchemaNames(document: OpenApiDocument) {
   ])
 }
 
-function setPropertyEnumNames(document: OpenApiDocument, schemaName: string, propertyName: string, names: string[]) {
-  const property = document.components?.schemas?.[schemaName]?.properties?.[propertyName]
+function setPropertyEnumNames(document: OpenApiDocument, schemaName: string, propertyPath: string[], names: string[]) {
+  let property: JSONSchema | undefined = document.components?.schemas?.[schemaName]
+  for (const propertyName of propertyPath) {
+    property = resolveSchemaRef(document, property)?.properties?.[propertyName]
+  }
+  property = resolveSchemaRef(document, property)
   if (!property) {
-    throw new Error(`OpenAPI schema property ${schemaName}.${propertyName} not found`)
+    throw new Error(`OpenAPI schema property ${schemaName}.${propertyPath.join('.')} not found`)
   }
   if (!property.enum || property.enum.length !== names.length) {
-    throw new Error(`OpenAPI schema property ${schemaName}.${propertyName} enum does not match varnames`)
+    throw new Error(`OpenAPI schema property ${schemaName}.${propertyPath.join('.')} enum does not match varnames`)
   }
   property['x-enum-varnames'] = names
+}
+
+function resolveSchemaRef(document: OpenApiDocument, schema: JSONSchema | undefined): JSONSchema | undefined {
+  if (!schema?.$ref) {
+    return schema
+  }
+  const prefix = '#/components/schemas/'
+  if (!schema.$ref.startsWith(prefix)) {
+    return schema
+  }
+  return document.components?.schemas?.[schema.$ref.slice(prefix.length)]
 }
 
 await main()

@@ -96,7 +96,7 @@ export function QuickstartPage() {
     mutationFn: () => api.createEnvironment(quickstartEnvironmentInput(environmentForm)),
     onSuccess: async (environment) => {
       toast.success('Environment created')
-      setSelectedEnvironmentId(environment.id)
+      setSelectedEnvironmentId(environment.metadata.uid)
       await queryClient.invalidateQueries({ queryKey: queryKeys.environments.all })
       goToStep('agent')
     },
@@ -107,7 +107,7 @@ export function QuickstartPage() {
   const createAgent = useMutation({
     mutationFn: (input: AgentBuilderDraft) => api.createAgent(toAgentInput(input)),
     onSuccess: async (agent) => {
-      toast.success(`Agent ${agent.id} created at v${agent.version}`)
+      toast.success(`Agent ${agent.metadata.uid} created at v${agent.status.version}`)
       await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
       goToStep('session')
     },
@@ -135,8 +135,8 @@ export function QuickstartPage() {
         quickstartEnvironmentInput({ ...defaultQuickstartEnvironmentForm, name: 'Workers AI starter environment' }),
       )
       const session = await api.createSession({
-        agentId: agent.id,
-        environmentId: environment.id,
+        agentId: agent.metadata.uid,
+        environmentId: environment.metadata.uid,
         runtime: 'ama',
         name: 'Workers AI starter session',
         initialPrompt: SAFE_EXAMPLE_PROMPT,
@@ -186,7 +186,9 @@ export function QuickstartPage() {
   const activeEnvironments = environments.filter((environment) => !isArchived(environment))
   const quickstartAgent = activeAgents[0] ?? null
   const quickstartEnvironment =
-    activeEnvironments.find((environment) => environment.id === selectedEnvironmentId) ?? activeEnvironments[0] ?? null
+    activeEnvironments.find((environment) => environment.metadata.uid === selectedEnvironmentId) ??
+    activeEnvironments[0] ??
+    null
   const previewSessionId = searchParams.get('session')
   const integrationSession =
     sessions.find((session) => session.metadata.uid === previewSessionId) ??

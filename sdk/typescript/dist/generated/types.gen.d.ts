@@ -287,10 +287,27 @@ export type AgentListResponse = {
     pagination: ListPagination;
 };
 export type Agent = {
-    id: string;
-    projectId: string;
+    metadata: ResourceMetadata;
+    spec: AgentSpec;
+    status: AgentStatus;
+};
+export type ResourceMetadata = {
+    uid: string;
+    pid: string | null;
     name: string;
     description: string | null;
+    labels: {
+        [key: string]: string;
+    };
+    annotations: {
+        [key: string]: string;
+    };
+    createdBy: string | null;
+    createdAt: string;
+    updatedAt: string;
+    archivedAt: string | null;
+};
+export type AgentSpec = {
     instructions: string | null;
     providerId: string | null;
     model: string | null;
@@ -305,11 +322,6 @@ export type Agent = {
     metadata: {
         [key: string]: unknown;
     };
-    archivedAt: string | null;
-    currentVersionId: string | null;
-    version: number;
-    createdAt: string;
-    updatedAt: string;
 };
 export type AgentSubagent = {
     username?: string;
@@ -343,6 +355,12 @@ export type AgentToolAttachment = {
         [key: string]: unknown;
     };
 };
+export type AgentStatus = {
+    phase: ResourcePhase;
+    currentVersionId: string | null;
+    version: number;
+};
+export type ResourcePhase = 'active' | 'archived';
 export type CreateAgentRequest = {
     name: string;
     description?: string | null;
@@ -399,25 +417,13 @@ export type AgentVersionListResponse = {
     pagination: ListPagination;
 };
 export type AgentVersion = {
-    id: string;
+    metadata: ResourceMetadata;
+    spec: AgentSpec;
+    status: AgentVersionStatus;
+};
+export type AgentVersionStatus = {
     agentId: string;
-    projectId: string;
     version: number;
-    instructions: string | null;
-    providerId: string | null;
-    model: string | null;
-    skills: Array<string>;
-    subagents: Array<AgentSubagent>;
-    role: string | null;
-    capabilityTags: Array<string>;
-    handoffPolicy: AgentHandoffPolicy;
-    memoryPolicy: AgentMemoryPolicy;
-    tools: Array<AgentToolAttachment>;
-    mcpConnectors: Array<string>;
-    metadata: {
-        [key: string]: unknown;
-    };
-    createdAt: string;
 };
 export type AgentHandoffCandidateListResponse = {
     data: Array<AgentHandoffCandidate>;
@@ -430,14 +436,19 @@ export type AgentHandoffCandidate = {
     capabilityTags: Array<string>;
 };
 export type AgentMemory = {
+    metadata: ResourceMetadata;
+    spec: AgentMemorySpec;
+    status: AgentMemoryStatus;
+};
+export type AgentMemorySpec = {
     agentId: string;
-    projectId: string;
     content: string;
     metadata: {
         [key: string]: unknown;
     };
-    createdAt: string;
-    updatedAt: string;
+};
+export type AgentMemoryStatus = {
+    phase: ResourcePhase;
 };
 export type ReplaceAgentMemoryRequest = {
     content: string;
@@ -450,10 +461,11 @@ export type EnvironmentListResponse = {
     pagination: ListPagination;
 };
 export type Environment = {
-    id: string;
-    projectId: string;
-    name: string;
-    description: string | null;
+    metadata: ResourceMetadata;
+    spec: EnvironmentSpec;
+    status: EnvironmentStatus;
+};
+export type EnvironmentSpec = {
     packages: Array<{
         name: string;
         version?: string;
@@ -481,11 +493,6 @@ export type Environment = {
     metadata: {
         [key: string]: unknown;
     };
-    archivedAt: string | null;
-    currentVersionId: string | null;
-    version: number;
-    createdAt: string;
-    updatedAt: string;
 };
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted';
 export type EnvironmentNetworkPolicy = {
@@ -501,6 +508,11 @@ export type EnvironmentMcpPolicy = {
         [key: string]: 'none' | 'require_approval';
     };
     defaultEffect?: 'allow' | 'deny';
+};
+export type EnvironmentStatus = {
+    phase: ResourcePhase;
+    currentVersionId: string | null;
+    version: number;
 };
 export type CreateEnvironmentRequest = {
     name: string;
@@ -573,38 +585,13 @@ export type EnvironmentVersionListResponse = {
     pagination: ListPagination;
 };
 export type EnvironmentVersion = {
-    id: string;
+    metadata: ResourceMetadata;
+    spec: EnvironmentSpec;
+    status: EnvironmentVersionStatus;
+};
+export type EnvironmentVersionStatus = {
     environmentId: string;
-    projectId: string;
     version: number;
-    packages: Array<{
-        name: string;
-        version?: string;
-    }>;
-    variables: {
-        [key: string]: {
-            description?: string;
-            required?: boolean;
-        };
-    };
-    hostingMode: EnvironmentHostingMode;
-    networkPolicy: EnvironmentNetworkPolicy;
-    mcpPolicy: EnvironmentMcpPolicy;
-    packageManagerPolicy: {
-        [key: string]: unknown;
-    };
-    resourceLimits: {
-        cpuMs?: number;
-        memoryMb?: number;
-        timeoutSeconds?: number;
-    };
-    runtimeConfig: {
-        [key: string]: unknown;
-    };
-    metadata: {
-        [key: string]: unknown;
-    };
-    createdAt: string;
 };
 export type ProviderListResponse = {
     data: Array<Provider>;
@@ -970,13 +957,15 @@ export type AuditRecord = {
     createdAt: string;
 };
 export type Trigger = {
-    id: string;
-    projectId: string;
+    metadata: ResourceMetadata;
+    spec: TriggerSpec;
+    status: TriggerStatus;
+};
+export type TriggerSpec = {
     type: 'scheduled' | 'http';
     agentId: string;
     environmentId: string | null;
     runtime: Runtime;
-    name: string;
     promptTemplate: string;
     env: {
         [key: string]: string;
@@ -984,22 +973,11 @@ export type Trigger = {
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
     volumeMounts: Array<VolumeMount>;
-    schedule: {
-        type: 'interval';
-        intervalSeconds: number;
-        windowSeconds: number;
-    } | null;
+    schedule: TriggerSchedule;
     enabled: boolean;
-    nextDueAt: string | null;
-    lastDispatchedAt: string | null;
-    lastRunId: string | null;
     metadata: {
         [key: string]: unknown;
     };
-    createdByUserId: string | null;
-    archivedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
 };
 export type Runtime = 'ama' | 'claude-code' | 'codex' | 'copilot';
 export type EnvFromEntry = {
@@ -1039,6 +1017,17 @@ export type VolumeMount = {
     name: string;
     mountPath: string;
     readOnly?: boolean;
+};
+export type TriggerSchedule = {
+    type: 'interval';
+    intervalSeconds: number;
+    windowSeconds: number;
+} | null;
+export type TriggerStatus = {
+    phase: ResourcePhase;
+    nextDueAt: string | null;
+    lastDispatchedAt: string | null;
+    lastRunId: string | null;
 };
 export type CreateTriggerRequest = {
     type?: 'scheduled' | 'http';
@@ -1098,22 +1087,25 @@ export type TriggerRunListResponse = {
     pagination: ListPagination;
 };
 export type TriggerRun = {
-    id: string;
-    projectId: string;
+    metadata: ResourceMetadata;
+    spec: TriggerRunSpec;
+    status: TriggerRunStatus;
+};
+export type TriggerRunSpec = {
     triggerId: string;
     scheduledFor: string | null;
-    heartbeatAt: string | null;
-    triggeredAt: string;
-    state: 'claimed' | 'dispatched' | 'failed';
     idempotencyKey: string;
-    sessionId: string | null;
     correlationId: string;
-    errorMessage: string | null;
     metadata: {
         [key: string]: unknown;
     };
-    createdAt: string;
-    updatedAt: string;
+};
+export type TriggerRunStatus = {
+    phase: 'claimed' | 'dispatched' | 'failed';
+    heartbeatAt: string | null;
+    triggeredAt: string;
+    sessionId: string | null;
+    errorMessage: string | null;
 };
 export type CreateHttpTriggerRunRequest = {
     [key: string]: unknown;
@@ -1356,16 +1348,17 @@ export type MemoryStoreListResponse = {
     pagination: ListPagination;
 };
 export type MemoryStore = {
-    id: string;
-    projectId: string;
-    name: string;
-    description: string | null;
+    metadata: ResourceMetadata;
+    spec: MemoryStoreSpec;
+    status: MemoryStoreStatus;
+};
+export type MemoryStoreSpec = {
     metadata: {
         [key: string]: unknown;
     };
-    archivedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
+};
+export type MemoryStoreStatus = {
+    phase: ResourcePhase;
 };
 export type CreateMemoryStoreRequest = {
     name: string;
@@ -1387,16 +1380,20 @@ export type MemoryStoreMemoryListResponse = {
     pagination: ListPagination;
 };
 export type MemoryStoreMemory = {
-    id: string;
+    metadata: ResourceMetadata;
+    spec: MemoryStoreMemorySpec;
+    status: MemoryStoreMemoryStatus;
+};
+export type MemoryStoreMemorySpec = {
     storeId: string;
-    projectId: string;
     path: string;
     content: string;
     metadata: {
         [key: string]: unknown;
     };
-    createdAt: string;
-    updatedAt: string;
+};
+export type MemoryStoreMemoryStatus = {
+    phase: ResourcePhase;
 };
 export type CreateMemoryStoreMemoryRequest = {
     path: string;
@@ -1417,17 +1414,19 @@ export type VaultListResponse = {
     pagination: ListPagination;
 };
 export type Vault = {
-    id: string;
-    projectId: string | null;
-    name: string;
-    description: string | null;
+    metadata: ResourceMetadata;
+    spec: VaultSpec;
+    status: VaultStatus;
+};
+export type VaultSpec = {
+    organizationId: string;
     scope: 'project' | 'organization';
     metadata: {
         [key: string]: unknown;
     };
-    archivedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
+};
+export type VaultStatus = {
+    phase: ResourcePhase;
 };
 export type CreateVaultRequest = {
     name: string;
@@ -1451,42 +1450,50 @@ export type VaultCredentialListResponse = {
     pagination: ListPagination;
 };
 export type VaultCredential = {
-    id: string;
+    metadata: ResourceMetadata;
+    spec: VaultCredentialSpec;
+    status: VaultCredentialStatus;
+};
+export type VaultCredentialSpec = {
     vaultId: string;
-    projectId: string | null;
-    name: string;
+    organizationId: string;
     type: 'opaque' | 'ama.dev/basic-auth' | 'ama.dev/ssh-auth' | 'ama.dev/tls' | 'ama.dev/private-key-jwk' | 'ama.dev/oauth-token';
     metadata: {
         [key: string]: unknown;
     };
-    state: 'active' | 'revoked';
+};
+export type VaultCredentialStatus = {
+    phase: 'active' | 'revoked';
     activeVersionId: string | null;
     activeVersion: VaultCredentialVersion;
     revokedAt: string | null;
     revokedByUserId: string | null;
     revokeReason: string | null;
-    createdAt: string;
-    updatedAt: string;
 };
 export type VaultCredentialVersion = {
-    id: string;
+    metadata: ResourceMetadata;
+    spec: VaultCredentialVersionSpec;
+    status: VaultCredentialVersionStatus;
+} | null;
+export type VaultCredentialVersionSpec = {
     credentialId: string;
     vaultId: string;
-    projectId: string | null;
+    organizationId: string;
     version: number;
     provider: 'ama';
     secretRef: string;
     referenceName: string;
-    state: 'active' | 'superseded' | 'revoked';
     hasSecret: boolean;
     dataKeys: Array<string>;
     metadata: VaultJsonObject;
-    createdAt: string;
-    supersededAt: string | null;
-    revokedAt: string | null;
-} | null;
+};
 export type VaultJsonObject = {
     [key: string]: unknown;
+};
+export type VaultCredentialVersionStatus = {
+    phase: 'active' | 'superseded' | 'revoked';
+    supersededAt: string | null;
+    revokedAt: string | null;
 };
 export type CreateVaultCredentialRequest = {
     name: string;
@@ -1525,13 +1532,15 @@ export type CreateVaultCredentialVersionRequest = {
     };
 };
 export type TriggerWritable = {
-    id: string;
-    projectId: string;
+    metadata: ResourceMetadata;
+    spec: TriggerSpecWritable;
+    status: TriggerStatus;
+};
+export type TriggerSpecWritable = {
     type: 'scheduled' | 'http';
     agentId: string;
     environmentId: string | null;
     runtime: Runtime;
-    name: string;
     promptTemplate: string;
     env: {
         [key: string]: string;
@@ -1539,22 +1548,11 @@ export type TriggerWritable = {
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
     volumeMounts: Array<VolumeMount>;
-    schedule: {
-        type: 'interval';
-        intervalSeconds: number;
-        windowSeconds: number;
-    } | null;
+    schedule: TriggerSchedule;
     enabled: boolean;
-    nextDueAt: string | null;
-    lastDispatchedAt: string | null;
-    lastRunId: string | null;
     metadata: {
         [key: string]: unknown;
     };
-    createdByUserId: string | null;
-    archivedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
 };
 export type TriggerListResponseWritable = {
     data: Array<TriggerWritable>;

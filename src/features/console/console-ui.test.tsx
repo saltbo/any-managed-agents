@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent, AuthContext, Project, Session } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { type AgentOverrides, agent as resourceAgent } from '@/test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { ConsoleLayout } from './ConsoleLayout'
 import { ConsoleShell } from './ConsoleShell'
@@ -40,31 +41,17 @@ function buildProject(overrides: Partial<Project> = {}): Project {
   }
 }
 
-function buildAgent(overrides: Partial<Agent> = {}): Agent {
-  return {
-    id: 'agent_1',
-    projectId: 'project_1',
+function buildAgent(overrides: AgentOverrides = {}): Agent {
+  return resourceAgent({
     name: 'My Agent',
-    description: null,
     instructions: 'Do things',
-    providerId: 'workers-ai',
     model: '@cf/model',
     skills: [],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: {},
     tools: [],
-    mcpConnectors: [],
-    metadata: {},
-    archivedAt: null,
-    currentVersionId: 'agentver_1',
-    version: 1,
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 function buildSession(overrides: TestSessionOverrides = {}): Session {

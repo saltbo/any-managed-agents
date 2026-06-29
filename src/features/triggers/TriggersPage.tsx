@@ -31,8 +31,8 @@ export function TriggersPage() {
     () =>
       allTriggers.filter(
         (trigger) =>
-          matchesSearch(search, trigger.name, trigger.agentId) &&
-          (status === 'all' || triggerStatus(trigger.enabled) === status),
+          matchesSearch(search, trigger.metadata.name, trigger.spec.agentId) &&
+          (status === 'all' || triggerStatus(trigger.spec.enabled) === status),
       ),
     [allTriggers, search, status],
   )

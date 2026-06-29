@@ -3,6 +3,8 @@
 // schema (zod) and the repo; the domain only owns secret-material rules and the
 // version-snapshot decision.
 
+import type { ResourceMetadata, ResourcePhase } from './resource'
+
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted'
 
 // Optional fields explicitly admit `undefined` so a zod-inferred request body
@@ -33,6 +35,29 @@ export interface EnvironmentConfig {
   resourceLimits: Record<string, unknown>
   runtimeConfig: Record<string, unknown>
   metadata: Record<string, unknown>
+}
+
+export interface Environment {
+  metadata: ResourceMetadata
+  spec: EnvironmentConfig
+  status: EnvironmentStatus
+}
+
+export interface EnvironmentStatus {
+  phase: ResourcePhase
+  currentVersionId: string | null
+  version: number
+}
+
+export interface EnvironmentVersion {
+  metadata: ResourceMetadata
+  spec: EnvironmentConfig
+  status: EnvironmentVersionStatus
+}
+
+export interface EnvironmentVersionStatus {
+  environmentId: string
+  version: number
 }
 
 // The config fields whose presence in a PATCH body forces a new version

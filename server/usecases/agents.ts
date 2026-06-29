@@ -1,5 +1,7 @@
 import {
+  type Agent,
   type AgentConfig,
+  type AgentMemory,
   type AgentToolAttachment,
   type HandoffTarget,
   hasSecretMaterial,
@@ -12,15 +14,9 @@ import {
   validateSkills,
   validateToolAttachments,
 } from '@server/domain/agent'
+import { resourceMetadata } from '@server/domain/resource'
 import type { Deps } from './deps'
-import {
-  AgentArchivedError,
-  type AgentHandoffCandidate,
-  type AgentMemoryRecord,
-  type AgentRecord,
-  AgentValidationError,
-  type AuthScope,
-} from './ports'
+import { AgentArchivedError, type AgentHandoffCandidate, AgentValidationError, type AuthScope } from './ports'
 
 // Validates the runtime config against sibling resources (provider/model,
 // MCP catalog entries), governance tool policy, and secret-material rules. Throws
@@ -90,7 +86,7 @@ export async function createAgent(
   deps: Deps,
   auth: AuthScope,
   input: { name: string; description: string | null; config: AgentConfig },
-): Promise<AgentRecord> {
+): Promise<Agent> {
   await validateConfig(deps, auth, input.config)
   const createdAt = new Date().toISOString()
   const agent = await deps.agents.insert(
@@ -98,8 +94,11 @@ export async function createAgent(
     createdAt,
   )
   const version = await deps.agents.insertVersion(agent, input.config, createdAt)
-  await deps.agents.setCurrentVersion(agent.id, version.id)
-  return { ...agent, currentVersionId: version.id, version: version.version }
+  await deps.agents.setCurrentVersion(agent.metadata.uid, version.metadata.uid)
+  return {
+    ...agent,
+    status: { ...agent.status, currentVersionId: version.metadata.uid, version: version.status.version },
+  }
 }
 
 // The runtime config fields whose presence in a PATCH body forces a new version
@@ -138,7 +137,7 @@ export interface UpdateAgentPatch {
 }
 
 export interface UpdateAgentResult {
-  agent: AgentRecord
+  agent: Agent
   archived: boolean
 }
 
@@ -149,38 +148,45 @@ export interface UpdateAgentResult {
 export async function updateAgent(
   deps: Deps,
   auth: AuthScope,
-  agent: AgentRecord,
+  agent: Agent,
   patch: UpdateAgentPatch,
 ): Promise<UpdateAgentResult> {
   const { archived, ...fields } = patch
   const hasFieldUpdates = Object.keys(fields).length > 0
 
-  if (agent.archivedAt) {
+  if (agent.metadata.archivedAt) {
     if (hasFieldUpdates) {
       throw new AgentArchivedError()
     }
     if (archived === false) {
       const updatedAt = new Date().toISOString()
-      await deps.agents.unarchive(auth.project.id, agent.id, updatedAt)
-      return { agent: { ...agent, archivedAt: null, updatedAt }, archived: false }
+      await deps.agents.unarchive(auth.project.id, agent.metadata.uid, updatedAt)
+      return {
+        agent: {
+          ...agent,
+          metadata: { ...agent.metadata, archivedAt: null, updatedAt },
+          status: { ...agent.status, phase: 'active' },
+        },
+        archived: false,
+      }
     }
     // archived: true (idempotent) or empty patch — no change.
     return { agent, archived: false }
   }
 
   const next: AgentConfig = {
-    instructions: fields.instructions !== undefined ? fields.instructions : agent.instructions,
-    providerId: fields.providerId !== undefined ? fields.providerId : agent.providerId,
-    model: fields.model !== undefined ? fields.model : agent.model,
-    skills: fields.skills ?? agent.skills,
-    subagents: fields.subagents ?? agent.subagents,
-    role: fields.role !== undefined ? fields.role : agent.role,
-    capabilityTags: fields.capabilityTags ?? agent.capabilityTags,
-    handoffPolicy: fields.handoffPolicy ?? agent.handoffPolicy,
-    memoryPolicy: fields.memoryPolicy ?? agent.memoryPolicy,
-    tools: fields.tools ?? agent.tools,
-    mcpConnectors: fields.mcpConnectors ?? agent.mcpConnectors,
-    metadata: mergeMetadata(agent.metadata, fields.metadata),
+    instructions: fields.instructions !== undefined ? fields.instructions : agent.spec.instructions,
+    providerId: fields.providerId !== undefined ? fields.providerId : agent.spec.providerId,
+    model: fields.model !== undefined ? fields.model : agent.spec.model,
+    skills: fields.skills ?? agent.spec.skills,
+    subagents: fields.subagents ?? agent.spec.subagents,
+    role: fields.role !== undefined ? fields.role : agent.spec.role,
+    capabilityTags: fields.capabilityTags ?? agent.spec.capabilityTags,
+    handoffPolicy: fields.handoffPolicy ?? agent.spec.handoffPolicy,
+    memoryPolicy: fields.memoryPolicy ?? agent.spec.memoryPolicy,
+    tools: fields.tools ?? agent.spec.tools,
+    mcpConnectors: fields.mcpConnectors ?? agent.spec.mcpConnectors,
+    metadata: mergeMetadata(agent.spec.metadata, fields.metadata),
   }
   await validateConfig(deps, auth, next)
 
@@ -189,27 +195,28 @@ export async function updateAgent(
   // A runtime change snapshots a new immutable version; otherwise the current
   // version (id + number) is retained.
   const version = runtimeChanged ? await deps.agents.insertVersion(agent, next, updatedAt) : null
-  const archivedAt = archived === true ? updatedAt : agent.archivedAt
-  const name = fields.name ?? agent.name
-  const description = fields.description !== undefined ? fields.description : agent.description
-  const currentVersionId = version?.id ?? agent.currentVersionId
+  const archivedAt = archived === true ? updatedAt : agent.metadata.archivedAt
+  const name = fields.name ?? agent.metadata.name
+  const description = fields.description !== undefined ? fields.description : agent.metadata.description
+  const currentVersionId = version?.metadata.uid ?? agent.status.currentVersionId
 
   await deps.agents.update(
     auth.project.id,
-    agent.id,
+    agent.metadata.uid,
     { name, description, config: next, archivedAt, currentVersionId },
     updatedAt,
   )
 
-  const updated: AgentRecord = {
+  const updated: Agent = {
     ...agent,
-    ...next,
-    name,
-    description,
-    archivedAt,
-    currentVersionId,
-    version: version?.version ?? agent.version,
-    updatedAt,
+    metadata: { ...agent.metadata, name, description, archivedAt, updatedAt },
+    spec: next,
+    status: {
+      ...agent.status,
+      phase: archivedAt ? 'archived' : 'active',
+      currentVersionId,
+      version: version?.status.version ?? agent.status.version,
+    },
   }
   return { agent: updated, archived: archived === true }
 }
@@ -217,13 +224,13 @@ export async function updateAgent(
 export async function resolveHandoffCandidates(
   deps: Deps,
   projectId: string,
-  agent: AgentRecord,
+  agent: Agent,
   requested: HandoffTarget,
 ): Promise<AgentHandoffCandidate[]> {
   const targets =
     requested.role !== undefined || requested.capability !== undefined
       ? [requested]
-      : policyHandoffTargets(agent.handoffPolicy)
+      : policyHandoffTargets(agent.spec.handoffPolicy)
   if (targets.length === 0) {
     throw new AgentValidationError('No handoff target requested', {
       target: 'Request a role or capability, or configure handoff policy targets on the agent.',
@@ -231,25 +238,33 @@ export async function resolveHandoffCandidates(
   }
   const rows = await deps.agents.liveAgents(projectId)
   return rows
-    .filter((row) => row.id !== agent.id && matchesHandoffTarget(targets, row))
-    .map((row) => ({ id: row.id, name: row.name, role: row.role, capabilityTags: row.capabilityTags }))
+    .filter((row) => row.metadata.uid !== agent.metadata.uid && matchesHandoffTarget(targets, row.spec))
+    .map((row) => ({
+      id: row.metadata.uid,
+      name: row.metadata.name,
+      role: row.spec.role,
+      capabilityTags: row.spec.capabilityTags,
+    }))
 }
 
 // Reads agent memory, lazily materializing an empty singleton on first read.
 // Throws AgentValidationError-free; the route checks memoryEnabled and 409s.
-export async function readAgentMemory(deps: Deps, projectId: string, agent: AgentRecord): Promise<AgentMemoryRecord> {
-  const existing = await deps.agents.findMemory(projectId, agent.id)
+export async function readAgentMemory(deps: Deps, projectId: string, agent: Agent): Promise<AgentMemory> {
+  const existing = await deps.agents.findMemory(projectId, agent.metadata.uid)
   if (existing) {
     return existing
   }
   const timestamp = new Date().toISOString()
-  const created: AgentMemoryRecord = {
-    agentId: agent.id,
-    projectId,
-    content: '',
-    metadata: {},
-    createdAt: timestamp,
-    updatedAt: timestamp,
+  const created: AgentMemory = {
+    metadata: resourceMetadata({
+      uid: agent.metadata.uid,
+      pid: projectId,
+      name: 'memory',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }),
+    spec: { agentId: agent.metadata.uid, content: '', metadata: {} },
+    status: { phase: 'active' },
   }
   await deps.agents.insertMemory(created)
   return created
@@ -258,29 +273,36 @@ export async function readAgentMemory(deps: Deps, projectId: string, agent: Agen
 export async function replaceAgentMemory(
   deps: Deps,
   projectId: string,
-  agent: AgentRecord,
+  agent: Agent,
   input: { content: string; metadata: Record<string, unknown> },
-): Promise<AgentMemoryRecord> {
+): Promise<AgentMemory> {
   if (hasSecretMaterial(input.metadata)) {
     throw new AgentValidationError('Invalid agent memory', { metadata: 'Secret material must be stored in a vault.' })
   }
-  const existing = await deps.agents.findMemory(projectId, agent.id)
+  const existing = await deps.agents.findMemory(projectId, agent.metadata.uid)
   const timestamp = new Date().toISOString()
   if (!existing) {
-    const created: AgentMemoryRecord = {
-      agentId: agent.id,
-      projectId,
-      content: input.content,
-      metadata: input.metadata,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+    const created: AgentMemory = {
+      metadata: resourceMetadata({
+        uid: agent.metadata.uid,
+        pid: projectId,
+        name: 'memory',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      spec: { agentId: agent.metadata.uid, content: input.content, metadata: input.metadata },
+      status: { phase: 'active' },
     }
     await deps.agents.insertMemory(created)
     return created
   }
   // PUT replaces the whole singleton: content and metadata are overwritten.
-  await deps.agents.replaceMemory(projectId, agent.id, input.content, input.metadata, timestamp)
-  return { ...existing, content: input.content, metadata: input.metadata, updatedAt: timestamp }
+  await deps.agents.replaceMemory(projectId, agent.metadata.uid, input.content, input.metadata, timestamp)
+  return {
+    ...existing,
+    metadata: { ...existing.metadata, updatedAt: timestamp },
+    spec: { ...existing.spec, content: input.content, metadata: input.metadata },
+  }
 }
 
 export { memoryEnabled }

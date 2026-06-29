@@ -1,12 +1,10 @@
-import type { AgentConfig, AgentToolAttachment } from '@server/domain/agent'
+import type { Agent, AgentConfig, AgentMemory, AgentToolAttachment, AgentVersion } from '@server/domain/agent'
 import { DEFAULT_CONNECTORS } from '@server/domain/connector'
+import { resourceMetadata, resourcePhase } from '@server/domain/resource'
 import type {
   AgentListPage,
   AgentListQuery,
-  AgentMemoryRecord,
-  AgentRecord,
   AgentRepo,
-  AgentVersionRecord,
   CreateAgentInput,
   UpdateAgentFields,
 } from '@server/usecases/ports'
@@ -77,40 +75,58 @@ async function versionNumberOf(db: Db, agentId: string, versionId: string | null
   return row?.version ?? 0
 }
 
-function agentRecordFrom(row: AgentRow, version: number): AgentRecord {
+function agentRecordFrom(row: AgentRow, version: number): Agent {
   return {
-    id: row.id,
-    projectId: row.projectId,
-    name: row.name,
-    description: row.description,
-    archivedAt: row.archivedAt,
-    currentVersionId: row.currentVersionId,
-    version,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    ...configFromRow(row),
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: row.name,
+      description: row.description,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.archivedAt,
+    }),
+    spec: configFromRow(row),
+    status: {
+      phase: resourcePhase(row.archivedAt),
+      currentVersionId: row.currentVersionId,
+      version,
+    },
   }
 }
 
-function versionRecordFrom(row: AgentVersionRow): AgentVersionRecord {
+function versionRecordFrom(row: AgentVersionRow): AgentVersion {
   return {
-    id: row.id,
-    agentId: row.agentId,
-    projectId: row.projectId,
-    version: row.version,
-    createdAt: row.createdAt,
-    ...configFromRow(row),
+    metadata: resourceMetadata({
+      uid: row.id,
+      pid: row.projectId,
+      name: `v${row.version}`,
+      createdAt: row.createdAt,
+      updatedAt: row.createdAt,
+    }),
+    spec: configFromRow(row),
+    status: {
+      agentId: row.agentId,
+      version: row.version,
+    },
   }
 }
 
-function memoryRecordFrom(row: AgentMemoryRow): AgentMemoryRecord {
+function memoryRecordFrom(row: AgentMemoryRow): AgentMemory {
   return {
-    agentId: row.agentId,
-    projectId: row.projectId,
-    content: row.content,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    metadata: resourceMetadata({
+      uid: row.agentId,
+      pid: row.projectId,
+      name: 'memory',
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }),
+    spec: {
+      agentId: row.agentId,
+      content: row.content,
+      metadata: parseJson<Record<string, unknown>>(row.metadata),
+    },
+    status: { phase: 'active' },
   }
 }
 
@@ -178,12 +194,12 @@ export function createAgentRepo(db: Db): AgentRepo {
       return row?.version ?? null
     },
 
-    async insertVersion(agent, config, createdAt): Promise<AgentVersionRecord> {
-      const latest = await this.latestVersionNumber(agent.id)
+    async insertVersion(agent, config, createdAt): Promise<AgentVersion> {
+      const latest = await this.latestVersionNumber(agent.metadata.uid)
       const row = {
         id: newId('agentver'),
-        agentId: agent.id,
-        projectId: agent.projectId,
+        agentId: agent.metadata.uid,
+        projectId: agent.metadata.pid ?? '',
         version: (latest ?? 0) + 1,
         createdAt,
         ...configColumns(config),
@@ -216,7 +232,7 @@ export function createAgentRepo(db: Db): AgentRepo {
       return row ? versionRecordFrom(row) : null
     },
 
-    async insert(input: CreateAgentInput, createdAt): Promise<AgentRecord> {
+    async insert(input: CreateAgentInput, createdAt): Promise<Agent> {
       const row = {
         id: newId('agent'),
         projectId: input.projectId,
@@ -266,14 +282,14 @@ export function createAgentRepo(db: Db): AgentRepo {
       return row ? memoryRecordFrom(row) : null
     },
 
-    async insertMemory(record: AgentMemoryRecord) {
+    async insertMemory(record: AgentMemory) {
       await db.insert(agentMemories).values({
-        agentId: record.agentId,
-        projectId: record.projectId,
-        content: record.content,
-        metadata: stringify(record.metadata),
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt,
+        agentId: record.spec.agentId,
+        projectId: record.metadata.pid ?? '',
+        content: record.spec.content,
+        metadata: stringify(record.spec.metadata),
+        createdAt: record.metadata.createdAt,
+        updatedAt: record.metadata.updatedAt,
       })
     },
 
