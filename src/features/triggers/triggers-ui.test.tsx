@@ -115,7 +115,7 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     expect(screen.getByText(/Schedule a trigger to dispatch an agent/)).toBeTruthy()
   })
 
-  it('renders rows with name, agent, schedule, status, and a pause action when enabled', () => {
+  it('renders rows with name, agent, schedule, status, and a pause action when active', () => {
     const triggers = [trigger()]
     render(
       <MemoryRouter>
@@ -138,8 +138,8 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     expect(screen.getByRole('button', { name: 'Pause trigger' })).toBeTruthy()
   })
 
-  it('renders a resume action and paused status when disabled', () => {
-    const triggers = [trigger({ enabled: false })]
+  it('renders a resume action and paused status when suspended', () => {
+    const triggers = [trigger({ suspend: true })]
     render(
       <MemoryRouter>
         <TriggersView
@@ -174,7 +174,7 @@ describe('[spec: triggers/console-list] TriggersView', () => {
   })
 
   it('shows HTTP triggers without schedule timing', () => {
-    const triggers = [trigger({ type: 'http', schedule: null, nextDueAt: null })]
+    const triggers = [trigger({ source: { type: 'http' }, nextDueAt: null })]
     render(
       <MemoryRouter>
         <TriggersView
@@ -211,7 +211,7 @@ describe('[spec: triggers/console-list] TriggersView', () => {
 
   it('calls onResume when the resume button is clicked', () => {
     const onResume = vi.fn()
-    const triggers = [trigger({ enabled: false })]
+    const triggers = [trigger({ suspend: true })]
     render(
       <MemoryRouter>
         <TriggersView
@@ -318,8 +318,8 @@ describe('[spec: triggers/console-page] TriggersPage', () => {
   it('filters triggers to paused when status=paused is set', async () => {
     renderPage(
       [
-        trigger({ id: 'trigger_on', name: 'Active trigger', enabled: true }),
-        trigger({ id: 'trigger_off', name: 'Paused trigger', enabled: false }),
+        trigger({ id: 'trigger_on', name: 'Active trigger', suspend: false }),
+        trigger({ id: 'trigger_off', name: 'Paused trigger', suspend: true }),
       ],
       '/?status=paused',
     )
@@ -328,7 +328,7 @@ describe('[spec: triggers/console-page] TriggersPage', () => {
     await waitFor(() => expect(screen.queryByText('Active trigger')).toBeNull())
   })
 
-  it('pauses a trigger via PATCH enabled:false when the pause action is clicked', async () => {
+  it('pauses a trigger via PATCH suspend:true when the pause action is clicked', async () => {
     let patchedBody: Record<string, unknown> | null = null
     const collection = createCollection<Trigger>([trigger()])
     server.use(
@@ -337,7 +337,7 @@ describe('[spec: triggers/console-page] TriggersPage', () => {
       ),
       http.patch('*/api/v1/triggers/:id', async ({ request }) => {
         patchedBody = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json(trigger({ enabled: false }))
+        return HttpResponse.json(trigger({ suspend: true }))
       }),
     )
 
@@ -352,7 +352,7 @@ describe('[spec: triggers/console-page] TriggersPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pause trigger' }))
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect(patchedBody!.enabled).toBe(false)
+    expect(patchedBody!.suspend).toBe(true)
   })
 })
 
@@ -365,14 +365,14 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
     return null
   }
 
-  it('calls PATCH /triggers/:id with enabled:false when pauseTrigger is invoked', async () => {
+  it('calls PATCH /triggers/:id with suspend:true when pauseTrigger is invoked', async () => {
     let patchedUrl = ''
     let patchedBody: Record<string, unknown> | null = null
     server.use(
       http.patch('*/api/v1/triggers/:id', async ({ request }) => {
         patchedUrl = request.url
         patchedBody = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json(trigger({ enabled: false }))
+        return HttpResponse.json(trigger({ suspend: true }))
       }),
       http.get('*/api/v1/triggers', () =>
         HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
@@ -395,16 +395,16 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
 
     capturedActions!.pauseTrigger('trigger_1')
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect(patchedBody!.enabled).toBe(false)
+    expect(patchedBody!.suspend).toBe(true)
     expect(patchedUrl).toContain('trigger_1')
   })
 
-  it('calls PATCH /triggers/:id with enabled:true when resumeTrigger is invoked', async () => {
+  it('calls PATCH /triggers/:id with suspend:false when resumeTrigger is invoked', async () => {
     let patchedBody: Record<string, unknown> | null = null
     server.use(
       http.patch('*/api/v1/triggers/:id', async ({ request }) => {
         patchedBody = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json(trigger({ enabled: true }))
+        return HttpResponse.json(trigger({ suspend: false }))
       }),
       http.get('*/api/v1/triggers', () =>
         HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
@@ -427,7 +427,7 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
 
     capturedActions!.resumeTrigger('trigger_1')
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect(patchedBody!.enabled).toBe(true)
+    expect(patchedBody!.suspend).toBe(false)
   })
 
   it('calls DELETE /triggers/:id when deleteTrigger is invoked [spec: triggers/delete]', async () => {
@@ -544,13 +544,17 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     await waitFor(() => expect(postedBody).not.toBeNull())
     expect(postedBody).toMatchObject({
-      agentId: 'agent_1',
-      environmentId: 'env_1',
-      runtime: 'ama',
       name: 'Nightly research',
-      promptTemplate: 'Research the latest offers.',
-      enabled: true,
-      schedule: { type: 'interval', intervalSeconds: 6 * 86400 },
+      suspend: false,
+      source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 6 * 86400 } },
+      template: {
+        spec: {
+          agentId: 'agent_1',
+          environmentId: 'env_1',
+          runtime: 'ama',
+          promptTemplate: 'Research the latest offers.',
+        },
+      },
     })
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
@@ -638,7 +642,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     fireEvent.submit(form)
 
     await waitFor(() => expect(postedBody).not.toBeNull())
-    const schedule = postedBody!.schedule as Record<string, unknown>
+    const schedule = (postedBody!.source as { schedule: Record<string, unknown> }).schedule
     expect(schedule.intervalSeconds).toBe(60)
   })
 
@@ -648,7 +652,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     renderSheet([
       http.post('*/api/v1/triggers', async ({ request }) => {
         postedBody = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json(trigger({ id: 'trigger_new', type: 'http', schedule: null, nextDueAt: null }), {
+        return HttpResponse.json(trigger({ id: 'trigger_new', source: { type: 'http' }, nextDueAt: null }), {
           status: 201,
         })
       }),
@@ -673,10 +677,9 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     await waitFor(() => expect(postedBody).not.toBeNull())
     expect(postedBody).toMatchObject({
-      type: 'http',
       name: 'Webhook trigger',
-      promptTemplate: 'Handle {{ body.ticket.id }}',
-      schedule: null,
+      source: { type: 'http' },
+      template: { spec: { promptTemplate: 'Handle {{ body.ticket.id }}' } },
     })
   })
 
@@ -704,7 +707,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     fireEvent.click(submitButton)
     await waitFor(() => expect(postedBody).not.toBeNull())
-    expect(postedBody!.runtime).toBe('codex')
+    expect((postedBody!.template as { spec: { runtime: string } }).spec.runtime).toBe('codex')
   })
 
   it('updates intervalUnit when a different unit is selected', async () => {
@@ -735,12 +738,12 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     fireEvent.click(submitButton)
     await waitFor(() => expect(postedBody).not.toBeNull())
-    const schedule = postedBody!.schedule as Record<string, unknown>
+    const schedule = (postedBody!.source as { schedule: Record<string, unknown> }).schedule
     // 2 hours = 2 * 3600 = 7200
     expect(schedule.intervalSeconds).toBe(7200)
   })
 
-  it('sends enabled:false when status is changed to paused', async () => {
+  it('sends suspend:true when status is changed to paused', async () => {
     stubPointerEvents()
     let postedBody: Record<string, unknown> | null = null
     renderSheet([
@@ -764,7 +767,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     fireEvent.click(submitButton)
     await waitFor(() => expect(postedBody).not.toBeNull())
-    expect(postedBody!.enabled).toBe(false)
+    expect(postedBody!.suspend).toBe(true)
   })
 })
 

@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.create_trigger_request_schedule_type_0_type import CreateTriggerRequestScheduleType0Type
+from ..models.update_trigger_request_source_type_0_schedule_type import UpdateTriggerRequestSourceType0ScheduleType
 from ..types import UNSET, Unset
 
 
@@ -16,21 +16,21 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="CreateTriggerRequestScheduleType0")
+T = TypeVar("T", bound="UpdateTriggerRequestSourceType0Schedule")
 
 
 
 @_attrs_define
-class CreateTriggerRequestScheduleType0:
+class UpdateTriggerRequestSourceType0Schedule:
     """ 
         Attributes:
-            interval_seconds (int):  Example: 86400.
-            type_ (CreateTriggerRequestScheduleType0Type | Unset):  Example: interval.
+            type_ (UpdateTriggerRequestSourceType0ScheduleType | Unset):  Example: interval.
+            interval_seconds (int | Unset):  Example: 86400.
             window_seconds (int | Unset):
      """
 
-    interval_seconds: int
-    type_: CreateTriggerRequestScheduleType0Type | Unset = UNSET
+    type_: UpdateTriggerRequestSourceType0ScheduleType | Unset = UNSET
+    interval_seconds: int | Unset = UNSET
     window_seconds: int | Unset = UNSET
 
 
@@ -38,12 +38,12 @@ class CreateTriggerRequestScheduleType0:
 
 
     def to_dict(self) -> dict[str, Any]:
-        interval_seconds = self.interval_seconds
-
         type_: str | Unset = UNSET
         if not isinstance(self.type_, Unset):
             type_ = self.type_.value
 
+
+        interval_seconds = self.interval_seconds
 
         window_seconds = self.window_seconds
 
@@ -51,10 +51,11 @@ class CreateTriggerRequestScheduleType0:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
-            "intervalSeconds": interval_seconds,
         })
         if type_ is not UNSET:
             field_dict["type"] = type_
+        if interval_seconds is not UNSET:
+            field_dict["intervalSeconds"] = interval_seconds
         if window_seconds is not UNSET:
             field_dict["windowSeconds"] = window_seconds
 
@@ -65,25 +66,25 @@ class CreateTriggerRequestScheduleType0:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        interval_seconds = d.pop("intervalSeconds")
-
         _type_ = d.pop("type", UNSET)
-        type_: CreateTriggerRequestScheduleType0Type | Unset
+        type_: UpdateTriggerRequestSourceType0ScheduleType | Unset
         if isinstance(_type_,  Unset):
             type_ = UNSET
         else:
-            type_ = CreateTriggerRequestScheduleType0Type(_type_)
+            type_ = UpdateTriggerRequestSourceType0ScheduleType(_type_)
 
 
 
+
+        interval_seconds = d.pop("intervalSeconds", UNSET)
 
         window_seconds = d.pop("windowSeconds", UNSET)
 
-        create_trigger_request_schedule_type_0 = cls(
-            interval_seconds=interval_seconds,
+        update_trigger_request_source_type_0_schedule = cls(
             type_=type_,
+            interval_seconds=interval_seconds,
             window_seconds=window_seconds,
         )
 
-        return create_trigger_request_schedule_type_0
+        return update_trigger_request_source_type_0_schedule
 

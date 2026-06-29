@@ -8,34 +8,40 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..models.trigger_source_type_1_type import TriggerSourceType1Type
 
 
 
 
 
 
-T = TypeVar("T", bound="CreateTriggerRequestEnv")
+T = TypeVar("T", bound="TriggerSourceType1")
 
 
 
 @_attrs_define
-class CreateTriggerRequestEnv:
+class TriggerSourceType1:
     """ 
-        Example:
-            {'AK_API_URL': 'https://ak.example.com'}
-
+        Attributes:
+            type_ (TriggerSourceType1Type):
      """
 
-    additional_properties: dict[str, str] = _attrs_field(init=False, factory=dict)
+    type_: TriggerSourceType1Type
+    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+        type_ = self.type_.value
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
+        field_dict.update({
+            "type": type_,
+        })
 
         return field_dict
 
@@ -44,21 +50,27 @@ class CreateTriggerRequestEnv:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        create_trigger_request_env = cls(
+        type_ = TriggerSourceType1Type(d.pop("type"))
+
+
+
+
+        trigger_source_type_1 = cls(
+            type_=type_,
         )
 
 
-        create_trigger_request_env.additional_properties = d
-        return create_trigger_request_env
+        trigger_source_type_1.additional_properties = d
+        return trigger_source_type_1
 
     @property
     def additional_keys(self) -> list[str]:
         return list(self.additional_properties.keys())
 
-    def __getitem__(self, key: str) -> str:
+    def __getitem__(self, key: str) -> Any:
         return self.additional_properties[key]
 
-    def __setitem__(self, key: str, value: str) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         self.additional_properties[key] = value
 
     def __delitem__(self, key: str) -> None:

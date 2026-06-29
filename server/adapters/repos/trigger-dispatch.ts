@@ -1,5 +1,5 @@
 import { RuntimeSchema } from '@server/contracts/environment-contracts'
-import type { Trigger } from '@server/domain/trigger'
+import type { Trigger, TriggerSessionTemplate } from '@server/domain/trigger'
 import type { ClaimedRun, DueTrigger, TriggerDispatchRepo } from '@server/usecases/ports'
 import { and, asc, eq, isNull, lte } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
@@ -35,15 +35,19 @@ function dueTriggerFrom(row: TriggerRow): DueTrigger {
     organizationId: row.organizationId,
     projectId: row.projectId,
     name: row.name,
-    agentId: row.agentId,
-    environmentId: row.environmentId,
-    runtime: RuntimeSchema.parse(row.runtime),
-    promptTemplate: row.promptTemplate,
-    env: parseJson<Record<string, string>>(row.env, {}),
-    envFrom: parseJson(row.envFrom, [] as DueTrigger['envFrom']),
-    volumes: parseJson(row.volumes, [] as DueTrigger['volumes']),
-    volumeMounts: parseJson(row.volumeMounts, [] as DueTrigger['volumeMounts']),
-    metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
+    template: {
+      metadata: parseJson<TriggerSessionTemplate['metadata']>(row.metadata, { labels: {}, annotations: {} }),
+      spec: {
+        agentId: row.agentId,
+        environmentId: row.environmentId,
+        runtime: RuntimeSchema.parse(row.runtime),
+        promptTemplate: row.promptTemplate,
+        env: parseJson<Record<string, string>>(row.env, {}),
+        envFrom: parseJson(row.envFrom, [] as TriggerSessionTemplate['spec']['envFrom']),
+        volumes: parseJson(row.volumes, [] as TriggerSessionTemplate['spec']['volumes']),
+        volumeMounts: parseJson(row.volumeMounts, [] as TriggerSessionTemplate['spec']['volumeMounts']),
+      },
+    },
     nextDueAt: row.nextDueAt,
     intervalSeconds: row.intervalSeconds,
   }

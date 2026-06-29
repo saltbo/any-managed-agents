@@ -528,7 +528,7 @@ export const readTrigger = (options) => (options.client ?? client).get({
 /**
  * Update, pause, or archive a trigger
  *
- * Partial update. Pause with `enabled: false`; archive with `archived: true`; restore with `archived: false`.
+ * Partial update. Pause with `suspend: true`; resume with `suspend: false`; archive with `archived: true`; restore with `archived: false`.
  */
 export const updateTrigger = (options) => (options.client ?? client).patch({
     security: [{ scheme: 'bearer', type: 'http' }],

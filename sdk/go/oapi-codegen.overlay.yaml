@@ -70,12 +70,6 @@ actions:
     remove: true
   - target: $.components.schemas['AuditRecord']['properties']['after'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['TriggerSpec']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateTriggerRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateTriggerRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['TriggerRunSpec']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionAgentSnapshot']['properties']['subagents']['items'].additionalProperties.nullable

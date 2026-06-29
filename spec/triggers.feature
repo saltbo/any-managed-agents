@@ -11,14 +11,14 @@ Feature: Triggers
   Scenario: Create a trigger from usable references
     Given a signed-in user with an active agent and environment
     When the user creates a scheduled trigger with a prompt template and schedule
-    Then the trigger is stored enabled with a derived next-due time when omitted
+    Then the trigger is stored active with a derived next-due time when omitted
     And a missing agent or archived environment is rejected before storing
 
   @triggers/http-create @usecase
   Scenario: Create an HTTP trigger from usable references
     Given a signed-in user with an active agent and environment
     When the user creates an HTTP trigger with a prompt template
-    Then the trigger is stored enabled without schedule timing
+    Then the trigger is stored active without schedule timing
     And the HTTP trigger can render prompt variables from request fields
 
   @triggers/lifecycle @usecase
@@ -48,7 +48,7 @@ Feature: Triggers
   Scenario: Create, list, read, update, pause, archive, restore, and audit triggers over the API
 	    Given a signed-in user with an active agent and environment
 	    When the user drives the triggers API end to end
-	    Then create, paginated list, search, enabled filter, read, update, archive, and restore are supported
+	    Then create, paginated list, search, suspend filter, read, update, archive, and restore are supported
 	    And trigger create, update, and archive actions are recorded in audit history
 	    And triggers expose safe metadata, spec, and status without raw tenancy fields
 

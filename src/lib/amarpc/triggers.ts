@@ -22,13 +22,14 @@ export type TriggerRunListResponse = RpcResponseType<TriggersRpc[':triggerId']['
 export type TriggerRun = ListItem<TriggerRunListResponse>
 export type TriggerSpec = Trigger['spec']
 export type TriggerStatus = Trigger['status']
-export type TriggerSchedule = NonNullable<TriggerSpec['schedule']>
+export type TriggerSource = TriggerSpec['source']
+export type TriggerSchedule = Extract<TriggerSource, { type: 'schedule' }>['schedule']
 export type TriggerRunSpec = TriggerRun['spec']
 export type TriggerRunStatus = TriggerRun['status']
-export type RuntimeName = TriggerSpec['runtime']
+export type RuntimeName = TriggerSpec['template']['spec']['runtime']
 
 export interface TriggerListOptions extends ListOptions {
-  enabled?: boolean
+  suspend?: boolean
 }
 
 export const triggersApi = {
@@ -37,7 +38,7 @@ export const triggersApi = {
   createTrigger: (input: CreateTriggerInput) =>
     rpcRequest<Trigger>(v1.triggers.$post(jsonArg<typeof v1.triggers.$post>(input))),
   readTrigger: (id: string) => rpcRequest<Trigger>(v1.triggers[':triggerId'].$get({ param: { triggerId: id } })),
-  updateTrigger: (id: string, input: Partial<TriggerInput> & { enabled?: boolean; archived?: boolean }) =>
+  updateTrigger: (id: string, input: Partial<TriggerInput> & { archived?: boolean }) =>
     rpcRequest<Trigger>(
       v1.triggers[':triggerId'].$patch({
         param: { triggerId: id },

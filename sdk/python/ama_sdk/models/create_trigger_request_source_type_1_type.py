@@ -1,8 +1,7 @@
 from enum import Enum
 
-class UpdateTriggerRequestType(str, Enum):
+class CreateTriggerRequestSourceType1Type(str, Enum):
     HTTP = "http"
-    SCHEDULED = "scheduled"
 
     def __str__(self) -> str:
         return str(self.value)

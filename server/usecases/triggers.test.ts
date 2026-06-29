@@ -15,20 +15,23 @@ const auth: AuthScope = {
 
 function baseConfig(overrides: Partial<TriggerConfig> = {}): TriggerConfig {
   return {
-    type: 'scheduled',
-    agentId: 'agent_1',
-    environmentId: 'env_1',
-    runtime: 'ama',
     name: 'Heartbeat',
-    promptTemplate: 'Do work.',
-    env: {},
-    envFrom: [],
-    volumes: [],
-    volumeMounts: [],
-    schedule: { intervalSeconds: 3600, windowSeconds: 0 },
-    enabled: true,
+    source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 } },
+    suspend: false,
+    template: {
+      metadata: { labels: {}, annotations: {} },
+      spec: {
+        agentId: 'agent_1',
+        environmentId: 'env_1',
+        runtime: 'ama',
+        promptTemplate: 'Do work.',
+        env: {},
+        envFrom: [],
+        volumes: [],
+        volumeMounts: [],
+      },
+    },
     nextDueAt: '2026-05-26T12:00:00.000Z',
-    metadata: {},
     ...overrides,
   }
 }
@@ -55,18 +58,9 @@ function triggerRecord(
       ...overrides.metadata,
     },
     spec: {
-      type: base.type,
-      agentId: base.agentId,
-      environmentId: base.environmentId,
-      runtime: base.runtime,
-      promptTemplate: base.promptTemplate,
-      env: base.env,
-      envFrom: base.envFrom,
-      volumes: base.volumes,
-      volumeMounts: base.volumeMounts,
-      schedule: base.schedule ? { type: 'interval', ...base.schedule } : null,
-      enabled: base.enabled,
-      metadata: base.metadata,
+      source: base.source,
+      suspend: base.suspend,
+      template: base.template,
       ...overrides.spec,
     },
     status: {
@@ -94,18 +88,9 @@ function fakeDeps(repo: Partial<Deps['triggers']> = {}): Deps {
           updatedAt: timestamp,
         },
         spec: {
-          type: input.config.type,
-          agentId: input.config.agentId,
-          environmentId: input.config.environmentId,
-          runtime: input.config.runtime,
-          promptTemplate: input.config.promptTemplate,
-          env: input.config.env,
-          envFrom: input.config.envFrom,
-          volumes: input.config.volumes,
-          volumeMounts: input.config.volumeMounts,
-          schedule: input.config.schedule ? { type: 'interval', ...input.config.schedule } : null,
-          enabled: input.config.enabled,
-          metadata: input.config.metadata,
+          source: input.config.source,
+          suspend: input.config.suspend,
+          template: input.config.template,
         },
         status: { nextDueAt: input.config.nextDueAt },
       }),
@@ -113,18 +98,9 @@ function fakeDeps(repo: Partial<Deps['triggers']> = {}): Deps {
       triggerRecord({
         metadata: { uid: id, name: fields.config.name, archivedAt: fields.archivedAt, updatedAt },
         spec: {
-          type: fields.config.type,
-          agentId: fields.config.agentId,
-          environmentId: fields.config.environmentId,
-          runtime: fields.config.runtime,
-          promptTemplate: fields.config.promptTemplate,
-          env: fields.config.env,
-          envFrom: fields.config.envFrom,
-          volumes: fields.config.volumes,
-          volumeMounts: fields.config.volumeMounts,
-          schedule: fields.config.schedule ? { type: 'interval', ...fields.config.schedule } : null,
-          enabled: fields.config.enabled,
-          metadata: fields.config.metadata,
+          source: fields.config.source,
+          suspend: fields.config.suspend,
+          template: fields.config.template,
         },
         status: { phase: fields.archivedAt ? 'archived' : 'active', nextDueAt: fields.config.nextDueAt },
       }),
@@ -141,29 +117,22 @@ function fakeDeps(repo: Partial<Deps['triggers']> = {}): Deps {
 describe('[spec: triggers/create] createTrigger', () => {
   it('creates a trigger when references are usable', async () => {
     const trigger = await createTrigger(fakeDeps(), auth, {
-      agentId: 'agent_1',
-      environmentId: 'env_1',
       config: { ...baseConfig(), nextDueAt: '2026-05-26T12:00:00.000Z' },
     })
-    expect(trigger.spec.agentId).toBe('agent_1')
+    expect(trigger.spec.template.spec.agentId).toBe('agent_1')
     expect(trigger.status.nextDueAt).toBe('2026-05-26T12:00:00.000Z')
   })
 
   it('creates an HTTP trigger without schedule timing [spec: triggers/http-create]', async () => {
     const trigger = await createTrigger(fakeDeps(), auth, {
-      agentId: 'agent_1',
-      environmentId: 'env_1',
-      config: { ...baseConfig({ type: 'http', schedule: null, nextDueAt: null }), nextDueAt: null },
+      config: { ...baseConfig({ source: { type: 'http' }, nextDueAt: null }), nextDueAt: null },
     })
-    expect(trigger.spec.type).toBe('http')
-    expect(trigger.spec.schedule).toBeNull()
+    expect(trigger.spec.source.type).toBe('http')
     expect(trigger.status.nextDueAt).toBeNull()
   })
 
   it('derives nextDueAt from the interval when omitted', async () => {
     const trigger = await createTrigger(fakeDeps(), auth, {
-      agentId: 'agent_1',
-      environmentId: 'env_1',
       config: { ...baseConfig(), nextDueAt: null },
     })
     expect(trigger.status.nextDueAt).toEqual(expect.any(String))
@@ -172,9 +141,7 @@ describe('[spec: triggers/create] createTrigger', () => {
   it('rejects scheduled triggers without schedule timing', async () => {
     await expect(
       createTrigger(fakeDeps(), auth, {
-        agentId: 'agent_1',
-        environmentId: 'env_1',
-        config: { ...baseConfig({ schedule: null }), nextDueAt: null },
+        config: { ...baseConfig({ source: { type: 'schedule', schedule: undefined as never } }), nextDueAt: null },
       }),
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
@@ -182,9 +149,7 @@ describe('[spec: triggers/create] createTrigger', () => {
   it('rejects HTTP triggers with schedule timing', async () => {
     await expect(
       createTrigger(fakeDeps(), auth, {
-        agentId: 'agent_1',
-        environmentId: 'env_1',
-        config: { ...baseConfig({ type: 'http' }), nextDueAt: null },
+        config: { ...baseConfig({ source: { type: 'http' } }), nextDueAt: '2026-05-26T12:00:00.000Z' },
       }),
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
@@ -192,9 +157,15 @@ describe('[spec: triggers/create] createTrigger', () => {
   it('rejects secret metadata [spec: triggers/validation]', async () => {
     await expect(
       createTrigger(fakeDeps(), auth, {
-        agentId: 'agent_1',
-        environmentId: 'env_1',
-        config: { ...baseConfig(), nextDueAt: null, metadata: { private_key: 'x' } },
+        config: {
+          ...baseConfig({
+            template: {
+              ...baseConfig().template,
+              metadata: { labels: {}, annotations: { private_key: 'x' } },
+            },
+          }),
+          nextDueAt: null,
+        },
       }),
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
@@ -202,9 +173,15 @@ describe('[spec: triggers/create] createTrigger', () => {
   it('rejects envFrom', async () => {
     await expect(
       createTrigger(fakeDeps(), auth, {
-        agentId: 'agent_1',
-        environmentId: 'env_1',
-        config: { ...baseConfig(), nextDueAt: null, env: { AK_API_TOKEN: 'x' } },
+        config: {
+          ...baseConfig({
+            template: {
+              ...baseConfig().template,
+              spec: { ...baseConfig().template.spec, env: { AK_API_TOKEN: 'x' } },
+            },
+          }),
+          nextDueAt: null,
+        },
       }),
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
@@ -213,9 +190,12 @@ describe('[spec: triggers/create] createTrigger', () => {
     const deps = fakeDeps({ agentUsable: async () => ({ status: 404, message: 'Agent not found' }) })
     await expect(
       createTrigger(deps, auth, {
-        agentId: 'agent_missing',
-        environmentId: 'env_1',
-        config: { ...baseConfig(), nextDueAt: null },
+        config: {
+          ...baseConfig({
+            template: { ...baseConfig().template, spec: { ...baseConfig().template.spec, agentId: 'agent_missing' } },
+          }),
+          nextDueAt: null,
+        },
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError', status: 404 })
   })
@@ -226,9 +206,15 @@ describe('[spec: triggers/create] createTrigger', () => {
     })
     await expect(
       createTrigger(deps, auth, {
-        agentId: 'agent_1',
-        environmentId: 'env_archived',
-        config: { ...baseConfig(), nextDueAt: null },
+        config: {
+          ...baseConfig({
+            template: {
+              ...baseConfig().template,
+              spec: { ...baseConfig().template.spec, environmentId: 'env_archived' },
+            },
+          }),
+          nextDueAt: null,
+        },
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError', status: 409 })
   })
@@ -238,10 +224,10 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
   it('merges field updates and snapshots schedule changes', async () => {
     const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), {
       name: 'Renamed',
-      schedule: { intervalSeconds: 1800 },
+      source: { type: 'schedule', schedule: { intervalSeconds: 1800 } },
     })
     expect(result.trigger.metadata.name).toBe('Renamed')
-    expect(result.trigger.spec.schedule?.intervalSeconds).toBe(1800)
+    expect(result.trigger.spec.source).toMatchObject({ type: 'schedule', schedule: { intervalSeconds: 1800 } })
     expect(result.archived).toBe(false)
   })
 
@@ -273,16 +259,17 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
 
   it('re-validates references when the agent changes', async () => {
     const deps = fakeDeps({ agentUsable: async () => ({ status: 404, message: 'Agent not found' }) })
-    await expect(updateTrigger(deps, auth, triggerRecord(), { agentId: 'agent_other' })).rejects.toMatchObject({
+    await expect(
+      updateTrigger(deps, auth, triggerRecord(), { template: { spec: { agentId: 'agent_other' } } }),
+    ).rejects.toMatchObject({
       name: 'TriggerConflictError',
       status: 404,
     })
   })
 
   it('converts a scheduled trigger to HTTP and clears timing', async () => {
-    const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), { type: 'http', schedule: null })
-    expect(result.trigger.spec.type).toBe('http')
-    expect(result.trigger.spec.schedule).toBeNull()
+    const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), { source: { type: 'http' } })
+    expect(result.trigger.spec.source.type).toBe('http')
     expect(result.trigger.status.nextDueAt).toBeNull()
   })
 
@@ -291,18 +278,20 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
       updateTrigger(
         fakeDeps(),
         auth,
-        triggerRecord({ spec: { type: 'http', schedule: null }, status: { nextDueAt: null } }),
+        triggerRecord({ spec: { source: { type: 'http' } }, status: { nextDueAt: null } }),
         {
-          schedule: { intervalSeconds: 60 },
+          nextDueAt: '2026-05-26T12:00:00.000Z',
         },
       ),
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
 
-  it('rejects clearing schedule timing on a scheduled trigger', async () => {
-    await expect(updateTrigger(fakeDeps(), auth, triggerRecord(), { schedule: null })).rejects.toBeInstanceOf(
-      TriggerValidationError,
-    )
+  it('rejects converting an HTTP trigger to a scheduled trigger without timing', async () => {
+    await expect(
+      updateTrigger(fakeDeps(), auth, triggerRecord({ spec: { source: { type: 'http' } } }), {
+        source: { type: 'schedule' },
+      }),
+    ).rejects.toBeInstanceOf(TriggerValidationError)
   })
 })
 

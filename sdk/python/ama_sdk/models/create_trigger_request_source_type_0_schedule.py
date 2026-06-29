@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.update_trigger_request_schedule_type_0_type import UpdateTriggerRequestScheduleType0Type
+from ..models.create_trigger_request_source_type_0_schedule_type import CreateTriggerRequestSourceType0ScheduleType
 from ..types import UNSET, Unset
 
 
@@ -16,21 +16,21 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="UpdateTriggerRequestScheduleType0")
+T = TypeVar("T", bound="CreateTriggerRequestSourceType0Schedule")
 
 
 
 @_attrs_define
-class UpdateTriggerRequestScheduleType0:
+class CreateTriggerRequestSourceType0Schedule:
     """ 
         Attributes:
             interval_seconds (int):  Example: 86400.
-            type_ (UpdateTriggerRequestScheduleType0Type | Unset):  Example: interval.
+            type_ (CreateTriggerRequestSourceType0ScheduleType | Unset):  Example: interval.
             window_seconds (int | Unset):
      """
 
     interval_seconds: int
-    type_: UpdateTriggerRequestScheduleType0Type | Unset = UNSET
+    type_: CreateTriggerRequestSourceType0ScheduleType | Unset = UNSET
     window_seconds: int | Unset = UNSET
 
 
@@ -68,22 +68,22 @@ class UpdateTriggerRequestScheduleType0:
         interval_seconds = d.pop("intervalSeconds")
 
         _type_ = d.pop("type", UNSET)
-        type_: UpdateTriggerRequestScheduleType0Type | Unset
+        type_: CreateTriggerRequestSourceType0ScheduleType | Unset
         if isinstance(_type_,  Unset):
             type_ = UNSET
         else:
-            type_ = UpdateTriggerRequestScheduleType0Type(_type_)
+            type_ = CreateTriggerRequestSourceType0ScheduleType(_type_)
 
 
 
 
         window_seconds = d.pop("windowSeconds", UNSET)
 
-        update_trigger_request_schedule_type_0 = cls(
+        create_trigger_request_source_type_0_schedule = cls(
             interval_seconds=interval_seconds,
             type_=type_,
             window_seconds=window_seconds,
         )
 
-        return update_trigger_request_schedule_type_0
+        return create_trigger_request_source_type_0_schedule
 

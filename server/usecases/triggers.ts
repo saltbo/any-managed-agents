@@ -1,17 +1,29 @@
-import { hasSecretMaterial, nextDueFromInterval, type Trigger } from '@server/domain/trigger'
+import {
+  hasSecretMaterial,
+  nextDueFromInterval,
+  type Trigger,
+  type TriggerSchedule,
+  type TriggerSessionTemplate,
+} from '@server/domain/trigger'
 import type { Deps } from './deps'
 import { type AuthScope, type TriggerConfig, TriggerConflictError, TriggerValidationError } from './ports'
 
 // Raw secrets must be stored as secret references, so trigger metadata, resource
 // volumes, and plain env are rejected when they carry secret-like material.
 function rejectSecretMaterial(input: {
-  metadata?: Record<string, unknown> | undefined
-  volumes?: TriggerConfig['volumes'] | undefined
+  template?: TriggerSessionTemplate | undefined
+  templateMetadata?: Partial<TriggerSessionTemplate['metadata']> | undefined
+  volumes?: TriggerSessionTemplate['spec']['volumes'] | undefined
   env?: Record<string, string> | undefined
 }) {
-  if (input.metadata !== undefined && hasSecretMaterial(input.metadata)) {
-    throw new TriggerValidationError('Invalid trigger metadata', {
-      metadata: 'Secret material must be stored in secret references.',
+  if (input.template !== undefined && hasSecretMaterial(input.template.metadata)) {
+    throw new TriggerValidationError('Invalid trigger template metadata', {
+      template: 'Secret material must be stored in secret references.',
+    })
+  }
+  if (input.templateMetadata !== undefined && hasSecretMaterial(input.templateMetadata)) {
+    throw new TriggerValidationError('Invalid trigger template metadata', {
+      template: 'Secret material must be stored in secret references.',
     })
   }
   if (
@@ -43,52 +55,50 @@ async function assertReferencesUsable(deps: Deps, projectId: string, agentId: st
 }
 
 export interface CreateTriggerInputDto {
-  agentId: string
-  environmentId: string | null
-  config: Omit<TriggerConfig, 'agentId' | 'environmentId' | 'nextDueAt'> & { nextDueAt: string | null }
+  config: Omit<TriggerConfig, 'nextDueAt'> & { nextDueAt: string | null }
 }
 
 function normalizeScheduleConfig(config: CreateTriggerInputDto['config']) {
-  if (config.type === 'scheduled') {
-    if (config.schedule === null) {
+  if (config.source.type === 'schedule') {
+    if (config.source.schedule === undefined) {
       throw new TriggerValidationError('Invalid trigger schedule', {
         schedule: 'Scheduled triggers require an interval schedule.',
       })
     }
     return {
-      schedule: config.schedule,
-      nextDueAt: config.nextDueAt ?? nextDueFromInterval(config.schedule.intervalSeconds),
+      source: config.source,
+      nextDueAt: config.nextDueAt ?? nextDueFromInterval(config.source.schedule.intervalSeconds),
     }
   }
-  if (config.schedule !== null || config.nextDueAt !== null) {
+  if (config.nextDueAt !== null) {
     throw new TriggerValidationError('Invalid trigger schedule', {
       schedule: 'HTTP triggers do not use schedule timing.',
     })
   }
-  return { schedule: null, nextDueAt: null }
+  return { source: config.source, nextDueAt: null }
 }
 
 export async function createTrigger(deps: Deps, auth: AuthScope, input: CreateTriggerInputDto): Promise<Trigger> {
-  rejectSecretMaterial(input.config)
-  await assertReferencesUsable(deps, auth.project.id, input.agentId, input.environmentId)
+  rejectSecretMaterial({
+    template: input.config.template,
+    volumes: input.config.template.spec.volumes,
+    env: input.config.template.spec.env,
+  })
+  await assertReferencesUsable(
+    deps,
+    auth.project.id,
+    input.config.template.spec.agentId,
+    input.config.template.spec.environmentId,
+  )
 
   const timestamp = new Date().toISOString()
   const timing = normalizeScheduleConfig(input.config)
   const config: TriggerConfig = {
-    type: input.config.type,
-    agentId: input.agentId,
-    environmentId: input.environmentId,
-    runtime: input.config.runtime,
     name: input.config.name,
-    promptTemplate: input.config.promptTemplate,
-    env: input.config.env,
-    envFrom: input.config.envFrom,
-    volumes: input.config.volumes,
-    volumeMounts: input.config.volumeMounts,
-    schedule: timing.schedule,
-    enabled: input.config.enabled,
+    source: timing.source,
+    suspend: input.config.suspend,
+    template: input.config.template,
     nextDueAt: timing.nextDueAt,
-    metadata: input.config.metadata,
   }
   return deps.triggers.insert(
     {
@@ -102,54 +112,65 @@ export async function createTrigger(deps: Deps, auth: AuthScope, input: CreateTr
 }
 
 export interface UpdateTriggerPatch {
-  type?: TriggerConfig['type']
-  agentId?: string
-  environmentId?: string
-  runtime?: TriggerConfig['runtime']
   name?: string
-  promptTemplate?: string
-  env?: Record<string, string>
-  envFrom?: TriggerConfig['envFrom']
-  volumes?: TriggerConfig['volumes']
-  volumeMounts?: TriggerConfig['volumeMounts']
-  schedule?: { intervalSeconds?: number; windowSeconds?: number } | null
-  enabled?: boolean
+  source?: { type: 'schedule'; schedule?: Partial<TriggerSchedule> } | { type: 'http' }
+  suspend?: boolean
+  template?: {
+    metadata?: Partial<TriggerSessionTemplate['metadata']>
+    spec?: Partial<TriggerSessionTemplate['spec']>
+  }
   archived?: boolean
   nextDueAt?: string
-  metadata?: Record<string, unknown>
 }
 
-function mergeSchedule(
-  trigger: Trigger,
-  patch: UpdateTriggerPatch,
-): Pick<TriggerConfig, 'type' | 'schedule' | 'nextDueAt'> {
-  const type = patch.type ?? trigger.spec.type
-  if (type === 'http') {
-    if (patch.schedule !== undefined && patch.schedule !== null) {
+function mergeTemplate(trigger: Trigger, patch: UpdateTriggerPatch): TriggerSessionTemplate {
+  return {
+    metadata: {
+      labels: patch.template?.metadata?.labels ?? trigger.spec.template.metadata.labels,
+      annotations: patch.template?.metadata?.annotations ?? trigger.spec.template.metadata.annotations,
+    },
+    spec: {
+      ...trigger.spec.template.spec,
+      ...patch.template?.spec,
+    },
+  }
+}
+
+function mergeSource(trigger: Trigger, patch: UpdateTriggerPatch): Pick<TriggerConfig, 'source' | 'nextDueAt'> {
+  const current = trigger.spec.source
+  if (patch.source?.type === 'http') {
+    if (patch.nextDueAt !== undefined) {
       throw new TriggerValidationError('Invalid trigger schedule', {
         schedule: 'HTTP triggers do not use schedule timing.',
       })
     }
-    return { type, schedule: null, nextDueAt: null }
+    return { source: { type: 'http' }, nextDueAt: null }
   }
-  const current = trigger.spec.schedule
-  const schedule =
-    patch.schedule === null
-      ? null
-      : {
-          intervalSeconds: patch.schedule?.intervalSeconds ?? current?.intervalSeconds,
-          windowSeconds: patch.schedule?.windowSeconds ?? current?.windowSeconds ?? 0,
-        }
-  if (schedule === null || schedule.intervalSeconds === undefined) {
+  if (patch.source?.type === 'schedule' || (!patch.source && current.type === 'schedule')) {
+    const currentSchedule = current.type === 'schedule' ? current.schedule : null
+    const patchSchedule = patch.source?.type === 'schedule' ? patch.source.schedule : undefined
+    const intervalSeconds = patchSchedule?.intervalSeconds ?? currentSchedule?.intervalSeconds
+    if (intervalSeconds === undefined) {
+      throw new TriggerValidationError('Invalid trigger schedule', {
+        schedule: 'Scheduled triggers require an interval schedule.',
+      })
+    }
+    const schedule: TriggerSchedule = {
+      type: 'interval',
+      intervalSeconds,
+      windowSeconds: patchSchedule?.windowSeconds ?? currentSchedule?.windowSeconds ?? 0,
+    }
+    return {
+      source: { type: 'schedule', schedule },
+      nextDueAt: patch.nextDueAt ?? trigger.status.nextDueAt ?? nextDueFromInterval(schedule.intervalSeconds),
+    }
+  }
+  if (patch.nextDueAt !== undefined) {
     throw new TriggerValidationError('Invalid trigger schedule', {
-      schedule: 'Scheduled triggers require an interval schedule.',
+      schedule: 'HTTP triggers do not use schedule timing.',
     })
   }
-  return {
-    type,
-    schedule: schedule as TriggerConfig['schedule'],
-    nextDueAt: patch.nextDueAt ?? trigger.status.nextDueAt,
-  }
+  return { source: { type: 'http' }, nextDueAt: null }
 }
 
 export interface UpdateTriggerResult {
@@ -170,12 +191,17 @@ export async function updateTrigger(
   if (trigger.metadata.archivedAt !== null && patch.archived !== false) {
     throw new TriggerConflictError('Archived triggers cannot be updated')
   }
-  rejectSecretMaterial({ metadata: patch.metadata, volumes: patch.volumes, env: patch.env })
-  const timing = mergeSchedule(trigger, patch)
+  const template = mergeTemplate(trigger, patch)
+  rejectSecretMaterial({
+    templateMetadata: patch.template?.metadata,
+    volumes: patch.template?.spec?.volumes,
+    env: patch.template?.spec?.env,
+  })
+  const timing = mergeSource(trigger, patch)
 
-  const agentId = patch.agentId ?? trigger.spec.agentId
-  const environmentId = patch.environmentId ?? trigger.spec.environmentId
-  if (patch.agentId !== undefined || patch.environmentId !== undefined) {
+  const agentId = template.spec.agentId
+  const environmentId = template.spec.environmentId
+  if (patch.template?.spec?.agentId !== undefined || patch.template?.spec?.environmentId !== undefined) {
     await assertReferencesUsable(deps, auth.project.id, agentId, environmentId)
   }
 
@@ -187,20 +213,11 @@ export async function updateTrigger(
         ? null
         : trigger.metadata.archivedAt
   const config: TriggerConfig = {
-    type: timing.type,
-    agentId,
-    environmentId,
-    runtime: patch.runtime ?? trigger.spec.runtime,
     name: patch.name ?? trigger.metadata.name,
-    promptTemplate: patch.promptTemplate ?? trigger.spec.promptTemplate,
-    env: patch.env ?? trigger.spec.env,
-    envFrom: patch.envFrom ?? trigger.spec.envFrom,
-    volumes: patch.volumes ?? trigger.spec.volumes,
-    volumeMounts: patch.volumeMounts ?? trigger.spec.volumeMounts,
-    schedule: timing.schedule,
-    enabled: patch.enabled ?? trigger.spec.enabled,
+    source: timing.source,
+    suspend: patch.suspend ?? trigger.spec.suspend,
+    template,
     nextDueAt: timing.nextDueAt,
-    metadata: patch.metadata ?? trigger.spec.metadata,
   }
   const updated = await deps.triggers.update(auth.project.id, trigger.metadata.uid, { config, archivedAt }, timestamp)
   return { trigger: updated, archived: patch.archived === true && trigger.metadata.archivedAt === null }

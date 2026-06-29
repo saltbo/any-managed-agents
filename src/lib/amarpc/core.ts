@@ -75,7 +75,7 @@ export async function rpcRequest<T>(responsePromise: Promise<RpcResponse>) {
 export function queryOptions(options: object = {}) {
   const query: Record<string, string> = {}
   for (const [key, value] of Object.entries(options as Record<string, string | number | boolean | undefined>)) {
-    if (value !== undefined && value !== false) {
+    if (value !== undefined) {
       query[key] = String(value)
     }
   }

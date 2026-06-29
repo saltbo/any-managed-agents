@@ -10,7 +10,7 @@ from ... import errors
 
 from ...models.error_response import ErrorResponse
 from ...models.list_triggers_archived import ListTriggersArchived
-from ...models.list_triggers_enabled import ListTriggersEnabled
+from ...models.list_triggers_suspend import ListTriggersSuspend
 from ...models.trigger_list_response import TriggerListResponse
 from ...types import UNSET, Unset
 from typing import cast
@@ -26,7 +26,7 @@ def _get_kwargs(
     created_to: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-    enabled: ListTriggersEnabled | Unset = UNSET,
+    suspend: ListTriggersSuspend | Unset = UNSET,
 
 ) -> dict[str, Any]:
     
@@ -57,11 +57,11 @@ def _get_kwargs(
 
     params["cursor"] = cursor
 
-    json_enabled: str | Unset = UNSET
-    if not isinstance(enabled, Unset):
-        json_enabled = enabled.value
+    json_suspend: str | Unset = UNSET
+    if not isinstance(suspend, Unset):
+        json_suspend = suspend.value
 
-    params["enabled"] = json_enabled
+    params["suspend"] = json_suspend
 
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
@@ -124,7 +124,7 @@ def sync_detailed(
     created_to: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-    enabled: ListTriggersEnabled | Unset = UNSET,
+    suspend: ListTriggersSuspend | Unset = UNSET,
 
 ) -> Response[ErrorResponse | TriggerListResponse]:
     """ List triggers
@@ -138,7 +138,7 @@ def sync_detailed(
         limit (int | Unset):  Example: 50.
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
-        enabled (ListTriggersEnabled | Unset): Filter by the operational toggle. Example: true.
+        suspend (ListTriggersSuspend | Unset): Filter by the operational toggle. Example: false.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -156,7 +156,7 @@ created_from=created_from,
 created_to=created_to,
 limit=limit,
 cursor=cursor,
-enabled=enabled,
+suspend=suspend,
 
     )
 
@@ -175,7 +175,7 @@ def sync(
     created_to: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-    enabled: ListTriggersEnabled | Unset = UNSET,
+    suspend: ListTriggersSuspend | Unset = UNSET,
 
 ) -> ErrorResponse | TriggerListResponse | None:
     """ List triggers
@@ -189,7 +189,7 @@ def sync(
         limit (int | Unset):  Example: 50.
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
-        enabled (ListTriggersEnabled | Unset): Filter by the operational toggle. Example: true.
+        suspend (ListTriggersSuspend | Unset): Filter by the operational toggle. Example: false.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -208,7 +208,7 @@ created_from=created_from,
 created_to=created_to,
 limit=limit,
 cursor=cursor,
-enabled=enabled,
+suspend=suspend,
 
     ).parsed
 
@@ -221,7 +221,7 @@ async def asyncio_detailed(
     created_to: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-    enabled: ListTriggersEnabled | Unset = UNSET,
+    suspend: ListTriggersSuspend | Unset = UNSET,
 
 ) -> Response[ErrorResponse | TriggerListResponse]:
     """ List triggers
@@ -235,7 +235,7 @@ async def asyncio_detailed(
         limit (int | Unset):  Example: 50.
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
-        enabled (ListTriggersEnabled | Unset): Filter by the operational toggle. Example: true.
+        suspend (ListTriggersSuspend | Unset): Filter by the operational toggle. Example: false.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -253,7 +253,7 @@ created_from=created_from,
 created_to=created_to,
 limit=limit,
 cursor=cursor,
-enabled=enabled,
+suspend=suspend,
 
     )
 
@@ -272,7 +272,7 @@ async def asyncio(
     created_to: datetime.datetime | Unset = UNSET,
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
-    enabled: ListTriggersEnabled | Unset = UNSET,
+    suspend: ListTriggersSuspend | Unset = UNSET,
 
 ) -> ErrorResponse | TriggerListResponse | None:
     """ List triggers
@@ -286,7 +286,7 @@ async def asyncio(
         limit (int | Unset):  Example: 50.
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
-        enabled (ListTriggersEnabled | Unset): Filter by the operational toggle. Example: true.
+        suspend (ListTriggersSuspend | Unset): Filter by the operational toggle. Example: false.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -305,6 +305,6 @@ created_from=created_from,
 created_to=created_to,
 limit=limit,
 cursor=cursor,
-enabled=enabled,
+suspend=suspend,
 
     )).parsed

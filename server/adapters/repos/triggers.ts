@@ -1,7 +1,7 @@
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { resourceMetadata, resourcePhase } from '@server/domain/resource'
 import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
-import type { Trigger, TriggerRun } from '@server/domain/trigger'
+import type { Trigger, TriggerRun, TriggerSessionTemplate } from '@server/domain/trigger'
 import type {
   CreateTriggerInput,
   ListPageResult,
@@ -32,6 +32,19 @@ function parseJson<T>(value: string | null, fallback: T) {
 
 function recordFrom(row: TriggerRow): Trigger {
   const type = row.triggerType ?? 'scheduled'
+  const template: TriggerSessionTemplate = {
+    metadata: parseJson<TriggerSessionTemplate['metadata']>(row.metadata, { labels: {}, annotations: {} }),
+    spec: {
+      agentId: row.agentId,
+      environmentId: row.environmentId,
+      runtime: row.runtime as RuntimeName,
+      promptTemplate: row.promptTemplate,
+      env: parseJson<Record<string, string>>(row.env, {}),
+      envFrom: parseJson<EnvFromEntry[]>(row.envFrom, []),
+      volumes: parseJson<Volume[]>(row.volumes, []),
+      volumeMounts: parseJson<VolumeMount[]>(row.volumeMounts, []),
+    },
+  }
   return {
     metadata: resourceMetadata({
       uid: row.id,
@@ -43,21 +56,19 @@ function recordFrom(row: TriggerRow): Trigger {
       archivedAt: row.archivedAt,
     }),
     spec: {
-      type,
-      agentId: row.agentId,
-      environmentId: row.environmentId,
-      runtime: row.runtime as RuntimeName,
-      promptTemplate: row.promptTemplate,
-      env: parseJson<Record<string, string>>(row.env, {}),
-      envFrom: parseJson<EnvFromEntry[]>(row.envFrom, []),
-      volumes: parseJson<Volume[]>(row.volumes, []),
-      volumeMounts: parseJson<VolumeMount[]>(row.volumeMounts, []),
-      schedule:
+      source:
         type === 'scheduled'
-          ? { type: 'interval', intervalSeconds: row.intervalSeconds ?? 0, windowSeconds: row.windowSeconds ?? 0 }
-          : null,
-      enabled: row.enabled,
-      metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
+          ? {
+              type: 'schedule',
+              schedule: {
+                type: 'interval',
+                intervalSeconds: row.intervalSeconds ?? 0,
+                windowSeconds: row.windowSeconds ?? 0,
+              },
+            }
+          : { type: 'http' },
+      suspend: !row.enabled,
+      template,
     },
     status: {
       phase: resourcePhase(row.archivedAt),
@@ -95,22 +106,23 @@ function runRecordFrom(row: RunRow): TriggerRun {
 }
 
 function configColumns(config: CreateTriggerInput['config']) {
+  const schedule = config.source.type === 'schedule' ? config.source.schedule : null
   return {
-    triggerType: config.type,
-    agentId: config.agentId,
-    environmentId: config.environmentId,
-    runtime: config.runtime,
+    triggerType: schedule ? ('scheduled' as const) : ('http' as const),
+    agentId: config.template.spec.agentId,
+    environmentId: config.template.spec.environmentId,
+    runtime: config.template.spec.runtime,
     name: config.name,
-    promptTemplate: config.promptTemplate,
-    env: stringify(config.env),
-    envFrom: stringify(config.envFrom),
-    volumes: stringify(config.volumes),
-    volumeMounts: stringify(config.volumeMounts),
-    intervalSeconds: config.schedule?.intervalSeconds ?? null,
-    windowSeconds: config.schedule?.windowSeconds ?? null,
-    enabled: config.enabled,
+    promptTemplate: config.template.spec.promptTemplate,
+    env: stringify(config.template.spec.env),
+    envFrom: stringify(config.template.spec.envFrom),
+    volumes: stringify(config.template.spec.volumes),
+    volumeMounts: stringify(config.template.spec.volumeMounts),
+    intervalSeconds: schedule?.intervalSeconds ?? null,
+    windowSeconds: schedule?.windowSeconds ?? null,
+    enabled: !config.suspend,
     nextDueAt: config.nextDueAt,
-    metadata: stringify(config.metadata),
+    metadata: stringify(config.template.metadata),
   }
 }
 

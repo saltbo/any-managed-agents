@@ -14,15 +14,15 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="UpdateTriggerRequestEnv")
+T = TypeVar("T", bound="UpdateTriggerRequestTemplateMetadataAnnotations")
 
 
 
 @_attrs_define
-class UpdateTriggerRequestEnv:
+class UpdateTriggerRequestTemplateMetadataAnnotations:
     """ 
         Example:
-            {'AK_API_URL': 'https://ak.example.com'}
+            {'owner': 'growth'}
 
      """
 
@@ -44,12 +44,12 @@ class UpdateTriggerRequestEnv:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        update_trigger_request_env = cls(
+        update_trigger_request_template_metadata_annotations = cls(
         )
 
 
-        update_trigger_request_env.additional_properties = d
-        return update_trigger_request_env
+        update_trigger_request_template_metadata_annotations.additional_properties = d
+        return update_trigger_request_template_metadata_annotations
 
     @property
     def additional_keys(self) -> list[str]:

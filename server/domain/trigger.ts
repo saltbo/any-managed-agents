@@ -8,10 +8,21 @@ import type { SessionSpec } from './session'
 
 export type TriggerType = 'scheduled' | 'http'
 export type TriggerRunPhase = 'claimed' | 'dispatched' | 'failed'
-export type TriggerSessionTemplate = Pick<
+export type TriggerSourceType = 'schedule' | 'http'
+export type TriggerSessionTemplateSpec = Pick<
   SessionSpec,
   'agentId' | 'environmentId' | 'runtime' | 'env' | 'envFrom' | 'volumes' | 'volumeMounts'
->
+> & {
+  promptTemplate: string
+}
+
+export interface TriggerSessionTemplate {
+  metadata: {
+    labels: Record<string, string>
+    annotations: Record<string, string>
+  }
+  spec: TriggerSessionTemplateSpec
+}
 
 export interface TriggerSchedule {
   type: 'interval'
@@ -19,18 +30,25 @@ export interface TriggerSchedule {
   windowSeconds: number
 }
 
+export type TriggerSource =
+  | {
+      type: 'schedule'
+      schedule: TriggerSchedule
+    }
+  | {
+      type: 'http'
+    }
+
 export interface Trigger {
   metadata: ResourceMetadata
   spec: TriggerSpec
   status: TriggerStatus
 }
 
-export interface TriggerSpec extends TriggerSessionTemplate {
-  type: TriggerType
-  promptTemplate: string
-  schedule: TriggerSchedule | null
-  enabled: boolean
-  metadata: Record<string, unknown>
+export interface TriggerSpec {
+  source: TriggerSource
+  suspend: boolean
+  template: TriggerSessionTemplate
 }
 
 export interface TriggerStatus {

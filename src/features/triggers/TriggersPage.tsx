@@ -13,8 +13,8 @@ import { CreateTriggerSheet } from './CreateTriggerSheet'
 import { TriggersView } from './TriggersView'
 import { useTriggerActions } from './use-trigger-actions'
 
-function triggerStatus(enabled: boolean) {
-  return enabled ? 'active' : 'paused'
+function triggerStatus(suspend: boolean) {
+  return suspend ? 'paused' : 'active'
 }
 
 export function TriggersPage() {
@@ -31,8 +31,8 @@ export function TriggersPage() {
     () =>
       allTriggers.filter(
         (trigger) =>
-          matchesSearch(search, trigger.metadata.name, trigger.spec.agentId) &&
-          (status === 'all' || triggerStatus(trigger.spec.enabled) === status),
+          matchesSearch(search, trigger.metadata.name, trigger.spec.template.spec.agentId) &&
+          (status === 'all' || triggerStatus(trigger.spec.suspend) === status),
       ),
     [allTriggers, search, status],
   )

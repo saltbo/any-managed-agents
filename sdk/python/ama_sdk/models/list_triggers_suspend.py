@@ -1,7 +1,8 @@
 from enum import Enum
 
-class TriggerScheduleType0Type(str, Enum):
-    INTERVAL = "interval"
+class ListTriggersSuspend(str, Enum):
+    FALSE = "false"
+    TRUE = "true"
 
     def __str__(self) -> str:
         return str(self.value)

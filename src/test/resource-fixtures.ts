@@ -9,6 +9,7 @@ import type {
   MemoryStoreMemory,
   ResourceMetadata,
   Trigger,
+  TriggerSchedule,
   Vault,
   VaultCredential,
   VaultCredentialVersion,
@@ -305,18 +306,18 @@ export function memory(overrides: MemoryOverrides = {}): MemoryStoreMemory {
 }
 
 export type TriggerOverrides = ResourceMetadataOverrides & {
-  type?: Trigger['spec']['type']
-  agentId?: string
-  environmentId?: string | null
-  runtime?: Trigger['spec']['runtime']
+  source?: Trigger['spec']['source']
+  agentId?: Trigger['spec']['template']['spec']['agentId']
+  environmentId?: Trigger['spec']['template']['spec']['environmentId']
+  runtime?: Trigger['spec']['template']['spec']['runtime']
   promptTemplate?: string
-  env?: Trigger['spec']['env']
-  envFrom?: Trigger['spec']['envFrom']
-  volumes?: Trigger['spec']['volumes']
-  volumeMounts?: Trigger['spec']['volumeMounts']
-  schedule?: Trigger['spec']['schedule']
-  enabled?: boolean
-  metadata?: JsonObject
+  env?: Trigger['spec']['template']['spec']['env']
+  envFrom?: Trigger['spec']['template']['spec']['envFrom']
+  volumes?: Trigger['spec']['template']['spec']['volumes']
+  volumeMounts?: Trigger['spec']['template']['spec']['volumeMounts']
+  schedule?: TriggerSchedule | null
+  suspend?: boolean
+  templateMetadata?: Trigger['spec']['template']['metadata']
   nextDueAt?: string | null
   lastDispatchedAt?: string | null
   lastRunId?: string | null
@@ -326,21 +327,28 @@ export function trigger(overrides: TriggerOverrides = {}): Trigger {
   return {
     metadata: metadata({ id: 'trigger_1', name: 'Daily research heartbeat', ...overrides }),
     spec: {
-      type: overrides.type ?? 'scheduled',
-      agentId: overrides.agentId ?? 'agent_1',
-      environmentId: overrides.environmentId === undefined ? 'env_1' : overrides.environmentId,
-      runtime: overrides.runtime ?? 'codex',
-      promptTemplate: overrides.promptTemplate ?? 'Research current offers.',
-      env: overrides.env ?? {},
-      envFrom: overrides.envFrom ?? [],
-      volumes: overrides.volumes ?? [],
-      volumeMounts: overrides.volumeMounts ?? [],
-      schedule:
-        overrides.schedule === undefined
-          ? { type: 'interval', intervalSeconds: 86400, windowSeconds: 0 }
-          : overrides.schedule,
-      enabled: overrides.enabled ?? true,
-      metadata: overrides.metadata ?? {},
+      source:
+        overrides.source ??
+        (overrides.schedule === null
+          ? { type: 'http' }
+          : {
+              type: 'schedule',
+              schedule: overrides.schedule ?? { type: 'interval', intervalSeconds: 86400, windowSeconds: 0 },
+            }),
+      suspend: overrides.suspend ?? false,
+      template: {
+        metadata: overrides.templateMetadata ?? { labels: {}, annotations: {} },
+        spec: {
+          agentId: overrides.agentId ?? 'agent_1',
+          environmentId: overrides.environmentId === undefined ? 'env_1' : overrides.environmentId,
+          runtime: overrides.runtime ?? 'codex',
+          promptTemplate: overrides.promptTemplate ?? 'Research current offers.',
+          env: overrides.env ?? {},
+          envFrom: overrides.envFrom ?? [],
+          volumes: overrides.volumes ?? [],
+          volumeMounts: overrides.volumeMounts ?? [],
+        },
+      },
     },
     status: {
       phase: overrides.archivedAt ? 'archived' : 'active',

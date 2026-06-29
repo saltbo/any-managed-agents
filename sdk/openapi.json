@@ -4044,14 +4044,128 @@
       "TriggerSpec": {
         "type": "object",
         "properties": {
+          "source": {
+            "$ref": "#/components/schemas/TriggerSource"
+          },
+          "suspend": {
+            "type": "boolean",
+            "example": false
+          },
+          "template": {
+            "$ref": "#/components/schemas/TriggerTemplate"
+          }
+        },
+        "required": [
+          "source",
+          "suspend",
+          "template"
+        ]
+      },
+      "TriggerSource": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "schedule"
+                ]
+              },
+              "schedule": {
+                "$ref": "#/components/schemas/TriggerSchedule"
+              }
+            },
+            "required": [
+              "type",
+              "schedule"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "http"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          }
+        ]
+      },
+      "TriggerSchedule": {
+        "type": "object",
+        "properties": {
           "type": {
             "type": "string",
             "enum": [
-              "scheduled",
-              "http"
-            ],
-            "example": "scheduled"
+              "interval"
+            ]
           },
+          "intervalSeconds": {
+            "type": "integer",
+            "example": 86400
+          },
+          "windowSeconds": {
+            "type": "integer",
+            "example": 0
+          }
+        },
+        "required": [
+          "type",
+          "intervalSeconds",
+          "windowSeconds"
+        ]
+      },
+      "TriggerTemplate": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/TriggerTemplateMetadata"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/TriggerTemplateSpec"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec"
+        ]
+      },
+      "TriggerTemplateMetadata": {
+        "type": "object",
+        "properties": {
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "app": "agent-kanban"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "owner": "growth"
+            }
+          }
+        },
+        "required": [
+          "labels",
+          "annotations"
+        ]
+      },
+      "TriggerTemplateSpec": {
+        "type": "object",
+        "properties": {
           "agentId": {
             "type": "string",
             "example": "agent_abc123"
@@ -4115,26 +4229,9 @@
                 "readOnly": true
               }
             ]
-          },
-          "schedule": {
-            "$ref": "#/components/schemas/TriggerSchedule"
-          },
-          "enabled": {
-            "type": "boolean",
-            "example": true
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "growth"
-            }
           }
         },
         "required": [
-          "type",
           "agentId",
           "environmentId",
           "runtime",
@@ -4142,10 +4239,7 @@
           "env",
           "envFrom",
           "volumes",
-          "volumeMounts",
-          "schedule",
-          "enabled",
-          "metadata"
+          "volumeMounts"
         ]
       },
       "Runtime": {
@@ -4353,36 +4447,6 @@
         ],
         "additionalProperties": false
       },
-      "TriggerSchedule": {
-        "type": "object",
-        "nullable": true,
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "interval"
-            ]
-          },
-          "intervalSeconds": {
-            "type": "integer",
-            "example": 86400
-          },
-          "windowSeconds": {
-            "type": "integer",
-            "example": 0
-          }
-        },
-        "required": [
-          "type",
-          "intervalSeconds",
-          "windowSeconds"
-        ],
-        "example": {
-          "type": "interval",
-          "intervalSeconds": 86400,
-          "windowSeconds": 0
-        }
-      },
       "TriggerStatus": {
         "type": "object",
         "properties": {
@@ -4417,129 +4481,180 @@
       "CreateTriggerRequest": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "scheduled",
-              "http"
-            ],
-            "example": "scheduled"
-          },
-          "agentId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "agent_abc123"
-          },
-          "environmentId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "env_abc123"
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/Runtime"
-          },
           "name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 160,
             "example": "Daily research heartbeat"
           },
-          "promptTemplate": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 16000,
-            "example": "Research current Canadian banking bonus offers."
-          },
-          "env": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "example": {
-              "AK_API_URL": "https://ak.example.com"
-            }
-          },
-          "envFrom": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EnvFromEntry"
-            },
-            "maxItems": 50,
-            "example": [
+          "source": {
+            "oneOf": [
               {
-                "type": "secret",
-                "name": "AK_AGENT_KEY",
-                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "schedule"
+                    ]
+                  },
+                  "schedule": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "interval"
+                        ],
+                        "example": "interval"
+                      },
+                      "intervalSeconds": {
+                        "type": "integer",
+                        "minimum": 60,
+                        "maximum": 31536000,
+                        "example": 86400
+                      },
+                      "windowSeconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 86400,
+                        "example": 0
+                      }
+                    },
+                    "required": [
+                      "intervalSeconds"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "schedule"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "http"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
               }
             ]
           },
-          "volumes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Volume"
-            },
-            "maxItems": 50
+          "suspend": {
+            "type": "boolean",
+            "example": false
           },
-          "volumeMounts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VolumeMount"
-            },
-            "maxItems": 50
-          },
-          "schedule": {
+          "template": {
             "type": "object",
-            "nullable": true,
             "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "interval"
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "app": "agent-kanban"
+                    }
+                  },
+                  "annotations": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "owner": "growth"
+                    }
+                  }
+                }
+              },
+              "spec": {
+                "type": "object",
+                "properties": {
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "agent_abc123"
+                  },
+                  "environmentId": {
+                    "type": "string",
+                    "nullable": true,
+                    "minLength": 1,
+                    "example": "env_abc123"
+                  },
+                  "runtime": {
+                    "$ref": "#/components/schemas/Runtime"
+                  },
+                  "promptTemplate": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16000,
+                    "example": "Research current Canadian banking bonus offers."
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "AK_API_URL": "https://ak.example.com"
+                    }
+                  },
+                  "envFrom": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/EnvFromEntry"
+                    },
+                    "maxItems": 50
+                  },
+                  "volumes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Volume"
+                    },
+                    "maxItems": 50
+                  },
+                  "volumeMounts": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/VolumeMount"
+                    },
+                    "maxItems": 50
+                  }
+                },
+                "required": [
+                  "agentId",
+                  "runtime",
+                  "promptTemplate"
                 ],
-                "example": "interval"
-              },
-              "intervalSeconds": {
-                "type": "integer",
-                "minimum": 60,
-                "maximum": 31536000,
-                "example": 86400
-              },
-              "windowSeconds": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 86400,
-                "example": 0
+                "additionalProperties": false
               }
             },
             "required": [
-              "intervalSeconds"
+              "spec"
             ],
             "additionalProperties": false
-          },
-          "enabled": {
-            "type": "boolean",
-            "example": true
           },
           "nextDueAt": {
             "type": "string",
             "format": "date-time",
             "example": "2026-05-26T12:00:00.000Z"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "growth"
-            }
           }
         },
         "required": [
-          "agentId",
-          "runtime",
           "name",
-          "promptTemplate"
+          "source",
+          "template"
         ],
         "additionalProperties": false
       },
@@ -4564,108 +4679,157 @@
       "UpdateTriggerRequest": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "scheduled",
-              "http"
-            ],
-            "example": "http"
-          },
-          "agentId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "agent_abc123"
-          },
-          "environmentId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "env_abc123"
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/Runtime"
-          },
           "name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 160,
             "example": "Daily research heartbeat"
           },
-          "promptTemplate": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 16000,
-            "example": "Research current Canadian banking bonus offers."
-          },
-          "env": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "example": {
-              "AK_API_URL": "https://ak.example.com"
-            }
-          },
-          "envFrom": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EnvFromEntry"
-            },
-            "maxItems": 50,
-            "example": [
+          "source": {
+            "oneOf": [
               {
-                "type": "secret",
-                "name": "AK_AGENT_KEY",
-                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "schedule"
+                    ]
+                  },
+                  "schedule": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "interval"
+                        ],
+                        "example": "interval"
+                      },
+                      "intervalSeconds": {
+                        "type": "integer",
+                        "minimum": 60,
+                        "maximum": 31536000,
+                        "example": 86400
+                      },
+                      "windowSeconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 86400,
+                        "example": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "http"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
               }
             ]
           },
-          "volumes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Volume"
-            },
-            "maxItems": 50
+          "suspend": {
+            "type": "boolean",
+            "example": true
           },
-          "volumeMounts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VolumeMount"
-            },
-            "maxItems": 50
-          },
-          "schedule": {
+          "template": {
             "type": "object",
-            "nullable": true,
             "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "interval"
-                ],
-                "example": "interval"
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "labels": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "app": "agent-kanban"
+                    }
+                  },
+                  "annotations": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "owner": "growth"
+                    }
+                  }
+                }
               },
-              "intervalSeconds": {
-                "type": "integer",
-                "minimum": 60,
-                "maximum": 31536000,
-                "example": 86400
-              },
-              "windowSeconds": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 86400,
-                "example": 0
+              "spec": {
+                "type": "object",
+                "properties": {
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "agent_abc123"
+                  },
+                  "environmentId": {
+                    "type": "string",
+                    "nullable": true,
+                    "minLength": 1,
+                    "example": "env_abc123"
+                  },
+                  "runtime": {
+                    "$ref": "#/components/schemas/Runtime"
+                  },
+                  "promptTemplate": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16000,
+                    "example": "Research current Canadian banking bonus offers."
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "AK_API_URL": "https://ak.example.com"
+                    }
+                  },
+                  "envFrom": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/EnvFromEntry"
+                    },
+                    "maxItems": 50
+                  },
+                  "volumes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Volume"
+                    },
+                    "maxItems": 50
+                  },
+                  "volumeMounts": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/VolumeMount"
+                    },
+                    "maxItems": 50
+                  }
+                },
+                "additionalProperties": false
               }
             },
-            "required": [
-              "intervalSeconds"
-            ],
             "additionalProperties": false
-          },
-          "enabled": {
-            "type": "boolean",
-            "example": false
           },
           "archived": {
             "type": "boolean",
@@ -4675,15 +4839,6 @@
             "type": "string",
             "format": "date-time",
             "example": "2026-05-27T12:00:00.000Z"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "growth"
-            }
           }
         },
         "additionalProperties": false
@@ -10627,11 +10782,11 @@
                 "false"
               ],
               "description": "Filter by the operational toggle.",
-              "example": "true"
+              "example": "false"
             },
             "required": false,
             "description": "Filter by the operational toggle.",
-            "name": "enabled",
+            "name": "suspend",
             "in": "query"
           }
         ],
@@ -10731,7 +10886,7 @@
           "Triggers"
         ],
         "summary": "Update, pause, or archive a trigger",
-        "description": "Partial update. Pause with `enabled: false`; archive with `archived: true`; restore with `archived: false`.",
+        "description": "Partial update. Pause with `suspend: true`; resume with `suspend: false`; archive with `archived: true`; restore with `archived: false`.",
         "security": [
           {
             "bearerAuth": []

@@ -21,10 +21,10 @@ export function formatInterval(intervalSeconds: number) {
 }
 
 function triggerTiming(trigger: Trigger) {
-  if (trigger.spec.type === 'http') {
+  if (trigger.spec.source.type === 'http') {
     return 'HTTP POST'
   }
-  return trigger.spec.schedule ? formatInterval(trigger.spec.schedule.intervalSeconds) : '—'
+  return formatInterval(trigger.spec.source.schedule.intervalSeconds)
 }
 
 export function TriggersView({
@@ -71,10 +71,10 @@ export function TriggersView({
                 <span className="truncate text-xs text-muted-foreground">{trigger.metadata.uid}</span>
               </div>
             </TableCell>
-            <TableCell className="max-w-48 truncate">{trigger.spec.agentId}</TableCell>
+            <TableCell className="max-w-48 truncate">{trigger.spec.template.spec.agentId}</TableCell>
             <TableCell>{triggerTiming(trigger)}</TableCell>
             <TableCell>
-              <StatusBadge value={trigger.spec.enabled ? 'active' : 'paused'} />
+              <StatusBadge value={trigger.spec.suspend ? 'paused' : 'active'} />
             </TableCell>
             <TableCell>{trigger.status.nextDueAt ? formatRelativeTime(trigger.status.nextDueAt) : '—'}</TableCell>
             <TableCell>
@@ -82,7 +82,7 @@ export function TriggersView({
             </TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">
-                {trigger.spec.enabled ? (
+                {!trigger.spec.suspend ? (
                   <Button
                     type="button"
                     variant="outline"

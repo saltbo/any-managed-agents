@@ -14,19 +14,19 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="TriggerSpecMetadata")
+T = TypeVar("T", bound="UpdateTriggerRequestTemplateSpecEnv")
 
 
 
 @_attrs_define
-class TriggerSpecMetadata:
+class UpdateTriggerRequestTemplateSpecEnv:
     """ 
         Example:
-            {'owner': 'growth'}
+            {'AK_API_URL': 'https://ak.example.com'}
 
      """
 
-    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+    additional_properties: dict[str, str] = _attrs_field(init=False, factory=dict)
 
 
 
@@ -44,21 +44,21 @@ class TriggerSpecMetadata:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        trigger_spec_metadata = cls(
+        update_trigger_request_template_spec_env = cls(
         )
 
 
-        trigger_spec_metadata.additional_properties = d
-        return trigger_spec_metadata
+        update_trigger_request_template_spec_env.additional_properties = d
+        return update_trigger_request_template_spec_env
 
     @property
     def additional_keys(self) -> list[str]:
         return list(self.additional_properties.keys())
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> str:
         return self.additional_properties[key]
 
-    def __setitem__(self, key: str, value: Any) -> None:
+    def __setitem__(self, key: str, value: str) -> None:
         self.additional_properties[key] = value
 
     def __delitem__(self, key: str) -> None:

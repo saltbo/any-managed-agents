@@ -14,12 +14,12 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="TriggerSpecEnv")
+T = TypeVar("T", bound="TriggerTemplateSpecEnv")
 
 
 
 @_attrs_define
-class TriggerSpecEnv:
+class TriggerTemplateSpecEnv:
     """ 
         Example:
             {'AK_API_URL': 'https://ak.example.com'}
@@ -44,12 +44,12 @@ class TriggerSpecEnv:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        trigger_spec_env = cls(
+        trigger_template_spec_env = cls(
         )
 
 
-        trigger_spec_env.additional_properties = d
-        return trigger_spec_env
+        trigger_template_spec_env.additional_properties = d
+        return trigger_template_spec_env
 
     @property
     def additional_keys(self) -> list[str]:

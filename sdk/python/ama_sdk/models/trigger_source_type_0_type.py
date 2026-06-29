@@ -1,7 +1,7 @@
 from enum import Enum
 
-class UpdateTriggerRequestScheduleType0Type(str, Enum):
-    INTERVAL = "interval"
+class TriggerSourceType0Type(str, Enum):
+    SCHEDULE = "schedule"
 
     def __str__(self) -> str:
         return str(self.value)

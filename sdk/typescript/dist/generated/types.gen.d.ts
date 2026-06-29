@@ -887,7 +887,34 @@ export type Trigger = {
     status: TriggerStatus;
 };
 export type TriggerSpec = {
-    type: 'scheduled' | 'http';
+    source: TriggerSource;
+    suspend: boolean;
+    template: TriggerTemplate;
+};
+export type TriggerSource = {
+    type: 'schedule';
+    schedule: TriggerSchedule;
+} | {
+    type: 'http';
+};
+export type TriggerSchedule = {
+    type: 'interval';
+    intervalSeconds: number;
+    windowSeconds: number;
+};
+export type TriggerTemplate = {
+    metadata: TriggerTemplateMetadata;
+    spec: TriggerTemplateSpec;
+};
+export type TriggerTemplateMetadata = {
+    labels: {
+        [key: string]: string;
+    };
+    annotations: {
+        [key: string]: string;
+    };
+};
+export type TriggerTemplateSpec = {
     agentId: string;
     environmentId: string | null;
     runtime: Runtime;
@@ -898,11 +925,6 @@ export type TriggerSpec = {
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
     volumeMounts: Array<VolumeMount>;
-    schedule: TriggerSchedule;
-    enabled: boolean;
-    metadata: {
-        [key: string]: unknown;
-    };
 };
 export type Runtime = 'ama' | 'claude-code' | 'codex' | 'copilot';
 export type EnvFromEntry = {
@@ -943,11 +965,6 @@ export type VolumeMount = {
     mountPath: string;
     readOnly?: boolean;
 };
-export type TriggerSchedule = {
-    type: 'interval';
-    intervalSeconds: number;
-    windowSeconds: number;
-} | null;
 export type TriggerStatus = {
     phase: ResourcePhase;
     nextDueAt: string | null;
@@ -955,57 +972,83 @@ export type TriggerStatus = {
     lastRunId: string | null;
 };
 export type CreateTriggerRequest = {
-    type?: 'scheduled' | 'http';
-    agentId: string;
-    environmentId?: string;
-    runtime: Runtime;
     name: string;
-    promptTemplate: string;
-    env?: {
-        [key: string]: string;
+    source: {
+        type: 'schedule';
+        schedule: {
+            type?: 'interval';
+            intervalSeconds: number;
+            windowSeconds?: number;
+        };
+    } | {
+        type: 'http';
     };
-    envFrom?: Array<EnvFromEntry>;
-    volumes?: Array<Volume>;
-    volumeMounts?: Array<VolumeMount>;
-    schedule?: {
-        type?: 'interval';
-        intervalSeconds: number;
-        windowSeconds?: number;
-    } | null;
-    enabled?: boolean;
+    suspend?: boolean;
+    template: {
+        metadata?: {
+            labels?: {
+                [key: string]: string;
+            };
+            annotations?: {
+                [key: string]: string;
+            };
+        };
+        spec: {
+            agentId: string;
+            environmentId?: string | null;
+            runtime: Runtime;
+            promptTemplate: string;
+            env?: {
+                [key: string]: string;
+            };
+            envFrom?: Array<EnvFromEntry>;
+            volumes?: Array<Volume>;
+            volumeMounts?: Array<VolumeMount>;
+        };
+    };
     nextDueAt?: string;
-    metadata?: {
-        [key: string]: unknown;
-    };
 };
 export type TriggerListResponse = {
     data: Array<Trigger>;
     pagination: ListPagination;
 };
 export type UpdateTriggerRequest = {
-    type?: 'scheduled' | 'http';
-    agentId?: string;
-    environmentId?: string;
-    runtime?: Runtime;
     name?: string;
-    promptTemplate?: string;
-    env?: {
-        [key: string]: string;
+    source?: {
+        type: 'schedule';
+        schedule?: {
+            type?: 'interval';
+            intervalSeconds?: number;
+            windowSeconds?: number;
+        };
+    } | {
+        type: 'http';
     };
-    envFrom?: Array<EnvFromEntry>;
-    volumes?: Array<Volume>;
-    volumeMounts?: Array<VolumeMount>;
-    schedule?: {
-        type?: 'interval';
-        intervalSeconds: number;
-        windowSeconds?: number;
-    } | null;
-    enabled?: boolean;
+    suspend?: boolean;
+    template?: {
+        metadata?: {
+            labels?: {
+                [key: string]: string;
+            };
+            annotations?: {
+                [key: string]: string;
+            };
+        };
+        spec?: {
+            agentId?: string;
+            environmentId?: string | null;
+            runtime?: Runtime;
+            promptTemplate?: string;
+            env?: {
+                [key: string]: string;
+            };
+            envFrom?: Array<EnvFromEntry>;
+            volumes?: Array<Volume>;
+            volumeMounts?: Array<VolumeMount>;
+        };
+    };
     archived?: boolean;
     nextDueAt?: string;
-    metadata?: {
-        [key: string]: unknown;
-    };
 };
 export type TriggerRunListResponse = {
     data: Array<TriggerRun>;
@@ -1460,7 +1503,15 @@ export type TriggerWritable = {
     status: TriggerStatus;
 };
 export type TriggerSpecWritable = {
-    type: 'scheduled' | 'http';
+    source: TriggerSource;
+    suspend: boolean;
+    template: TriggerTemplateWritable;
+};
+export type TriggerTemplateWritable = {
+    metadata: TriggerTemplateMetadata;
+    spec: TriggerTemplateSpecWritable;
+};
+export type TriggerTemplateSpecWritable = {
     agentId: string;
     environmentId: string | null;
     runtime: Runtime;
@@ -1471,11 +1522,6 @@ export type TriggerSpecWritable = {
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
     volumeMounts: Array<VolumeMount>;
-    schedule: TriggerSchedule;
-    enabled: boolean;
-    metadata: {
-        [key: string]: unknown;
-    };
 };
 export type TriggerListResponseWritable = {
     data: Array<TriggerWritable>;
@@ -3017,7 +3063,7 @@ export type ListTriggersData = {
         /**
          * Filter by the operational toggle.
          */
-        enabled?: 'true' | 'false';
+        suspend?: 'true' | 'false';
     };
     url: '/api/v1/triggers';
 };

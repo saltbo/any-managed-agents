@@ -87,11 +87,18 @@ from .create_session_request_env import CreateSessionRequestEnv
 from .create_session_request_metadata import CreateSessionRequestMetadata
 from .create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
 from .create_trigger_request import CreateTriggerRequest
-from .create_trigger_request_env import CreateTriggerRequestEnv
-from .create_trigger_request_metadata import CreateTriggerRequestMetadata
-from .create_trigger_request_schedule_type_0 import CreateTriggerRequestScheduleType0
-from .create_trigger_request_schedule_type_0_type import CreateTriggerRequestScheduleType0Type
-from .create_trigger_request_type import CreateTriggerRequestType
+from .create_trigger_request_source_type_0 import CreateTriggerRequestSourceType0
+from .create_trigger_request_source_type_0_schedule import CreateTriggerRequestSourceType0Schedule
+from .create_trigger_request_source_type_0_schedule_type import CreateTriggerRequestSourceType0ScheduleType
+from .create_trigger_request_source_type_0_type import CreateTriggerRequestSourceType0Type
+from .create_trigger_request_source_type_1 import CreateTriggerRequestSourceType1
+from .create_trigger_request_source_type_1_type import CreateTriggerRequestSourceType1Type
+from .create_trigger_request_template import CreateTriggerRequestTemplate
+from .create_trigger_request_template_metadata import CreateTriggerRequestTemplateMetadata
+from .create_trigger_request_template_metadata_annotations import CreateTriggerRequestTemplateMetadataAnnotations
+from .create_trigger_request_template_metadata_labels import CreateTriggerRequestTemplateMetadataLabels
+from .create_trigger_request_template_spec import CreateTriggerRequestTemplateSpec
+from .create_trigger_request_template_spec_env import CreateTriggerRequestTemplateSpecEnv
 from .create_vault_credential_request import CreateVaultCredentialRequest
 from .create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
 from .create_vault_credential_request_secret import CreateVaultCredentialRequestSecret
@@ -148,7 +155,7 @@ from .list_sessions_archived import ListSessionsArchived
 from .list_sessions_state import ListSessionsState
 from .list_trigger_runs_state import ListTriggerRunsState
 from .list_triggers_archived import ListTriggersArchived
-from .list_triggers_enabled import ListTriggersEnabled
+from .list_triggers_suspend import ListTriggersSuspend
 from .list_vault_credential_versions_state import ListVaultCredentialVersionsState
 from .list_vault_credentials_state import ListVaultCredentialsState
 from .list_vaults_archived import ListVaultsArchived
@@ -312,13 +319,20 @@ from .trigger_run_spec import TriggerRunSpec
 from .trigger_run_spec_metadata import TriggerRunSpecMetadata
 from .trigger_run_status import TriggerRunStatus
 from .trigger_run_status_phase import TriggerRunStatusPhase
-from .trigger_schedule_type_0 import TriggerScheduleType0
-from .trigger_schedule_type_0_type import TriggerScheduleType0Type
+from .trigger_schedule import TriggerSchedule
+from .trigger_schedule_type import TriggerScheduleType
+from .trigger_source_type_0 import TriggerSourceType0
+from .trigger_source_type_0_type import TriggerSourceType0Type
+from .trigger_source_type_1 import TriggerSourceType1
+from .trigger_source_type_1_type import TriggerSourceType1Type
 from .trigger_spec import TriggerSpec
-from .trigger_spec_env import TriggerSpecEnv
-from .trigger_spec_metadata import TriggerSpecMetadata
-from .trigger_spec_type import TriggerSpecType
 from .trigger_status import TriggerStatus
+from .trigger_template import TriggerTemplate
+from .trigger_template_metadata import TriggerTemplateMetadata
+from .trigger_template_metadata_annotations import TriggerTemplateMetadataAnnotations
+from .trigger_template_metadata_labels import TriggerTemplateMetadataLabels
+from .trigger_template_spec import TriggerTemplateSpec
+from .trigger_template_spec_env import TriggerTemplateSpecEnv
 from .update_agent_request import UpdateAgentRequest
 from .update_budget_request import UpdateBudgetRequest
 from .update_budget_request_metadata import UpdateBudgetRequestMetadata
@@ -341,11 +355,18 @@ from .update_session_request import UpdateSessionRequest
 from .update_session_request_metadata import UpdateSessionRequestMetadata
 from .update_session_request_state import UpdateSessionRequestState
 from .update_trigger_request import UpdateTriggerRequest
-from .update_trigger_request_env import UpdateTriggerRequestEnv
-from .update_trigger_request_metadata import UpdateTriggerRequestMetadata
-from .update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
-from .update_trigger_request_schedule_type_0_type import UpdateTriggerRequestScheduleType0Type
-from .update_trigger_request_type import UpdateTriggerRequestType
+from .update_trigger_request_source_type_0 import UpdateTriggerRequestSourceType0
+from .update_trigger_request_source_type_0_schedule import UpdateTriggerRequestSourceType0Schedule
+from .update_trigger_request_source_type_0_schedule_type import UpdateTriggerRequestSourceType0ScheduleType
+from .update_trigger_request_source_type_0_type import UpdateTriggerRequestSourceType0Type
+from .update_trigger_request_source_type_1 import UpdateTriggerRequestSourceType1
+from .update_trigger_request_source_type_1_type import UpdateTriggerRequestSourceType1Type
+from .update_trigger_request_template import UpdateTriggerRequestTemplate
+from .update_trigger_request_template_metadata import UpdateTriggerRequestTemplateMetadata
+from .update_trigger_request_template_metadata_annotations import UpdateTriggerRequestTemplateMetadataAnnotations
+from .update_trigger_request_template_metadata_labels import UpdateTriggerRequestTemplateMetadataLabels
+from .update_trigger_request_template_spec import UpdateTriggerRequestTemplateSpec
+from .update_trigger_request_template_spec_env import UpdateTriggerRequestTemplateSpecEnv
 from .update_vault_credential_request import UpdateVaultCredentialRequest
 from .update_vault_credential_request_metadata import UpdateVaultCredentialRequestMetadata
 from .update_vault_credential_request_state import UpdateVaultCredentialRequestState
@@ -479,11 +500,18 @@ __all__ = (
     "CreateSessionRequestMetadata",
     "CreateSessionRequestRuntimeConfig",
     "CreateTriggerRequest",
-    "CreateTriggerRequestEnv",
-    "CreateTriggerRequestMetadata",
-    "CreateTriggerRequestScheduleType0",
-    "CreateTriggerRequestScheduleType0Type",
-    "CreateTriggerRequestType",
+    "CreateTriggerRequestSourceType0",
+    "CreateTriggerRequestSourceType0Schedule",
+    "CreateTriggerRequestSourceType0ScheduleType",
+    "CreateTriggerRequestSourceType0Type",
+    "CreateTriggerRequestSourceType1",
+    "CreateTriggerRequestSourceType1Type",
+    "CreateTriggerRequestTemplate",
+    "CreateTriggerRequestTemplateMetadata",
+    "CreateTriggerRequestTemplateMetadataAnnotations",
+    "CreateTriggerRequestTemplateMetadataLabels",
+    "CreateTriggerRequestTemplateSpec",
+    "CreateTriggerRequestTemplateSpecEnv",
     "CreateVaultCredentialRequest",
     "CreateVaultCredentialRequestMetadata",
     "CreateVaultCredentialRequestSecret",
@@ -540,7 +568,7 @@ __all__ = (
     "ListSessionsState",
     "ListTriggerRunsState",
     "ListTriggersArchived",
-    "ListTriggersEnabled",
+    "ListTriggersSuspend",
     "ListVaultCredentialsState",
     "ListVaultCredentialVersionsState",
     "ListVaultsArchived",
@@ -704,13 +732,20 @@ __all__ = (
     "TriggerRunSpecMetadata",
     "TriggerRunStatus",
     "TriggerRunStatusPhase",
-    "TriggerScheduleType0",
-    "TriggerScheduleType0Type",
+    "TriggerSchedule",
+    "TriggerScheduleType",
+    "TriggerSourceType0",
+    "TriggerSourceType0Type",
+    "TriggerSourceType1",
+    "TriggerSourceType1Type",
     "TriggerSpec",
-    "TriggerSpecEnv",
-    "TriggerSpecMetadata",
-    "TriggerSpecType",
     "TriggerStatus",
+    "TriggerTemplate",
+    "TriggerTemplateMetadata",
+    "TriggerTemplateMetadataAnnotations",
+    "TriggerTemplateMetadataLabels",
+    "TriggerTemplateSpec",
+    "TriggerTemplateSpecEnv",
     "UpdateAgentRequest",
     "UpdateBudgetRequest",
     "UpdateBudgetRequestMetadata",
@@ -733,11 +768,18 @@ __all__ = (
     "UpdateSessionRequestMetadata",
     "UpdateSessionRequestState",
     "UpdateTriggerRequest",
-    "UpdateTriggerRequestEnv",
-    "UpdateTriggerRequestMetadata",
-    "UpdateTriggerRequestScheduleType0",
-    "UpdateTriggerRequestScheduleType0Type",
-    "UpdateTriggerRequestType",
+    "UpdateTriggerRequestSourceType0",
+    "UpdateTriggerRequestSourceType0Schedule",
+    "UpdateTriggerRequestSourceType0ScheduleType",
+    "UpdateTriggerRequestSourceType0Type",
+    "UpdateTriggerRequestSourceType1",
+    "UpdateTriggerRequestSourceType1Type",
+    "UpdateTriggerRequestTemplate",
+    "UpdateTriggerRequestTemplateMetadata",
+    "UpdateTriggerRequestTemplateMetadataAnnotations",
+    "UpdateTriggerRequestTemplateMetadataLabels",
+    "UpdateTriggerRequestTemplateSpec",
+    "UpdateTriggerRequestTemplateSpecEnv",
     "UpdateVaultCredentialRequest",
     "UpdateVaultCredentialRequestMetadata",
     "UpdateVaultCredentialRequestState",

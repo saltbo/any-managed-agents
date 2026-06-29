@@ -42,15 +42,19 @@ function dueTrigger(overrides: Partial<DueTrigger> = {}): DueTrigger {
     organizationId: 'org_1',
     projectId: 'project_1',
     name: 'Nightly Agent',
-    agentId: 'agent_1',
-    environmentId: 'env_1',
-    runtime: 'ama',
-    promptTemplate: 'Run the analysis',
-    env: {},
-    envFrom: [],
-    volumes: [],
-    volumeMounts: [],
-    metadata: {},
+    template: {
+      metadata: { labels: {}, annotations: {} },
+      spec: {
+        agentId: 'agent_1',
+        environmentId: 'env_1',
+        runtime: 'ama',
+        promptTemplate: 'Run the analysis',
+        env: {},
+        envFrom: [],
+        volumes: [],
+        volumeMounts: [],
+      },
+    },
     nextDueAt: '2026-01-01T00:00:00.000Z',
     intervalSeconds: 3600,
     ...overrides,
@@ -78,18 +82,21 @@ function httpTrigger(
       ...overrides.metadata,
     },
     spec: {
-      type: 'http',
-      agentId: 'agent_1',
-      environmentId: 'env_1',
-      runtime: 'ama',
-      promptTemplate: 'Handle {{ body.ticket.id }} from {{ query.source }}',
-      env: {},
-      envFrom: [],
-      volumes: [],
-      volumeMounts: [],
-      schedule: null,
-      enabled: true,
-      metadata: {},
+      source: { type: 'http' },
+      suspend: false,
+      template: {
+        metadata: { labels: {}, annotations: {} },
+        spec: {
+          agentId: 'agent_1',
+          environmentId: 'env_1',
+          runtime: 'ama',
+          promptTemplate: 'Handle {{ body.ticket.id }} from {{ query.source }}',
+          env: {},
+          envFrom: [],
+          volumes: [],
+          volumeMounts: [],
+        },
+      },
       ...overrides.spec,
     },
     status: {
@@ -437,7 +444,12 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — successful 
   })
 
   it('includes trigger metadata in session metadata', async () => {
-    const trigger = dueTrigger({ metadata: { env: 'staging' } })
+    const trigger = dueTrigger({
+      template: {
+        ...dueTrigger().template,
+        metadata: { labels: {}, annotations: { env: 'staging' } },
+      },
+    })
     let capturedMetadata: Record<string, unknown> | null = null
     const deps = fakeDeps({
       triggerDispatch: {
@@ -449,7 +461,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — successful 
     })
     await dispatchDueScheduledTriggers(deps)
     expect(capturedMetadata).toMatchObject({
-      env: 'staging',
+      annotations: { env: 'staging' },
       source: 'scheduled-agent-trigger',
       scheduledTriggerId: 'trigger_1',
     })
@@ -478,7 +490,12 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
   it('passes a null environment through to createSession for an unpinned trigger', async () => {
     // The dispatcher no longer resolves an environment; createSession resolves a
     // runner-capable one when it receives null.
-    const trigger = dueTrigger({ environmentId: null, runtime: 'codex' })
+    const trigger = dueTrigger({
+      template: {
+        ...dueTrigger().template,
+        spec: { ...dueTrigger().template.spec, environmentId: null, runtime: 'codex' },
+      },
+    })
     let dispatchedEnvironmentId: string | null | undefined = 'unset'
     const deps = fakeDeps({
       triggerDispatch: { dueTriggers: async () => [trigger] },
@@ -495,7 +512,12 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
   })
 
   it('passes the pinned environment through to createSession', async () => {
-    const trigger = dueTrigger({ environmentId: 'env_pinned' })
+    const trigger = dueTrigger({
+      template: {
+        ...dueTrigger().template,
+        spec: { ...dueTrigger().template.spec, environmentId: 'env_pinned' },
+      },
+    })
     let dispatchedEnvironmentId: string | null | undefined = 'unset'
     const deps = fakeDeps({
       triggerDispatch: { dueTriggers: async () => [trigger] },
@@ -519,8 +541,14 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
       },
     ]
     const trigger = dueTrigger({
-      env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
-      envFrom,
+      template: {
+        ...dueTrigger().template,
+        spec: {
+          ...dueTrigger().template.spec,
+          env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
+          envFrom,
+        },
+      },
     })
     let capturedOptions: Record<string, unknown> | null = null
     const deps = fakeDeps({
@@ -533,7 +561,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
       },
     })
     await dispatchDueScheduledTriggers(deps)
-    expect(capturedOptions).toMatchObject({ env: trigger.env, envFrom })
+    expect(capturedOptions).toMatchObject({ env: trigger.template.spec.env, envFrom })
   })
 })
 
@@ -777,7 +805,14 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     })
 
     await dispatchHttpTrigger(deps, auth, {
-      trigger: httpTrigger({ spec: { metadata: { labels: { maintainerId: 'maintainer_1' }, retained: true } } }),
+      trigger: httpTrigger({
+        spec: {
+          template: {
+            ...httpTrigger().spec.template,
+            metadata: { labels: { maintainerId: 'maintainer_1' }, annotations: { retained: 'true' } },
+          },
+        },
+      }),
       context: {
         body: {
           key: 'github:owner/repo:issue:123',
@@ -798,7 +833,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     })
 
     expect(sessionMetadata).toMatchObject({
-      retained: true,
+      annotations: { retained: 'true' },
       labels: { maintainerId: 'maintainer_1', subject: 'github-issue' },
       github: {
         repository: 'owner/repo',
@@ -1025,8 +1060,14 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     ]
     const trigger = httpTrigger({
       spec: {
-        env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
-        envFrom,
+        template: {
+          ...httpTrigger().spec.template,
+          spec: {
+            ...httpTrigger().spec.template.spec,
+            env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
+            envFrom,
+          },
+        },
       },
     })
     let capturedOptions: Record<string, unknown> | null = null
@@ -1046,7 +1087,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
         headers: {},
       },
     })
-    expect(capturedOptions).toMatchObject({ env: trigger.spec.env, envFrom })
+    expect(capturedOptions).toMatchObject({ env: trigger.spec.template.spec.env, envFrom })
   })
 
   it('records the HTTP session key on newly created trigger run metadata', async () => {
@@ -1098,17 +1139,19 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     await expect(
       dispatchHttpTrigger(fakeDeps(), auth, {
         trigger: httpTrigger({
-          spec: { type: 'scheduled', schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 } },
+          spec: {
+            source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 } },
+          },
         }),
         context: { body: {}, query: {}, headers: {} },
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError' })
   })
 
-  it('rejects disabled HTTP triggers', async () => {
+  it('rejects suspended HTTP triggers', async () => {
     await expect(
       dispatchHttpTrigger(fakeDeps(), auth, {
-        trigger: httpTrigger({ spec: { enabled: false } }),
+        trigger: httpTrigger({ spec: { suspend: true } }),
         context: { body: {}, query: {}, headers: {} },
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError' })

@@ -33,7 +33,7 @@ interface TriggerFormState {
   promptTemplate: string
   intervalValue: string
   intervalUnit: IntervalUnit
-  enabled: boolean
+  suspend: boolean
 }
 
 const emptyTrigger: TriggerFormState = {
@@ -45,7 +45,7 @@ const emptyTrigger: TriggerFormState = {
   promptTemplate: '',
   intervalValue: '1',
   intervalUnit: 'days',
-  enabled: true,
+  suspend: false,
 }
 
 const MIN_INTERVAL_SECONDS = 60
@@ -78,14 +78,25 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
   const createTrigger = useMutation({
     mutationFn: () =>
       api.createTrigger({
-        type: form.type,
-        agentId: form.agentId,
-        ...(form.environmentId ? { environmentId: form.environmentId } : {}),
-        runtime: form.runtime,
         name: form.name,
-        promptTemplate: form.promptTemplate,
-        schedule: form.type === 'scheduled' ? { type: 'interval', intervalSeconds: intervalSeconds(form) } : null,
-        enabled: form.enabled,
+        source:
+          form.type === 'scheduled'
+            ? { type: 'schedule', schedule: { type: 'interval', intervalSeconds: intervalSeconds(form) } }
+            : { type: 'http' },
+        suspend: form.suspend,
+        template: {
+          metadata: { labels: {}, annotations: {} },
+          spec: {
+            agentId: form.agentId,
+            environmentId: form.environmentId,
+            runtime: form.runtime,
+            promptTemplate: form.promptTemplate,
+            env: {},
+            envFrom: [],
+            volumes: [],
+            volumeMounts: [],
+          },
+        },
       }),
     onSuccess: () => {
       onOpenChange(false)
@@ -264,8 +275,8 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
               <Field>
                 <FieldLabel>Status</FieldLabel>
                 <Select
-                  value={form.enabled ? 'active' : 'paused'}
-                  onValueChange={(status) => setForm({ ...form, enabled: status === 'active' })}
+                  value={form.suspend ? 'paused' : 'active'}
+                  onValueChange={(status) => setForm({ ...form, suspend: status === 'paused' })}
                 >
                   <SelectTrigger aria-label="Status">
                     <SelectValue />

@@ -63,7 +63,7 @@ v1 不兼容旧版（旧路径全部删除，无兼容层）。
   `pending|running|idle|stopped|error`）。
 - `metadata.archivedAt: string|null`：生命周期。`null` = 活跃。标准资源的
   `status.phase` 可派生为 `active|archived`，但业务 enum 里不得出现 `deleted`。
-- 运营开关用布尔（如 trigger 的 `spec.enabled`，替代 `paused`）。
+- 运营开关用布尔（如 trigger 的 `spec.suspend`，替代 `paused`）。
 
 ### 1.4 凭据引用统一
 

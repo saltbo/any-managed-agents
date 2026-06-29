@@ -196,13 +196,12 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       expect(url).toContain('limit=10')
     })
 
-    it('omits false boolean values from the query string', async () => {
+    it('includes false boolean values in the query string', async () => {
       const fetchMock = makeJsonFetch(listPage)
       vi.stubGlobal('fetch', fetchMock)
-      // archived=false should be excluded per queryOptions logic
       await api.listAgents({ archived: false })
       const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).not.toContain('archived')
+      expect(url).toContain('archived=false')
     })
 
     it('includes true boolean values', async () => {
@@ -590,22 +589,35 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         archivedAt: null,
       },
       spec: {
-        agentId: 'agent_1',
-        environmentId: null,
-        runtime: 'ama',
-        prompt: 'Run checks',
-        schedule: { type: 'interval' as const, intervalSeconds: 3600, windowSeconds: 0 },
+        source: {
+          type: 'schedule' as const,
+          schedule: { type: 'interval' as const, intervalSeconds: 3600, windowSeconds: 0 },
+        },
+        suspend: false,
+        template: {
+          metadata: { labels: {}, annotations: {} },
+          spec: {
+            agentId: 'agent_1',
+            environmentId: null,
+            runtime: 'ama' as const,
+            promptTemplate: 'Run checks',
+            env: {},
+            envFrom: [],
+            volumes: [],
+            volumeMounts: [],
+          },
+        },
       },
-      status: { phase: 'active' as const, enabled: true, lastRunAt: null, nextRunAt: null },
+      status: { phase: 'active' as const, nextDueAt: null, lastDispatchedAt: null, lastRunId: null },
     }
 
     it('listTriggers serializes list options', async () => {
       const fetchMock = makeJsonFetch(listPage)
       vi.stubGlobal('fetch', fetchMock)
-      await api.listTriggers({ enabled: true, limit: 10 })
+      await api.listTriggers({ suspend: false, limit: 10 })
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/triggers')
-      expect(url).toContain('enabled=true')
+      expect(url).toContain('suspend=false')
       expect(url).toContain('limit=10')
     })
 
@@ -614,10 +626,21 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       vi.stubGlobal('fetch', fetchMock)
       await api.createTrigger({
         name: 'Nightly run',
-        agentId: 'agent_1',
-        runtime: 'ama',
-        promptTemplate: 'Run checks',
-        schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 },
+        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 } },
+        suspend: false,
+        template: {
+          metadata: { labels: {}, annotations: {} },
+          spec: {
+            agentId: 'agent_1',
+            environmentId: null,
+            runtime: 'ama',
+            promptTemplate: 'Run checks',
+            env: {},
+            envFrom: [],
+            volumes: [],
+            volumeMounts: [],
+          },
+        },
       })
       const [, init] = fetchMock.mock.calls[0]!
       expect(init?.method).toBe('POST')
@@ -635,7 +658,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('updateTrigger patches the trigger', async () => {
       const fetchMock = makeJsonFetch(triggerFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.updateTrigger('trigger_1', { enabled: false })
+      await api.updateTrigger('trigger_1', { suspend: true })
       const [url, init] = fetchMock.mock.calls[0]!
       expect(url).toContain('/api/v1/triggers/trigger_1')
       expect(init?.method).toBe('PATCH')

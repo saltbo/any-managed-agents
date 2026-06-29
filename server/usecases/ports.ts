@@ -16,7 +16,7 @@ import type {
   SessionMessage,
   SessionState,
 } from '@server/domain/session'
-import type { Trigger, TriggerRun, TriggerSchedule, TriggerType } from '@server/domain/trigger'
+import type { Trigger, TriggerRun, TriggerSessionTemplate, TriggerSource } from '@server/domain/trigger'
 import type {
   Credential,
   CredentialState,
@@ -959,22 +959,11 @@ export class TriggerConflictError extends Error {
 }
 
 export interface TriggerConfig {
-  type: TriggerType
-  agentId: string
-  // Null pins no environment; the dispatcher resolves a runner-capable one per
-  // run via TriggerDispatchRepo.resolveEnvironmentForRuntime.
-  environmentId: string | null
-  runtime: RuntimeName
   name: string
-  promptTemplate: string
-  env: Record<string, string>
-  envFrom: EnvFromEntry[]
-  volumes: Volume[]
-  volumeMounts: VolumeMount[]
-  schedule: Omit<TriggerSchedule, 'type'> | null
-  enabled: boolean
+  source: TriggerSource
+  suspend: boolean
+  template: TriggerSessionTemplate
   nextDueAt: string | null
-  metadata: Record<string, unknown>
 }
 
 export interface TriggerListQuery {
@@ -1042,17 +1031,7 @@ export interface DueTrigger {
   organizationId: string
   projectId: string
   name: string
-  agentId: string
-  // Null when the trigger is unpinned; the dispatcher resolves an environment
-  // per run before creating the session.
-  environmentId: string | null
-  runtime: RuntimeName
-  promptTemplate: string
-  env: Record<string, string>
-  envFrom: EnvFromEntry[]
-  volumes: Volume[]
-  volumeMounts: VolumeMount[]
-  metadata: Record<string, unknown>
+  template: TriggerSessionTemplate
   nextDueAt: string
   intervalSeconds: number
 }

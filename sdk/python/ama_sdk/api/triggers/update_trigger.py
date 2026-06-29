@@ -102,8 +102,8 @@ def sync_detailed(
 ) -> Response[ErrorResponse | Trigger]:
     """ Update, pause, or archive a trigger
 
-     Partial update. Pause with `enabled: false`; archive with `archived: true`; restore with `archived:
-    false`.
+     Partial update. Pause with `suspend: true`; resume with `suspend: false`; archive with `archived:
+    true`; restore with `archived: false`.
 
     Args:
         trigger_id (str):  Example: trigger_abc123.
@@ -139,8 +139,8 @@ def sync(
 ) -> ErrorResponse | Trigger | None:
     """ Update, pause, or archive a trigger
 
-     Partial update. Pause with `enabled: false`; archive with `archived: true`; restore with `archived:
-    false`.
+     Partial update. Pause with `suspend: true`; resume with `suspend: false`; archive with `archived:
+    true`; restore with `archived: false`.
 
     Args:
         trigger_id (str):  Example: trigger_abc123.
@@ -171,8 +171,8 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | Trigger]:
     """ Update, pause, or archive a trigger
 
-     Partial update. Pause with `enabled: false`; archive with `archived: true`; restore with `archived:
-    false`.
+     Partial update. Pause with `suspend: true`; resume with `suspend: false`; archive with `archived:
+    true`; restore with `archived: false`.
 
     Args:
         trigger_id (str):  Example: trigger_abc123.
@@ -208,8 +208,8 @@ async def asyncio(
 ) -> ErrorResponse | Trigger | None:
     """ Update, pause, or archive a trigger
 
-     Partial update. Pause with `enabled: false`; archive with `archived: true`; restore with `archived:
-    false`.
+     Partial update. Pause with `suspend: true`; resume with `suspend: false`; archive with `archived:
+    true`; restore with `archived: false`.
 
     Args:
         trigger_id (str):  Example: trigger_abc123.

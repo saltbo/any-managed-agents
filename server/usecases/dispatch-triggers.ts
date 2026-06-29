@@ -148,7 +148,13 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
     auth = systemAuth(trigger, { id: trigger.projectId, name: projectName })
 
     const sessionMetadata = {
-      ...trigger.metadata,
+      labels: trigger.template.metadata.labels,
+      annotations: {
+        ...trigger.template.metadata.annotations,
+        source: 'scheduled-agent-trigger',
+        scheduledTriggerId: trigger.id,
+        scheduledRunId: run.id,
+      },
       source: 'scheduled-agent-trigger',
       scheduledTriggerId: trigger.id,
       scheduledRunId: run.id,
@@ -156,19 +162,19 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
       correlationId: run.correlationId,
     }
     const result = await createSession(deps, auth, {
-      agentId: trigger.agentId,
+      agentId: trigger.template.spec.agentId,
       // Null when the trigger is unpinned; createSession resolves an environment
       // for the runtime at dispatch time.
-      environmentId: trigger.environmentId,
+      environmentId: trigger.template.spec.environmentId,
       options: {
         name: trigger.name,
         metadata: sessionMetadata,
-        runtime: trigger.runtime,
-        initialPrompt: trigger.promptTemplate,
-        env: trigger.env,
-        envFrom: trigger.envFrom,
-        volumes: trigger.volumes,
-        volumeMounts: trigger.volumeMounts,
+        runtime: trigger.template.spec.runtime,
+        initialPrompt: trigger.template.spec.promptTemplate,
+        env: trigger.template.spec.env,
+        envFrom: trigger.template.spec.envFrom,
+        volumes: trigger.template.spec.volumes,
+        volumeMounts: trigger.template.spec.volumeMounts,
       },
       requestId: run.correlationId,
     })
@@ -263,20 +269,20 @@ export async function dispatchHttpTrigger(
   errorMessage: string | null
 }> {
   const { trigger } = input
-  if (trigger.spec.type !== 'http') {
+  if (trigger.spec.source.type !== 'http') {
     throw new TriggerConflictError('Only HTTP triggers can create runs from requests')
   }
   if (trigger.metadata.archivedAt !== null) {
     throw new TriggerConflictError('Archived triggers cannot be dispatched')
   }
-  if (!trigger.spec.enabled) {
-    throw new TriggerConflictError('Disabled triggers cannot be dispatched')
+  if (trigger.spec.suspend) {
+    throw new TriggerConflictError('Suspended triggers cannot be dispatched')
   }
 
   const triggeredAt = new Date().toISOString()
   let renderedPrompt: string
   try {
-    renderedPrompt = renderHttpPromptTemplate(trigger.spec.promptTemplate, input.context)
+    renderedPrompt = renderHttpPromptTemplate(trigger.spec.template.spec.promptTemplate, input.context)
   } catch (error) {
     if (error instanceof PromptTemplateRenderError) {
       throw new TriggerValidationError('Invalid trigger prompt template', { promptTemplate: error.message })
@@ -290,9 +296,10 @@ export async function dispatchHttpTrigger(
   }
 
   const requestMetadata = httpTriggerBodyMetadata(input.context.body)
-  const labels = mergeLabels(trigger.spec.metadata.labels, requestMetadata.labels)
+  const labels = mergeLabels(trigger.spec.template.metadata.labels, requestMetadata.labels)
   const sessionMetadata = {
-    ...trigger.spec.metadata,
+    labels: trigger.spec.template.metadata.labels,
+    annotations: trigger.spec.template.metadata.annotations,
     ...requestMetadata,
     ...(labels ? { labels } : {}),
     source: 'http-trigger',
@@ -353,17 +360,17 @@ export async function dispatchHttpTrigger(
   }
 
   const result = await createSession(deps, auth, {
-    agentId: trigger.spec.agentId,
-    environmentId: trigger.spec.environmentId,
+    agentId: trigger.spec.template.spec.agentId,
+    environmentId: trigger.spec.template.spec.environmentId,
     options: {
       name: trigger.metadata.name,
       metadata: key ? { ...sessionMetadata, key } : sessionMetadata,
-      runtime: trigger.spec.runtime,
+      runtime: trigger.spec.template.spec.runtime,
       initialPrompt: renderedPrompt,
-      env: trigger.spec.env,
-      envFrom: trigger.spec.envFrom,
-      volumes: trigger.spec.volumes,
-      volumeMounts: trigger.spec.volumeMounts,
+      env: trigger.spec.template.spec.env,
+      envFrom: trigger.spec.template.spec.envFrom,
+      volumes: trigger.spec.template.spec.volumes,
+      volumeMounts: trigger.spec.template.spec.volumeMounts,
     },
     requestId: run.correlationId,
   })

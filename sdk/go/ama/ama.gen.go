@@ -424,33 +424,45 @@ func (e CreateSessionMessageRequestType) Valid() bool {
 	}
 }
 
-// Defines values for CreateTriggerRequestScheduleType.
+// Defines values for CreateTriggerRequestSource0ScheduleType.
 const (
-	CreateTriggerRequestScheduleTypeInterval CreateTriggerRequestScheduleType = "interval"
+	CreateTriggerRequestSource0ScheduleTypeInterval CreateTriggerRequestSource0ScheduleType = "interval"
 )
 
-// Valid indicates whether the value is a known member of the CreateTriggerRequestScheduleType enum.
-func (e CreateTriggerRequestScheduleType) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateTriggerRequestSource0ScheduleType enum.
+func (e CreateTriggerRequestSource0ScheduleType) Valid() bool {
 	switch e {
-	case CreateTriggerRequestScheduleTypeInterval:
+	case CreateTriggerRequestSource0ScheduleTypeInterval:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for CreateTriggerRequestType.
+// Defines values for CreateTriggerRequestSource0Type.
 const (
-	CreateTriggerRequestTypeHttp      CreateTriggerRequestType = "http"
-	CreateTriggerRequestTypeScheduled CreateTriggerRequestType = "scheduled"
+	CreateTriggerRequestSource0TypeSchedule CreateTriggerRequestSource0Type = "schedule"
 )
 
-// Valid indicates whether the value is a known member of the CreateTriggerRequestType enum.
-func (e CreateTriggerRequestType) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateTriggerRequestSource0Type enum.
+func (e CreateTriggerRequestSource0Type) Valid() bool {
 	switch e {
-	case CreateTriggerRequestTypeHttp:
+	case CreateTriggerRequestSource0TypeSchedule:
 		return true
-	case CreateTriggerRequestTypeScheduled:
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTriggerRequestSource1Type.
+const (
+	CreateTriggerRequestSource1TypeHttp CreateTriggerRequestSource1Type = "http"
+)
+
+// Valid indicates whether the value is a known member of the CreateTriggerRequestSource1Type enum.
+func (e CreateTriggerRequestSource1Type) Valid() bool {
+	switch e {
+	case CreateTriggerRequestSource1TypeHttp:
 		return true
 	default:
 		return false
@@ -1516,18 +1528,30 @@ func (e TriggerScheduleType) Valid() bool {
 	}
 }
 
-// Defines values for TriggerSpecType.
+// Defines values for TriggerSource0Type.
 const (
-	TriggerSpecTypeHttp      TriggerSpecType = "http"
-	TriggerSpecTypeScheduled TriggerSpecType = "scheduled"
+	TriggerSource0TypeSchedule TriggerSource0Type = "schedule"
 )
 
-// Valid indicates whether the value is a known member of the TriggerSpecType enum.
-func (e TriggerSpecType) Valid() bool {
+// Valid indicates whether the value is a known member of the TriggerSource0Type enum.
+func (e TriggerSource0Type) Valid() bool {
 	switch e {
-	case TriggerSpecTypeHttp:
+	case TriggerSource0TypeSchedule:
 		return true
-	case TriggerSpecTypeScheduled:
+	default:
+		return false
+	}
+}
+
+// Defines values for TriggerSource1Type.
+const (
+	TriggerSource1TypeHttp TriggerSource1Type = "http"
+)
+
+// Valid indicates whether the value is a known member of the TriggerSource1Type enum.
+func (e TriggerSource1Type) Valid() bool {
+	switch e {
+	case TriggerSource1TypeHttp:
 		return true
 	default:
 		return false
@@ -1615,13 +1639,13 @@ func (e UpdateSessionRequestState) Valid() bool {
 	}
 }
 
-// Defines values for UpdateTriggerRequestScheduleType.
+// Defines values for UpdateTriggerRequestSource0ScheduleType.
 const (
-	Interval UpdateTriggerRequestScheduleType = "interval"
+	Interval UpdateTriggerRequestSource0ScheduleType = "interval"
 )
 
-// Valid indicates whether the value is a known member of the UpdateTriggerRequestScheduleType enum.
-func (e UpdateTriggerRequestScheduleType) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateTriggerRequestSource0ScheduleType enum.
+func (e UpdateTriggerRequestSource0ScheduleType) Valid() bool {
 	switch e {
 	case Interval:
 		return true
@@ -1630,18 +1654,30 @@ func (e UpdateTriggerRequestScheduleType) Valid() bool {
 	}
 }
 
-// Defines values for UpdateTriggerRequestType.
+// Defines values for UpdateTriggerRequestSource0Type.
 const (
-	UpdateTriggerRequestTypeHttp      UpdateTriggerRequestType = "http"
-	UpdateTriggerRequestTypeScheduled UpdateTriggerRequestType = "scheduled"
+	Schedule UpdateTriggerRequestSource0Type = "schedule"
 )
 
-// Valid indicates whether the value is a known member of the UpdateTriggerRequestType enum.
-func (e UpdateTriggerRequestType) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateTriggerRequestSource0Type enum.
+func (e UpdateTriggerRequestSource0Type) Valid() bool {
 	switch e {
-	case UpdateTriggerRequestTypeHttp:
+	case Schedule:
 		return true
-	case UpdateTriggerRequestTypeScheduled:
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateTriggerRequestSource1Type.
+const (
+	Http UpdateTriggerRequestSource1Type = "http"
+)
+
+// Valid indicates whether the value is a known member of the UpdateTriggerRequestSource1Type enum.
+func (e UpdateTriggerRequestSource1Type) Valid() bool {
+	switch e {
+	case Http:
 		return true
 	default:
 		return false
@@ -1713,16 +1749,16 @@ func (e UsageRecordProviderType) Valid() bool {
 
 // Defines values for UsageRecordState.
 const (
-	UsageRecordStateError   UsageRecordState = "error"
-	UsageRecordStateSuccess UsageRecordState = "success"
+	Error   UsageRecordState = "error"
+	Success UsageRecordState = "success"
 )
 
 // Valid indicates whether the value is a known member of the UsageRecordState enum.
 func (e UsageRecordState) Valid() bool {
 	switch e {
-	case UsageRecordStateError:
+	case Error:
 		return true
-	case UsageRecordStateSuccess:
+	case Success:
 		return true
 	default:
 		return false
@@ -2215,18 +2251,18 @@ func (e ListTriggersParamsArchived) Valid() bool {
 	}
 }
 
-// Defines values for ListTriggersParamsEnabled.
+// Defines values for ListTriggersParamsSuspend.
 const (
-	ListTriggersParamsEnabledFalse ListTriggersParamsEnabled = "false"
-	ListTriggersParamsEnabledTrue  ListTriggersParamsEnabled = "true"
+	ListTriggersParamsSuspendFalse ListTriggersParamsSuspend = "false"
+	ListTriggersParamsSuspendTrue  ListTriggersParamsSuspend = "true"
 )
 
-// Valid indicates whether the value is a known member of the ListTriggersParamsEnabled enum.
-func (e ListTriggersParamsEnabled) Valid() bool {
+// Valid indicates whether the value is a known member of the ListTriggersParamsSuspend enum.
+func (e ListTriggersParamsSuspend) Valid() bool {
 	switch e {
-	case ListTriggersParamsEnabledFalse:
+	case ListTriggersParamsSuspendFalse:
 		return true
-	case ListTriggersParamsEnabledTrue:
+	case ListTriggersParamsSuspendTrue:
 		return true
 	default:
 		return false
@@ -2784,31 +2820,56 @@ type CreateSessionRequest struct {
 
 // CreateTriggerRequest defines model for CreateTriggerRequest.
 type CreateTriggerRequest struct {
-	AgentId        string                  `json:"agentId"`
-	Enabled        *bool                   `json:"enabled,omitempty"`
-	Env            *map[string]string      `json:"env,omitempty"`
-	EnvFrom        *[]EnvFromEntry         `json:"envFrom,omitempty"`
-	EnvironmentId  *string                 `json:"environmentId,omitempty"`
-	Metadata       *map[string]interface{} `json:"metadata,omitempty"`
-	Name           string                  `json:"name"`
-	NextDueAt      *time.Time              `json:"nextDueAt,omitempty"`
-	PromptTemplate string                  `json:"promptTemplate"`
-	Runtime        Runtime                 `json:"runtime"`
-	Schedule       *struct {
-		IntervalSeconds int                               `json:"intervalSeconds"`
-		Type            *CreateTriggerRequestScheduleType `json:"type,omitempty"`
-		WindowSeconds   *int                              `json:"windowSeconds,omitempty"`
-	} `json:"schedule,omitempty"`
-	Type         *CreateTriggerRequestType `json:"type,omitempty"`
-	VolumeMounts *[]VolumeMount            `json:"volumeMounts,omitempty"`
-	Volumes      *[]Volume                 `json:"volumes,omitempty"`
+	Name      string                      `json:"name"`
+	NextDueAt *time.Time                  `json:"nextDueAt,omitempty"`
+	Source    CreateTriggerRequest_Source `json:"source"`
+	Suspend   *bool                       `json:"suspend,omitempty"`
+	Template  struct {
+		Metadata *struct {
+			Annotations *map[string]string `json:"annotations,omitempty"`
+			Labels      *map[string]string `json:"labels,omitempty"`
+		} `json:"metadata,omitempty"`
+		Spec struct {
+			AgentId        string             `json:"agentId"`
+			Env            *map[string]string `json:"env,omitempty"`
+			EnvFrom        *[]EnvFromEntry    `json:"envFrom,omitempty"`
+			EnvironmentId  *string            `json:"environmentId,omitempty"`
+			PromptTemplate string             `json:"promptTemplate"`
+			Runtime        Runtime            `json:"runtime"`
+			VolumeMounts   *[]VolumeMount     `json:"volumeMounts,omitempty"`
+			Volumes        *[]Volume          `json:"volumes,omitempty"`
+		} `json:"spec"`
+	} `json:"template"`
 }
 
-// CreateTriggerRequestScheduleType defines model for CreateTriggerRequest.Schedule.Type.
-type CreateTriggerRequestScheduleType string
+// CreateTriggerRequestSource0 defines model for .
+type CreateTriggerRequestSource0 struct {
+	Schedule struct {
+		IntervalSeconds int                                      `json:"intervalSeconds"`
+		Type            *CreateTriggerRequestSource0ScheduleType `json:"type,omitempty"`
+		WindowSeconds   *int                                     `json:"windowSeconds,omitempty"`
+	} `json:"schedule"`
+	Type CreateTriggerRequestSource0Type `json:"type"`
+}
 
-// CreateTriggerRequestType defines model for CreateTriggerRequest.Type.
-type CreateTriggerRequestType string
+// CreateTriggerRequestSource0ScheduleType defines model for CreateTriggerRequest.Source.0.Schedule.Type.
+type CreateTriggerRequestSource0ScheduleType string
+
+// CreateTriggerRequestSource0Type defines model for CreateTriggerRequest.Source.0.Type.
+type CreateTriggerRequestSource0Type string
+
+// CreateTriggerRequestSource1 defines model for .
+type CreateTriggerRequestSource1 struct {
+	Type CreateTriggerRequestSource1Type `json:"type"`
+}
+
+// CreateTriggerRequestSource1Type defines model for CreateTriggerRequest.Source.1.Type.
+type CreateTriggerRequestSource1Type string
+
+// CreateTriggerRequest_Source defines model for CreateTriggerRequest.Source.
+type CreateTriggerRequest_Source struct {
+	union json.RawMessage
+}
 
 // CreateVaultCredentialRequest defines model for CreateVaultCredentialRequest.
 type CreateVaultCredentialRequest struct {
@@ -3865,24 +3926,34 @@ type TriggerSchedule struct {
 // TriggerScheduleType defines model for TriggerSchedule.Type.
 type TriggerScheduleType string
 
-// TriggerSpec defines model for TriggerSpec.
-type TriggerSpec struct {
-	AgentId        string                 `json:"agentId"`
-	Enabled        bool                   `json:"enabled"`
-	Env            map[string]string      `json:"env"`
-	EnvFrom        []EnvFromEntry         `json:"envFrom"`
-	EnvironmentId  *string                `json:"environmentId"`
-	Metadata       map[string]interface{} `json:"metadata"`
-	PromptTemplate string                 `json:"promptTemplate"`
-	Runtime        Runtime                `json:"runtime"`
-	Schedule       *TriggerSchedule       `json:"schedule"`
-	Type           TriggerSpecType        `json:"type"`
-	VolumeMounts   []VolumeMount          `json:"volumeMounts"`
-	Volumes        []Volume               `json:"volumes"`
+// TriggerSource defines model for TriggerSource.
+type TriggerSource struct {
+	union json.RawMessage
 }
 
-// TriggerSpecType defines model for TriggerSpec.Type.
-type TriggerSpecType string
+// TriggerSource0 defines model for .
+type TriggerSource0 struct {
+	Schedule TriggerSchedule    `json:"schedule"`
+	Type     TriggerSource0Type `json:"type"`
+}
+
+// TriggerSource0Type defines model for TriggerSource.0.Type.
+type TriggerSource0Type string
+
+// TriggerSource1 defines model for .
+type TriggerSource1 struct {
+	Type TriggerSource1Type `json:"type"`
+}
+
+// TriggerSource1Type defines model for TriggerSource.1.Type.
+type TriggerSource1Type string
+
+// TriggerSpec defines model for TriggerSpec.
+type TriggerSpec struct {
+	Source   TriggerSource   `json:"source"`
+	Suspend  bool            `json:"suspend"`
+	Template TriggerTemplate `json:"template"`
+}
 
 // TriggerStatus defines model for TriggerStatus.
 type TriggerStatus struct {
@@ -3890,6 +3961,30 @@ type TriggerStatus struct {
 	LastRunId        *string       `json:"lastRunId"`
 	NextDueAt        *time.Time    `json:"nextDueAt"`
 	Phase            ResourcePhase `json:"phase"`
+}
+
+// TriggerTemplate defines model for TriggerTemplate.
+type TriggerTemplate struct {
+	Metadata TriggerTemplateMetadata `json:"metadata"`
+	Spec     TriggerTemplateSpec     `json:"spec"`
+}
+
+// TriggerTemplateMetadata defines model for TriggerTemplateMetadata.
+type TriggerTemplateMetadata struct {
+	Annotations map[string]string `json:"annotations"`
+	Labels      map[string]string `json:"labels"`
+}
+
+// TriggerTemplateSpec defines model for TriggerTemplateSpec.
+type TriggerTemplateSpec struct {
+	AgentId        string            `json:"agentId"`
+	Env            map[string]string `json:"env"`
+	EnvFrom        []EnvFromEntry    `json:"envFrom"`
+	EnvironmentId  *string           `json:"environmentId"`
+	PromptTemplate string            `json:"promptTemplate"`
+	Runtime        Runtime           `json:"runtime"`
+	VolumeMounts   []VolumeMount     `json:"volumeMounts"`
+	Volumes        []Volume          `json:"volumes"`
 }
 
 // UpdateAgentRequest defines model for UpdateAgentRequest.
@@ -3992,32 +4087,57 @@ type UpdateSessionRequestState string
 
 // UpdateTriggerRequest defines model for UpdateTriggerRequest.
 type UpdateTriggerRequest struct {
-	AgentId        *string                 `json:"agentId,omitempty"`
-	Archived       *bool                   `json:"archived,omitempty"`
-	Enabled        *bool                   `json:"enabled,omitempty"`
-	Env            *map[string]string      `json:"env,omitempty"`
-	EnvFrom        *[]EnvFromEntry         `json:"envFrom,omitempty"`
-	EnvironmentId  *string                 `json:"environmentId,omitempty"`
-	Metadata       *map[string]interface{} `json:"metadata,omitempty"`
-	Name           *string                 `json:"name,omitempty"`
-	NextDueAt      *time.Time              `json:"nextDueAt,omitempty"`
-	PromptTemplate *string                 `json:"promptTemplate,omitempty"`
-	Runtime        *Runtime                `json:"runtime,omitempty"`
-	Schedule       *struct {
-		IntervalSeconds int                               `json:"intervalSeconds"`
-		Type            *UpdateTriggerRequestScheduleType `json:"type,omitempty"`
-		WindowSeconds   *int                              `json:"windowSeconds,omitempty"`
-	} `json:"schedule,omitempty"`
-	Type         *UpdateTriggerRequestType `json:"type,omitempty"`
-	VolumeMounts *[]VolumeMount            `json:"volumeMounts,omitempty"`
-	Volumes      *[]Volume                 `json:"volumes,omitempty"`
+	Archived  *bool                        `json:"archived,omitempty"`
+	Name      *string                      `json:"name,omitempty"`
+	NextDueAt *time.Time                   `json:"nextDueAt,omitempty"`
+	Source    *UpdateTriggerRequest_Source `json:"source,omitempty"`
+	Suspend   *bool                        `json:"suspend,omitempty"`
+	Template  *struct {
+		Metadata *struct {
+			Annotations *map[string]string `json:"annotations,omitempty"`
+			Labels      *map[string]string `json:"labels,omitempty"`
+		} `json:"metadata,omitempty"`
+		Spec *struct {
+			AgentId        *string            `json:"agentId,omitempty"`
+			Env            *map[string]string `json:"env,omitempty"`
+			EnvFrom        *[]EnvFromEntry    `json:"envFrom,omitempty"`
+			EnvironmentId  *string            `json:"environmentId,omitempty"`
+			PromptTemplate *string            `json:"promptTemplate,omitempty"`
+			Runtime        *Runtime           `json:"runtime,omitempty"`
+			VolumeMounts   *[]VolumeMount     `json:"volumeMounts,omitempty"`
+			Volumes        *[]Volume          `json:"volumes,omitempty"`
+		} `json:"spec,omitempty"`
+	} `json:"template,omitempty"`
 }
 
-// UpdateTriggerRequestScheduleType defines model for UpdateTriggerRequest.Schedule.Type.
-type UpdateTriggerRequestScheduleType string
+// UpdateTriggerRequestSource0 defines model for .
+type UpdateTriggerRequestSource0 struct {
+	Schedule *struct {
+		IntervalSeconds *int                                     `json:"intervalSeconds,omitempty"`
+		Type            *UpdateTriggerRequestSource0ScheduleType `json:"type,omitempty"`
+		WindowSeconds   *int                                     `json:"windowSeconds,omitempty"`
+	} `json:"schedule,omitempty"`
+	Type UpdateTriggerRequestSource0Type `json:"type"`
+}
 
-// UpdateTriggerRequestType defines model for UpdateTriggerRequest.Type.
-type UpdateTriggerRequestType string
+// UpdateTriggerRequestSource0ScheduleType defines model for UpdateTriggerRequest.Source.0.Schedule.Type.
+type UpdateTriggerRequestSource0ScheduleType string
+
+// UpdateTriggerRequestSource0Type defines model for UpdateTriggerRequest.Source.0.Type.
+type UpdateTriggerRequestSource0Type string
+
+// UpdateTriggerRequestSource1 defines model for .
+type UpdateTriggerRequestSource1 struct {
+	Type UpdateTriggerRequestSource1Type `json:"type"`
+}
+
+// UpdateTriggerRequestSource1Type defines model for UpdateTriggerRequest.Source.1.Type.
+type UpdateTriggerRequestSource1Type string
+
+// UpdateTriggerRequest_Source defines model for UpdateTriggerRequest.Source.
+type UpdateTriggerRequest_Source struct {
+	union json.RawMessage
+}
 
 // UpdateVaultCredentialRequest defines model for UpdateVaultCredentialRequest.
 type UpdateVaultCredentialRequest struct {
@@ -4440,15 +4560,15 @@ type ListTriggersParams struct {
 	Limit       *int                        `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor      *string                     `form:"cursor,omitempty" json:"cursor,omitempty"`
 
-	// Enabled Filter by the operational toggle.
-	Enabled *ListTriggersParamsEnabled `form:"enabled,omitempty" json:"enabled,omitempty"`
+	// Suspend Filter by the operational toggle.
+	Suspend *ListTriggersParamsSuspend `form:"suspend,omitempty" json:"suspend,omitempty"`
 }
 
 // ListTriggersParamsArchived defines parameters for ListTriggers.
 type ListTriggersParamsArchived string
 
-// ListTriggersParamsEnabled defines parameters for ListTriggers.
-type ListTriggersParamsEnabled string
+// ListTriggersParamsSuspend defines parameters for ListTriggers.
+type ListTriggersParamsSuspend string
 
 // ListTriggerRunsParams defines parameters for ListTriggerRuns.
 type ListTriggerRunsParams struct {
@@ -4798,6 +4918,68 @@ func (a ProviderModelPricing) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
+// AsCreateTriggerRequestSource0 returns the union data inside the CreateTriggerRequest_Source as a CreateTriggerRequestSource0
+func (t CreateTriggerRequest_Source) AsCreateTriggerRequestSource0() (CreateTriggerRequestSource0, error) {
+	var body CreateTriggerRequestSource0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTriggerRequestSource0 overwrites any union data inside the CreateTriggerRequest_Source as the provided CreateTriggerRequestSource0
+func (t *CreateTriggerRequest_Source) FromCreateTriggerRequestSource0(v CreateTriggerRequestSource0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTriggerRequestSource0 performs a merge with any union data inside the CreateTriggerRequest_Source, using the provided CreateTriggerRequestSource0
+func (t *CreateTriggerRequest_Source) MergeCreateTriggerRequestSource0(v CreateTriggerRequestSource0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCreateTriggerRequestSource1 returns the union data inside the CreateTriggerRequest_Source as a CreateTriggerRequestSource1
+func (t CreateTriggerRequest_Source) AsCreateTriggerRequestSource1() (CreateTriggerRequestSource1, error) {
+	var body CreateTriggerRequestSource1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCreateTriggerRequestSource1 overwrites any union data inside the CreateTriggerRequest_Source as the provided CreateTriggerRequestSource1
+func (t *CreateTriggerRequest_Source) FromCreateTriggerRequestSource1(v CreateTriggerRequestSource1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeCreateTriggerRequestSource1 performs a merge with any union data inside the CreateTriggerRequest_Source, using the provided CreateTriggerRequestSource1
+func (t *CreateTriggerRequest_Source) MergeCreateTriggerRequestSource1(v CreateTriggerRequestSource1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t CreateTriggerRequest_Source) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *CreateTriggerRequest_Source) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // AsSessionPromptFrame returns the union data inside the SessionClientFrame as a SessionPromptFrame
 func (t SessionClientFrame) AsSessionPromptFrame() (SessionPromptFrame, error) {
 	var body SessionPromptFrame
@@ -4973,6 +5155,130 @@ func (t SessionClientFrame) MarshalJSON() ([]byte, error) {
 }
 
 func (t *SessionClientFrame) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsTriggerSource0 returns the union data inside the TriggerSource as a TriggerSource0
+func (t TriggerSource) AsTriggerSource0() (TriggerSource0, error) {
+	var body TriggerSource0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTriggerSource0 overwrites any union data inside the TriggerSource as the provided TriggerSource0
+func (t *TriggerSource) FromTriggerSource0(v TriggerSource0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTriggerSource0 performs a merge with any union data inside the TriggerSource, using the provided TriggerSource0
+func (t *TriggerSource) MergeTriggerSource0(v TriggerSource0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTriggerSource1 returns the union data inside the TriggerSource as a TriggerSource1
+func (t TriggerSource) AsTriggerSource1() (TriggerSource1, error) {
+	var body TriggerSource1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTriggerSource1 overwrites any union data inside the TriggerSource as the provided TriggerSource1
+func (t *TriggerSource) FromTriggerSource1(v TriggerSource1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTriggerSource1 performs a merge with any union data inside the TriggerSource, using the provided TriggerSource1
+func (t *TriggerSource) MergeTriggerSource1(v TriggerSource1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t TriggerSource) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *TriggerSource) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsUpdateTriggerRequestSource0 returns the union data inside the UpdateTriggerRequest_Source as a UpdateTriggerRequestSource0
+func (t UpdateTriggerRequest_Source) AsUpdateTriggerRequestSource0() (UpdateTriggerRequestSource0, error) {
+	var body UpdateTriggerRequestSource0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateTriggerRequestSource0 overwrites any union data inside the UpdateTriggerRequest_Source as the provided UpdateTriggerRequestSource0
+func (t *UpdateTriggerRequest_Source) FromUpdateTriggerRequestSource0(v UpdateTriggerRequestSource0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateTriggerRequestSource0 performs a merge with any union data inside the UpdateTriggerRequest_Source, using the provided UpdateTriggerRequestSource0
+func (t *UpdateTriggerRequest_Source) MergeUpdateTriggerRequestSource0(v UpdateTriggerRequestSource0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUpdateTriggerRequestSource1 returns the union data inside the UpdateTriggerRequest_Source as a UpdateTriggerRequestSource1
+func (t UpdateTriggerRequest_Source) AsUpdateTriggerRequestSource1() (UpdateTriggerRequestSource1, error) {
+	var body UpdateTriggerRequestSource1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUpdateTriggerRequestSource1 overwrites any union data inside the UpdateTriggerRequest_Source as the provided UpdateTriggerRequestSource1
+func (t *UpdateTriggerRequest_Source) FromUpdateTriggerRequestSource1(v UpdateTriggerRequestSource1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeUpdateTriggerRequestSource1 performs a merge with any union data inside the UpdateTriggerRequest_Source, using the provided UpdateTriggerRequestSource1
+func (t *UpdateTriggerRequest_Source) MergeUpdateTriggerRequestSource1(v UpdateTriggerRequestSource1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t UpdateTriggerRequest_Source) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *UpdateTriggerRequest_Source) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -10779,9 +11085,9 @@ func NewListTriggersRequest(server string, params *ListTriggersParams) (*http.Re
 
 		}
 
-		if params.Enabled != nil {
+		if params.Suspend != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "enabled", *params.Enabled, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "suspend", *params.Suspend, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
