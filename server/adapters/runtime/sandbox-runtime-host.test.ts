@@ -517,6 +517,22 @@ describe('session-runtime', () => {
               mountPath: '/workspace/repos/saltbo/any-managed-agents',
               url: 'https://github.com/saltbo/any-managed-agents.git',
               ref: 'main',
+              credential: { username: 'git-user', password: 'git-password' },
+            },
+            {
+              name: 'memory',
+              type: 'memory',
+              mountPath: '/workspace/.ama/memory-stores/memstore_1',
+              memoryRef: 'ama://memories/memstore_1',
+              access: 'read_only',
+              files: [{ path: 'guides/review.md', content: 'Review carefully.' }],
+            },
+            {
+              name: 'api-token',
+              type: 'secret',
+              mountPath: '/workspace/.ama/secrets/api',
+              readOnly: true,
+              files: [{ path: 'token', content: 'secret-token' }],
             },
           ],
         },
@@ -546,7 +562,24 @@ describe('session-runtime', () => {
       "git -C '/workspace/repos/saltbo/any-managed-agents' checkout 'main'",
       undefined,
     )
-    expect(mockSandbox.exec).not.toHaveBeenCalledWith('mkdir -p /workspace/.ama')
+    expect(mockSandbox.exec).toHaveBeenCalledWith('git config --global credential.helper store', undefined)
+    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
+      '/root/.git-credentials',
+      'https://git-user:git-password@github.com\n',
+      {
+        encoding: 'utf-8',
+      },
+    )
+    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
+      '/workspace/.ama/memory-stores/memstore_1/guides/review.md',
+      'Review carefully.',
+      { encoding: 'utf-8' },
+    )
+    expect(mockSandbox.exec).toHaveBeenCalledWith("chmod -R a-w '/workspace/.ama/memory-stores/memstore_1'", undefined)
+    expect(mockSandbox.writeFile).toHaveBeenCalledWith('/workspace/.ama/secrets/api/token', 'secret-token', {
+      encoding: 'utf-8',
+    })
+    expect(mockSandbox.exec).toHaveBeenCalledWith("chmod -R a-w '/workspace/.ama/secrets/api'", undefined)
     expect(mockSandbox.writeFile).not.toHaveBeenCalledWith(
       expect.stringMatching(/^\/workspace\/\.ama\/(session|resources|runtime-env)\.json$/),
       expect.anything(),

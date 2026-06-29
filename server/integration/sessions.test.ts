@@ -141,9 +141,8 @@ async function connectMcp(authorization: string, connectorId: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `${connectorId} token`,
-      type: 'api_key',
-      connectorBinding: { connectorId, name: 'token' },
-      secret: { secretValue: `raw-${connectorId}-token` },
+      type: 'Opaque',
+      secret: { stringData: { value: `raw-${connectorId}-token` } },
     }),
   })
   expect(credentialRes.status).toBe(201)
@@ -153,6 +152,36 @@ async function connectMcp(authorization: string, connectorId: string) {
     activeVersion: { id: string; secretRef: string }
   }
   return credential
+}
+
+async function createVault(authorization: string, name = `Runtime credentials ${crypto.randomUUID()}`) {
+  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+  expect(vaultRes.status).toBe(201)
+  return (await vaultRes.json()) as { id: string }
+}
+
+async function createCredential(
+  authorization: string,
+  vaultId: string,
+  input: { name: string; type: string; stringData: Record<string, string> },
+) {
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vaultId}/credentials`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: input.name,
+      type: input.type,
+      secret: { stringData: input.stringData },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  return (await credentialRes.json()) as {
+    id: string
+    name: string
+    activeVersion: { id: string; secretRef: string; dataKeys: string[] }
+  }
 }
 
 async function setProjectPolicy(authorization: string, policy: Record<string, unknown>) {
@@ -839,6 +868,132 @@ describe('[CF] /api/v1/sessions', () => {
       }),
     })
     expect(duplicateMountRes.status).toBe(400)
+  })
+
+  it('materializes credential-backed env and workspace volumes for runner use', async () => {
+    const authorization = await signIn()
+    const environment = await createEnvironment(authorization, {
+      name: `Self-hosted credential workspace ${crypto.randomUUID()}`,
+      hostingMode: 'self_hosted',
+      networkPolicy: { mode: 'unrestricted' },
+      mcpPolicy: {},
+      packageManagerPolicy: {},
+      runtimeConfig: {},
+      packages: [],
+    })
+    const runner = await registerRunner(authorization, environment.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
+    const agent = await createAgent(authorization, {
+      name: 'Credential-backed workspace agent',
+      instructions: 'Use prepared workspace mounts.',
+      skills: [],
+      mcpConnectors: [],
+    })
+    const vault = await createVault(authorization)
+    const gitCredential = await createCredential(authorization, vault.id, {
+      name: 'git-basic-auth',
+      type: 'kubernetes.io/basic-auth',
+      stringData: { username: 'git-user', password: 'git-password' },
+    })
+    const appSecret = await createCredential(authorization, vault.id, {
+      name: 'app-config',
+      type: 'Opaque',
+      stringData: { alpha: 'secret-alpha', beta: 'secret-beta' },
+    })
+    await createCredential(authorization, vault.id, {
+      name: 'tls-cert',
+      type: 'kubernetes.io/tls',
+      stringData: { 'tls.crt': '-----BEGIN CERTIFICATE-----', 'tls.key': '-----BEGIN PRIVATE KEY-----' },
+    })
+
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        envFrom: [
+          {
+            type: 'secret',
+            name: 'SERVICE_PASSWORD',
+            secretRef: gitCredential.activeVersion.secretRef,
+            key: 'password',
+          },
+        ],
+        volumes: [
+          {
+            name: 'repo',
+            type: 'git_repository',
+            url: 'https://github.com/saltbo/slink.git',
+            secretRef: gitCredential.activeVersion.secretRef,
+          },
+          { name: 'single-secret', type: 'secret', secretRef: appSecret.activeVersion.secretRef },
+          { name: 'vault-secrets', type: 'secret', secretRef: `ama://vaults/${vault.id}` },
+        ],
+        volumeMounts: [
+          { name: 'repo', mountPath: '/workspace/repos/saltbo/slink' },
+          { name: 'single-secret', mountPath: '/workspace/.ama/secrets/app' },
+          { name: 'vault-secrets', mountPath: '/workspace/.ama/secrets/project' },
+        ],
+      }),
+    })
+    expect(createRes.status).toBe(201)
+
+    await heartbeatRunner(authorization, runner.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
+    const lease = await claimLease(authorization, runner.id)
+    expect(lease).toBeTruthy()
+    const workItem = await readWorkItem(authorization, lease!.workItemId)
+    const payload = workItem.payload as {
+      env: Record<string, string>
+      workspaceManifest: {
+        root: string
+        mounts: Array<{
+          type: string
+          name: string
+          mountPath: string
+          credential?: { username: string; password: string }
+          files?: Array<{ path: string; content: string }>
+        }>
+      }
+    }
+
+    expect(payload.env.SERVICE_PASSWORD).toBe('git-password')
+    expect(payload).not.toHaveProperty('envFrom')
+    expect(payload).not.toHaveProperty('volumes')
+    expect(payload).not.toHaveProperty('volumeMounts')
+    expect(payload.workspaceManifest.root).toBe('/workspace')
+
+    const repoMount = payload.workspaceManifest.mounts.find((mount) => mount.name === 'repo')
+    expect(repoMount).toMatchObject({
+      type: 'git_repository',
+      mountPath: '/workspace/repos/saltbo/slink',
+      credential: { username: 'git-user', password: 'git-password' },
+    })
+
+    const singleSecretMount = payload.workspaceManifest.mounts.find((mount) => mount.name === 'single-secret')
+    expect(singleSecretMount).toMatchObject({
+      type: 'secret',
+      mountPath: '/workspace/.ama/secrets/app',
+      files: [
+        { path: 'alpha', content: 'secret-alpha' },
+        { path: 'beta', content: 'secret-beta' },
+      ],
+    })
+
+    const vaultMount = payload.workspaceManifest.mounts.find((mount) => mount.name === 'vault-secrets')
+    expect(vaultMount).toMatchObject({
+      type: 'secret',
+      mountPath: '/workspace/.ama/secrets/project',
+    })
+    expect(vaultMount?.files).toEqual(
+      expect.arrayContaining([
+        { path: 'app-config/alpha', content: 'secret-alpha' },
+        { path: 'app-config/beta', content: 'secret-beta' },
+        { path: 'git-basic-auth/password', content: 'git-password' },
+        { path: 'git-basic-auth/username', content: 'git-user' },
+        { path: 'tls-cert/tls.crt', content: '-----BEGIN CERTIFICATE-----' },
+        { path: 'tls-cert/tls.key', content: '-----BEGIN PRIVATE KEY-----' },
+      ]),
+    )
   })
 
   it('validates envFrom references without exposing raw secrets [spec: sessions/create-explicit-inputs]', async () => {

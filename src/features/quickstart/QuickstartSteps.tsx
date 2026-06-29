@@ -61,7 +61,7 @@ export function QuickstartProviderStep({
         <Button type="button" variant="outline" onClick={onContinue}>
           Continue to next step
         </Button>
-        <OpenPageLink to="/providers" label="Open providers" />
+        <OpenPageLink to="/settings/providers" label="Open providers" />
       </div>
       <p className="text-xs text-muted-foreground">
         The one-click run creates a starter agent on the default Workers AI model, a reusable environment, and a session

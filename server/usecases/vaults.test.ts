@@ -32,8 +32,7 @@ function credential(overrides: Partial<CredentialRecord> = {}): CredentialRecord
     organizationId: 'org_1',
     projectId: 'project_1',
     name: 'Token',
-    type: 'api_key',
-    connectorBinding: {},
+    type: 'Opaque',
     metadata: {},
     state: 'active',
     activeVersionId: 'vaultver_1',
@@ -93,7 +92,7 @@ function fakeDeps(
     ...overrides.vaults,
   }
   const secretStore: Deps['secretStore'] = {
-    store: async () => ({ encryptedSecretValue: 'cipher' }),
+    store: async () => ({ encryptedSecretData: { value: 'cipher' } }),
     ...overrides.secretStore,
   }
   return {
@@ -159,16 +158,15 @@ describe('[spec: vaults/credential-create] createCredential', () => {
       secretStore: {
         store: async () => {
           stored = true
-          return { encryptedSecretValue: 'cipher' }
+          return { encryptedSecretData: { value: 'cipher' } }
         },
       },
     })
     const result = await createCredential(deps, vault(), {
       name: 'Token',
-      type: 'api_key',
-      connectorBinding: {},
+      type: 'Opaque',
       metadata: {},
-      secret: { secretValue: 'raw' },
+      secret: { stringData: { value: 'raw' } },
     })
     expect(stored).toBe(true)
     expect(result.version.version).toBe(1)
@@ -183,10 +181,9 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     })
     const result = await createCredential(deps, vault(), {
       name: 'Token',
-      type: 'api_key',
-      connectorBinding: {},
+      type: 'Opaque',
       metadata: {},
-      secret: { secretValue: 'raw' },
+      secret: { stringData: { value: 'raw' } },
     })
     expect(result.credential.activeVersionId).toBeDefined()
   })
@@ -195,8 +192,7 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     await expect(
       createCredential(fakeDeps(), vault(), {
         name: 'Token',
-        type: 'api_key',
-        connectorBinding: {},
+        type: 'Opaque',
         metadata: {},
         secret: {},
       }),
@@ -214,10 +210,9 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     await expect(
       createCredential(deps, vault(), {
         name: 'Token',
-        type: 'api_key',
-        connectorBinding: {},
+        type: 'Opaque',
         metadata: {},
-        secret: { secretValue: 'raw' },
+        secret: { stringData: { value: 'raw' } },
       }),
     ).rejects.toBeInstanceOf(VaultSecretError)
   })
@@ -236,7 +231,7 @@ describe('[spec: vaults/credential-rotate] rotateCredential', () => {
       },
     })
     const result = await rotateCredential(deps, credential({ activeVersionId: 'vaultver_1' }), {
-      secretValue: 'raw',
+      stringData: { value: 'raw' },
     })
     expect(result.version.version).toBe(2)
     expect(supersededOf).toBe('vaultver_1')
@@ -250,7 +245,9 @@ describe('[spec: vaults/credential-rotate] rotateCredential', () => {
         },
       },
     })
-    await expect(rotateCredential(deps, credential(), { secretValue: 'raw' })).rejects.toBeInstanceOf(VaultSecretError)
+    await expect(rotateCredential(deps, credential(), { stringData: { value: 'raw' } })).rejects.toBeInstanceOf(
+      VaultSecretError,
+    )
   })
 })
 
@@ -290,7 +287,7 @@ describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
         },
       },
     })
-    const error = await rotateCredential(deps, credential(), { secretValue: 'raw' }).catch((e) => e)
+    const error = await rotateCredential(deps, credential(), { stringData: { value: 'raw' } }).catch((e) => e)
     expect(error).toBeInstanceOf(VaultSecretError)
     expect(error.message).toBe('Invalid secret reference')
   })

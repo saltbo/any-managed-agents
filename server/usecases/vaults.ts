@@ -1,4 +1,4 @@
-import type { SecretMaterial, VaultScope } from '@server/domain/vault'
+import type { CredentialType, SecretMaterial, VaultScope } from '@server/domain/vault'
 import { secretReference } from '@server/domain/vault'
 import type { Deps } from './deps'
 import {
@@ -20,8 +20,7 @@ function versionMetadata(
 
 export interface CreateCredentialInputDto {
   name: string
-  type: string
-  connectorBinding: Record<string, unknown>
+  type: CredentialType
   metadata: Record<string, unknown>
   secret: SecretMaterial
 }
@@ -44,7 +43,7 @@ export async function createCredential(
   const versionId = newId('vaultver')
   let reference: ReturnType<typeof secretReference>
   try {
-    reference = secretReference({ vaultId: vault.id, credentialId, versionId }, 1, input.secret)
+    reference = secretReference({ vaultId: vault.id, credentialId, versionId }, 1, input.type, input.secret)
   } catch (error) {
     throw secretError(error)
   }
@@ -61,7 +60,6 @@ export async function createCredential(
       projectId: vault.projectId,
       name: input.name,
       type: input.type,
-      connectorBinding: input.connectorBinding,
       metadata: input.metadata,
     },
     {
@@ -95,6 +93,7 @@ export async function rotateCredential(
     reference = secretReference(
       { vaultId: credential.vaultId, credentialId: credential.id, versionId },
       nextVersion,
+      credential.type,
       secret,
     )
     stored = await deps.secretStore.store(reference, secret)

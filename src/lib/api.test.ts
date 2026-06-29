@@ -721,8 +721,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         vaultId: 'vault_1',
         projectId: 'p1',
         name: 'API Key',
-        type: 'api_key',
-        connectorBinding: {},
+        type: 'Opaque',
         metadata: {},
         state: 'active' as const,
         activeVersionId: null,
@@ -735,7 +734,11 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       }
       const fetchMock = makeJsonFetch(cred)
       vi.stubGlobal('fetch', fetchMock)
-      await api.createVaultCredential('vault_1', { name: 'API Key', type: 'api_key', secret: { secretValue: 'raw' } })
+      await api.createVaultCredential('vault_1', {
+        name: 'API Key',
+        type: 'Opaque',
+        secret: { stringData: { value: 'raw' } },
+      })
       const [, init] = fetchMock.mock.calls[0]!
       expect(init?.method).toBe('POST')
     })
@@ -759,7 +762,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       }
       const fetchMock = makeJsonFetch(version)
       vi.stubGlobal('fetch', fetchMock)
-      const result = await api.rotateVaultCredential('vault_1', 'cred_1', { secretValue: 'newsecret' })
+      const result = await api.rotateVaultCredential('vault_1', 'cred_1', { stringData: { value: 'newsecret' } })
       expect(result.id).toBe('ver_1')
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/vaults/vault_1/credentials/cred_1/versions')
@@ -771,8 +774,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         vaultId: 'vault_1',
         projectId: 'p1',
         name: 'API Key',
-        type: 'api_key',
-        connectorBinding: {},
+        type: 'Opaque',
         metadata: {},
         state: 'revoked' as const,
         activeVersionId: null,
@@ -795,8 +797,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         vaultId: 'vault_1',
         projectId: 'p1',
         name: 'API Key',
-        type: 'api_key',
-        connectorBinding: {},
+        type: 'Opaque',
         metadata: {},
         state: 'revoked' as const,
         activeVersionId: null,
@@ -848,7 +849,6 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const result = await api.readConnector('conn_1')
       expect(result.id).toBe('conn_1')
     })
-
   })
 
   // ---------------------------------------------------------------------------

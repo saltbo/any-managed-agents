@@ -2,7 +2,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   Bot,
-  Boxes,
   Brain,
   Check,
   ChevronsUpDown,
@@ -11,7 +10,6 @@ import {
   DatabaseZap,
   LogOut,
   MessageSquare,
-  PlugZap,
   Plus,
   Server,
   Settings,
@@ -148,12 +146,10 @@ function DesktopNav() {
       <NavButton icon={<Code2 size={17} />} to="/quickstart" label="Quickstart" />
       <NavButton icon={<Bot size={17} />} to="/agents" label="Agents" />
       <NavButton icon={<Server size={17} />} to="/environments" label="Environments" />
-      <NavButton icon={<Clock size={17} />} to="/triggers" label="Triggers" />
       <NavButton icon={<MessageSquare size={17} />} to="/sessions" label="Sessions" />
-      <NavButton icon={<Boxes size={17} />} to="/providers" label="Providers" />
+      <NavButton icon={<Clock size={17} />} to="/triggers" label="Triggers" />
       <NavButton icon={<Vault size={17} />} to="/vaults" label="Vaults" />
       <NavButton icon={<Brain size={17} />} to="/memory-stores" label="Memory" />
-      <NavButton icon={<PlugZap size={17} />} to="/mcp" label="MCP" />
       <NavButton icon={<Code2 size={17} />} to="/usage" label="Usage" />
       <NavButton icon={<DatabaseZap size={17} />} to="/audit" label="Audit" />
       <NavButton icon={<Settings size={17} />} to="/settings" label="Settings" />
@@ -211,12 +207,10 @@ function MobileNav() {
       <MobileNavButton icon={<Code2 size={16} />} to="/quickstart" label="Quickstart" />
       <MobileNavButton icon={<Bot size={16} />} to="/agents" label="Agents" />
       <MobileNavButton icon={<Server size={16} />} to="/environments" label="Environments" />
-      <MobileNavButton icon={<Clock size={16} />} to="/triggers" label="Triggers" />
       <MobileNavButton icon={<MessageSquare size={16} />} to="/sessions" label="Sessions" />
-      <MobileNavButton icon={<Boxes size={16} />} to="/providers" label="Providers" />
+      <MobileNavButton icon={<Clock size={16} />} to="/triggers" label="Triggers" />
       <MobileNavButton icon={<Vault size={16} />} to="/vaults" label="Vaults" />
       <MobileNavButton icon={<Brain size={16} />} to="/memory-stores" label="Memory" />
-      <MobileNavButton icon={<PlugZap size={16} />} to="/mcp" label="MCP" />
       <MobileNavButton icon={<Code2 size={16} />} to="/usage" label="Usage" />
       <MobileNavButton icon={<DatabaseZap size={16} />} to="/audit" label="Audit" />
       <MobileNavButton icon={<Settings size={16} />} to="/settings" label="Settings" />

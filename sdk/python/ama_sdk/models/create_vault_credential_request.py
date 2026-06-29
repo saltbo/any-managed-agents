@@ -8,11 +8,11 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..models.create_vault_credential_request_type import CreateVaultCredentialRequestType
 from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.create_vault_credential_request_connector_binding import CreateVaultCredentialRequestConnectorBinding
   from ..models.create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
   from ..models.create_vault_credential_request_secret import CreateVaultCredentialRequestSecret
 
@@ -29,17 +29,14 @@ class CreateVaultCredentialRequest:
     """ 
         Attributes:
             name (str):  Example: Workers AI token.
-            type_ (str):  Example: api_key.
-            secret (CreateVaultCredentialRequestSecret):  Example: {'secretValue': 'input-only'}.
-            connector_binding (CreateVaultCredentialRequestConnectorBinding | Unset):  Example: {'connectorId': 'workers-
-                ai', 'name': 'apiKey'}.
+            type_ (CreateVaultCredentialRequestType):  Example: Opaque.
+            secret (CreateVaultCredentialRequestSecret):  Example: {'stringData': {'token': 'input-only'}}.
             metadata (CreateVaultCredentialRequestMetadata | Unset):  Example: {'owner': 'platform'}.
      """
 
     name: str
-    type_: str
+    type_: CreateVaultCredentialRequestType
     secret: CreateVaultCredentialRequestSecret
-    connector_binding: CreateVaultCredentialRequestConnectorBinding | Unset = UNSET
     metadata: CreateVaultCredentialRequestMetadata | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -48,18 +45,13 @@ class CreateVaultCredentialRequest:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.create_vault_credential_request_connector_binding import CreateVaultCredentialRequestConnectorBinding
         from ..models.create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
         from ..models.create_vault_credential_request_secret import CreateVaultCredentialRequestSecret
         name = self.name
 
-        type_ = self.type_
+        type_ = self.type_.value
 
         secret = self.secret.to_dict()
-
-        connector_binding: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.connector_binding, Unset):
-            connector_binding = self.connector_binding.to_dict()
 
         metadata: dict[str, Any] | Unset = UNSET
         if not isinstance(self.metadata, Unset):
@@ -73,8 +65,6 @@ class CreateVaultCredentialRequest:
             "type": type_,
             "secret": secret,
         })
-        if connector_binding is not UNSET:
-            field_dict["connectorBinding"] = connector_binding
         if metadata is not UNSET:
             field_dict["metadata"] = metadata
 
@@ -84,25 +74,17 @@ class CreateVaultCredentialRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.create_vault_credential_request_connector_binding import CreateVaultCredentialRequestConnectorBinding
         from ..models.create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
         from ..models.create_vault_credential_request_secret import CreateVaultCredentialRequestSecret
         d = dict(src_dict)
         name = d.pop("name")
 
-        type_ = d.pop("type")
+        type_ = CreateVaultCredentialRequestType(d.pop("type"))
+
+
+
 
         secret = CreateVaultCredentialRequestSecret.from_dict(d.pop("secret"))
-
-
-
-
-        _connector_binding = d.pop("connectorBinding", UNSET)
-        connector_binding: CreateVaultCredentialRequestConnectorBinding | Unset
-        if isinstance(_connector_binding,  Unset):
-            connector_binding = UNSET
-        else:
-            connector_binding = CreateVaultCredentialRequestConnectorBinding.from_dict(_connector_binding)
 
 
 
@@ -121,7 +103,6 @@ class CreateVaultCredentialRequest:
             name=name,
             type_=type_,
             secret=secret,
-            connector_binding=connector_binding,
             metadata=metadata,
         )
 

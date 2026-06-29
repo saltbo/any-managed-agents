@@ -15,6 +15,8 @@
 // server/runtime/session-create module; only dependency acquisition changed.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
+import { amaMemoryRef, memoryStoreIdFromRef } from '@server/domain/memory-store'
+import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
 import type {
   EnvFromEntry,
   GitRepositoryVolume,
@@ -22,8 +24,6 @@ import type {
   Volume,
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
-import { amaMemoryRef, memoryStoreIdFromRef } from '@server/domain/memory-store'
-import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
 import {
   agentSnapshotWithWorkspaceContext,
   type NormalizedEnvironmentSnapshot,
@@ -135,14 +135,19 @@ async function resolveEnvFromEntries(
     names.add(entry.name)
     const secretRef = entry.secretRef
     const version = await store.secretVersionForResolution(auth.organization.id, auth.project.id, secretRef)
-    if (!version || version.state !== 'active') {
+    if (version?.state !== 'active') {
       return {
         fields: {
           [`${field}.secretRef`]: 'Secret reference must exist, be active, and belong to this project or organization.',
         },
       }
     }
-    entries.push({ type: 'secret', name: entry.name, secretRef: version.secretRef })
+    entries.push({
+      type: 'secret',
+      name: entry.name,
+      secretRef: version.secretRef,
+      ...(entry.key ? { key: entry.key } : {}),
+    })
   }
   return { entries }
 }
@@ -167,7 +172,7 @@ async function validateDeclaredVolumes(
     if (volume.type !== 'secret') {
       if (volume.type === 'git_repository' && volume.secretRef) {
         const version = await store.secretVersionForResolution(auth.organization.id, auth.project.id, volume.secretRef)
-        if (!version || version.state !== 'active') {
+        if (version?.state !== 'active') {
           return {
             fields: {
               [`${field}.secretRef`]: 'Git repository secret reference must point to an active credential version.',

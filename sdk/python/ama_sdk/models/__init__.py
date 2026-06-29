@@ -96,12 +96,14 @@ from .create_trigger_request_schedule_type_0 import CreateTriggerRequestSchedule
 from .create_trigger_request_schedule_type_0_type import CreateTriggerRequestScheduleType0Type
 from .create_trigger_request_type import CreateTriggerRequestType
 from .create_vault_credential_request import CreateVaultCredentialRequest
-from .create_vault_credential_request_connector_binding import CreateVaultCredentialRequestConnectorBinding
 from .create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
 from .create_vault_credential_request_secret import CreateVaultCredentialRequestSecret
 from .create_vault_credential_request_secret_metadata import CreateVaultCredentialRequestSecretMetadata
+from .create_vault_credential_request_secret_string_data import CreateVaultCredentialRequestSecretStringData
+from .create_vault_credential_request_type import CreateVaultCredentialRequestType
 from .create_vault_credential_version_request import CreateVaultCredentialVersionRequest
 from .create_vault_credential_version_request_metadata import CreateVaultCredentialVersionRequestMetadata
+from .create_vault_credential_version_request_string_data import CreateVaultCredentialVersionRequestStringData
 from .create_vault_request import CreateVaultRequest
 from .create_vault_request_metadata import CreateVaultRequestMetadata
 from .create_vault_request_scope import CreateVaultRequestScope
@@ -371,10 +373,10 @@ from .usage_summary_group_key import UsageSummaryGroupKey
 from .usage_summary_totals import UsageSummaryTotals
 from .vault import Vault
 from .vault_credential import VaultCredential
-from .vault_credential_connector_binding import VaultCredentialConnectorBinding
 from .vault_credential_list_response import VaultCredentialListResponse
 from .vault_credential_metadata import VaultCredentialMetadata
 from .vault_credential_state import VaultCredentialState
+from .vault_credential_type import VaultCredentialType
 from .vault_credential_version_list_response import VaultCredentialVersionListResponse
 from .vault_credential_version_type_0 import VaultCredentialVersionType0
 from .vault_credential_version_type_0_provider import VaultCredentialVersionType0Provider
@@ -488,12 +490,14 @@ __all__ = (
     "CreateTriggerRequestScheduleType0Type",
     "CreateTriggerRequestType",
     "CreateVaultCredentialRequest",
-    "CreateVaultCredentialRequestConnectorBinding",
     "CreateVaultCredentialRequestMetadata",
     "CreateVaultCredentialRequestSecret",
     "CreateVaultCredentialRequestSecretMetadata",
+    "CreateVaultCredentialRequestSecretStringData",
+    "CreateVaultCredentialRequestType",
     "CreateVaultCredentialVersionRequest",
     "CreateVaultCredentialVersionRequestMetadata",
+    "CreateVaultCredentialVersionRequestStringData",
     "CreateVaultRequest",
     "CreateVaultRequestMetadata",
     "CreateVaultRequestScope",
@@ -763,10 +767,10 @@ __all__ = (
     "UsageSummaryTotals",
     "Vault",
     "VaultCredential",
-    "VaultCredentialConnectorBinding",
     "VaultCredentialListResponse",
     "VaultCredentialMetadata",
     "VaultCredentialState",
+    "VaultCredentialType",
     "VaultCredentialVersionListResponse",
     "VaultCredentialVersionType0",
     "VaultCredentialVersionType0Provider",

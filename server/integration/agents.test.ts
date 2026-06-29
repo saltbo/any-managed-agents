@@ -25,9 +25,8 @@ async function connectMcp(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: 'GitHub token',
-      type: 'api_key',
-      connectorBinding: { connectorId: 'github', name: 'token' },
-      secret: { secretValue: 'raw-github-token' },
+      type: 'Opaque',
+      secret: { stringData: { value: 'raw-github-token' } },
     }),
   })
   expect(credentialRes.status).toBe(201)

@@ -21,7 +21,7 @@ export function McpConnectorPage() {
         title="Connector not found"
         body={`No MCP connector named "${connectorId}" exists in the catalog.`}
         action={
-          <Link to="/mcp" className={buttonVariants({ variant: 'outline' })}>
+          <Link to="/settings/mcp" className={buttonVariants({ variant: 'outline' })}>
             Back to MCP discovery
           </Link>
         }

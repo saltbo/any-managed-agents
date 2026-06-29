@@ -38,6 +38,7 @@ class VaultCredentialVersionType0:
             reference_name (str):  Example: AMA_PROJECT_ABC123_TOKEN_V2.
             state (VaultCredentialVersionType0State):  Example: active.
             has_secret (bool):  Example: True.
+            data_keys (list[str]):  Example: ['token'].
             metadata (VaultJsonObject):  Example: {'rotatedBy': 'operator'}.
             created_at (datetime.datetime):  Example: 2026-05-24T00:00:00.000Z.
             superseded_at (datetime.datetime | None):  Example: 2026-05-24T01:00:00.000Z.
@@ -54,6 +55,7 @@ class VaultCredentialVersionType0:
     reference_name: str
     state: VaultCredentialVersionType0State
     has_secret: bool
+    data_keys: list[str]
     metadata: VaultJsonObject
     created_at: datetime.datetime
     superseded_at: datetime.datetime | None
@@ -87,6 +89,10 @@ class VaultCredentialVersionType0:
 
         has_secret = self.has_secret
 
+        data_keys = self.data_keys
+
+
+
         metadata = self.metadata.to_dict()
 
         created_at = self.created_at.isoformat()
@@ -117,6 +123,7 @@ class VaultCredentialVersionType0:
             "referenceName": reference_name,
             "state": state,
             "hasSecret": has_secret,
+            "dataKeys": data_keys,
             "metadata": metadata,
             "createdAt": created_at,
             "supersededAt": superseded_at,
@@ -162,6 +169,9 @@ class VaultCredentialVersionType0:
 
 
         has_secret = d.pop("hasSecret")
+
+        data_keys = cast(list[str], d.pop("dataKeys"))
+
 
         metadata = VaultJsonObject.from_dict(d.pop("metadata"))
 
@@ -220,6 +230,7 @@ class VaultCredentialVersionType0:
             reference_name=reference_name,
             state=state,
             has_secret=has_secret,
+            data_keys=data_keys,
             metadata=metadata,
             created_at=created_at,
             superseded_at=superseded_at,

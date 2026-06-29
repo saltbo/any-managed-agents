@@ -1,5 +1,5 @@
-import { hc } from 'hono/client'
 import type { InferRequestType, InferResponseType } from 'hono/client'
+import { hc } from 'hono/client'
 import type { AppType } from '../../server/app'
 import { getAccessToken } from './oidc'
 import { getSelectedProjectId } from './project-selection'
@@ -318,19 +318,27 @@ export interface VaultCredentialVersion {
   referenceName: string
   state: 'active' | 'superseded' | 'revoked'
   hasSecret: boolean
+  dataKeys: string[]
   metadata: Record<string, unknown>
   createdAt: string
   supersededAt: string | null
   revokedAt: string | null
 }
 
+export type CredentialType =
+  | 'Opaque'
+  | 'kubernetes.io/basic-auth'
+  | 'kubernetes.io/ssh-auth'
+  | 'kubernetes.io/tls'
+  | 'ama.dev/private-key-jwk'
+  | 'ama.dev/oauth-token'
+
 export interface VaultCredential {
   id: string
   vaultId: string
   projectId: string | null
   name: string
-  type: string
-  connectorBinding: Record<string, unknown>
+  type: CredentialType
   metadata: Record<string, unknown>
   state: 'active' | 'revoked'
   activeVersionId: string | null
@@ -580,15 +588,14 @@ export interface MemoryStoreMemoryInput {
 }
 
 export interface VaultCredentialSecretInput {
-  secretValue: string
+  stringData: Record<string, string>
   referenceName?: string
   metadata?: Record<string, unknown>
 }
 
 export interface VaultCredentialInput {
   name: string
-  type: string
-  connectorBinding?: { connectorId?: string; name?: string }
+  type: CredentialType
   metadata?: Record<string, unknown>
   secret: VaultCredentialSecretInput
 }

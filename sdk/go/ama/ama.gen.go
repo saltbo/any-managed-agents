@@ -457,6 +457,36 @@ func (e CreateTriggerRequestType) Valid() bool {
 	}
 }
 
+// Defines values for CreateVaultCredentialRequestType.
+const (
+	CreateVaultCredentialRequestTypeAmaDevoauthToken      CreateVaultCredentialRequestType = "ama.dev/oauth-token"
+	CreateVaultCredentialRequestTypeAmaDevprivateKeyJwk   CreateVaultCredentialRequestType = "ama.dev/private-key-jwk"
+	CreateVaultCredentialRequestTypeKubernetesIobasicAuth CreateVaultCredentialRequestType = "kubernetes.io/basic-auth"
+	CreateVaultCredentialRequestTypeKubernetesIosshAuth   CreateVaultCredentialRequestType = "kubernetes.io/ssh-auth"
+	CreateVaultCredentialRequestTypeKubernetesIotls       CreateVaultCredentialRequestType = "kubernetes.io/tls"
+	CreateVaultCredentialRequestTypeOpaque                CreateVaultCredentialRequestType = "Opaque"
+)
+
+// Valid indicates whether the value is a known member of the CreateVaultCredentialRequestType enum.
+func (e CreateVaultCredentialRequestType) Valid() bool {
+	switch e {
+	case CreateVaultCredentialRequestTypeAmaDevoauthToken:
+		return true
+	case CreateVaultCredentialRequestTypeAmaDevprivateKeyJwk:
+		return true
+	case CreateVaultCredentialRequestTypeKubernetesIobasicAuth:
+		return true
+	case CreateVaultCredentialRequestTypeKubernetesIosshAuth:
+		return true
+	case CreateVaultCredentialRequestTypeKubernetesIotls:
+		return true
+	case CreateVaultCredentialRequestTypeOpaque:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateVaultRequestScope.
 const (
 	CreateVaultRequestScopeOrganization CreateVaultRequestScope = "organization"
@@ -1741,6 +1771,36 @@ func (e VaultCredentialState) Valid() bool {
 	}
 }
 
+// Defines values for VaultCredentialType.
+const (
+	VaultCredentialTypeAmaDevoauthToken      VaultCredentialType = "ama.dev/oauth-token"
+	VaultCredentialTypeAmaDevprivateKeyJwk   VaultCredentialType = "ama.dev/private-key-jwk"
+	VaultCredentialTypeKubernetesIobasicAuth VaultCredentialType = "kubernetes.io/basic-auth"
+	VaultCredentialTypeKubernetesIosshAuth   VaultCredentialType = "kubernetes.io/ssh-auth"
+	VaultCredentialTypeKubernetesIotls       VaultCredentialType = "kubernetes.io/tls"
+	VaultCredentialTypeOpaque                VaultCredentialType = "Opaque"
+)
+
+// Valid indicates whether the value is a known member of the VaultCredentialType enum.
+func (e VaultCredentialType) Valid() bool {
+	switch e {
+	case VaultCredentialTypeAmaDevoauthToken:
+		return true
+	case VaultCredentialTypeAmaDevprivateKeyJwk:
+		return true
+	case VaultCredentialTypeKubernetesIobasicAuth:
+		return true
+	case VaultCredentialTypeKubernetesIosshAuth:
+		return true
+	case VaultCredentialTypeKubernetesIotls:
+		return true
+	case VaultCredentialTypeOpaque:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VaultCredentialVersionProvider.
 const (
 	VaultCredentialVersionProviderAma VaultCredentialVersionProvider = "ama"
@@ -2736,25 +2796,24 @@ type CreateTriggerRequestType string
 
 // CreateVaultCredentialRequest defines model for CreateVaultCredentialRequest.
 type CreateVaultCredentialRequest struct {
-	ConnectorBinding *struct {
-		ConnectorId *string `json:"connectorId,omitempty"`
-		Name        *string `json:"name,omitempty"`
-	} `json:"connectorBinding,omitempty"`
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 	Name     string                  `json:"name"`
 	Secret   struct {
 		Metadata      *map[string]interface{} `json:"metadata,omitempty"`
 		ReferenceName *string                 `json:"referenceName,omitempty"`
-		SecretValue   string                  `json:"secretValue"`
+		StringData    map[string]string       `json:"stringData"`
 	} `json:"secret"`
-	Type string `json:"type"`
+	Type CreateVaultCredentialRequestType `json:"type"`
 }
+
+// CreateVaultCredentialRequestType defines model for CreateVaultCredentialRequest.Type.
+type CreateVaultCredentialRequestType string
 
 // CreateVaultCredentialVersionRequest defines model for CreateVaultCredentialVersionRequest.
 type CreateVaultCredentialVersionRequest struct {
 	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
 	ReferenceName *string                 `json:"referenceName,omitempty"`
-	SecretValue   string                  `json:"secretValue"`
+	StringData    map[string]string       `json:"stringData"`
 }
 
 // CreateVaultRequest defines model for CreateVaultRequest.
@@ -2776,6 +2835,7 @@ type CredentialRef struct {
 
 // EnvFromEntry defines model for EnvFromEntry.
 type EnvFromEntry struct {
+	Key       *string          `json:"key,omitempty"`
 	Name      string           `json:"name"`
 	SecretRef string           `json:"secretRef"`
 	Type      EnvFromEntryType `json:"type"`
@@ -4041,28 +4101,27 @@ type VaultScope string
 
 // VaultCredential defines model for VaultCredential.
 type VaultCredential struct {
-	ActiveVersion    *VaultCredentialVersion `json:"activeVersion"`
-	ActiveVersionId  *string                 `json:"activeVersionId"`
-	ConnectorBinding struct {
-		ConnectorId *string `json:"connectorId,omitempty"`
-		Name        *string `json:"name,omitempty"`
-	} `json:"connectorBinding"`
-	CreatedAt       time.Time              `json:"createdAt"`
-	Id              string                 `json:"id"`
-	Metadata        map[string]interface{} `json:"metadata"`
-	Name            string                 `json:"name"`
-	ProjectId       *string                `json:"projectId"`
-	RevokeReason    *string                `json:"revokeReason"`
-	RevokedAt       *time.Time             `json:"revokedAt"`
-	RevokedByUserId *string                `json:"revokedByUserId"`
-	State           VaultCredentialState   `json:"state"`
-	Type            string                 `json:"type"`
-	UpdatedAt       time.Time              `json:"updatedAt"`
-	VaultId         string                 `json:"vaultId"`
+	ActiveVersion   *VaultCredentialVersion `json:"activeVersion"`
+	ActiveVersionId *string                 `json:"activeVersionId"`
+	CreatedAt       time.Time               `json:"createdAt"`
+	Id              string                  `json:"id"`
+	Metadata        map[string]interface{}  `json:"metadata"`
+	Name            string                  `json:"name"`
+	ProjectId       *string                 `json:"projectId"`
+	RevokeReason    *string                 `json:"revokeReason"`
+	RevokedAt       *time.Time              `json:"revokedAt"`
+	RevokedByUserId *string                 `json:"revokedByUserId"`
+	State           VaultCredentialState    `json:"state"`
+	Type            VaultCredentialType     `json:"type"`
+	UpdatedAt       time.Time               `json:"updatedAt"`
+	VaultId         string                  `json:"vaultId"`
 }
 
 // VaultCredentialState defines model for VaultCredential.State.
 type VaultCredentialState string
+
+// VaultCredentialType defines model for VaultCredential.Type.
+type VaultCredentialType string
 
 // VaultCredentialListResponse defines model for VaultCredentialListResponse.
 type VaultCredentialListResponse struct {
@@ -4074,6 +4133,7 @@ type VaultCredentialListResponse struct {
 type VaultCredentialVersion struct {
 	CreatedAt     time.Time                      `json:"createdAt"`
 	CredentialId  string                         `json:"credentialId"`
+	DataKeys      []string                       `json:"dataKeys"`
 	HasSecret     bool                           `json:"hasSecret"`
 	Id            string                         `json:"id"`
 	Metadata      VaultJsonObject                `json:"metadata"`

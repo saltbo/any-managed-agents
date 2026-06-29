@@ -101,11 +101,6 @@ function staticConnectorRecordFrom(connector: ConnectorCatalogEntry): ConnectorR
   }
 }
 
-function connectorBindingMatches(value: string, connectorId: string) {
-  const binding = parseJson<Record<string, unknown>>(value) ?? {}
-  return binding.connectorId === connectorId
-}
-
 function sessionStateGuard(expected: string | string[]) {
   return Array.isArray(expected)
     ? or(...expected.map((state) => eq(sessions.state, state as SessionStateColumn)))
@@ -495,50 +490,6 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
       return connectorIds
         .map((connectorId) => byId.get(connectorId) ?? defaultsById.get(connectorId))
         .filter((row): row is ConnectorRecord => !!row)
-    },
-
-    async mcpCredentialForConnector(organizationId: string, projectId: string, connectorId: string) {
-      const credentials = await db
-        .select()
-        .from(vaultCredentials)
-        .where(
-          and(
-            eq(vaultCredentials.organizationId, organizationId),
-            or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
-            eq(vaultCredentials.state, 'active'),
-            isNotNull(vaultCredentials.activeVersionId),
-          ),
-        )
-        .orderBy(desc(vaultCredentials.updatedAt))
-      const credential = credentials.find((row) => connectorBindingMatches(row.connectorBinding, connectorId))
-      if (!credential?.activeVersionId) {
-        return null
-      }
-      const version = await db
-        .select({
-          id: vaultCredentialVersions.id,
-          secretRef: vaultCredentialVersions.secretRef,
-          referenceName: vaultCredentialVersions.referenceName,
-        })
-        .from(vaultCredentialVersions)
-        .where(
-          and(
-            eq(vaultCredentialVersions.id, credential.activeVersionId),
-            eq(vaultCredentialVersions.credentialId, credential.id),
-            eq(vaultCredentialVersions.organizationId, organizationId),
-            or(eq(vaultCredentialVersions.projectId, projectId), isNull(vaultCredentialVersions.projectId)),
-            eq(vaultCredentialVersions.state, 'active'),
-          ),
-        )
-        .get()
-      return version
-        ? {
-            credentialId: credential.id,
-            credentialVersionId: version.id,
-            secretRef: version.secretRef,
-            referenceName: version.referenceName,
-          }
-        : null
     },
 
     // ── credential reference validation ────────────────────────────────────

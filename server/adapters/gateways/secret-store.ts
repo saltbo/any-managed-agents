@@ -9,11 +9,16 @@ import { encryptSecretValue } from '../../vault-crypto'
 export function createSecretStoreGateway(env: Env): SecretStoreGateway {
   return {
     async store(reference: SecretReference, values: SecretMaterial) {
-      if (!values.secretValue) {
-        throw new Error(`secretValue is required for ${reference.provider} credentials`)
+      const stringData = values.stringData ?? {}
+      const entries = Object.entries(stringData)
+      if (entries.length === 0) {
+        throw new Error(`stringData is required for ${reference.provider} credentials`)
       }
-      const encryptedSecretValue = await encryptSecretValue(env, values.secretValue)
-      return { encryptedSecretValue }
+      const encryptedSecretData: Record<string, unknown> = {}
+      for (const [key, value] of entries.sort(([left], [right]) => left.localeCompare(right))) {
+        encryptedSecretData[key] = await encryptSecretValue(env, value)
+      }
+      return { encryptedSecretData }
     },
   }
 }

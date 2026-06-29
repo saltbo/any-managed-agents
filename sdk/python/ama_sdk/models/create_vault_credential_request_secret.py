@@ -13,6 +13,7 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.create_vault_credential_request_secret_metadata import CreateVaultCredentialRequestSecretMetadata
+  from ..models.create_vault_credential_request_secret_string_data import CreateVaultCredentialRequestSecretStringData
 
 
 
@@ -26,15 +27,15 @@ T = TypeVar("T", bound="CreateVaultCredentialRequestSecret")
 class CreateVaultCredentialRequestSecret:
     """ 
         Example:
-            {'secretValue': 'input-only'}
+            {'stringData': {'token': 'input-only'}}
 
         Attributes:
-            secret_value (str):  Example: redacted-input-only.
+            string_data (CreateVaultCredentialRequestSecretStringData):  Example: {'token': 'redacted-input-only'}.
             reference_name (str | Unset):  Example: AMA_PROJECT_TOKEN.
             metadata (CreateVaultCredentialRequestSecretMetadata | Unset):  Example: {'source': 'console'}.
      """
 
-    secret_value: str
+    string_data: CreateVaultCredentialRequestSecretStringData
     reference_name: str | Unset = UNSET
     metadata: CreateVaultCredentialRequestSecretMetadata | Unset = UNSET
 
@@ -44,7 +45,8 @@ class CreateVaultCredentialRequestSecret:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.create_vault_credential_request_secret_metadata import CreateVaultCredentialRequestSecretMetadata
-        secret_value = self.secret_value
+        from ..models.create_vault_credential_request_secret_string_data import CreateVaultCredentialRequestSecretStringData
+        string_data = self.string_data.to_dict()
 
         reference_name = self.reference_name
 
@@ -56,7 +58,7 @@ class CreateVaultCredentialRequestSecret:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
-            "secretValue": secret_value,
+            "stringData": string_data,
         })
         if reference_name is not UNSET:
             field_dict["referenceName"] = reference_name
@@ -70,8 +72,12 @@ class CreateVaultCredentialRequestSecret:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.create_vault_credential_request_secret_metadata import CreateVaultCredentialRequestSecretMetadata
+        from ..models.create_vault_credential_request_secret_string_data import CreateVaultCredentialRequestSecretStringData
         d = dict(src_dict)
-        secret_value = d.pop("secretValue")
+        string_data = CreateVaultCredentialRequestSecretStringData.from_dict(d.pop("stringData"))
+
+
+
 
         reference_name = d.pop("referenceName", UNSET)
 
@@ -86,7 +92,7 @@ class CreateVaultCredentialRequestSecret:
 
 
         create_vault_credential_request_secret = cls(
-            secret_value=secret_value,
+            string_data=string_data,
             reference_name=reference_name,
             metadata=metadata,
         )

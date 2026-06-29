@@ -5,12 +5,12 @@ import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
 import {
   AuthenticatedOperation,
   type DepsEnv,
+  EnvFromEntrySchema,
   ErrorResponseSchema,
   formatListCursor,
   listQuerySchema,
   listResponseSchema,
   parseListCursor,
-  EnvFromEntrySchema,
 } from '../openapi'
 import { dispatchHttpTrigger } from '../usecases/dispatch-triggers'
 import {
@@ -216,6 +216,7 @@ function normalizeEnvFrom(entries: z.infer<typeof EnvFromEntrySchema>[]): EnvFro
     type: 'secret',
     name: entry.name,
     secretRef: entry.secretRef,
+    ...(entry.key ? { key: entry.key } : {}),
   }))
 }
 

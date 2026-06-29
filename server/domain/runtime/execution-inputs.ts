@@ -6,6 +6,7 @@ export interface EnvFromEntry {
   type: 'secret'
   name: string
   secretRef: string
+  key?: string | undefined
 }
 
 export type Volume = SecretVolume | GitRepositoryVolume | MemoryVolume

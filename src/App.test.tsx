@@ -236,8 +236,7 @@ function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
     vaultId: 'vault_1',
     projectId: 'project_1',
     name: 'Workers token',
-    type: 'api_key',
-    connectorBinding: { connectorId: 'workers-ai', name: 'apiKey' },
+    type: 'Opaque',
     metadata: {},
     state: 'active',
     activeVersionId: 'vaultver_1',
@@ -252,6 +251,7 @@ function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
       referenceName: 'WORKERS_AI',
       state: 'active',
       hasSecret: true,
+      dataKeys: ['value'],
       metadata: {},
       createdAt: now,
       supersededAt: null,
@@ -641,8 +641,10 @@ describe('App', () => {
     expect(primaryNav().getByRole('link', { name: 'Agents' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Environments' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Sessions' })).toBeTruthy()
+    expect(primaryNav().getByRole('link', { name: 'Triggers' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Vaults' })).toBeTruthy()
-    expect(primaryNav().getByRole('link', { name: 'MCP' })).toBeTruthy()
+    expect(primaryNav().queryByRole('link', { name: 'Providers' })).toBeNull()
+    expect(primaryNav().queryByRole('link', { name: 'MCP' })).toBeNull()
     expect(primaryNav().getByRole('link', { name: 'Usage' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Audit' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Settings' })).toBeTruthy()
@@ -721,7 +723,11 @@ describe('App', () => {
     expect(await screen.findByText('Credential metadata')).toBeTruthy()
     expect(screen.getByText('Raw secret values are not returned by the control plane.')).toBeTruthy()
 
-    fireEvent.click(primaryNav().getByRole('link', { name: 'MCP' }))
+    fireEvent.click(primaryNav().getByRole('link', { name: 'Settings' }))
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/settings/providers')
+    fireEvent.click(screen.getByRole('tab', { name: 'MCP' }))
+    expect(window.location.pathname).toBe('/settings/mcp')
     expect(await screen.findByText('MCP connectors')).toBeTruthy()
     expect(screen.getByText('source-control')).toBeTruthy()
     expect(screen.getByText('repo')).toBeTruthy()
@@ -736,6 +742,8 @@ describe('App', () => {
 
     fireEvent.click(primaryNav().getByRole('link', { name: 'Settings' }))
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Providers' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy()
   })
 
   it('boots directly into environment and session detail routes', async () => {

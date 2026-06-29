@@ -12,7 +12,7 @@ const RESOURCE_ROUTES: Record<string, string> = {
   agent: '/agents',
   environment: '/environments',
   session: '/sessions',
-  provider: '/providers',
+  provider: '/settings/providers',
   vault: '/vaults',
 }
 

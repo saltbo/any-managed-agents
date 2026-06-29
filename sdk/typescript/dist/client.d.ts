@@ -153,6 +153,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
             referenceName: string;
             state: "active" | "superseded" | "revoked";
             hasSecret: boolean;
+            dataKeys: Array<string>;
             metadata: types.VaultJsonObject;
             createdAt: string;
             supersededAt: string | null;

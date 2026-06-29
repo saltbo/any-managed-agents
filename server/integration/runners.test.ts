@@ -40,8 +40,8 @@ async function createRunnerCredential(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: 'Self-hosted runner token',
-      type: 'session_env_secret',
-      secret: { secretValue: 'raw-runner-credential' },
+      type: 'Opaque',
+      secret: { stringData: { value: 'raw-runner-credential' } },
     }),
   })
   expect(credentialRes.status).toBe(201)

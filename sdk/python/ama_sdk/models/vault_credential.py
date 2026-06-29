@@ -9,11 +9,11 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.vault_credential_state import VaultCredentialState
+from ..models.vault_credential_type import VaultCredentialType
 from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.vault_credential_connector_binding import VaultCredentialConnectorBinding
   from ..models.vault_credential_metadata import VaultCredentialMetadata
   from ..models.vault_credential_version_type_0 import VaultCredentialVersionType0
 
@@ -33,8 +33,7 @@ class VaultCredential:
             vault_id (str):  Example: vault_abc123.
             project_id (None | str):  Example: project_abc123.
             name (str):  Example: Workers AI token.
-            type_ (str):  Example: api_key.
-            connector_binding (VaultCredentialConnectorBinding):  Example: {'connectorId': 'workers-ai', 'name': 'apiKey'}.
+            type_ (VaultCredentialType):  Example: Opaque.
             metadata (VaultCredentialMetadata):  Example: {'owner': 'platform'}.
             state (VaultCredentialState):  Example: active.
             active_version_id (None | str):  Example: vaultver_abc123.
@@ -50,8 +49,7 @@ class VaultCredential:
     vault_id: str
     project_id: None | str
     name: str
-    type_: str
-    connector_binding: VaultCredentialConnectorBinding
+    type_: VaultCredentialType
     metadata: VaultCredentialMetadata
     state: VaultCredentialState
     active_version_id: None | str
@@ -68,7 +66,6 @@ class VaultCredential:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.vault_credential_connector_binding import VaultCredentialConnectorBinding
         from ..models.vault_credential_metadata import VaultCredentialMetadata
         from ..models.vault_credential_version_type_0 import VaultCredentialVersionType0
         id = self.id
@@ -80,9 +77,7 @@ class VaultCredential:
 
         name = self.name
 
-        type_ = self.type_
-
-        connector_binding = self.connector_binding.to_dict()
+        type_ = self.type_.value
 
         metadata = self.metadata.to_dict()
 
@@ -122,7 +117,6 @@ class VaultCredential:
             "projectId": project_id,
             "name": name,
             "type": type_,
-            "connectorBinding": connector_binding,
             "metadata": metadata,
             "state": state,
             "activeVersionId": active_version_id,
@@ -140,7 +134,6 @@ class VaultCredential:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.vault_credential_connector_binding import VaultCredentialConnectorBinding
         from ..models.vault_credential_metadata import VaultCredentialMetadata
         from ..models.vault_credential_version_type_0 import VaultCredentialVersionType0
         d = dict(src_dict)
@@ -158,9 +151,7 @@ class VaultCredential:
 
         name = d.pop("name")
 
-        type_ = d.pop("type")
-
-        connector_binding = VaultCredentialConnectorBinding.from_dict(d.pop("connectorBinding"))
+        type_ = VaultCredentialType(d.pop("type"))
 
 
 
@@ -251,7 +242,6 @@ class VaultCredential:
             project_id=project_id,
             name=name,
             type_=type_,
-            connector_binding=connector_binding,
             metadata=metadata,
             state=state,
             active_version_id=active_version_id,

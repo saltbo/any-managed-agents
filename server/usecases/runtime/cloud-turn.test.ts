@@ -409,7 +409,6 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     updateSessionWhenStateMock.mockReset()
     updateSessionWhenStateMock.mockReturnValue(true)
     ;(store as { mcpCatalogEntries?: unknown }).mcpCatalogEntries = vi.fn(async () => [])
-    ;(store as { mcpCredentialForConnector?: unknown }).mcpCredentialForConnector = vi.fn(async () => null)
   })
 
   it('tears down the provisioned sandbox and skips audit/initial-prompt when the pending→idle CAS no-ops', async () => {

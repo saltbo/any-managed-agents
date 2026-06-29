@@ -25,7 +25,7 @@ describe('[spec: secret-store/gateway] createSecretStoreGateway', () => {
     expect(typeof gateway.store).toBe('function')
   })
 
-  it('throws when secretValue is missing', async () => {
+  it('throws when stringData is missing', async () => {
     const gateway = createSecretStoreGateway(makeEnv())
     await expect(
       gateway.store(
@@ -38,7 +38,7 @@ describe('[spec: secret-store/gateway] createSecretStoreGateway', () => {
         },
         {},
       ),
-    ).rejects.toThrow(/secretValue is required/)
+    ).rejects.toThrow(/stringData is required/)
   })
 
   it('encrypts managed secret values and returns encrypted metadata', async () => {
@@ -52,9 +52,9 @@ describe('[spec: secret-store/gateway] createSecretStoreGateway', () => {
         hasSecret: true,
         metadata: {},
       },
-      { secretValue: 'raw-secret' },
+      { stringData: { value: 'raw-secret' } },
     )
-    expect(result).toEqual({ encryptedSecretValue: encryptedValue })
+    expect(result).toEqual({ encryptedSecretData: { value: encryptedValue } })
     expect(encryptSecretValueMock).toHaveBeenCalledWith(expect.any(Object), 'raw-secret')
   })
 })

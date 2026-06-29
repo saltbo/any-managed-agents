@@ -1,4 +1,4 @@
-import type { SecretProvider, VaultScope, VersionState } from '@server/domain/vault'
+import type { CredentialType, SecretProvider, VaultScope, VersionState } from '@server/domain/vault'
 import { secretRefPinsVersion } from '@server/domain/vault'
 import type {
   CreateCredentialInput,
@@ -68,8 +68,7 @@ function credentialRecordFrom(row: CredentialRow): CredentialRecord {
     organizationId: row.organizationId,
     projectId: row.projectId,
     name: row.name,
-    type: row.type,
-    connectorBinding: parseJson<Record<string, unknown>>(row.connectorBinding),
+    type: row.type as CredentialType,
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     state: row.state as CredentialRecord['state'],
     activeVersionId: row.activeVersionId,
@@ -81,7 +80,7 @@ function credentialRecordFrom(row: CredentialRow): CredentialRecord {
   }
 }
 
-// The version record carries the full stored metadata (encryptedSecretValue).
+// The version record carries the full stored metadata (encryptedSecretData).
 // The http serializer strips stored secret keys before it crosses the wire.
 function versionRecordFrom(row: CredentialVersionRow): CredentialVersionRecord {
   return {
@@ -266,7 +265,6 @@ export function createVaultRepo(db: Db): VaultRepo {
         projectId: credential.projectId,
         name: credential.name,
         type: credential.type,
-        connectorBinding: stringify(credential.connectorBinding),
         metadata: stringify(credential.metadata),
         state: 'active',
         activeVersionId: null as string | null,
@@ -404,7 +402,11 @@ export function createVaultRepo(db: Db): VaultRepo {
         or(eq(sessions.state, ACTIVE_SESSION_STATES[0]), eq(sessions.state, ACTIVE_SESSION_STATES[1])),
       ].filter((filter) => filter !== undefined)
       const sessionReferences = await db
-        .select({ envFrom: sessions.envFrom, volumes: sessions.volumes, environmentSnapshot: sessions.environmentSnapshot })
+        .select({
+          envFrom: sessions.envFrom,
+          volumes: sessions.volumes,
+          environmentSnapshot: sessions.environmentSnapshot,
+        })
         .from(sessions)
         .where(and(...sessionFilters))
       return sessionReferences.some((row) => {

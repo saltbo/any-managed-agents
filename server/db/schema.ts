@@ -341,8 +341,16 @@ export const vaultCredentials = sqliteTable(
     // NOT NULL (visibility queries use OR(projectId=?, projectId IS NULL)).
     projectId: text('project_id').references(() => projects.id),
     name: text('name').notNull(),
-    type: text('type').notNull(),
-    connectorBinding: text('connector_binding').notNull().default('{}'),
+    type: text('type', {
+      enum: [
+        'Opaque',
+        'kubernetes.io/basic-auth',
+        'kubernetes.io/ssh-auth',
+        'kubernetes.io/tls',
+        'ama.dev/private-key-jwk',
+        'ama.dev/oauth-token',
+      ],
+    }).notNull(),
     metadata: text('metadata').notNull().default('{}'),
     // Mirrors CREDENTIAL_STATES (server/domain/vault.ts).
     state: text('state', { enum: ['active', 'revoked'] })
@@ -363,6 +371,10 @@ export const vaultCredentials = sqliteTable(
     index('idx_vault_credentials_vault_created').on(table.vaultId, table.createdAt, table.id),
     index('idx_vault_credentials_project_created').on(table.projectId, table.createdAt, table.id),
     check('ck_vault_credentials_state', sql`${table.state} in ('active','revoked')`),
+    check(
+      'ck_vault_credentials_type',
+      sql`${table.type} in ('Opaque','kubernetes.io/basic-auth','kubernetes.io/ssh-auth','kubernetes.io/tls','ama.dev/private-key-jwk','ama.dev/oauth-token')`,
+    ),
   ],
 )
 

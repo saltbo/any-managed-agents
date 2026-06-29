@@ -9,6 +9,7 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.env_from_entry_type import EnvFromEntryType
+from ..types import UNSET, Unset
 
 
 
@@ -26,11 +27,13 @@ class EnvFromEntry:
             type_ (EnvFromEntryType):  Example: secret.
             name (str):  Example: API_TOKEN.
             secret_ref (str):  Example: ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123.
+            key (str | Unset):  Example: token.
      """
 
     type_: EnvFromEntryType
     name: str
     secret_ref: str
+    key: str | Unset = UNSET
 
 
 
@@ -43,6 +46,8 @@ class EnvFromEntry:
 
         secret_ref = self.secret_ref
 
+        key = self.key
+
 
         field_dict: dict[str, Any] = {}
 
@@ -51,6 +56,8 @@ class EnvFromEntry:
             "name": name,
             "secretRef": secret_ref,
         })
+        if key is not UNSET:
+            field_dict["key"] = key
 
         return field_dict
 
@@ -68,10 +75,13 @@ class EnvFromEntry:
 
         secret_ref = d.pop("secretRef")
 
+        key = d.pop("key", UNSET)
+
         env_from_entry = cls(
             type_=type_,
             name=name,
             secret_ref=secret_ref,
+            key=key,
         )
 
         return env_from_entry

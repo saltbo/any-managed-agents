@@ -103,9 +103,9 @@ describe('MCP catalog UI', () => {
 
     render(
       withQueryClient(
-        <MemoryRouter initialEntries={['/mcp']}>
+        <MemoryRouter initialEntries={['/settings/mcp']}>
           <Routes>
-            <Route path="/mcp" element={<McpPage />} />
+            <Route path="/settings/mcp" element={<McpPage />} />
           </Routes>
         </MemoryRouter>,
       ),
@@ -120,9 +120,9 @@ describe('MCP catalog UI', () => {
 
     render(
       withQueryClient(
-        <MemoryRouter initialEntries={['/mcp/github']}>
+        <MemoryRouter initialEntries={['/settings/mcp/github']}>
           <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
+            <Route path="/settings/mcp/:connectorId" element={<McpConnectorPage />} />
           </Routes>
         </MemoryRouter>,
       ),

@@ -57,12 +57,9 @@ function credentialRefShape() {
 
 // Vault credential reference: control-plane resource selector used by
 // connectors, runners, and other AMA-owned control-plane resources.
-export const CredentialRefSchema = credentialRefShape()
-  .openapi('CredentialRef')
+export const CredentialRefSchema = credentialRefShape().openapi('CredentialRef')
 
-export const NullableCredentialRefSchema = credentialRefShape()
-  .nullable()
-  .openapi('NullableCredentialRef')
+export const NullableCredentialRefSchema = credentialRefShape().nullable().openapi('NullableCredentialRef')
 
 export const EnvFromEntrySchema = z
   .object({
@@ -72,6 +69,7 @@ export const EnvFromEntrySchema = z
       .string()
       .min(1)
       .openapi({ example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123' }),
+    key: z.string().min(1).max(253).optional().openapi({ example: 'token' }),
   })
   .strict()
   .openapi('EnvFromEntry')

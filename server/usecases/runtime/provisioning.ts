@@ -70,7 +70,7 @@ function endpointUrl(metadata: Record<string, unknown>) {
 
 export async function resolveMcpServers(
   deps: ProvisioningDeps,
-  auth: AuthScope,
+  _auth: AuthScope,
   _sessionId: string,
   agentSnapshot: SerializedAgentVersion,
   _environmentSnapshot: NormalizedEnvironmentSnapshot | null,
@@ -85,24 +85,11 @@ export async function resolveMcpServers(
     if (connector.availability !== 'available') {
       continue
     }
-    const credential = await deps.sessionOrchestration.mcpCredentialForConnector(
-      auth.organization.id,
-      auth.project.id,
-      connector.id,
-    )
     servers.push({
       connectorId: connector.id,
       name: connector.name,
       endpointUrl: endpointUrl(connector.metadata),
-      auth: credential
-        ? {
-            type: 'bearer',
-            credentialId: credential.credentialId,
-            credentialVersionId: credential.credentialVersionId,
-            secretRef: credential.secretRef,
-            referenceName: credential.referenceName,
-          }
-        : null,
+      auth: null,
       tools: connector.tools.map((tool) => ({
         name: tool.name,
         description: tool.description,

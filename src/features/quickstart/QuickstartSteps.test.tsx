@@ -84,12 +84,12 @@ describe('OpenPageLink', () => {
   it('renders a link with the given label and href', () => {
     render(
       <MemoryRouter>
-        <OpenPageLink to="/providers" label="Open providers" />
+        <OpenPageLink to="/settings/providers" label="Open providers" />
       </MemoryRouter>,
     )
     const link = screen.getByRole('link', { name: 'Open providers' })
     expect(link).toBeTruthy()
-    expect(link.getAttribute('href')).toBe('/providers')
+    expect(link.getAttribute('href')).toBe('/settings/providers')
   })
 })
 

@@ -4686,6 +4686,12 @@
             "type": "string",
             "minLength": 1,
             "example": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "example": "token"
           }
         },
         "required": [
@@ -6724,27 +6730,15 @@
           },
           "type": {
             "type": "string",
-            "example": "api_key"
-          },
-          "connectorBinding": {
-            "type": "object",
-            "properties": {
-              "connectorId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "connectorId": "workers-ai",
-              "name": "apiKey"
-            }
+            "enum": [
+              "Opaque",
+              "kubernetes.io/basic-auth",
+              "kubernetes.io/ssh-auth",
+              "kubernetes.io/tls",
+              "ama.dev/private-key-jwk",
+              "ama.dev/oauth-token"
+            ],
+            "example": "Opaque"
           },
           "metadata": {
             "type": "object",
@@ -6804,7 +6798,6 @@
           "projectId",
           "name",
           "type",
-          "connectorBinding",
           "metadata",
           "state",
           "activeVersionId",
@@ -6869,6 +6862,15 @@
             "type": "boolean",
             "example": true
           },
+          "dataKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "token"
+            ]
+          },
           "metadata": {
             "$ref": "#/components/schemas/VaultJsonObject"
           },
@@ -6901,6 +6903,7 @@
           "referenceName",
           "state",
           "hasSecret",
+          "dataKeys",
           "metadata",
           "createdAt",
           "supersededAt",
@@ -6927,29 +6930,15 @@
           },
           "type": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 80,
-            "example": "api_key"
-          },
-          "connectorBinding": {
-            "type": "object",
-            "properties": {
-              "connectorId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "connectorId": "workers-ai",
-              "name": "apiKey"
-            }
+            "enum": [
+              "Opaque",
+              "kubernetes.io/basic-auth",
+              "kubernetes.io/ssh-auth",
+              "kubernetes.io/tls",
+              "ama.dev/private-key-jwk",
+              "ama.dev/oauth-token"
+            ],
+            "example": "Opaque"
           },
           "metadata": {
             "type": "object",
@@ -6963,11 +6952,16 @@
           "secret": {
             "type": "object",
             "properties": {
-              "secretValue": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 16000,
-                "example": "redacted-input-only"
+              "stringData": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16000
+                },
+                "example": {
+                  "token": "redacted-input-only"
+                }
               },
               "referenceName": {
                 "type": "string",
@@ -6986,11 +6980,13 @@
               }
             },
             "required": [
-              "secretValue"
+              "stringData"
             ],
             "additionalProperties": false,
             "example": {
-              "secretValue": "input-only"
+              "stringData": {
+                "token": "input-only"
+              }
             }
           }
         },
@@ -7048,11 +7044,16 @@
       "CreateVaultCredentialVersionRequest": {
         "type": "object",
         "properties": {
-          "secretValue": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 16000,
-            "example": "redacted-input-only"
+          "stringData": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16000
+            },
+            "example": {
+              "token": "redacted-input-only"
+            }
           },
           "referenceName": {
             "type": "string",
@@ -7071,7 +7072,7 @@
           }
         },
         "required": [
-          "secretValue"
+          "stringData"
         ],
         "additionalProperties": false
       }

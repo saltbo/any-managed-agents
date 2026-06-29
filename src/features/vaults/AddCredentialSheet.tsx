@@ -6,29 +6,40 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { parseJsonObject } from '@/console/format'
-import { api } from '@/lib/api'
+import { api, type CredentialType } from '@/lib/api'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 interface CredentialFormState {
   name: string
-  type: string
-  connectorId: string
-  connectorBindingName: string
-  secretValue: string
+  type: CredentialType
+  stringData: string
   metadata: string
 }
 
 const emptyCredential: CredentialFormState = {
   name: '',
-  type: '',
-  connectorId: '',
-  connectorBindingName: '',
-  secretValue: '',
+  type: 'Opaque',
+  stringData: '',
   metadata: '{}',
+}
+
+const credentialTypes: CredentialType[] = [
+  'Opaque',
+  'kubernetes.io/basic-auth',
+  'kubernetes.io/ssh-auth',
+  'kubernetes.io/tls',
+  'ama.dev/private-key-jwk',
+  'ama.dev/oauth-token',
+]
+
+function parseStringData(value: string) {
+  const parsed = parseJsonObject(value, 'String data')
+  return Object.fromEntries(Object.entries(parsed).map(([key, item]) => [key, String(item)]))
 }
 
 export function AddCredentialSheet({
@@ -47,12 +58,8 @@ export function AddCredentialSheet({
       api.createVaultCredential(vaultId, {
         name: form.name,
         type: form.type,
-        connectorBinding: {
-          ...(form.connectorId ? { connectorId: form.connectorId } : {}),
-          ...(form.connectorBindingName ? { name: form.connectorBindingName } : {}),
-        },
         metadata: parseJsonObject(form.metadata, 'Metadata'),
-        secret: { secretValue: form.secretValue },
+        secret: { stringData: parseStringData(form.stringData) },
       }),
     onSuccess: () => {
       onOpenChange(false)
@@ -62,7 +69,7 @@ export function AddCredentialSheet({
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
-  const valid = form.name.trim() !== '' && form.type.trim() !== '' && form.secretValue !== ''
+  const valid = form.name.trim() !== '' && form.stringData.trim() !== ''
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!valid) return
@@ -75,7 +82,7 @@ export function AddCredentialSheet({
         <SheetHeader>
           <SheetTitle>Add credential</SheetTitle>
           <SheetDescription>
-            The secret value is encrypted at rest and never returned by the control plane.
+            The secret data is encrypted at rest and never returned by the control plane.
           </SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-4">
@@ -91,43 +98,29 @@ export function AddCredentialSheet({
               </Field>
               <Field>
                 <FieldLabel htmlFor="credential-type">Type</FieldLabel>
-                <Input
-                  id="credential-type"
-                  value={form.type}
-                  onChange={(event) => setForm({ ...form, type: event.target.value })}
-                />
-                <FieldDescription>For example api_key or oauth_token.</FieldDescription>
+                <Select value={form.type} onValueChange={(type) => setForm({ ...form, type: type as CredentialType })}>
+                  <SelectTrigger id="credential-type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {credentialTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>Credential type defines the required stringData keys.</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor="credential-connector-id">Connector binding</FieldLabel>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Input
-                    id="credential-connector-id"
-                    placeholder="Connector id"
-                    aria-label="Connector id"
-                    value={form.connectorId}
-                    onChange={(event) => setForm({ ...form, connectorId: event.target.value })}
-                  />
-                  <Input
-                    id="credential-connector-binding-name"
-                    placeholder="Binding name"
-                    aria-label="Connector binding name"
-                    value={form.connectorBindingName}
-                    onChange={(event) => setForm({ ...form, connectorBindingName: event.target.value })}
-                  />
-                </div>
-                <FieldDescription>Optional connector this credential is bound to.</FieldDescription>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="credential-secret-value">Secret value</FieldLabel>
-                <Input
-                  id="credential-secret-value"
-                  type="password"
+                <FieldLabel htmlFor="credential-string-data">String data</FieldLabel>
+                <Textarea
+                  id="credential-string-data"
                   autoComplete="off"
-                  value={form.secretValue}
-                  onChange={(event) => setForm({ ...form, secretValue: event.target.value })}
+                  value={form.stringData}
+                  onChange={(event) => setForm({ ...form, stringData: event.target.value })}
                 />
-                <FieldDescription>Accepted only in this request and stored encrypted.</FieldDescription>
+                <FieldDescription>JSON object accepted only in this request and stored encrypted.</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="credential-metadata">Metadata</FieldLabel>

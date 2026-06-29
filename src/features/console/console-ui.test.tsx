@@ -368,10 +368,12 @@ describe('[spec: console/shell] ConsoleShell', () => {
     expect(screen.getAllByRole('link', { name: 'Agents' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Environments' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Sessions' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Triggers' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Vaults' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: 'MCP' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Audit' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Settings' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: 'Providers' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'MCP' })).toBeNull()
   })
 
   it('renders user name from auth context', () => {

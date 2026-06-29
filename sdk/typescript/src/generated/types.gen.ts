@@ -1115,6 +1115,7 @@ export type EnvFromEntry = {
     type: 'secret';
     name: string;
     secretRef: string;
+    key?: string;
 };
 
 export type Volume = ({
@@ -1612,11 +1613,7 @@ export type VaultCredential = {
     vaultId: string;
     projectId: string | null;
     name: string;
-    type: string;
-    connectorBinding: {
-        connectorId?: string;
-        name?: string;
-    };
+    type: 'Opaque' | 'kubernetes.io/basic-auth' | 'kubernetes.io/ssh-auth' | 'kubernetes.io/tls' | 'ama.dev/private-key-jwk' | 'ama.dev/oauth-token';
     metadata: {
         [key: string]: unknown;
     };
@@ -1641,6 +1638,7 @@ export type VaultCredentialVersion = {
     referenceName: string;
     state: 'active' | 'superseded' | 'revoked';
     hasSecret: boolean;
+    dataKeys: Array<string>;
     metadata: VaultJsonObject;
     createdAt: string;
     supersededAt: string | null;
@@ -1653,16 +1651,14 @@ export type VaultJsonObject = {
 
 export type CreateVaultCredentialRequest = {
     name: string;
-    type: string;
-    connectorBinding?: {
-        connectorId?: string;
-        name?: string;
-    };
+    type: 'Opaque' | 'kubernetes.io/basic-auth' | 'kubernetes.io/ssh-auth' | 'kubernetes.io/tls' | 'ama.dev/private-key-jwk' | 'ama.dev/oauth-token';
     metadata?: {
         [key: string]: unknown;
     };
     secret: {
-        secretValue: string;
+        stringData: {
+            [key: string]: string;
+        };
         referenceName?: string;
         metadata?: {
             [key: string]: unknown;
@@ -1684,7 +1680,9 @@ export type VaultCredentialVersionListResponse = {
 };
 
 export type CreateVaultCredentialVersionRequest = {
-    secretValue: string;
+    stringData: {
+        [key: string]: string;
+    };
     referenceName?: string;
     metadata?: {
         [key: string]: unknown;

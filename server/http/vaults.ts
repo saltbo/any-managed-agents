@@ -1,6 +1,8 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import {
   CREDENTIAL_STATES,
+  CREDENTIAL_TYPES,
+  credentialDataKeys,
   SECRET_PROVIDERS,
   stripStoredSecretMetadata,
   VAULT_SCOPES,
@@ -31,13 +33,7 @@ type VaultRoutes = OpenAPIHono<DepsEnv>
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const VaultJsonObjectSchema = JsonObjectSchema.openapi('VaultJsonObject')
 const SecretProviderSchema = z.enum(SECRET_PROVIDERS)
-
-const ConnectorBindingSchema = z
-  .object({
-    connectorId: z.string().min(1).max(120).optional(),
-    name: z.string().min(1).max(120).optional(),
-  })
-  .strict()
+const CredentialTypeSchema = z.enum(CREDENTIAL_TYPES)
 
 const VaultSchema = z
   .object({
@@ -67,6 +63,7 @@ const CredentialVersionSchema = z
     referenceName: z.string().openapi({ example: 'AMA_PROJECT_ABC123_TOKEN_V2' }),
     state: z.enum(VERSION_STATES).openapi({ example: 'active' }),
     hasSecret: z.boolean().openapi({ example: true }),
+    dataKeys: z.array(z.string()).openapi({ example: ['token'] }),
     metadata: VaultJsonObjectSchema.openapi({ example: { rotatedBy: 'operator' } }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
     supersededAt: z.string().datetime().nullable().openapi({ example: '2026-05-24T01:00:00.000Z' }),
@@ -80,8 +77,7 @@ const CredentialSchema = z
     vaultId: z.string().openapi({ example: 'vault_abc123' }),
     projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     name: z.string().openapi({ example: 'Workers AI token' }),
-    type: z.string().openapi({ example: 'api_key' }),
-    connectorBinding: ConnectorBindingSchema.openapi({ example: { connectorId: 'workers-ai', name: 'apiKey' } }),
+    type: CredentialTypeSchema.openapi({ example: 'Opaque' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     state: z.enum(CREDENTIAL_STATES).openapi({ example: 'active' }),
     activeVersionId: z.string().nullable().openapi({ example: 'vaultver_abc123' }),
@@ -111,7 +107,10 @@ const UpdateVaultSchema = CreateVaultSchema.partial()
 
 const SecretMaterialSchema = z
   .object({
-    secretValue: z.string().min(1).max(16000).openapi({ example: 'redacted-input-only' }),
+    stringData: z
+      .record(z.string(), z.string().min(1).max(16000))
+      .refine((value) => Object.keys(value).length > 0, 'At least one data key is required.')
+      .openapi({ example: { token: 'redacted-input-only' } }),
     referenceName: z.string().min(1).max(160).optional().openapi({ example: 'AMA_PROJECT_TOKEN' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { source: 'console' } }),
   })
@@ -120,12 +119,9 @@ const SecretMaterialSchema = z
 const CreateCredentialSchema = z
   .object({
     name: z.string().min(1).max(120).openapi({ example: 'Workers AI token' }),
-    type: z.string().min(1).max(80).openapi({ example: 'api_key' }),
-    connectorBinding: ConnectorBindingSchema.optional().openapi({
-      example: { connectorId: 'workers-ai', name: 'apiKey' },
-    }),
+    type: CredentialTypeSchema.openapi({ example: 'Opaque' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
-    secret: SecretMaterialSchema.openapi({ example: { secretValue: 'input-only' } }),
+    secret: SecretMaterialSchema.openapi({ example: { stringData: { token: 'input-only' } } }),
   })
   .openapi('CreateVaultCredentialRequest')
 
@@ -207,6 +203,7 @@ function serializeVersion(record: CredentialVersionRecord) {
     referenceName: record.referenceName,
     state: record.state,
     hasSecret: record.hasSecret,
+    dataKeys: credentialDataKeys(record.metadata),
     metadata: stripStoredSecretMetadata(record.metadata),
     createdAt: record.createdAt,
     supersededAt: record.supersededAt,
@@ -221,7 +218,6 @@ function serializeCredential(record: CredentialRecord, activeVersion: Credential
     projectId: record.projectId,
     name: record.name,
     type: record.type,
-    connectorBinding: record.connectorBinding,
     metadata: record.metadata,
     state: record.state,
     activeVersionId: record.activeVersionId,
@@ -627,7 +623,6 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         result = await createCredential(deps, vault, {
           name: body.name,
           type: body.type,
-          connectorBinding: body.connectorBinding ?? {},
           metadata: body.metadata ?? {},
           secret: body.secret,
         })

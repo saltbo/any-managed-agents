@@ -135,8 +135,9 @@ const routes = app
       return errorResponse(c, 404, 'not_found', 'Credential version not found')
     }
     const body = await c.req.json<{ expectedValue?: string }>().catch(() => ({}) as { expectedValue?: string })
-    const metadata = JSON.parse(row.metadata) as { encryptedSecretValue?: { ciphertext?: string } }
-    const encrypted = metadata.encryptedSecretValue
+    const metadata = JSON.parse(row.metadata) as { encryptedSecretData?: Record<string, { ciphertext?: string }> }
+    const encryptedData = metadata.encryptedSecretData ?? {}
+    const encrypted = encryptedData[Object.keys(encryptedData)[0] ?? '']
     if (!encrypted || typeof encrypted.ciphertext !== 'string') {
       return errorResponse(c, 409, 'conflict', 'Credential version has no managed ciphertext')
     }

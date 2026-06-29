@@ -6,7 +6,6 @@ import type { CatalogModel } from '@server/domain/model-catalog'
 import type { ModelAvailability, ModelCatalogState } from '@server/domain/provider'
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type { EnvFromEntry, MemoryVolume, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
-import type { WorkspaceManifest } from '@server/domain/workspace'
 import type {
   MessageDelivery,
   MessageState,
@@ -19,12 +18,14 @@ import type {
 } from '@server/domain/session'
 import type {
   CredentialState,
+  CredentialType,
   SecretMaterial,
   SecretProvider,
   SecretReference,
   VaultScope,
   VersionState,
 } from '@server/domain/vault'
+import type { WorkspaceManifest } from '@server/domain/workspace'
 
 export type {
   EnvFromEntry,
@@ -497,8 +498,7 @@ export interface CredentialRecord {
   organizationId: string
   projectId: string | null
   name: string
-  type: string
-  connectorBinding: Record<string, unknown>
+  type: CredentialType
   metadata: Record<string, unknown>
   state: CredentialState
   activeVersionId: string | null
@@ -521,7 +521,7 @@ export interface CredentialVersionRecord {
   referenceName: string
   state: VersionState
   hasSecret: boolean
-  // Includes stored secret material (encryptedSecretValue).
+  // Includes stored secret material (encryptedSecretData).
   // Never serialize the raw metadata — strip stored secret keys first.
   metadata: Record<string, unknown>
   createdAt: string
@@ -687,8 +687,7 @@ export interface CreateCredentialInput {
   organizationId: string
   projectId: string | null
   name: string
-  type: string
-  connectorBinding: Record<string, unknown>
+  type: CredentialType
   metadata: Record<string, unknown>
 }
 
@@ -956,7 +955,6 @@ export interface PolicyEvalRepo {
   successfulUsage(projectId: string): Promise<BudgetUsageRecord[]>
   // The project's enabled budgets.
   enabledBudgets(projectId: string): Promise<BudgetRule[]>
-
 }
 
 // --- usage records + summary (read-only reporting) ---
@@ -1987,11 +1985,6 @@ export interface SessionOrchestrationStore {
 
   // ── MCP manifest resolution ──
   mcpCatalogEntries(connectorIds: string[]): Promise<ConnectorRecord[]>
-  mcpCredentialForConnector(
-    organizationId: string,
-    projectId: string,
-    connectorId: string,
-  ): Promise<{ credentialId: string; credentialVersionId: string; secretRef: string; referenceName: string } | null>
 
   // ── credential validation ──
   activeCredentialVersionExists(organizationId: string, projectId: string, versionId: string): Promise<boolean>

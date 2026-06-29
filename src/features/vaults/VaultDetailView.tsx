@@ -96,7 +96,7 @@ export function VaultDetailView({
                 <TableHead>Status</TableHead>
                 <TableHead>Version</TableHead>
                 <TableHead>Secret reference</TableHead>
-                <TableHead>Connector binding</TableHead>
+                <TableHead>Data keys</TableHead>
                 {vaultActive ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
@@ -112,7 +112,9 @@ export function VaultDetailView({
                   <TableCell className="max-w-64 truncate">
                     {credential.activeVersion?.referenceName ?? 'Not returned'}
                   </TableCell>
-                  <TableCell className="max-w-72 truncate">{stringifyJson(credential.connectorBinding)}</TableCell>
+                  <TableCell className="max-w-72 truncate">
+                    {credential.activeVersion?.dataKeys.join(', ') || 'None'}
+                  </TableCell>
                   {vaultActive ? (
                     <TableCell>
                       <div className="flex justify-end gap-2">

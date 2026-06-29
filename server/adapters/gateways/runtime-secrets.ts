@@ -1,9 +1,9 @@
 import { gitRepositoryMountPath } from '@server/domain/git-repository'
 import { memoryStoreIdFromRef, memoryStoreMountPath } from '@server/domain/memory-store'
 import {
+  type EnvFromEntry,
   isGitRepositoryVolume,
   isMemoryVolume,
-  type EnvFromEntry,
   type Volume,
   type VolumeMount,
   volumeMountPath,
@@ -48,12 +48,8 @@ export async function resolveEnvFrom(
     if (version.state === 'revoked') {
       throw new Error(`Runtime secret reference ${secretRef} is revoked by vault policy`)
     }
-    const metadata = parseMetadata(version.metadata)
-    const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
-    if (typeof value !== 'string') {
-      throw new Error(`Runtime secret reference ${secretRef} cannot be resolved`)
-    }
-    resolved[entry.name] = value
+    const data = await decryptVersionData(env, version.metadata, secretRef)
+    resolved[entry.name] = secretValueForEnv(entry, data, secretRef)
   }
   return resolved
 }
@@ -116,10 +112,13 @@ async function resolveGitCredential(
   secretRef: string,
 ): Promise<WorkspaceGitCredential> {
   const version = await repo.secretVersionForResolution(scope.organizationId, scope.projectId, secretRef)
-  if (!version || version.state !== 'active') {
+  if (version?.state !== 'active') {
     throw new Error(`Runtime git secret reference ${secretRef} cannot be resolved`)
   }
-  return parseGitCredential(await decryptVersion(env, version.metadata, version.secretRef))
+  return gitCredentialFromSecretData(
+    await decryptVersionData(env, version.metadata, version.secretRef),
+    version.secretRef,
+  )
 }
 
 function parseGitCredential(secret: string): WorkspaceGitCredential {
@@ -129,6 +128,17 @@ function parseGitCredential(secret: string): WorkspaceGitCredential {
     return { username: trimmed.slice(0, separator), password: trimmed.slice(separator + 1) }
   }
   return { username: 'x-access-token', password: trimmed }
+}
+
+function gitCredentialFromSecretData(data: Record<string, string>, secretRef: string): WorkspaceGitCredential {
+  if (typeof data.username === 'string' && typeof data.password === 'string') {
+    return { username: data.username, password: data.password }
+  }
+  const token = data['access-token'] ?? data.token ?? data.value
+  if (typeof token === 'string') {
+    return parseGitCredential(token)
+  }
+  return parseGitCredential(data[singleDataKey(data, secretRef)]!)
 }
 
 async function resolveSecretMount(
@@ -142,7 +152,7 @@ async function resolveSecretMount(
     if (version.state !== 'active') {
       throw new Error(`Runtime secret reference ${secretRef} cannot be resolved`)
     }
-    return [{ path: 'value', content: await decryptVersion(env, version.metadata, secretRef) }]
+    return filesFromSecretData(await decryptVersionData(env, version.metadata, secretRef))
   }
   const versions = await repo.vaultVersionsForResolution(scope.organizationId, scope.projectId, secretRef)
   if (!versions) {
@@ -153,10 +163,12 @@ async function resolveSecretMount(
     if (credentialVersion.state !== 'active') {
       continue
     }
-    files.push({
-      path: safeFileName(credentialVersion.name),
-      content: await decryptVersion(env, credentialVersion.metadata, credentialVersion.secretRef),
-    })
+    const credentialName = safeFileName(credentialVersion.name)
+    for (const file of filesFromSecretData(
+      await decryptVersionData(env, credentialVersion.metadata, credentialVersion.secretRef),
+    )) {
+      files.push({ path: `${credentialName}/${file.path}`, content: file.content })
+    }
   }
   return files
 }
@@ -171,13 +183,44 @@ function memoryFiles(memories: Array<Record<string, unknown>> | undefined): Work
   }))
 }
 
-async function decryptVersion(env: Env, metadata: string, secretRef: string) {
+async function decryptVersionData(env: Env, metadata: string, secretRef: string) {
   const parsed = parseMetadata(metadata)
-  const value = await decryptSecretValue(env, parsed?.encryptedSecretValue)
-  if (typeof value !== 'string') {
+  const encryptedSecretData = parsed?.encryptedSecretData
+  if (!encryptedSecretData || typeof encryptedSecretData !== 'object' || Array.isArray(encryptedSecretData)) {
     throw new Error(`Runtime secret reference ${secretRef} cannot be resolved`)
   }
+  const data: Record<string, string> = {}
+  for (const [key, encrypted] of Object.entries(encryptedSecretData)) {
+    const value = await decryptSecretValue(env, encrypted)
+    if (typeof value !== 'string') {
+      throw new Error(`Runtime secret reference ${secretRef} cannot be resolved`)
+    }
+    data[key] = value
+  }
+  return data
+}
+
+function secretValueForEnv(entry: EnvFromEntry, data: Record<string, string>, secretRef: string) {
+  const key = entry.key ?? singleDataKey(data, secretRef)
+  const value = data[key]
+  if (typeof value !== 'string') {
+    throw new Error(`Runtime secret reference ${secretRef} has no data key ${key}`)
+  }
   return value
+}
+
+function singleDataKey(data: Record<string, string>, secretRef: string) {
+  const keys = Object.keys(data)
+  if (keys.length !== 1) {
+    throw new Error(`Runtime secret reference ${secretRef} must specify a data key`)
+  }
+  return keys[0]!
+}
+
+function filesFromSecretData(data: Record<string, string>) {
+  return Object.entries(data)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, content]) => ({ path: safeFileName(path), content }))
 }
 
 function safeFileName(value: string) {

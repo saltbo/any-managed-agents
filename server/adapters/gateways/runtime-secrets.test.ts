@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EnvFromEntry } from '@server/domain/runtime/execution-inputs'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Env } from '../../env'
 
 const secretVersionForResolutionMock = vi.fn()
@@ -43,7 +43,7 @@ describe('[spec: runtime-secrets/gateway] createRuntimeSecretGateway', () => {
   it('decrypts the stored ciphertext for an AMA credential version', async () => {
     secretVersionForResolutionMock.mockResolvedValueOnce({
       state: 'active',
-      metadata: JSON.stringify({ encryptedSecretValue: 'cipher' }),
+      metadata: JSON.stringify({ encryptedSecretData: { value: 'cipher' } }),
       secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1',
     })
     decryptSecretValueMock.mockResolvedValueOnce('secret-value')

@@ -13,6 +13,7 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.create_vault_credential_version_request_metadata import CreateVaultCredentialVersionRequestMetadata
+  from ..models.create_vault_credential_version_request_string_data import CreateVaultCredentialVersionRequestStringData
 
 
 
@@ -26,12 +27,12 @@ T = TypeVar("T", bound="CreateVaultCredentialVersionRequest")
 class CreateVaultCredentialVersionRequest:
     """ 
         Attributes:
-            secret_value (str):  Example: redacted-input-only.
+            string_data (CreateVaultCredentialVersionRequestStringData):  Example: {'token': 'redacted-input-only'}.
             reference_name (str | Unset):  Example: AMA_PROJECT_TOKEN.
             metadata (CreateVaultCredentialVersionRequestMetadata | Unset):  Example: {'source': 'console'}.
      """
 
-    secret_value: str
+    string_data: CreateVaultCredentialVersionRequestStringData
     reference_name: str | Unset = UNSET
     metadata: CreateVaultCredentialVersionRequestMetadata | Unset = UNSET
 
@@ -41,7 +42,8 @@ class CreateVaultCredentialVersionRequest:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.create_vault_credential_version_request_metadata import CreateVaultCredentialVersionRequestMetadata
-        secret_value = self.secret_value
+        from ..models.create_vault_credential_version_request_string_data import CreateVaultCredentialVersionRequestStringData
+        string_data = self.string_data.to_dict()
 
         reference_name = self.reference_name
 
@@ -53,7 +55,7 @@ class CreateVaultCredentialVersionRequest:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
-            "secretValue": secret_value,
+            "stringData": string_data,
         })
         if reference_name is not UNSET:
             field_dict["referenceName"] = reference_name
@@ -67,8 +69,12 @@ class CreateVaultCredentialVersionRequest:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.create_vault_credential_version_request_metadata import CreateVaultCredentialVersionRequestMetadata
+        from ..models.create_vault_credential_version_request_string_data import CreateVaultCredentialVersionRequestStringData
         d = dict(src_dict)
-        secret_value = d.pop("secretValue")
+        string_data = CreateVaultCredentialVersionRequestStringData.from_dict(d.pop("stringData"))
+
+
+
 
         reference_name = d.pop("referenceName", UNSET)
 
@@ -83,7 +89,7 @@ class CreateVaultCredentialVersionRequest:
 
 
         create_vault_credential_version_request = cls(
-            secret_value=secret_value,
+            string_data=string_data,
             reference_name=reference_name,
             metadata=metadata,
         )

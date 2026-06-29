@@ -96,8 +96,8 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Archived vault token',
-        type: 'api_key',
-        secret: { secretValue: 'raw-secret-for-archived-vault' },
+        type: 'Opaque',
+        secret: { stringData: { value: 'raw-secret-for-archived-vault' } },
       }),
     })
     expect(createCredentialRes.status).toBe(409)
@@ -128,9 +128,8 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Workers AI token',
-        type: 'api_key',
-        connectorBinding: { connectorId: 'workers-ai', name: 'apiKey' },
-        secret: { secretValue: rawSecret },
+        type: 'Opaque',
+        secret: { stringData: { value: rawSecret } },
       }),
     })
     expect(createCredentialRes.status).toBe(201)
@@ -167,7 +166,7 @@ describe('[CF] /api/v1/vaults', () => {
     })
 
     const dbRows = await env.DB.prepare(
-      'SELECT vault_credentials.id, vault_credentials.connector_binding, vault_credentials.metadata, vault_credential_versions.secret_ref, vault_credential_versions.reference_name, vault_credential_versions.metadata AS version_metadata FROM vault_credentials JOIN vault_credential_versions ON vault_credentials.id = vault_credential_versions.credential_id',
+      'SELECT vault_credentials.id, vault_credentials.metadata, vault_credential_versions.secret_ref, vault_credential_versions.reference_name, vault_credential_versions.metadata AS version_metadata FROM vault_credentials JOIN vault_credential_versions ON vault_credentials.id = vault_credential_versions.credential_id',
     ).all()
     expect(JSON.stringify(dbRows.results)).not.toContain(rawSecret)
 
@@ -175,7 +174,7 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Invalid token',
-        type: 'api_key',
+        type: 'Opaque',
         secret: {},
       }),
     })
@@ -190,7 +189,7 @@ describe('[CF] /api/v1/vaults', () => {
       authorization,
       {
         method: 'POST',
-        body: JSON.stringify({ secretValue: rotatedSecret }),
+        body: JSON.stringify({ stringData: { value: rotatedSecret } }),
       },
     )
     expect(rotateRes.status).toBe(201)
@@ -240,7 +239,7 @@ describe('[CF] /api/v1/vaults', () => {
       authorization,
       {
         method: 'POST',
-        body: JSON.stringify({ secretValue: thirdSecret }),
+        body: JSON.stringify({ stringData: { value: thirdSecret } }),
       },
     )
     expect(thirdRotateRes.status).toBe(201)
@@ -332,13 +331,116 @@ describe('[CF] /api/v1/vaults', () => {
       authorization,
       {
         method: 'POST',
-        body: JSON.stringify({ secretValue: 'after-revoke' }),
+        body: JSON.stringify({ stringData: { value: 'after-revoke' } }),
       },
     )
     expect(rotateRevokedRes.status).toBe(409)
     await expect(rotateRevokedRes.json()).resolves.toMatchObject({
       error: { type: 'conflict', message: 'Credential is not active' },
     })
+  })
+
+  it('validates credential types and returns only safe data key metadata', async () => {
+    const authorization = await signIn()
+    const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: `Typed credentials ${crypto.randomUUID()}` }),
+    })
+    expect(vaultRes.status).toBe(201)
+    const vault = (await vaultRes.json()) as { id: string }
+    const cases = [
+      {
+        name: 'basic-auth',
+        type: 'kubernetes.io/basic-auth',
+        stringData: { username: 'service-user', password: 'service-password' },
+        dataKeys: ['password', 'username'],
+        raw: 'service-password',
+      },
+      {
+        name: 'ssh-auth',
+        type: 'kubernetes.io/ssh-auth',
+        stringData: { 'ssh-privatekey': '-----BEGIN OPENSSH PRIVATE KEY-----' },
+        dataKeys: ['ssh-privatekey'],
+        raw: '-----BEGIN OPENSSH PRIVATE KEY-----',
+      },
+      {
+        name: 'tls',
+        type: 'kubernetes.io/tls',
+        stringData: { 'tls.crt': '-----BEGIN CERTIFICATE-----', 'tls.key': '-----BEGIN PRIVATE KEY-----' },
+        dataKeys: ['tls.crt', 'tls.key'],
+        raw: '-----BEGIN PRIVATE KEY-----',
+      },
+      {
+        name: 'oauth-token',
+        type: 'ama.dev/oauth-token',
+        stringData: { 'access-token': 'oauth-access-token', 'refresh-token': 'oauth-refresh-token' },
+        dataKeys: ['access-token', 'refresh-token'],
+        raw: 'oauth-access-token',
+      },
+      {
+        name: 'private-key-jwk',
+        type: 'ama.dev/private-key-jwk',
+        stringData: { jwk: '{"kty":"OKP","crv":"Ed25519","x":"public","d":"jwk-secret-material"}' },
+        dataKeys: ['jwk'],
+        raw: 'jwk-secret-material',
+      },
+    ] as const
+
+    for (const item of cases) {
+      const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: item.name,
+          type: item.type,
+          secret: { stringData: item.stringData },
+        }),
+      })
+      expect(credentialRes.status).toBe(201)
+      const body = (await credentialRes.json()) as {
+        type: string
+        activeVersion: { dataKeys: string[]; metadata: Record<string, unknown> }
+      }
+      expect(body.type).toBe(item.type)
+      expect(body.activeVersion.dataKeys).toEqual(item.dataKeys)
+      expect(body.activeVersion.metadata).toEqual({ dataKeys: item.dataKeys })
+      expect(JSON.stringify(body)).not.toContain(item.raw)
+    }
+
+    const missingRequiredRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'bad-basic-auth',
+        type: 'kubernetes.io/basic-auth',
+        secret: { stringData: { username: 'service-user' } },
+      }),
+    })
+    expect(missingRequiredRes.status).toBe(400)
+    await expect(missingRequiredRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', details: { fields: { secret: expect.stringContaining('password') } } },
+    })
+
+    const extraKeyRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'bad-tls',
+        type: 'kubernetes.io/tls',
+        secret: { stringData: { 'tls.crt': 'crt', 'tls.key': 'key', token: 'not-allowed' } },
+      }),
+    })
+    expect(extraKeyRes.status).toBe(400)
+    await expect(extraKeyRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', details: { fields: { secret: expect.stringContaining('token') } } },
+    })
+
+    const nonStringRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'bad-string-data',
+        type: 'Opaque',
+        secret: { stringData: { enabled: true } },
+      }),
+    })
+    expect(nonStringRes.status).toBe(400)
   })
 
   it('isolates project vaults inside the same organization and shares organization-scoped vaults [spec: vaults/api-tenancy]', async () => {

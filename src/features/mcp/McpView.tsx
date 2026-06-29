@@ -62,7 +62,7 @@ export function McpView({
                               <span className="truncate font-medium">{connector.name}</span>
                             ) : (
                               <Link
-                                to={`/mcp/${connector.id}`}
+                                to={`/settings/mcp/${connector.id}`}
                                 className="truncate font-medium underline-offset-4 hover:underline"
                               >
                                 {connector.name}
