@@ -1,6 +1,11 @@
 import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
 import type { AgentHandoff } from '../agent'
-import { defaultEnvironmentPackages, type EnvironmentNetworking, type EnvironmentPackages } from '../environment'
+import {
+  defaultEnvironmentPackages,
+  type EnvironmentNetworking,
+  type EnvironmentPackages,
+  type EnvironmentVariable,
+} from '../environment'
 import { workspaceSystemPromptBlock } from '../workspace'
 import type { Volume, VolumeMount } from './execution-inputs'
 
@@ -111,6 +116,32 @@ function networkingFromRow(row: EnvironmentVersionRow): EnvironmentNetworking {
   }
 }
 
+function normalizeNetworking(value: unknown): EnvironmentNetworking {
+  const networking = objectValue(value)
+  const type = networking.type === 'closed' || networking.type === 'limited' ? networking.type : 'open'
+  return {
+    type,
+    allowMcpServers: networking.allowMcpServers === true,
+    allowPackageManagers: networking.allowPackageManagers !== false,
+    ...(type === 'limited' ? { allowedHosts: stringArray(networking.allowedHosts) } : {}),
+  }
+}
+
+function normalizeVariables(value: unknown): Record<string, EnvironmentVariable> {
+  return Object.fromEntries(
+    Object.entries(objectValue(value)).map(([key, variable]) => {
+      const descriptor = objectValue(variable)
+      return [
+        key,
+        {
+          ...(typeof descriptor.description === 'string' ? { description: descriptor.description } : {}),
+          ...(typeof descriptor.required === 'boolean' ? { required: descriptor.required } : {}),
+        },
+      ]
+    }),
+  )
+}
+
 export function createEnvironmentSnapshot(row: EnvironmentVersionRow) {
   const metadata = JSON.parse(row.metadata) as Record<string, unknown>
   return {
@@ -137,8 +168,15 @@ export function normalizeEnvironmentSnapshot(
   }
   const snapshotRecord = snapshot as Record<string, unknown>
   return {
-    ...snapshotRecord,
+    id: typeof snapshotRecord.id === 'string' ? snapshotRecord.id : '',
+    environmentId: typeof snapshotRecord.environmentId === 'string' ? snapshotRecord.environmentId : '',
+    projectId: typeof snapshotRecord.projectId === 'string' ? snapshotRecord.projectId : '',
+    version: typeof snapshotRecord.version === 'number' ? snapshotRecord.version : Number(snapshotRecord.version ?? 0),
+    scope: snapshotRecord.scope === 'organization' ? 'organization' : 'project',
     type: snapshotRecord.type === 'self_hosted' ? 'self_hosted' : 'cloud',
-    networking: objectValue(snapshotRecord.networking),
-  } as unknown as EnvironmentSnapshot
+    networking: normalizeNetworking(snapshotRecord.networking),
+    packages: normalizePackages(snapshotRecord.packages),
+    variables: normalizeVariables(snapshotRecord.variables),
+    createdAt: typeof snapshotRecord.createdAt === 'string' ? snapshotRecord.createdAt : '',
+  }
 }
