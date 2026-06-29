@@ -42,7 +42,7 @@ describe('[spec: secret-store/gateway] createSecretStoreGateway', () => {
   })
 
   it('encrypts managed secret values and returns encrypted metadata', async () => {
-    encryptSecretValueMock.mockResolvedValueOnce(encryptedValue)
+    encryptSecretValueMock.mockResolvedValue(encryptedValue)
     const gateway = createSecretStoreGateway(makeEnv())
     const result = await gateway.store(
       {
@@ -52,9 +52,9 @@ describe('[spec: secret-store/gateway] createSecretStoreGateway', () => {
         hasSecret: true,
         metadata: {},
       },
-      { stringData: { value: 'raw-secret' } },
+      { stringData: { z: 'last', a: 'first' } },
     )
-    expect(result).toEqual({ encryptedSecretData: { value: encryptedValue } })
-    expect(encryptSecretValueMock).toHaveBeenCalledWith(expect.any(Object), 'raw-secret')
+    expect(result).toEqual({ encryptedSecretData: { a: encryptedValue, z: encryptedValue } })
+    expect(encryptSecretValueMock.mock.calls.map((call) => call[1])).toEqual(['first', 'last'])
   })
 })

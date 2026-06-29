@@ -1,4 +1,5 @@
 import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
+import type { WorkspaceManifest } from '@server/domain/workspace'
 import { describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
 import { claimLease, materializeWorkItemPayload } from './leases'
@@ -173,6 +174,33 @@ describe('[spec: runners/claim-eligibility] claimLease', () => {
       ),
     ).rejects.toThrow('credential revoked')
     expect(failClaim).toHaveBeenCalledOnce()
+  })
+
+  it('validates workspace references at claim time even without envFrom entries', async () => {
+    const resolveWorkspaceManifest = vi.fn(async () => ({ root: '/workspace', mounts: [] }) satisfies WorkspaceManifest)
+    await claimLease(
+      fakeDeps({
+        leases: {
+          claimCandidate: async () =>
+            candidate({
+              rawPayload: {
+                type: 'session.start',
+                requiredRunnerCapability: CAP,
+                volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/slink.git' }],
+              },
+            }),
+        },
+        resolveWorkspaceManifest,
+      }),
+      auth,
+      runner(),
+      { workItemId: 'work_1', leaseDurationSeconds: 60 },
+    )
+    expect(resolveWorkspaceManifest).toHaveBeenCalledWith(
+      scope,
+      [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/slink.git' }],
+      [],
+    )
   })
 
   it('uses the default lease duration when leaseDurationSeconds is not provided', async () => {

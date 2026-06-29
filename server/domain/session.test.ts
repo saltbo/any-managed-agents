@@ -7,7 +7,9 @@ import {
   hostingModeFromSnapshot,
   mergeSessionUserMetadata,
   sessionAcceptsPrompts,
+  sessionEventVisibility,
   sessionIsTerminal,
+  sessionUserMetadata,
 } from './session'
 
 describe('[spec: sessions/state-rules] session state rules', () => {
@@ -66,6 +68,35 @@ describe('mergeSessionUserMetadata', () => {
       labels: { lane: 'new' },
       annotations: { keep: 'yes', ticket: 'AMA-1' },
     })
+  })
+
+  it('handles direct labels, annotations, deletes, and ignored non-strings', () => {
+    expect(
+      sessionUserMetadata({
+        labels: { team: 'runtime', ignored: 1 },
+        annotations: { note: 'keep', ignored: false },
+        ticket: 'AMA-1',
+        count: 2,
+        nullable: null,
+      }),
+    ).toEqual({ labels: { team: 'runtime' }, annotations: { note: 'keep', ticket: 'AMA-1' } })
+
+    expect(
+      mergeSessionUserMetadata(
+        { labels: { keep: 'yes', remove: 'old' }, annotations: { keep: 'yes', remove: 'old' } },
+        { labels: { remove: null, add: 'new' }, annotations: { remove: null, add: 'new' }, keep: null },
+      ),
+    ).toEqual({ labels: { keep: 'yes', add: 'new' }, annotations: { add: 'new' } })
+  })
+})
+
+describe('sessionEventVisibility', () => {
+  it('accepts known visibility values and rejects invalid values', () => {
+    expect(sessionEventVisibility('runtime')).toBe('runtime')
+    expect(sessionEventVisibility('transcript')).toBe('transcript')
+    expect(sessionEventVisibility('debug')).toBe('debug')
+    expect(sessionEventVisibility('audit')).toBe('audit')
+    expect(() => sessionEventVisibility('public')).toThrow('Invalid session event visibility')
   })
 })
 

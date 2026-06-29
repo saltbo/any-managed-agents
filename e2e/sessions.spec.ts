@@ -28,7 +28,7 @@ test('lists a seeded session and opens its detail page [spec: web-console/routed
   ).json()) as { id: string }
   const title = `ui-session-${runId}`
   const res = await api.post('/api/v1/sessions', {
-    data: { agentId: agent.id, environmentId: environment.id, runtime: 'ama', title },
+    data: { agentId: agent.id, environmentId: environment.id, runtime: 'ama', name: title },
   })
   expect(res.status(), 'seed session').toBe(201)
   const session = (await res.json()) as { id: string }
