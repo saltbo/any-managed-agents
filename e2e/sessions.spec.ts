@@ -11,21 +11,21 @@ test('lists a seeded session and opens its detail page [spec: web-console/routed
 }) => {
   // Agents must pin a provider+model from the global catalog; seed it first.
   await api.post('/api/v1/e2e/catalog/seed', { data: {} })
-  const agent = (await (
-    await api.post('/api/v1/agents', {
-      data: {
-        name: `s-agent-${runId}`,
-        instructions: 'x',
-        providerId: 'workers-ai',
-        model: '@cf/moonshotai/kimi-k2.6',
-      },
-    })
-  ).json()) as { metadata: { uid: string } }
-  const environment = (await (
-    await api.post('/api/v1/environments', {
-      data: { name: `s-env-${runId}`, runtimeConfig: { image: 'ama-pi-runtime' } },
-    })
-  ).json()) as { metadata: { uid: string } }
+  const agentRes = await api.post('/api/v1/agents', {
+    data: {
+      name: `s-agent-${runId}`,
+      systemPrompt: 'x',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+    },
+  })
+  expect(agentRes.status(), 'seed session agent').toBe(201)
+  const agent = (await agentRes.json()) as { metadata: { uid: string } }
+  const environmentRes = await api.post('/api/v1/environments', {
+    data: { name: `s-env-${runId}` },
+  })
+  expect(environmentRes.status(), 'seed session environment').toBe(201)
+  const environment = (await environmentRes.json()) as { metadata: { uid: string } }
   const title = `ui-session-${runId}`
   const res = await api.post('/api/v1/sessions', {
     data: { agentId: agent.metadata.uid, environmentId: environment.metadata.uid, runtime: 'ama', name: title },
