@@ -286,9 +286,10 @@ function mockConsoleApi(seed?: {
 
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = normalizeMockUrl(input)
+    const path = url.split('?')[0] ?? url
     const method = init?.method ?? 'GET'
 
-    if (url === '/api/v1/projects') {
+    if (path === '/api/v1/projects') {
       return jsonResponse({
         data: [
           {
@@ -308,10 +309,10 @@ function mockConsoleApi(seed?: {
         },
       })
     }
-    if (url.startsWith('/api/v1/runtime/sessions/') && url.endsWith('/rpc') && method === 'POST') {
+    if (path.startsWith('/api/v1/runtime/sessions/') && path.endsWith('/rpc') && method === 'POST') {
       const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }
       runtimeCommandSink()[runtimeCommandSinkKey]?.push(command)
-      const sessionId = url.split('/')[5] ?? 'session_1'
+      const sessionId = path.split('/')[5] ?? 'session_1'
       const sequence = state.events.length
       if (command.type === 'prompt') {
         const content = `Received: ${command.message}`
@@ -364,70 +365,70 @@ function mockConsoleApi(seed?: {
       }
       return jsonResponse({ id: command.id, type: 'response', command: command.type, success: true })
     }
-    if (url.startsWith('/api/v1/providers/') && method === 'GET') {
-      const found = state.providers.find((item) => url === `/api/v1/providers/${item.id}`)
+    if (path.startsWith('/api/v1/providers/') && method === 'GET') {
+      const found = state.providers.find((item) => path === `/api/v1/providers/${item.id}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Provider not found' } }, 404)
     }
-    if (url === '/api/v1/providers' && method === 'GET') {
+    if (path === '/api/v1/providers' && method === 'GET') {
       return jsonResponse({ data: state.providers })
     }
-    if (url === '/api/v1/providers' && method === 'POST') {
+    if (path === '/api/v1/providers' && method === 'POST') {
       const created = provider({ id: 'provider_created', displayName: 'Workers AI' })
       state.providers = [created]
       return jsonResponse(created)
     }
-    if (url === '/api/v1/vaults' && method === 'GET') {
+    if (path === '/api/v1/vaults' && method === 'GET') {
       return jsonResponse({ data: state.vaults })
     }
-    if (url === '/api/v1/vaults' && method === 'POST') {
+    if (path === '/api/v1/vaults' && method === 'POST') {
       const created = vault({ id: 'vault_created' })
       state.vaults = [created]
       return jsonResponse(created)
     }
-    if (url.startsWith('/api/v1/vaults/') && url.endsWith('/credentials') && method === 'GET') {
-      const vaultId = url.split('/')[4]
+    if (path.startsWith('/api/v1/vaults/') && path.endsWith('/credentials') && method === 'GET') {
+      const vaultId = path.split('/')[4]
       return vaultId === 'vault_1' ? jsonResponse({ data: state.credentials }) : jsonResponse({ data: [] })
     }
-    if (url.startsWith('/api/v1/vaults/') && method === 'GET') {
-      const found = state.vaults.find((item) => url === `/api/v1/vaults/${item.metadata.uid}`)
+    if (path.startsWith('/api/v1/vaults/') && method === 'GET') {
+      const found = state.vaults.find((item) => path === `/api/v1/vaults/${item.metadata.uid}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Vault not found' } }, 404)
     }
-    if (url === '/api/v1/connectors' && method === 'GET') {
+    if (path === '/api/v1/connectors' && method === 'GET') {
       return jsonResponse({ data: state.mcpConnectors })
     }
-    if (url.startsWith('/api/v1/usage-summary') && method === 'GET') {
+    if (path.startsWith('/api/v1/usage-summary') && method === 'GET') {
       return jsonResponse(state.usageSummary)
     }
-    if ((url === '/api/v1/audit-records' || url.startsWith('/api/v1/audit-records?')) && method === 'GET') {
+    if (path === '/api/v1/audit-records' && method === 'GET') {
       return jsonResponse({ data: state.auditRecords })
     }
-    if (url === '/api/v1/environments' && method === 'GET') {
+    if (path === '/api/v1/environments' && method === 'GET') {
       return jsonResponse({ data: state.environments })
     }
-    if (url === '/api/v1/environments' && method === 'POST') {
+    if (path === '/api/v1/environments' && method === 'POST') {
       const created = environment({ id: 'env_created', name: 'Node workspace' })
       state.environments = [created]
       return jsonResponse(created)
     }
-    if (url.startsWith('/api/v1/environments/') && method === 'GET') {
-      const found = state.environments.find((item) => url === `/api/v1/environments/${item.metadata.uid}`)
+    if (path.startsWith('/api/v1/environments/') && method === 'GET') {
+      const found = state.environments.find((item) => path === `/api/v1/environments/${item.metadata.uid}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Environment not found' } }, 404)
     }
-    if (url === '/api/v1/agents' && method === 'GET') {
+    if (path === '/api/v1/agents' && method === 'GET') {
       return jsonResponse({ data: state.agents })
     }
-    if (url === '/api/v1/agents' && method === 'POST') {
+    if (path === '/api/v1/agents' && method === 'POST') {
       const created = agent({ id: 'agent_created' })
       state.agents = [created]
       return jsonResponse(created)
     }
-    if (url.startsWith('/api/v1/agents/') && url.endsWith('/versions') && method === 'GET') {
-      const found = state.agents.find((item) => url === `/api/v1/agents/${item.metadata.uid}/versions`)
+    if (path.startsWith('/api/v1/agents/') && path.endsWith('/versions') && method === 'GET') {
+      const found = state.agents.find((item) => path === `/api/v1/agents/${item.metadata.uid}/versions`)
       return found
         ? jsonResponse({ data: [agentVersion({ agentId: found.metadata.uid, ...found.spec })] })
         : jsonResponse({ data: [] })
     }
-    if (url === '/api/v1/sessions' && method === 'POST') {
+    if (path === '/api/v1/sessions' && method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}')) as {
         agentId: string
         environmentId: string
@@ -445,15 +446,15 @@ function mockConsoleApi(seed?: {
       state.sessions = [created]
       return jsonResponse(created)
     }
-    if (url.startsWith('/api/v1/agents/') && method === 'GET') {
-      const found = state.agents.find((item) => url === `/api/v1/agents/${item.metadata.uid}`)
+    if (path.startsWith('/api/v1/agents/') && method === 'GET') {
+      const found = state.agents.find((item) => path === `/api/v1/agents/${item.metadata.uid}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Agent not found' } }, 404)
     }
-    if (url === '/api/v1/sessions' && method === 'GET') {
+    if (path === '/api/v1/sessions' && method === 'GET') {
       return jsonResponse({ data: state.sessions })
     }
-    if (url.startsWith('/api/v1/sessions/') && url.endsWith('/connection') && method === 'GET') {
-      const sessionId = url.split('/')[4]
+    if (path.startsWith('/api/v1/sessions/') && path.endsWith('/connection') && method === 'GET') {
+      const sessionId = path.split('/')[4]
       const found = [...state.detailSessions, ...state.sessions].find((item) => item.metadata.uid === sessionId)
       return jsonResponse({
         sessionId,
@@ -463,11 +464,11 @@ function mockConsoleApi(seed?: {
         stateReason: found?.status.reason ?? null,
       })
     }
-    if (url.startsWith('/api/v1/sessions/') && url.includes('/events') && method === 'GET') {
-      const sessionId = url.split('/')[4]
+    if (path.startsWith('/api/v1/sessions/') && path.includes('/events') && method === 'GET') {
+      const sessionId = path.split('/')[4]
       return jsonResponse({ data: state.events.filter((item) => item.sessionId === sessionId) })
     }
-    if (url === '/api/v1/sessions/session_1' && method === 'PATCH') {
+    if (path === '/api/v1/sessions/session_1' && method === 'PATCH') {
       const body = JSON.parse(String(init?.body ?? '{}')) as { state?: string; archived?: boolean }
       if (body.archived) {
         const archived = session({ archivedAt: now })
@@ -478,9 +479,9 @@ function mockConsoleApi(seed?: {
       state.sessions = [stopped]
       return jsonResponse(stopped)
     }
-    if (url.startsWith('/api/v1/sessions/') && method === 'GET') {
+    if (path.startsWith('/api/v1/sessions/') && method === 'GET') {
       const found = [...state.detailSessions, ...state.sessions].find(
-        (item) => url === `/api/v1/sessions/${item.metadata.uid}`,
+        (item) => path === `/api/v1/sessions/${item.metadata.uid}`,
       )
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Session not found' } }, 404)
     }
@@ -597,7 +598,7 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Create Agent' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Save agent' }))
     expectToast(await screen.findByText('Agent created'))
-    expect(screen.getByText('Coding agent')).toBeTruthy()
+    expect(await screen.findByText('Coding agent')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
     expect(await screen.findByRole('heading', { name: 'Create Session' })).toBeTruthy()

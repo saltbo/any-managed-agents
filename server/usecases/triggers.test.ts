@@ -186,6 +186,32 @@ describe('[spec: triggers/create] createTrigger', () => {
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
 
+  it('rejects raw secret material in template volumes', async () => {
+    await expect(
+      createTrigger(fakeDeps(), auth, {
+        config: {
+          ...baseConfig({
+            template: {
+              ...baseConfig().template,
+              spec: {
+                ...baseConfig().template.spec,
+                volumes: [
+                  {
+                    name: 'repo',
+                    type: 'git_repository',
+                    url: 'https://example.com/repo.git',
+                    accessToken: 'raw-token',
+                  },
+                ],
+              },
+            },
+          }),
+          nextDueAt: null,
+        },
+      }),
+    ).rejects.toBeInstanceOf(TriggerValidationError)
+  })
+
   it('maps a missing agent to a 404 conflict', async () => {
     const deps = fakeDeps({ agentUsable: async () => ({ status: 404, message: 'Agent not found' }) })
     await expect(
@@ -271,6 +297,35 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
     const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), { source: { type: 'http' } })
     expect(result.trigger.spec.source.type).toBe('http')
     expect(result.trigger.status.nextDueAt).toBeNull()
+  })
+
+  it('rejects converting a scheduled trigger to HTTP with nextDueAt', async () => {
+    await expect(
+      updateTrigger(fakeDeps(), auth, triggerRecord(), {
+        source: { type: 'http' },
+        nextDueAt: '2026-05-26T12:00:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(TriggerValidationError)
+  })
+
+  it('updates an HTTP trigger without changing timing', async () => {
+    const result = await updateTrigger(
+      fakeDeps(),
+      auth,
+      triggerRecord({ spec: { source: { type: 'http' } }, status: { nextDueAt: null } }),
+      { name: 'Webhook renamed' },
+    )
+    expect(result.trigger.metadata.name).toBe('Webhook renamed')
+    expect(result.trigger.spec.source.type).toBe('http')
+    expect(result.trigger.status.nextDueAt).toBeNull()
+  })
+
+  it('rejects secret material in template metadata patch', async () => {
+    await expect(
+      updateTrigger(fakeDeps(), auth, triggerRecord(), {
+        template: { metadata: { annotations: { private_key: 'raw' } } },
+      }),
+    ).rejects.toBeInstanceOf(TriggerValidationError)
   })
 
   it('rejects an HTTP trigger update with schedule timing', async () => {

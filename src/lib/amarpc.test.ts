@@ -125,6 +125,28 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     )
   })
 
+  it('omits optional auth headers when local credentials are absent', async () => {
+    window.localStorage.clear()
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/v1/configz') {
+        return new Response(
+          JSON.stringify({ auth: { oidc: { issuer: 'https://auth.example.com', clientId: 'client_1' } } }),
+          { headers: { 'content-type': 'application/json' } },
+        )
+      }
+      return new Response(JSON.stringify(listPage), { headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.listAgents({})
+
+    const headers = fetchMock.mock.calls.find(([input]) => input === '/api/v1/agents')?.[1]?.headers
+    expect(headerValue(headers, 'authorization')).toBeNull()
+    expect(headerValue(headers, 'x-ama-project-id')).toBeNull()
+    expect(headerValue(headers, 'x-ama-client')).toBe('web-rpc')
+  })
+
   // ---------------------------------------------------------------------------
   // ApiError
   // ---------------------------------------------------------------------------
@@ -169,6 +191,21 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       })
     })
 
+    it('throws ApiError using statusText when JSON error has no message', async () => {
+      const fetchMock = vi.fn(async () => {
+        return new Response(JSON.stringify({ error: {} }), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: { 'content-type': 'application/json' },
+        })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      await expect(api.readAgent('bad-id')).rejects.toMatchObject({
+        status: 400,
+        message: 'Bad Request',
+      })
+    })
+
     it('throws ApiError with statusText when body is not JSON object', async () => {
       vi.stubGlobal('fetch', makeTextFetch('Internal Server Error', 500))
       await expect(api.readAgent('err-id')).rejects.toMatchObject({
@@ -184,7 +221,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // queryOptions — false values are excluded, undefined excluded, 0 included
+  // queryOptions — false values included, undefined excluded, 0 included
   // ---------------------------------------------------------------------------
   describe('queryOptions filtering (via listAgents)', () => {
     it('omits undefined values from the query string', async () => {
@@ -210,6 +247,24 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       await api.listAgents({ archived: true })
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('archived=true')
+    })
+
+    it('includes zero values and omits the query string when options are empty', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listAgents({})
+      await api.listAgents({ limit: 0 })
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/agents')
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/v1/agents?limit=0')
+    })
+
+    it('omits empty query strings for parameterized list endpoints', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listSessionEvents('session_1', {})
+      await api.listSessionEvents('session_1', { limit: 0 })
+      expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/sessions/session_1/events')
+      expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/v1/sessions/session_1/events?limit=0')
     })
   })
 

@@ -787,6 +787,35 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(initialPrompt).toBe('Handle T-123 from portal')
   })
 
+  it('creates a run without a reusable session key when the body is not an object', async () => {
+    let lookedUpKey: string | null | undefined = 'unset'
+    const deps = fakeDeps({
+      sessions: {
+        findActiveHttpTriggerSession: async (_projectId, _triggerId, key) => {
+          lookedUpKey = key
+          return null
+        },
+      },
+    })
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({
+        spec: {
+          template: {
+            ...httpTrigger().spec.template,
+            spec: { ...httpTrigger().spec.template.spec, promptTemplate: 'Handle webhook' },
+          },
+        },
+      }),
+      context: {
+        body: null,
+        query: {},
+        headers: {},
+      },
+    })
+    expect(result.state).toBe('dispatched')
+    expect(lookedUpKey).toBe('unset')
+  })
+
   it('adds request metadata from the HTTP body to newly created session metadata and run metadata', async () => {
     let sessionMetadata: Record<string, unknown> | undefined
     let runMetadata: Record<string, unknown> | undefined

@@ -83,11 +83,13 @@ export function queryOptions(options: object = {}) {
 }
 
 export function queryArg<T>(options: object = {}) {
-  return { query: queryOptions(options) as RpcQuery<T> } as RpcArg<T>
+  const query = queryOptions(options)
+  return (Object.keys(query).length === 0 ? {} : { query: query as RpcQuery<T> }) as RpcArg<T>
 }
 
 export function paramQueryArg<T>(param: RpcArg<T> extends { param: infer P } ? P : never, options: object = {}) {
-  return { param, query: queryOptions(options) as RpcQuery<T> } as RpcArg<T>
+  const query = queryOptions(options)
+  return (Object.keys(query).length === 0 ? { param } : { param, query: query as RpcQuery<T> }) as RpcArg<T>
 }
 
 export function jsonArg<T>(json: RpcJson<T>) {
