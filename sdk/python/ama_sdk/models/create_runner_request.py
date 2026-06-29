@@ -14,7 +14,6 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.create_runner_request_metadata import CreateRunnerRequestMetadata
-  from ..models.credential_ref import CredentialRef
 
 
 
@@ -31,7 +30,8 @@ class CreateRunnerRequest:
             name (str):  Example: mac-mini-build-runner.
             capabilities (list[str] | Unset):  Example: ['node', 'git'].
             environment_id (str | Unset):  Example: env_abc123.
-            credential_ref (CredentialRef | Unset):
+            secret_ref (str | Unset):  Example:
+                ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123.
             auth_mode (CreateRunnerRequestAuthMode | Unset):  Example: bearer.
             max_concurrent (int | Unset):  Example: 2.
             metadata (CreateRunnerRequestMetadata | Unset):  Example: {'pool': 'default'}.
@@ -40,7 +40,7 @@ class CreateRunnerRequest:
     name: str
     capabilities: list[str] | Unset = UNSET
     environment_id: str | Unset = UNSET
-    credential_ref: CredentialRef | Unset = UNSET
+    secret_ref: str | Unset = UNSET
     auth_mode: CreateRunnerRequestAuthMode | Unset = UNSET
     max_concurrent: int | Unset = UNSET
     metadata: CreateRunnerRequestMetadata | Unset = UNSET
@@ -51,7 +51,6 @@ class CreateRunnerRequest:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.create_runner_request_metadata import CreateRunnerRequestMetadata
-        from ..models.credential_ref import CredentialRef
         name = self.name
 
         capabilities: list[str] | Unset = UNSET
@@ -62,9 +61,7 @@ class CreateRunnerRequest:
 
         environment_id = self.environment_id
 
-        credential_ref: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.credential_ref, Unset):
-            credential_ref = self.credential_ref.to_dict()
+        secret_ref = self.secret_ref
 
         auth_mode: str | Unset = UNSET
         if not isinstance(self.auth_mode, Unset):
@@ -87,8 +84,8 @@ class CreateRunnerRequest:
             field_dict["capabilities"] = capabilities
         if environment_id is not UNSET:
             field_dict["environmentId"] = environment_id
-        if credential_ref is not UNSET:
-            field_dict["credentialRef"] = credential_ref
+        if secret_ref is not UNSET:
+            field_dict["secretRef"] = secret_ref
         if auth_mode is not UNSET:
             field_dict["authMode"] = auth_mode
         if max_concurrent is not UNSET:
@@ -103,7 +100,6 @@ class CreateRunnerRequest:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.create_runner_request_metadata import CreateRunnerRequestMetadata
-        from ..models.credential_ref import CredentialRef
         d = dict(src_dict)
         name = d.pop("name")
 
@@ -112,15 +108,7 @@ class CreateRunnerRequest:
 
         environment_id = d.pop("environmentId", UNSET)
 
-        _credential_ref = d.pop("credentialRef", UNSET)
-        credential_ref: CredentialRef | Unset
-        if isinstance(_credential_ref,  Unset):
-            credential_ref = UNSET
-        else:
-            credential_ref = CredentialRef.from_dict(_credential_ref)
-
-
-
+        secret_ref = d.pop("secretRef", UNSET)
 
         _auth_mode = d.pop("authMode", UNSET)
         auth_mode: CreateRunnerRequestAuthMode | Unset
@@ -148,7 +136,7 @@ class CreateRunnerRequest:
             name=name,
             capabilities=capabilities,
             environment_id=environment_id,
-            credential_ref=credential_ref,
+            secret_ref=secret_ref,
             auth_mode=auth_mode,
             max_concurrent=max_concurrent,
             metadata=metadata,

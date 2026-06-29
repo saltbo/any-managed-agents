@@ -2,7 +2,7 @@
  * Tests for use-session-actions hook — covers the mutation callbacks (onSuccess,
  * onError) for stopSession and archiveSession.
  *
- * Uses MSW + the REAL api client. No vi.spyOn / vi.mock of @/lib/api.
+ * Uses MSW + the REAL api client. No vi.spyOn / vi.mock of @/lib/amarpc.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'

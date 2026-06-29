@@ -48,18 +48,12 @@ export function listResponseSchema<T extends z.ZodType>(name: string, itemSchema
     .openapi(name)
 }
 
-function credentialRefShape() {
-  return z.object({
-    credentialId: z.string().min(1).openapi({ example: 'vaultcred_abc123' }),
-    versionId: z.string().min(1).optional().openapi({ example: 'vaultver_abc123' }),
-  })
-}
+export const SecretRefSchema = z
+  .string()
+  .min(1)
+  .openapi({ example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123' })
 
-// Vault credential reference: control-plane resource selector used by
-// connectors, runners, and other AMA-owned control-plane resources.
-export const CredentialRefSchema = credentialRefShape().openapi('CredentialRef')
-
-export const NullableCredentialRefSchema = credentialRefShape().nullable().openapi('NullableCredentialRef')
+export const NullableSecretRefSchema = SecretRefSchema.nullable().openapi('NullableSecretRef')
 
 export const EnvFromEntrySchema = z
   .object({

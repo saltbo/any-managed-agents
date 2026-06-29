@@ -111,7 +111,6 @@ from .create_vault_credential_version_request_string_data import CreateVaultCred
 from .create_vault_request import CreateVaultRequest
 from .create_vault_request_metadata import CreateVaultRequestMetadata
 from .create_vault_request_scope import CreateVaultRequestScope
-from .credential_ref import CredentialRef
 from .env_from_entry import EnvFromEntry
 from .env_from_entry_type import EnvFromEntryType
 from .environment import Environment
@@ -179,7 +178,6 @@ from .memory_store_status import MemoryStoreStatus
 from .memory_volume import MemoryVolume
 from .memory_volume_access import MemoryVolumeAccess
 from .memory_volume_type import MemoryVolumeType
-from .nullable_credential_ref_type_0 import NullableCredentialRefType0
 from .project import Project
 from .project_list_response import ProjectListResponse
 from .provider import Provider
@@ -523,7 +521,6 @@ __all__ = (
     "CreateVaultRequest",
     "CreateVaultRequestMetadata",
     "CreateVaultRequestScope",
-    "CredentialRef",
     "EnvFromEntry",
     "EnvFromEntryType",
     "Environment",
@@ -591,7 +588,6 @@ __all__ = (
     "MemoryVolume",
     "MemoryVolumeAccess",
     "MemoryVolumeType",
-    "NullableCredentialRefType0",
     "Project",
     "ProjectListResponse",
     "Provider",

@@ -25,13 +25,13 @@ import type {
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
 import {
+  type AgentSnapshot,
   agentSnapshotWithWorkspaceContext,
-  type NormalizedEnvironmentSnapshot,
+  createAgentSnapshot,
+  createEnvironmentSnapshot,
+  type EnvironmentSnapshot,
   normalizeEnvironmentSnapshot,
   parseJson,
-  type SerializedAgentVersion,
-  serializeAgentVersion,
-  serializeEnvironmentVersion,
 } from '@server/domain/runtime/session-snapshot'
 import { newId, now, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
@@ -262,8 +262,8 @@ export async function enqueueSelfHostedSessionWork(
   auth: AuthScope,
   values: {
     session: SessionRow
-    agentSnapshot: SerializedAgentVersion
-    environmentSnapshot: NormalizedEnvironmentSnapshot | null
+    agentSnapshot: AgentSnapshot
+    environmentSnapshot: EnvironmentSnapshot | null
     runtime: RuntimeName
     runtimeConfig: Record<string, unknown>
     env?: Record<string, string>
@@ -575,13 +575,13 @@ export async function createSessionForAgent(
 
   const timestamp = now()
   const id = crypto.randomUUID()
-  const agentSnapshot = serializeAgentVersion(agentVersion, providerId)
+  const agentSnapshot = createAgentSnapshot(agentVersion, providerId)
   const runtimeAgentSnapshot = agentSnapshotWithWorkspaceContext(
     agentSnapshot,
     validatedVolumes.volumes,
     validatedVolumes.volumeMounts,
   )
-  const baseEnvironmentSnapshot = normalizeEnvironmentSnapshot(serializeEnvironmentVersion(environmentVersion))
+  const baseEnvironmentSnapshot = normalizeEnvironmentSnapshot(createEnvironmentSnapshot(environmentVersion))
   const runtimeConfig = options.runtimeConfig ?? baseEnvironmentSnapshot?.runtimeConfig ?? {}
   const environmentSnapshot = baseEnvironmentSnapshot
   const hostingMode = environmentHostingMode(environmentSnapshot)

@@ -12,10 +12,10 @@
 
 import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import {
+  type createEnvironmentSnapshot,
   normalizeEnvironmentSnapshot,
   parseAgentSnapshot,
   parseJson,
-  type serializeEnvironmentVersion,
 } from '@server/domain/runtime/session-snapshot'
 import { now } from '@server/domain/runtime/util'
 import { runtimeSupportsLivePrompts } from '@server/domain/runtime-catalog'
@@ -121,7 +121,7 @@ async function queueSelfHostedSessionPrompt(
     return { ok: false, status: 409, message: 'Session agent snapshot is required' }
   }
   const environmentSnapshot = normalizeEnvironmentSnapshot(
-    parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
+    parseJson<ReturnType<typeof createEnvironmentSnapshot>>(session.environmentSnapshot),
   )
   const submittedAt = now()
   const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}

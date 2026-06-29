@@ -1,5 +1,5 @@
 import { parseTools, providerIdPatch } from '@/console/format'
-import { type Agent, type AgentInput, ApiError } from '@/lib/api'
+import { type Agent, type AgentInput, ApiError } from '@/lib/amarpc'
 
 export const BUILDER_STEPS = ['start', 'core', 'tools', 'sandbox', 'roles', 'test', 'done'] as const
 export type BuilderStep = (typeof BUILDER_STEPS)[number]

@@ -31,7 +31,7 @@ function runner(overrides: Partial<RunnerAuthRecord> = {}): RunnerAuthRecord {
     name: 'Runner',
     capabilities: [CAP],
     environmentId: null,
-    credentialRef: null,
+    secretRef: null,
     authMode: 'oidc',
     state: 'active',
     currentLoad: 0,

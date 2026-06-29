@@ -5,7 +5,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { archivedLabel, formatDate } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Agent } from '@/lib/api'
+import type { Agent } from '@/lib/amarpc'
 
 export function AgentsView({
   agents,

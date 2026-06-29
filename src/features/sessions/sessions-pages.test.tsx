@@ -4,14 +4,14 @@
  * empty-state / archived branches), SessionRuntimePanel (connection-badge / canSend
  * branches), SessionToolTrace (empty / running / orphan branches).
  *
- * Uses MSW + the REAL api client. No vi.spyOn / vi.mock of @/lib/api.
+ * Uses MSW + the REAL api client. No vi.spyOn / vi.mock of @/lib/amarpc.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import type { Agent, Environment, ListResponse, Session, SessionEvent } from '@/lib/api'
-import { ApiError } from '@/lib/api'
+import type { Agent, Environment, ListResponse, Session, SessionEvent } from '@/lib/amarpc'
+import { ApiError } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,

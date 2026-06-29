@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { useClientPagination } from '@/console/use-client-pagination'
-import type { AuditRecord, Vault, VaultCredential } from '@/lib/api'
+import type { AuditRecord, Vault, VaultCredential } from '@/lib/amarpc'
 import { createCollection, HttpResponse, http, server } from '@/test/msw'
 import {
   credential as resourceCredential,
@@ -118,7 +118,7 @@ describe('[spec: vaults/console-list] VaultsView', () => {
     )
 
     expect(screen.getByText('No vaults')).toBeInTheDocument()
-    expect(screen.getByText(/Create a vault to track safe credential references/)).toBeInTheDocument()
+    expect(screen.getByText(/Create a vault to track safe secret references/)).toBeInTheDocument()
   })
 
   it('renders vault rows with display name, scope, status, and timestamps', () => {

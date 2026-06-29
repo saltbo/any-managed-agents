@@ -2751,11 +2751,11 @@ type CreateProjectRequest struct {
 type CreateRunnerRequest struct {
 	AuthMode      *CreateRunnerRequestAuthMode `json:"authMode,omitempty"`
 	Capabilities  *[]string                    `json:"capabilities,omitempty"`
-	CredentialRef *CredentialRef               `json:"credentialRef,omitempty"`
 	EnvironmentId *string                      `json:"environmentId,omitempty"`
 	MaxConcurrent *int                         `json:"maxConcurrent,omitempty"`
 	Metadata      *map[string]interface{}      `json:"metadata,omitempty"`
 	Name          string                       `json:"name"`
+	SecretRef     *string                      `json:"secretRef,omitempty"`
 }
 
 // CreateRunnerRequestAuthMode defines model for CreateRunnerRequest.AuthMode.
@@ -2850,12 +2850,6 @@ type CreateVaultRequest struct {
 
 // CreateVaultRequestScope defines model for CreateVaultRequest.Scope.
 type CreateVaultRequestScope string
-
-// CredentialRef defines model for CredentialRef.
-type CredentialRef struct {
-	CredentialId string  `json:"credentialId"`
-	VersionId    *string `json:"versionId,omitempty"`
-}
 
 // EnvFromEntry defines model for EnvFromEntry.
 type EnvFromEntry struct {
@@ -3091,11 +3085,8 @@ type MemoryVolumeAccess string
 // MemoryVolumeType defines model for MemoryVolume.Type.
 type MemoryVolumeType string
 
-// NullableCredentialRef defines model for NullableCredentialRef.
-type NullableCredentialRef struct {
-	CredentialId string  `json:"credentialId"`
-	VersionId    *string `json:"versionId,omitempty"`
-}
+// NullableSecretRef defines model for NullableSecretRef.
+type NullableSecretRef = string
 
 // Project defines model for Project.
 type Project struct {
@@ -3244,7 +3235,6 @@ type Runner struct {
 	AuthMode         RunnerAuthMode           `json:"authMode"`
 	Capabilities     []string                 `json:"capabilities"`
 	CreatedAt        time.Time                `json:"createdAt"`
-	CredentialRef    *NullableCredentialRef   `json:"credentialRef"`
 	CurrentLoad      int                      `json:"currentLoad"`
 	EnvironmentId    *string                  `json:"environmentId"`
 	Id               string                   `json:"id"`
@@ -3255,6 +3245,7 @@ type Runner struct {
 	ProjectId        string                   `json:"projectId"`
 	RuntimeInventory []RunnerRuntimeInventory `json:"runtimeInventory"`
 	RuntimeUsage     []RuntimeUsage           `json:"runtimeUsage"`
+	SecretRef        *NullableSecretRef       `json:"secretRef"`
 	State            RunnerState              `json:"state"`
 	UpdatedAt        time.Time                `json:"updatedAt"`
 }

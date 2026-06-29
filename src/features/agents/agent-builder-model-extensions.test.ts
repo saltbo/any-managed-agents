@@ -3,8 +3,8 @@
  * No API calls, no MSW, no rendering.
  */
 import { describe, expect, it } from 'vitest'
-import type { Agent } from '@/lib/api'
-import { ApiError } from '@/lib/api'
+import type { Agent } from '@/lib/amarpc'
+import { ApiError } from '@/lib/amarpc'
 import { type AgentOverrides, agent as resourceAgent } from '@/test/resource-fixtures'
 import {
   agentApiExamples,

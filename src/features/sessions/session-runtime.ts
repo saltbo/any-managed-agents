@@ -4,7 +4,7 @@ import {
   amaSessionEventTypeFromPayload,
   isAmaSessionEventType,
 } from '@shared/session-events'
-import type { SessionEvent } from '@/lib/api'
+import type { SessionEvent } from '@/lib/amarpc'
 import { getStoredAccessToken } from '@/lib/oidc'
 
 export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'

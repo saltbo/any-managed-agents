@@ -10,7 +10,7 @@ import { TextAreaField, TextField } from '@/console/forms'
 import { CoreStep, StartStep } from '@/features/agents/AgentBuilderSteps'
 import type { AgentBuilderDraft, AgentTemplate, BuilderFieldErrors } from '@/features/agents/agent-builder-model'
 import { JsonBlock } from '@/features/console/json-block'
-import type { Environment, Provider } from '@/lib/api'
+import type { Environment, Provider } from '@/lib/amarpc'
 import {
   type QuickstartEnvironmentForm,
   type QuickstartIntegrationInput,

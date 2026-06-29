@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MobileNavButton, NavButton } from '@/console/components'
-import type { Project } from '@/lib/api'
+import type { Project } from '@/lib/amarpc'
 import { signOut } from '@/lib/oidc'
 import { CreateProjectSheet } from './CreateProjectSheet'
 import { useConsoleContext } from './console-context'

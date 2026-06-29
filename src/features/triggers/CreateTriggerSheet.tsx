@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { isArchived } from '@/console/format'
 import { TextAreaField, TextField } from '@/console/forms'
-import { api, type RuntimeName } from '@/lib/api'
+import { api, type RuntimeName } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 

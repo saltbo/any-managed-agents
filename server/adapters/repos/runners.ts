@@ -3,7 +3,6 @@ import type {
   CreateRunnerInput,
   ListPageResult,
   RunnerAuthRecord,
-  RunnerCredentialRef,
   RunnerHeartbeatFields,
   RunnerListQuery,
   RunnerRepo,
@@ -14,6 +13,7 @@ import type {
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or, sql } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { environments, runners, vaultCredentials, vaultCredentialVersions } from '../../db/schema'
+import { credentialScopedSecretRef, credentialVersionSecretRef, secretRefIdentity } from '../../domain/vault'
 import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
@@ -40,7 +40,38 @@ function stringify(value: unknown) {
   return JSON.stringify(redactSensitiveValue(value))
 }
 
-function recordFrom(row: RunnerRow): RunnerAuthRecord {
+async function secretRefFromColumns(db: Db, row: RunnerRow) {
+  if (!row.credentialId) {
+    return null
+  }
+  if (row.credentialVersionId) {
+    const version = await db
+      .select({ vaultId: vaultCredentialVersions.vaultId })
+      .from(vaultCredentialVersions)
+      .where(
+        and(
+          eq(vaultCredentialVersions.id, row.credentialVersionId),
+          eq(vaultCredentialVersions.credentialId, row.credentialId),
+        ),
+      )
+      .get()
+    return version
+      ? credentialVersionSecretRef({
+          vaultId: version.vaultId,
+          credentialId: row.credentialId,
+          versionId: row.credentialVersionId,
+        })
+      : null
+  }
+  const credential = await db
+    .select({ vaultId: vaultCredentials.vaultId })
+    .from(vaultCredentials)
+    .where(eq(vaultCredentials.id, row.credentialId))
+    .get()
+  return credential ? credentialScopedSecretRef({ vaultId: credential.vaultId, credentialId: row.credentialId }) : null
+}
+
+async function recordFrom(db: Db, row: RunnerRow): Promise<RunnerAuthRecord> {
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -48,9 +79,7 @@ function recordFrom(row: RunnerRow): RunnerAuthRecord {
     name: row.name,
     capabilities: parseJson<string[]>(row.capabilities) ?? [],
     environmentId: row.environmentId,
-    credentialRef: row.credentialId
-      ? { credentialId: row.credentialId, ...(row.credentialVersionId ? { versionId: row.credentialVersionId } : {}) }
-      : null,
+    secretRef: await secretRefFromColumns(db, row),
     // DB text column constrained to the auth-mode set by every write path.
     authMode: row.authMode as RunnerAuthMode,
     state: row.state,
@@ -69,14 +98,15 @@ function recordFrom(row: RunnerRow): RunnerAuthRecord {
 }
 
 function columnsFromInput(input: CreateRunnerInput) {
+  const identity = input.secretRef ? secretRefIdentity(input.secretRef) : null
   return {
     organizationId: input.organizationId,
     projectId: input.projectId,
     name: input.name,
     capabilities: stringify(input.capabilities),
     environmentId: input.environmentId,
-    credentialId: input.credentialRef?.credentialId ?? null,
-    credentialVersionId: input.credentialRef?.versionId ?? null,
+    credentialId: identity?.credentialId ?? null,
+    credentialVersionId: identity?.versionId ?? null,
     authMode: input.authMode,
     oidcSubject: input.oidcSubject,
     oidcClientId: input.oidcClientId,
@@ -123,12 +153,12 @@ export function createRunnerRepo(db: Db): RunnerRepo {
         .orderBy(desc(runners.createdAt), desc(runners.id))
         .limit(query.limit + 1)
       const hasMore = rows.length > query.limit
-      return { rows: rows.slice(0, query.limit).map(recordFrom), hasMore }
+      return { rows: await Promise.all(rows.slice(0, query.limit).map((row) => recordFrom(db, row))), hasMore }
     },
 
     async find(projectId, runnerId) {
       const row = await findRow(db, projectId, runnerId)
-      return row ? recordFrom(row) : null
+      return row ? recordFrom(db, row) : null
     },
 
     async findForMachineRegistration(projectId, authMode, oidcSubject, environmentId, machineId) {
@@ -148,7 +178,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
           ),
         )
         .get()
-      return row ? recordFrom(row) : null
+      return row ? recordFrom(db, row) : null
     },
 
     async insert(input, timestamp) {
@@ -169,7 +199,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
       if (!inserted) {
         throw new Error('Inserted runner row is required')
       }
-      return recordFrom(inserted)
+      return recordFrom(db, inserted)
     },
 
     async reregister(projectId, runnerId, input, timestamp) {
@@ -181,7 +211,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
       if (!row) {
         throw new Error('Federated runner registration update did not return a runner')
       }
-      return recordFrom(row)
+      return recordFrom(db, row)
     },
 
     async update(projectId, runnerId, fields: UpdateRunnerFields, timestamp) {
@@ -201,7 +231,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
       if (!row) {
         throw new Error('Updated runner row is required')
       }
-      return recordFrom(row)
+      return recordFrom(db, row)
     },
 
     async heartbeat(projectId, runnerId, fields: RunnerHeartbeatFields, timestamp) {
@@ -225,7 +255,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
       if (!row) {
         throw new Error('Heartbeat runner row is required')
       }
-      return recordFrom(row)
+      return recordFrom(db, row)
     },
 
     async environmentUsable(projectId, environmentId) {
@@ -243,7 +273,11 @@ export function createRunnerRepo(db: Db): RunnerRepo {
       return Boolean(environment)
     },
 
-    async credentialRefUsable(organizationId, projectId, ref: RunnerCredentialRef) {
+    async secretRefUsable(organizationId, projectId, secretRef: string) {
+      const ref = secretRefIdentity(secretRef)
+      if (!ref?.credentialId) {
+        return { credentialMissing: true, versionMissing: false }
+      }
       const credential = await db
         .select({ id: vaultCredentials.id })
         .from(vaultCredentials)

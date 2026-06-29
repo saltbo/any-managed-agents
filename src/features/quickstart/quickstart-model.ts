@@ -1,5 +1,5 @@
 import { isArchived } from '@/console/format'
-import type { Agent, AgentInput, Environment, EnvironmentInput, Provider, Session } from '@/lib/api'
+import type { Agent, AgentInput, Environment, EnvironmentInput, Provider, Session } from '@/lib/amarpc'
 
 export const QUICKSTART_STEPS = ['provider', 'environment', 'agent', 'session', 'integration'] as const
 export type QuickstartStep = (typeof QUICKSTART_STEPS)[number]

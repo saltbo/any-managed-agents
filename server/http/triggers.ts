@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
-import type { Trigger, TriggerRun } from '@server/domain/trigger'
 import { requireAuth } from '../auth/session'
 import { RuntimeSchema } from '../contracts/environment-contracts'
 import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
@@ -231,14 +230,6 @@ function normalizeEnvFrom(entries: z.infer<typeof EnvFromEntrySchema>[]): EnvFro
   }))
 }
 
-function serializeTrigger(record: Trigger) {
-  return record
-}
-
-function serializeRun(record: TriggerRun) {
-  return record
-}
-
 const TEMPLATE_HEADER_DENYLIST = new Set(['authorization', 'cookie', 'set-cookie', 'proxy-authorization'])
 
 function promptHeaders(headers: Headers): Record<string, string> {
@@ -435,9 +426,9 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
           resourceId: trigger.metadata.uid,
           outcome: 'success',
           requestId: requestId(c),
-          after: serializeTrigger(trigger),
+          after: trigger,
         })
-        return c.json(serializeTrigger(trigger), 201)
+        return c.json(trigger, 201)
       } catch (error) {
         return conflictOrValidation(c, error)
       }
@@ -471,10 +462,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json(
-        { data: page.rows.map(serializeTrigger), pagination: { limit, nextCursor, hasMore: page.hasMore } },
-        200,
-      )
+      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
     })
     .openapi(readRouteDefinition, async (c) => {
       const deps = c.get('deps')
@@ -486,7 +474,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       if (!trigger) {
         return c.json(errorBody('not_found', 'Trigger not found'), 404)
       }
-      return c.json(serializeTrigger(trigger), 200)
+      return c.json(trigger, 200)
     })
     .openapi(updateRouteDefinition, async (c) => {
       const deps = c.get('deps')
@@ -509,10 +497,10 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
           resourceId: trigger.metadata.uid,
           outcome: 'success',
           requestId: requestId(c),
-          before: serializeTrigger(trigger),
-          after: serializeTrigger(result.trigger),
+          before: trigger,
+          after: result.trigger,
         })
-        return c.json(serializeTrigger(result.trigger), 200)
+        return c.json(result.trigger, 200)
       } catch (error) {
         return conflictOrValidation(c, error)
       }
@@ -536,7 +524,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         resourceId: trigger.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        before: serializeTrigger(trigger),
+        before: trigger,
       })
       return c.body(null, 204)
     })
@@ -574,10 +562,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json(
-        { data: page.rows.map(serializeRun), pagination: { limit, nextCursor, hasMore: page.hasMore } },
-        200,
-      )
+      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
     })
     .openapi(createRunRouteDefinition, async (c) => {
       const deps = c.get('deps')
@@ -604,7 +589,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         if (!run) {
           throw new Error('HTTP trigger run was not persisted')
         }
-        return c.json(serializeRun(run), 201)
+        return c.json(run, 201)
       } catch (error) {
         return conflictOrValidation(c, error)
       }
@@ -624,7 +609,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       if (!run) {
         return c.json(errorBody('not_found', 'Trigger run not found'), 404)
       }
-      return c.json(serializeRun(run), 200)
+      return c.json(run, 200)
     })
 }
 

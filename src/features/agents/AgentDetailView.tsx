@@ -7,7 +7,7 @@ import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, StatusBadge }
 import { archivedLabel, formatDate, isArchived, stringifyJson } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
 import { RelatedResourcesTable } from '@/features/console/related-resources-table'
-import type { Agent, AgentVersion, Session } from '@/lib/api'
+import type { Agent, AgentVersion, Session } from '@/lib/amarpc'
 
 export function AgentDetailView({
   agent,

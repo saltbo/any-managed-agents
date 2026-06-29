@@ -98,7 +98,7 @@ export async function evaluateProviderPolicy(
       message: 'Provider is not configured for this project.',
     }
   }
-  // Providers bind their credential through a vault credential reference; a
+  // Providers bind their credential through a vault secret reference; a
   // revoked or missing credential must fail provider policy evaluation, not
   // only runtime resolution.
   if (provider && !(await repo.providerCredentialUsable(auth, provider))) {

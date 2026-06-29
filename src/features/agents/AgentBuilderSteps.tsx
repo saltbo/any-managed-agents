@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/console/components'
 import { isArchived } from '@/console/format'
 import { TextAreaField, TextField } from '@/console/forms'
-import { api, type Connector, type Environment } from '@/lib/api'
+import { api, type Connector, type Environment } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import {

@@ -679,7 +679,7 @@ export const runners = sqliteTable(
     capabilities: text('capabilities').notNull().default('[]'),
     environmentId: text('environment_id').references(() => environments.id),
     // Vault credential ref (nullable). Existence validated in the usecase
-    // (credentialRefUsable). Intentionally NOT a FK: a hard FK would reject
+    // (secretRefUsable). Intentionally NOT a FK: a hard FK would reject
     // legitimate pre-validation writes / stale refs as raw D1 500s (D1 enforces
     // FKs). Documented soft pointer.
     credentialId: text('credential_id'),

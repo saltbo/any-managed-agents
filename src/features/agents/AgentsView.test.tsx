@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Agent } from '@/lib/api'
+import type { Agent } from '@/lib/amarpc'
 import { type AgentOverrides, agent as resourceAgent } from '@/test/resource-fixtures'
 import { AgentsView } from './AgentsView'
 

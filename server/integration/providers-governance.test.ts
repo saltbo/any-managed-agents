@@ -45,7 +45,7 @@ describe('[CF] providers', () => {
     // The de-tenanted catalog never carries transport/credential fields.
     const serialized = JSON.stringify(list)
     expect(serialized).not.toContain('credentialSecretRef')
-    expect(serialized).not.toContain('credentialRef')
+    expect(serialized).not.toContain('secretRef')
     expect(serialized).not.toContain('baseUrl')
 
     // A null providerId defers resolution to session start (docs §Agents).

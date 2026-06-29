@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState, PageHeader, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { api } from '@/lib/api'
+import { api } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 

@@ -1,7 +1,7 @@
 /**
  * Tests for QuickstartPage — loading, error, step navigation, and step content.
  * Pattern: MSW + real api client, QueryClientProvider (retry:false) + MemoryRouter.
- * vi.spyOn is only used for useSessionRuntimeSession (a WebSocket hook, not @/lib/api).
+ * vi.spyOn is only used for useSessionRuntimeSession (a WebSocket hook, not @/lib/amarpc).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -17,7 +17,7 @@ import type {
   SessionAgentSnapshot,
   SessionConnection,
   SessionEvent,
-} from '@/lib/api'
+} from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,

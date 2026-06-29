@@ -2,7 +2,7 @@ import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-row
 import { workspaceSystemPromptBlock } from '../workspace'
 import type { Volume, VolumeMount } from './execution-inputs'
 
-// Snapshot serialization (DB row -> immutable session snapshot) and volume
+// Snapshot creation (DB row -> immutable session snapshot) and volume
 // normalization for the session runtime data plane. Pure shaping/validation with
 // no env or D1 dependency, factored out of the orchestration module.
 
@@ -14,7 +14,7 @@ export function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-export function serializeAgentVersion(row: AgentVersionRow, providerId: string) {
+export function createAgentSnapshot(row: AgentVersionRow, providerId: string) {
   return {
     id: row.id,
     agentId: row.agentId,
@@ -36,17 +36,17 @@ export function serializeAgentVersion(row: AgentVersionRow, providerId: string) 
   }
 }
 
-export type SerializedAgentVersion = ReturnType<typeof serializeAgentVersion>
+export type AgentSnapshot = ReturnType<typeof createAgentSnapshot>
 
 export function parseAgentSnapshot(value: string | null) {
-  return parseJson<SerializedAgentVersion>(value)
+  return parseJson<AgentSnapshot>(value)
 }
 
 export function agentSnapshotWithWorkspaceContext(
-  agentSnapshot: SerializedAgentVersion,
+  agentSnapshot: AgentSnapshot,
   volumes: Volume[],
   volumeMounts: VolumeMount[],
-): SerializedAgentVersion {
+): AgentSnapshot {
   const block = workspaceSystemPromptBlock({ volumes, volumeMounts })
   if (!block) {
     return agentSnapshot
@@ -58,7 +58,7 @@ export function agentSnapshotWithWorkspaceContext(
   }
 }
 
-export function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
+export function createEnvironmentSnapshot(row: EnvironmentVersionRow) {
   return {
     ...row,
     packages: JSON.parse(row.packages) as Record<string, unknown>[],
@@ -73,11 +73,11 @@ export function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
   }
 }
 
-export type NormalizedEnvironmentSnapshot = ReturnType<typeof serializeEnvironmentVersion>
+export type EnvironmentSnapshot = ReturnType<typeof createEnvironmentSnapshot>
 
 export function normalizeEnvironmentSnapshot(
-  snapshot: ReturnType<typeof serializeEnvironmentVersion> | Record<string, unknown> | null,
-): NormalizedEnvironmentSnapshot | null {
+  snapshot: ReturnType<typeof createEnvironmentSnapshot> | Record<string, unknown> | null,
+): EnvironmentSnapshot | null {
   if (!snapshot) {
     return null
   }
@@ -87,5 +87,5 @@ export function normalizeEnvironmentSnapshot(
     hostingMode: snapshotRecord.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
     networkPolicy: objectValue(snapshotRecord.networkPolicy),
     runtimeConfig: objectValue(snapshotRecord.runtimeConfig),
-  } as NormalizedEnvironmentSnapshot
+  } as EnvironmentSnapshot
 }

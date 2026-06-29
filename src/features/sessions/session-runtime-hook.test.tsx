@@ -3,7 +3,7 @@
  *
  * Uses MSW for the GET /api/v1/sessions/:id/connection endpoint, and a
  * MockWebSocket to exercise the live runtime socket path. No vi.spyOn/vi.mock
- * of @/lib/api.
+ * of @/lib/amarpc.
  *
  * ROOT CAUSE OF OOM: The hook's two useEffects both depend on props that can
  * change reference on every re-render, causing infinite loops:
@@ -28,7 +28,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useCallback } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Session, SessionEvent } from '@/lib/api'
+import type { Session, SessionEvent } from '@/lib/amarpc'
 import * as oidcModule from '@/lib/oidc'
 import { HttpResponse, http, server } from '@/test/msw'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'

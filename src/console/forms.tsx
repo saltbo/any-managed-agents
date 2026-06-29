@@ -15,7 +15,7 @@ import {
   type MemoryStoreAccess,
   type Volume,
   type VolumeMount,
-} from '@/lib/api'
+} from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 import { isArchived } from './format'
 import type { AgentFormState, EnvironmentFormState, SessionFormState, VaultFormState } from './types'
@@ -512,7 +512,7 @@ export function VaultForm({
               </SelectGroup>
             </SelectContent>
           </Select>
-          <FieldDescription>Project vaults are the default for runtime credential references.</FieldDescription>
+          <FieldDescription>Project vaults are the default for runtime secret references.</FieldDescription>
         </Field>
       </FieldGroup>
       <Button type="submit">

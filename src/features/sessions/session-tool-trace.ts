@@ -1,4 +1,4 @@
-import type { SessionEvent } from '@/lib/api'
+import type { SessionEvent } from '@/lib/amarpc'
 
 export type SessionToolTraceStatus = 'running' | 'completed' | 'failed'
 export type SessionToolTraceApproval = 'approved' | 'denied' | 'approval required'

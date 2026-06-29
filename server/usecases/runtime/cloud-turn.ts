@@ -21,11 +21,11 @@ import { isRuntimeName, runtimeDriver, runtimeDriverName } from '@server/domain/
 import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import { resolveSessionProviderModel } from '@server/domain/runtime/provider'
 import {
+  type AgentSnapshot,
   agentSnapshotWithWorkspaceContext,
-  type NormalizedEnvironmentSnapshot,
+  type EnvironmentSnapshot,
   parseAgentSnapshot,
   parseJson,
-  type SerializedAgentVersion,
 } from '@server/domain/runtime/session-snapshot'
 import { cloudTurnSystemAuth } from '@server/domain/runtime/system-auth'
 import {
@@ -87,8 +87,8 @@ export async function startSessionRuntimeForRow(
   auth: AuthScope,
   input: {
     pending: SessionRow
-    agentSnapshot: SerializedAgentVersion
-    environmentSnapshot: NormalizedEnvironmentSnapshot | null
+    agentSnapshot: AgentSnapshot
+    environmentSnapshot: EnvironmentSnapshot | null
     runtime: RuntimeName
     runtimeConfig: Record<string, unknown>
     env?: Record<string, string>
@@ -456,7 +456,7 @@ export async function consumeCloudTurnMessage(deps: CloudTurnDeps, message: Clou
     await startSessionRuntimeForRow(deps, auth, {
       pending: session,
       agentSnapshot,
-      environmentSnapshot: parseJson<NormalizedEnvironmentSnapshot>(session.environmentSnapshot),
+      environmentSnapshot: parseJson<EnvironmentSnapshot>(session.environmentSnapshot),
       runtime: message.runtime,
       runtimeConfig: message.runtimeConfig,
       env: message.env,

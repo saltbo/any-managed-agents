@@ -5,11 +5,7 @@
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { runtimeDriver } from '@server/domain/runtime/driver'
-import {
-  type NormalizedEnvironmentSnapshot,
-  parseJson,
-  type SerializedAgentVersion,
-} from '@server/domain/runtime/session-snapshot'
+import { type AgentSnapshot, type EnvironmentSnapshot, parseJson } from '@server/domain/runtime/session-snapshot'
 import { runnerSupportsRuntimeProviderModel, runtimeCatalogSupportsProviderModel } from '@server/domain/runtime-catalog'
 import type { AuthScope, ProviderRepo, SessionOrchestrationStore } from '../ports'
 
@@ -72,8 +68,8 @@ export async function resolveMcpServers(
   deps: ProvisioningDeps,
   _auth: AuthScope,
   _sessionId: string,
-  agentSnapshot: SerializedAgentVersion,
-  _environmentSnapshot: NormalizedEnvironmentSnapshot | null,
+  agentSnapshot: AgentSnapshot,
+  _environmentSnapshot: EnvironmentSnapshot | null,
 ) {
   const connectorIds = agentSnapshot.mcpConnectors
   if (connectorIds.length === 0) {

@@ -234,7 +234,7 @@ export function hasSecretMaterial(value: unknown): boolean {
 }
 
 function secretKey(key: string) {
-  if (key === 'secretRef' || key === 'credentialRef') {
+  if (key === 'secretRef') {
     return false
   }
   return /secret|token|password|api[_-]?key/i.test(key)

@@ -31,10 +31,11 @@ describe('generated SDK layout [spec: api-contracts/sdk-layout]', () => {
   })
 
   it('keeps the web console on the shared Hono RPC client', () => {
-    const apiClient = readFileSync('src/lib/api.ts', 'utf8')
+    const apiClient = readFileSync('src/lib/amarpc/core.ts', 'utf8')
 
     expect(apiClient).toMatch(/hc<AppType>/)
     expect(apiClient).toMatch(/x-ama-client['"]?: ['"]web-rpc/)
     expect(apiClient).not.toMatch(/@any-managed-agents\/sdk/)
+    expect(existsSync('src/lib/api.ts')).toBe(false)
   })
 })

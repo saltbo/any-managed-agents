@@ -184,10 +184,6 @@ function domainValidation(message: string, fields: Record<string, string>) {
   return { error: { type: 'validation_error', message, details: { fields } } } as const
 }
 
-function serializeVault(record: Vault) {
-  return record
-}
-
 // Stored secret material (ciphertext, legacy local values) lives only in the
 // version record metadata. It must never leave through API responses or audit
 // snapshots.
@@ -458,10 +454,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json(
-        { data: page.rows.map(serializeVault), pagination: { limit, nextCursor, hasMore: page.hasMore } },
-        200,
-      )
+      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
     })
     .openapi(createVaultRoute, async (c) => {
       const body = c.req.valid('json')
@@ -482,16 +475,15 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         },
         new Date().toISOString(),
       )
-      const serialized = serializeVault(vault)
       await deps.audit.record(auth, {
         action: 'vault.create',
         resourceType: 'vault',
         resourceId: vault.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        after: serialized,
+        after: vault,
       })
-      return c.json(serialized, 201)
+      return c.json(vault, 201)
     })
     .openapi(readVaultRoute, async (c) => {
       const { vaultId } = c.req.valid('param')
@@ -504,7 +496,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       if (!vault) {
         return vaultNotFound(c)
       }
-      return c.json(serializeVault(vault), 200)
+      return c.json(vault, 200)
     })
     .openapi(updateVaultRoute, async (c) => {
       const { vaultId } = c.req.valid('param')
@@ -541,7 +533,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         archivedAt,
       }
       await deps.vaults.update(vault.metadata.uid, fields, timestamp)
-      const serialized = serializeVault({
+      const updated: Vault = {
         ...vault,
         metadata: {
           ...vault.metadata,
@@ -553,17 +545,17 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         },
         spec: { ...vault.spec, scope: fields.scope, metadata: fields.metadata },
         status: { phase: fields.archivedAt ? 'archived' : 'active' },
-      })
+      }
       await deps.audit.record(auth, {
         action: body.archived === true && vault.metadata.archivedAt === null ? 'vault.archive' : 'vault.update',
         resourceType: 'vault',
         resourceId: vault.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        before: serializeVault(vault),
-        after: serialized,
+        before: vault,
+        after: updated,
       })
-      return c.json(serialized, 200)
+      return c.json(updated, 200)
     })
     .openapi(listCredentialsRoute, async (c) => {
       const { vaultId } = c.req.valid('param')

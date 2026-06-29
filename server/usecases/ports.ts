@@ -1203,11 +1203,6 @@ export class RunnerConflictError extends Error {
   }
 }
 
-export interface RunnerCredentialRef {
-  credentialId: string
-  versionId?: string
-}
-
 export interface RuntimeUsageWindow {
   label: string
   utilization: number
@@ -1232,7 +1227,7 @@ export interface RunnerRecord {
   name: string
   capabilities: string[]
   environmentId: string | null
-  credentialRef: RunnerCredentialRef | null
+  secretRef: string | null
   authMode: RunnerAuthMode
   state: string
   currentLoad: number
@@ -1277,7 +1272,7 @@ export interface CreateRunnerInput {
   name: string
   capabilities: string[]
   environmentId: string | null
-  credentialRef: RunnerCredentialRef | null
+  secretRef: string | null
   authMode: RunnerAuthMode
   oidcSubject: string | null
   oidcClientId: string | null
@@ -1336,10 +1331,10 @@ export interface RunnerRepo {
 
   // Reference validation against sibling resources.
   environmentUsable(projectId: string, environmentId: string): Promise<boolean>
-  credentialRefUsable(
+  secretRefUsable(
     organizationId: string,
     projectId: string,
-    ref: RunnerCredentialRef,
+    secretRef: string,
   ): Promise<{ credentialMissing: boolean; versionMissing: boolean }>
 }
 

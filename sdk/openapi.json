@@ -2924,8 +2924,8 @@
             "nullable": true,
             "example": "env_abc123"
           },
-          "credentialRef": {
-            "$ref": "#/components/schemas/NullableCredentialRef"
+          "secretRef": {
+            "$ref": "#/components/schemas/NullableSecretRef"
           },
           "authMode": {
             "type": "string",
@@ -3003,7 +3003,7 @@
           "name",
           "capabilities",
           "environmentId",
-          "credentialRef",
+          "secretRef",
           "authMode",
           "state",
           "currentLoad",
@@ -3017,24 +3017,11 @@
           "updatedAt"
         ]
       },
-      "NullableCredentialRef": {
-        "type": "object",
+      "NullableSecretRef": {
+        "type": "string",
         "nullable": true,
-        "properties": {
-          "credentialId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "vaultcred_abc123"
-          },
-          "versionId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "vaultver_abc123"
-          }
-        },
-        "required": [
-          "credentialId"
-        ]
+        "minLength": 1,
+        "example": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
       },
       "RuntimeUsage": {
         "type": "object",
@@ -3142,8 +3129,10 @@
             "minLength": 1,
             "example": "env_abc123"
           },
-          "credentialRef": {
-            "$ref": "#/components/schemas/CredentialRef"
+          "secretRef": {
+            "type": "string",
+            "minLength": 1,
+            "example": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
           },
           "authMode": {
             "type": "string",
@@ -3175,24 +3164,6 @@
           "name"
         ],
         "additionalProperties": false
-      },
-      "CredentialRef": {
-        "type": "object",
-        "properties": {
-          "credentialId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "vaultcred_abc123"
-          },
-          "versionId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "vaultver_abc123"
-          }
-        },
-        "required": [
-          "credentialId"
-        ]
       },
       "RunnerListResponse": {
         "type": "object",

@@ -48,9 +48,15 @@ async function createRunnerCredential(authorization: string) {
   expect(credentialRes.status).toBe(201)
   const credential = (await credentialRes.json()) as {
     metadata: { uid: string }
-    status: { activeVersion: { metadata: { uid: string } } }
+    status: { activeVersion: { metadata: { uid: string }; spec: { secretRef: string } } }
   }
-  return { id: credential.metadata.uid, activeVersion: { id: credential.status.activeVersion.metadata.uid } }
+  return {
+    id: credential.metadata.uid,
+    activeVersion: {
+      id: credential.status.activeVersion.metadata.uid,
+      secretRef: credential.status.activeVersion.spec.secretRef,
+    },
+  }
 }
 
 describe('[CF] /api/v1/runners', () => {
@@ -58,7 +64,7 @@ describe('[CF] /api/v1/runners', () => {
     await setupOidcProvider()
   })
 
-  it('registers a runner with a vault credential ref and serves the heartbeat singleton [spec: runners/heartbeat]', async () => {
+  it('registers a runner with a vault secret ref and serves the heartbeat singleton [spec: runners/heartbeat]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const credential = await createRunnerCredential(authorization)
@@ -69,7 +75,7 @@ describe('[CF] /api/v1/runners', () => {
         name: 'Local runner',
         environmentId: environment.id,
         capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
-        credentialRef: { credentialId: credential.id, versionId: credential.activeVersion.id },
+        secretRef: credential.activeVersion.secretRef,
         maxConcurrent: 2,
         metadata: { pool: 'default' },
       }),
@@ -80,7 +86,7 @@ describe('[CF] /api/v1/runners', () => {
       state: 'offline',
       environmentId: environment.id,
       capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
-      credentialRef: { credentialId: credential.id, versionId: credential.activeVersion.id },
+      secretRef: credential.activeVersion.secretRef,
       maxConcurrent: 2,
       archivedAt: null,
       lastHeartbeatAt: null,
@@ -139,20 +145,20 @@ describe('[CF] /api/v1/runners', () => {
     })
   })
 
-  it('rejects credential refs that are not active vault credentials', async () => {
+  it('rejects secret refs that are not active vault credentials', async () => {
     const authorization = await signIn()
     const res = await jsonFetch('/api/v1/runners', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Bad credential runner',
-        credentialRef: { credentialId: 'cred_missing' },
+        secretRef: 'ama://vaults/vault_missing/credentials/cred_missing',
       }),
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({
       error: {
         type: 'validation_error',
-        details: { fields: { credentialRef: expect.stringContaining('not an active vault credential') } },
+        details: { fields: { secretRef: expect.stringContaining('not an active vault credential') } },
       },
     })
   })

@@ -13,7 +13,6 @@ import {
   type CreateRunnerInput,
   type RunnerAuthRecord,
   RunnerConflictError,
-  type RunnerCredentialRef,
   RunnerValidationError,
   type RuntimeInventoryEntry,
   type RuntimeUsage,
@@ -23,7 +22,7 @@ export interface RegisterRunnerInput {
   name: string
   capabilities: string[]
   environmentId: string | undefined
-  credentialRef: RunnerCredentialRef | undefined
+  secretRef: string | undefined
   authMode: RunnerAuthMode | undefined
   maxConcurrent: number
   metadata: Record<string, unknown>
@@ -36,7 +35,7 @@ export interface RegisterRunnerResult {
 
 // Registers (or federated re-registers) a self-hosted runner: rejects raw
 // secret material, resolves the OIDC binding, validates the environment and
-// credential references, and reuses a machine-bound runner row when present.
+// secret references, and reuses a machine-bound runner row when present.
 export async function registerRunner(
   deps: Deps,
   auth: AuthScope,
@@ -55,16 +54,16 @@ export async function registerRunner(
   if (bindingFields) {
     throw new RunnerValidationError('Runner OIDC token is missing required binding claims', bindingFields)
   }
-  if (input.credentialRef) {
-    const usable = await deps.runners.credentialRefUsable(auth.organization.id, auth.project.id, input.credentialRef)
+  if (input.secretRef) {
+    const usable = await deps.runners.secretRefUsable(auth.organization.id, auth.project.id, input.secretRef)
     if (usable.credentialMissing) {
-      throw new RunnerValidationError('Runner credential reference is invalid', {
-        credentialRef: 'Runner credential reference is not an active vault credential.',
+      throw new RunnerValidationError('Runner secret reference is invalid', {
+        secretRef: 'Runner secret reference is not an active vault credential.',
       })
     }
     if (usable.versionMissing) {
-      throw new RunnerValidationError('Runner credential reference is invalid', {
-        credentialRef: 'Runner credential reference is not an active credential version.',
+      throw new RunnerValidationError('Runner secret reference is invalid', {
+        secretRef: 'Runner secret reference is not an active credential version.',
       })
     }
   }
@@ -74,7 +73,7 @@ export async function registerRunner(
     name: input.name,
     capabilities: input.capabilities,
     environmentId: environmentId ?? null,
-    credentialRef: input.credentialRef ?? null,
+    secretRef: input.secretRef ?? null,
     authMode,
     oidcSubject: oidc.subject,
     oidcClientId: oidc.clientId,

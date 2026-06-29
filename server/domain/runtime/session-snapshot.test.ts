@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeWorkspaceSpec, workspaceSpec } from '../workspace'
-import { agentSnapshotWithWorkspaceContext, type SerializedAgentVersion } from './session-snapshot'
+import { type AgentSnapshot, agentSnapshotWithWorkspaceContext } from './session-snapshot'
 
-function agentSnapshot(overrides: Partial<SerializedAgentVersion> = {}): SerializedAgentVersion {
+function agentSnapshot(overrides: Partial<AgentSnapshot> = {}): AgentSnapshot {
   return {
     id: 'agentver_1',
     agentId: 'agent_1',

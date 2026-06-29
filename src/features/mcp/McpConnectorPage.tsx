@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
 import { buttonVariants } from '@/components/ui/button'
 import { DetailSection, EmptyState, Meta, MetaGrid, PageHeader, StatusBadge } from '@/console/components'
-import { ApiError, api, type Connector } from '@/lib/api'
+import { ApiError, api, type Connector } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 import { connectorDisabledReason } from './McpView'
 
@@ -102,7 +102,7 @@ function setupInstructions(connector: Connector) {
     for (const requirement of connector.setupRequirements) {
       instructions.push(`Store a ${requirement} credential in a project vault.`)
     }
-    instructions.push('Connect the connector with the vault credential reference.')
+    instructions.push('Connect the connector with the vault secret reference.')
   } else {
     instructions.push('Connect the connector; no credential is required.')
   }

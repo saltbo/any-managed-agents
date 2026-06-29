@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Provider } from '@/lib/api'
+import type { Provider } from '@/lib/amarpc'
 import { agent as resourceAgent, environment as resourceEnvironment } from '@/test/resource-fixtures'
 import { buildTestSession } from '@/testing/session'
 import {
@@ -67,7 +67,7 @@ describe('quickstart step sequencing [spec: quickstart/step-sequencing]', () => 
 describe('quickstart step sequencing — all-complete fallback [spec: quickstart/step-sequencing]', () => {
   it('returns integration when all steps are complete (firstIncompleteStep fallback)', () => {
     const completion = quickstartCompletion({
-      providers: [{ enabled: true } as import('@/lib/api').Provider],
+      providers: [{ enabled: true } as import('@/lib/amarpc').Provider],
       environments: [resourceEnvironment()],
       agents: [resourceAgent()],
       sessions: [buildTestSession({ phase: 'idle' })],

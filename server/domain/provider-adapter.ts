@@ -68,7 +68,7 @@ export function providerFamily(value: string | null | undefined): ProviderFamily
 }
 
 const CATEGORY_MESSAGES: Record<ProviderErrorCategory, string> = {
-  auth: 'Provider rejected the configured credential. Update the provider credential reference.',
+  auth: 'Provider rejected the configured credential. Update the provider secret reference.',
   quota: 'Provider account quota is exhausted. Review the provider plan or budget.',
   rate_limit: 'Provider rate limit reached. Retry after the provider cooldown.',
   model_unavailable: 'Requested model is unavailable at the provider. Pick another model from the catalog.',

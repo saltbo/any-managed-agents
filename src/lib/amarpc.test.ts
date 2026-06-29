@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agent, credential, environment, vault } from '@/test/resource-fixtures'
-import { ApiError, api } from './api'
+import { ApiError, api } from './amarpc'
 
 describe('shared API client [spec: web-console/rpc-client]', () => {
   beforeEach(() => {

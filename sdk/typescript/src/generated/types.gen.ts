@@ -747,7 +747,7 @@ export type Runner = {
     name: string;
     capabilities: Array<string>;
     environmentId: string | null;
-    credentialRef: NullableCredentialRef;
+    secretRef: NullableSecretRef;
     authMode: 'bearer' | 'mtls' | 'oidc' | 'federated';
     state: 'active' | 'draining' | 'disabled' | 'offline';
     currentLoad: number;
@@ -763,10 +763,7 @@ export type Runner = {
     updatedAt: string;
 };
 
-export type NullableCredentialRef = {
-    credentialId: string;
-    versionId?: string;
-} | null;
+export type NullableSecretRef = string | null;
 
 export type RuntimeUsage = {
     runtime: string;
@@ -790,17 +787,12 @@ export type CreateRunnerRequest = {
     name: string;
     capabilities?: Array<string>;
     environmentId?: string;
-    credentialRef?: CredentialRef;
+    secretRef?: string;
     authMode?: 'bearer' | 'mtls' | 'oidc' | 'federated';
     maxConcurrent?: number;
     metadata?: {
         [key: string]: unknown;
     };
-};
-
-export type CredentialRef = {
-    credentialId: string;
-    versionId?: string;
 };
 
 export type RunnerListResponse = {

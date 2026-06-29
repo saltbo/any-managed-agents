@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DetailSection, StatusBadge, TableEmpty, TableSurface } from '@/console/components'
 import { archivedLabel, formatDate } from '@/console/format'
-import type { Agent, Session } from '@/lib/api'
+import type { Agent, Session } from '@/lib/amarpc'
 
 function isAgent(item: Agent | Session): item is Agent {
   return 'instructions' in item.spec

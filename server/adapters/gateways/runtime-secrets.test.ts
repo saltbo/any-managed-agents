@@ -59,7 +59,7 @@ describe('[spec: runtime-secrets/gateway] createRuntimeSecretGateway', () => {
     expect(result).toEqual({})
   })
 
-  it('throws when a credential reference cannot be resolved', async () => {
+  it('throws when a secret reference cannot be resolved', async () => {
     secretVersionForResolutionMock.mockResolvedValueOnce(null)
     const gateway = createRuntimeSecretGateway(env, fakeDb)
     await expect(gateway.resolveEnv(scope, items)).rejects.toThrow('cannot be resolved')

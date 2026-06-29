@@ -8,8 +8,8 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { parseJsonObject } from '@/console/format'
-import type { VaultCredential } from '@/lib/api'
-import { api } from '@/lib/api'
+import type { VaultCredential } from '@/lib/amarpc'
+import { api } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 

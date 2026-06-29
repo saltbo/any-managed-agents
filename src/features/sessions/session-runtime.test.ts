@@ -5,7 +5,7 @@ import {
   amaSessionEventTypeFromPayload,
 } from '@shared/session-events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SessionEvent } from '@/lib/api'
+import type { SessionEvent } from '@/lib/amarpc'
 import * as oidcModule from '@/lib/oidc'
 import { initialSessionRuntimeState, runtimeWebSocketUrl, sessionRuntimeReducer } from './session-runtime'
 

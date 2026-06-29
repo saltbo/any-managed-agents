@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
-import type { Memory, MemoryStore } from '@server/domain/memory-store'
 import { normalizeMemoryPath } from '@server/domain/memory-store'
 import { requireAuth } from '../auth/session'
 import {
@@ -101,14 +100,6 @@ function conflict(message: string) {
 
 function notFound(message: string) {
   return { error: { type: 'not_found', message } } as const
-}
-
-function serializeStore(record: MemoryStore) {
-  return { ...record }
-}
-
-function serializeMemory(record: Memory) {
-  return { ...record }
 }
 
 function memoryStoresRepo(deps: { memoryStores?: MemoryStoreRepo }) {
@@ -295,10 +286,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json(
-        { data: page.rows.map(serializeStore), pagination: { limit, nextCursor, hasMore: page.hasMore } },
-        200,
-      )
+      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
     })
     .openapi(createStoreRoute, async (c) => {
       const deps = c.get('deps')
@@ -321,9 +309,9 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
         resourceId: store.metadata.uid,
         outcome: 'success',
         requestId: requestId(c),
-        after: serializeStore(store),
+        after: store,
       })
-      return c.json(serializeStore(store), 201)
+      return c.json(store, 201)
     })
     .openapi(readStoreRoute, async (c) => {
       const deps = c.get('deps')
@@ -333,7 +321,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
       const { storeId } = c.req.valid('param')
       const store = await memoryStores.find(auth.project.id, storeId)
       if (!store) return c.json(notFound('Memory store not found'), 404)
-      return c.json(serializeStore(store), 200)
+      return c.json(store, 200)
     })
     .openapi(updateStoreRoute, async (c) => {
       const deps = c.get('deps')
@@ -364,10 +352,10 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
         resourceId: storeId,
         outcome: 'success',
         requestId: requestId(c),
-        before: serializeStore(current),
-        after: serializeStore(updated),
+        before: current,
+        after: updated,
       })
-      return c.json(serializeStore(updated), 200)
+      return c.json(updated, 200)
     })
     .openapi(listMemoriesRoute, async (c) => {
       const deps = c.get('deps')
@@ -388,10 +376,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json(
-        { data: page.rows.map(serializeMemory), pagination: { limit, nextCursor, hasMore: page.hasMore } },
-        200,
-      )
+      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
     })
     .openapi(createMemoryRoute, async (c) => {
       const deps = c.get('deps')
@@ -423,7 +408,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
           requestId: requestId(c),
           after: { id: memory.metadata.uid, path: memory.spec.path },
         })
-        return c.json(serializeMemory(memory), 201)
+        return c.json(memory, 201)
       } catch (error) {
         if (isUniqueError(error)) return c.json(conflict('Memory path already exists'), 409)
         throw error
@@ -467,7 +452,7 @@ export function registerMemoryStoreRoutes(routes: MemoryStoreRoutes) {
           before: { id: current.metadata.uid, path: current.spec.path },
           after: { id: updated.metadata.uid, path: updated.spec.path },
         })
-        return c.json(serializeMemory(updated), 200)
+        return c.json(updated, 200)
       } catch (error) {
         if (isUniqueError(error)) return c.json(conflict('Memory path already exists'), 409)
         throw error

@@ -4,6 +4,7 @@ import type {
   AgentVersion,
   Environment,
   EnvironmentSpec,
+  JsonObject,
   MemoryStore,
   MemoryStoreMemory,
   ResourceMetadata,
@@ -11,7 +12,7 @@ import type {
   Vault,
   VaultCredential,
   VaultCredentialVersion,
-} from '@/lib/api'
+} from '@/lib/amarpc'
 
 const now = '2026-05-23T00:00:00.000Z'
 
@@ -129,7 +130,7 @@ export function environment(overrides: EnvironmentOverrides = {}): Environment {
 export type VaultOverrides = ResourceMetadataOverrides & {
   organizationId?: string
   scope?: 'project' | 'organization'
-  metadata?: Record<string, unknown>
+  metadata?: JsonObject
 }
 
 export function vault(overrides: VaultOverrides = {}): Vault {
@@ -161,7 +162,7 @@ export type VaultCredentialVersionOverrides = ResourceMetadataOverrides & {
   referenceName?: string
   hasSecret?: boolean
   dataKeys?: string[]
-  metadata?: Record<string, unknown>
+  metadata?: JsonObject
   phase?: 'active' | 'superseded' | 'revoked'
   supersededAt?: string | null
   revokedAt?: string | null
@@ -194,7 +195,7 @@ export type VaultCredentialOverrides = ResourceMetadataOverrides & {
   vaultId?: string
   organizationId?: string
   type?: VaultCredential['spec']['type']
-  metadata?: Record<string, unknown>
+  metadata?: JsonObject
   phase?: 'active' | 'revoked'
   activeVersionId?: string | null
   activeVersion?: VaultCredentialVersion | null
@@ -227,7 +228,7 @@ export function credential(overrides: VaultCredentialOverrides = {}): VaultCrede
 }
 
 export type MemoryStoreOverrides = ResourceMetadataOverrides & {
-  metadata?: Record<string, unknown>
+  metadata?: JsonObject
 }
 
 export function memoryStore(overrides: MemoryStoreOverrides = {}): MemoryStore {
@@ -246,7 +247,7 @@ export type MemoryOverrides = ResourceMetadataOverrides & {
   storeId?: string
   path?: string
   content?: string
-  metadata?: Record<string, unknown>
+  metadata?: JsonObject
 }
 
 export function memory(overrides: MemoryOverrides = {}): MemoryStoreMemory {
@@ -276,7 +277,7 @@ export type TriggerOverrides = ResourceMetadataOverrides & {
   volumeMounts?: Trigger['spec']['volumeMounts']
   schedule?: Trigger['spec']['schedule']
   enabled?: boolean
-  metadata?: Record<string, unknown>
+  metadata?: JsonObject
   nextDueAt?: string | null
   lastDispatchedAt?: string | null
   lastRunId?: string | null

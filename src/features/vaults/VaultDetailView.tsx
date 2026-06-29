@@ -12,7 +12,7 @@ import {
   TableSurface,
 } from '@/console/components'
 import { archivedLabel, formatDate, isArchived, stringifyJson } from '@/console/format'
-import type { AuditRecord, Vault, VaultCredential } from '@/lib/api'
+import type { AuditRecord, Vault, VaultCredential } from '@/lib/amarpc'
 
 export function VaultDetailView({
   vault,

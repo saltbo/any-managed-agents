@@ -14,7 +14,7 @@ import type {
   UsageSummary,
   Vault,
   VaultCredential,
-} from './lib/api'
+} from './lib/amarpc'
 import {
   type AgentOverrides,
   agentVersion,
@@ -201,10 +201,10 @@ function mcpConnector(overrides: Partial<Connector> = {}): Connector {
     id: 'github',
     name: 'GitHub',
     description: 'Repository access',
-    category: 'source-control',
-    trustLevel: 'official',
+    category: 'development',
+    trustLevel: 'verified',
     capabilities: ['repo'],
-    supportedAuthModes: ['api_key'],
+    supportedAuthModes: ['vault_credential'],
     setupRequirements: ['credential'],
     tools: [
       {
@@ -659,7 +659,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'MCP' }))
     expect(window.location.pathname).toBe('/settings/mcp')
     expect(await screen.findByText('MCP connectors')).toBeTruthy()
-    expect(screen.getByText('source-control')).toBeTruthy()
+    expect(screen.getByText('development')).toBeTruthy()
     expect(screen.getByText('repo')).toBeTruthy()
     expect(screen.getByText(/Setup: credential/)).toBeTruthy()
 

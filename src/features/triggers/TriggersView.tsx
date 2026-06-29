@@ -5,7 +5,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatRelativeTime } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Trigger } from '@/lib/api'
+import type { Trigger } from '@/lib/amarpc'
 
 export function formatInterval(intervalSeconds: number) {
   if (intervalSeconds % 86400 === 0) {

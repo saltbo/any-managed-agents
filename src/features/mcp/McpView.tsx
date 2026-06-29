@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { StatusBadge, TableEmpty, TablePagination, TableSurface } from '@/console/components'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Connector } from '@/lib/api'
+import type { Connector } from '@/lib/amarpc'
 
 export function connectorDisabledReason(connector: Connector) {
   if (connector.availability === 'unavailable') {

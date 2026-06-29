@@ -14,7 +14,6 @@ from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.nullable_credential_ref_type_0 import NullableCredentialRefType0
   from ..models.runner_metadata import RunnerMetadata
   from ..models.runner_runtime_inventory import RunnerRuntimeInventory
   from ..models.runtime_usage import RuntimeUsage
@@ -36,7 +35,8 @@ class Runner:
             name (str):  Example: mac-mini-build-runner.
             capabilities (list[str]):  Example: ['node', 'git', 'sandbox.exec'].
             environment_id (None | str):  Example: env_abc123.
-            credential_ref (None | NullableCredentialRefType0):
+            secret_ref (None | str):  Example:
+                ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123.
             auth_mode (RunnerAuthMode):  Example: oidc.
             state (RunnerState):  Example: active.
             current_load (int):
@@ -55,7 +55,7 @@ class Runner:
     name: str
     capabilities: list[str]
     environment_id: None | str
-    credential_ref: None | NullableCredentialRefType0
+    secret_ref: None | str
     auth_mode: RunnerAuthMode
     state: RunnerState
     current_load: int
@@ -74,7 +74,6 @@ class Runner:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.nullable_credential_ref_type_0 import NullableCredentialRefType0
         from ..models.runner_metadata import RunnerMetadata
         from ..models.runner_runtime_inventory import RunnerRuntimeInventory
         from ..models.runtime_usage import RuntimeUsage
@@ -91,11 +90,8 @@ class Runner:
         environment_id: None | str
         environment_id = self.environment_id
 
-        credential_ref: dict[str, Any] | None
-        if isinstance(self.credential_ref, NullableCredentialRefType0):
-            credential_ref = self.credential_ref.to_dict()
-        else:
-            credential_ref = self.credential_ref
+        secret_ref: None | str
+        secret_ref = self.secret_ref
 
         auth_mode = self.auth_mode.value
 
@@ -146,7 +142,7 @@ class Runner:
             "name": name,
             "capabilities": capabilities,
             "environmentId": environment_id,
-            "credentialRef": credential_ref,
+            "secretRef": secret_ref,
             "authMode": auth_mode,
             "state": state,
             "currentLoad": current_load,
@@ -166,7 +162,6 @@ class Runner:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.nullable_credential_ref_type_0 import NullableCredentialRefType0
         from ..models.runner_metadata import RunnerMetadata
         from ..models.runner_runtime_inventory import RunnerRuntimeInventory
         from ..models.runtime_usage import RuntimeUsage
@@ -188,22 +183,12 @@ class Runner:
         environment_id = _parse_environment_id(d.pop("environmentId"))
 
 
-        def _parse_credential_ref(data: object) -> None | NullableCredentialRefType0:
+        def _parse_secret_ref(data: object) -> None | str:
             if data is None:
                 return data
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_nullable_credential_ref_type_0 = NullableCredentialRefType0.from_dict(data)
+            return cast(None | str, data)
 
-
-
-                return componentsschemas_nullable_credential_ref_type_0
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            return cast(None | NullableCredentialRefType0, data)
-
-        credential_ref = _parse_credential_ref(d.pop("credentialRef"))
+        secret_ref = _parse_secret_ref(d.pop("secretRef"))
 
 
         auth_mode = RunnerAuthMode(d.pop("authMode"))
@@ -297,7 +282,7 @@ class Runner:
             name=name,
             capabilities=capabilities,
             environment_id=environment_id,
-            credential_ref=credential_ref,
+            secret_ref=secret_ref,
             auth_mode=auth_mode,
             state=state,
             current_load=current_load,

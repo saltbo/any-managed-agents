@@ -5,7 +5,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { archivedLabel, formatDate } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Vault } from '@/lib/api'
+import type { Vault } from '@/lib/amarpc'
 
 export function VaultsView({
   vaults,
@@ -17,9 +17,7 @@ export function VaultsView({
   onArchive: (id: string) => void
 }) {
   if (vaults.length === 0) {
-    return (
-      <EmptyState title="No vaults" body="Create a vault to track safe credential references for providers and MCP." />
-    )
+    return <EmptyState title="No vaults" body="Create a vault to track safe secret references for providers and MCP." />
   }
   return (
     <TableSurface
@@ -64,7 +62,7 @@ export function VaultsView({
               <div className="flex justify-end">
                 <ConfirmAction
                   title="Archive vault?"
-                  description={`Archive ${vault.metadata.name}. Existing credential references remain auditable.`}
+                  description={`Archive ${vault.metadata.name}. Existing secret references remain auditable.`}
                   confirmLabel="Archive vault"
                   destructive
                   onConfirm={() => onArchive(vault.metadata.uid)}

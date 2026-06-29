@@ -5,11 +5,11 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { archivedLabel, formatDate } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Environment } from '@/lib/api'
+import type { Environment } from '@/lib/amarpc'
 
 function networkSummary(environment: Environment) {
   if (environment.spec.networkPolicy.mode === 'restricted') {
-    return `Restricted: ${environment.spec.networkPolicy.allowedHosts.join(', ')}`
+    return `Restricted: ${(environment.spec.networkPolicy.allowedHosts ?? []).join(', ')}`
   }
   return environment.spec.networkPolicy.mode
 }

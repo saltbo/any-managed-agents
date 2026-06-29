@@ -6,14 +6,14 @@ import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
-  CredentialRefSchema,
   type DepsEnv,
   ErrorResponseSchema,
   formatListCursor,
   listQuerySchema,
   listResponseSchema,
-  NullableCredentialRefSchema,
+  NullableSecretRefSchema,
   parseListCursor,
+  SecretRefSchema,
 } from '../openapi'
 import { type RunnerAuthRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
 import { recordRunnerHeartbeat, registerRunner, updateRunner } from '../usecases/runners'
@@ -68,7 +68,7 @@ const RunnerSchema = z
     name: z.string().openapi({ example: 'mac-mini-build-runner' }),
     capabilities: z.array(CapabilitySchema).openapi({ example: ['node', 'git', 'sandbox.exec'] }),
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
-    credentialRef: NullableCredentialRefSchema,
+    secretRef: NullableSecretRefSchema,
     authMode: z.enum(RUNNER_AUTH_MODES).openapi({ example: 'oidc' }),
     state: z.enum(RUNNER_STATES).openapi({ example: 'active' }),
     currentLoad: z.number().int().openapi({ example: 0 }),
@@ -104,7 +104,7 @@ const CreateRunnerSchema = z
       .optional()
       .openapi({ example: ['node', 'git'] }),
     environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
-    credentialRef: CredentialRefSchema.optional(),
+    secretRef: SecretRefSchema.optional(),
     authMode: z.enum(RUNNER_AUTH_MODES).optional().openapi({ example: 'bearer' }),
     maxConcurrent: z.number().int().min(1).max(100).optional().openapi({ example: 2 }),
     metadata: JsonObjectSchema.optional().openapi({ example: { pool: 'default' } }),
@@ -189,7 +189,7 @@ function serializeRunner(runner: RunnerAuthRecord) {
     name: runner.name,
     capabilities: runner.capabilities,
     environmentId: runner.environmentId,
-    credentialRef: runner.credentialRef,
+    secretRef: runner.secretRef,
     authMode: runner.authMode,
     state: runner.state as (typeof RUNNER_STATES)[number],
     currentLoad: runner.currentLoad,
@@ -426,17 +426,11 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
         return auth
       }
       try {
-        const credentialRef = body.credentialRef
-          ? {
-              credentialId: body.credentialRef.credentialId,
-              ...(body.credentialRef.versionId ? { versionId: body.credentialRef.versionId } : {}),
-            }
-          : undefined
         const { runner, reregistered } = await registerRunner(deps, auth, runnerOidcContext(c.env, auth), {
           name: body.name,
           capabilities: body.capabilities ?? [],
           ...(body.environmentId ? { environmentId: body.environmentId } : { environmentId: undefined }),
-          ...(credentialRef ? { credentialRef } : { credentialRef: undefined }),
+          ...(body.secretRef ? { secretRef: body.secretRef } : { secretRef: undefined }),
           ...(body.authMode ? { authMode: body.authMode } : { authMode: undefined }),
           maxConcurrent: body.maxConcurrent ?? 1,
           metadata: body.metadata ?? {},

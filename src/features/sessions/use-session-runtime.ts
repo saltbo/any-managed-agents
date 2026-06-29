@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { api, type Session, type SessionEvent } from '@/lib/api'
+import { api, type Session, type SessionEvent } from '@/lib/amarpc'
 import {
   initialSessionRuntimeState,
   type RuntimeRpcCommand,

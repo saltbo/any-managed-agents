@@ -106,7 +106,7 @@ export function stringArray(value: unknown): string[] {
 }
 
 // The free-form JSON config fields that must never carry raw secret material —
-// secrets belong in a vault credential reference, not inline configuration.
+// secrets belong in a vault secret reference, not inline configuration.
 export function validateSecretFreeObjects(values: {
   metadata: Record<string, unknown>
   mcpPolicy: Record<string, unknown>

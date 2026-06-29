@@ -1,7 +1,7 @@
 /**
  * Tests for QuickstartSessionStep and QuickstartSessionPreview.
  * Pattern: MSW + real api client, QueryClientProvider (retry:false) + MemoryRouter.
- * vi.spyOn is only used for useSessionRuntimeSession (a WebSocket hook, not @/lib/api).
+ * vi.spyOn is only used for useSessionRuntimeSession (a WebSocket hook, not @/lib/amarpc).
  *
  * QuickstartSessionPreview is a private component rendered when sessionId is set;
  * tests drive it through the public prop interface.
@@ -12,7 +12,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
-import type { Agent, Environment, Session, SessionConnection, SessionEvent } from '@/lib/api'
+import type { Agent, Environment, Session, SessionConnection, SessionEvent } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,
@@ -53,7 +53,7 @@ function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
   })
 }
 
-const defaultAgentSnapshot: import('@/lib/api').SessionAgentSnapshot = {
+const defaultAgentSnapshot: import('@/lib/amarpc').SessionAgentSnapshot = {
   id: 'agentver_1',
   agentId: 'agent_1',
   projectId: 'project_1',

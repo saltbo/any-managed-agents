@@ -3,11 +3,11 @@ import { Button } from '@/components/ui/button'
 import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, StatusBadge } from '@/console/components'
 import { archivedLabel, isArchived, stringifyJson } from '@/console/format'
 import { RelatedResourcesTable } from '@/features/console/related-resources-table'
-import type { Environment, Session } from '@/lib/api'
+import type { Environment, Session } from '@/lib/amarpc'
 
 function networkSummary(environment: Environment) {
   if (environment.spec.networkPolicy.mode === 'restricted') {
-    return `Restricted: ${environment.spec.networkPolicy.allowedHosts.join(', ')}`
+    return `Restricted: ${(environment.spec.networkPolicy.allowedHosts ?? []).join(', ')}`
   }
   return environment.spec.networkPolicy.mode
 }

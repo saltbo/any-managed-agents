@@ -36,7 +36,6 @@ func TestClientFacadeConfiguresHeadersAndCallsGeneratedOperation(t *testing.T) {
 			"authMode": "oidc",
 			"capabilities": [],
 			"createdAt": "2026-01-01T00:00:00Z",
-			"credentialRef": {},
 			"currentLoad": 0,
 			"environmentId": null,
 			"id": "runner_1",
@@ -47,6 +46,7 @@ func TestClientFacadeConfiguresHeadersAndCallsGeneratedOperation(t *testing.T) {
 			"projectId": "project_1",
 			"runtimeInventory": [],
 			"runtimeUsage": [],
+			"secretRef": null,
 			"state": "active",
 			"updatedAt": "2026-01-01T00:00:00Z"
 		}`))

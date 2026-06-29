@@ -5,7 +5,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatDate, formatDuration, isArchived } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Session } from '@/lib/api'
+import type { Session } from '@/lib/amarpc'
 
 export function SessionsView({
   sessions,

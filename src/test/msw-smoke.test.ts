@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { api } from '@/lib/api'
+import { api } from '@/lib/amarpc'
 import { createCollection, resourceHandlers, server } from './msw'
 import { agent } from './resource-fixtures'
 

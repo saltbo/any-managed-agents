@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { delay } from 'msw'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Agent, AuthContext, Project, Session } from '@/lib/api'
+import type { Agent, AuthContext, Project, Session } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import { type AgentOverrides, agent as resourceAgent } from '@/test/resource-fixtures'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
@@ -612,8 +612,8 @@ describe('[spec: web-console/project-switcher] CreateProjectSheet', () => {
 // ConsoleLayout calls getCurrentUser() (from @/lib/oidc) and api.listProjects()
 // (which hits GET /api/v1/projects). The e2e localStorage token set by setup.ts
 // makes getCurrentUser fast-path to an e2e user, so happy-path tests need no spy.
-// Error/null-user tests spy only on @/lib/oidc (allowed — not @/lib/api).
-// The projects endpoint is handled by MSW — no @/lib/api mock ever.
+// Error/null-user tests spy only on @/lib/oidc (allowed — not @/lib/amarpc).
+// The projects endpoint is handled by MSW — no @/lib/amarpc mock ever.
 //
 // IMPORTANT: the e2e token in localStorage is also used by getAccessToken() for
 // API request headers. Never remove it — only spy on getCurrentUser when you need

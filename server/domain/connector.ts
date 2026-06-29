@@ -87,7 +87,7 @@ export const DEFAULT_CONNECTORS: readonly ConnectorCatalogEntry[] = [
 // rows exist.
 export const PLATFORM_CONNECTOR_IDS: readonly string[] = DEFAULT_CONNECTORS.map((connector) => connector.id)
 
-// Whether a connector's auth modes require a vault credential reference.
+// Whether a connector's auth modes require a vault secret reference.
 export function requiresVaultCredential(supportedAuthModes: string[]) {
   return supportedAuthModes.includes('vault_credential')
 }

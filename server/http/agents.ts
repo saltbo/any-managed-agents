@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
-import type { Agent, AgentMemory, AgentVersion } from '@server/domain/agent'
 import { normalizeToolAttachments } from '@server/domain/agent'
 import { requireAuth } from '../auth/session'
 import {
@@ -227,18 +226,6 @@ function domainValidation(message: string, fields: Record<string, string>) {
   return { error: { type: 'validation_error', message, details: { fields } } } as const
 }
 
-function serializeAgent(record: Agent) {
-  return record
-}
-
-function serializeAgentVersion(record: AgentVersion) {
-  return record
-}
-
-function serializeAgentMemory(record: AgentMemory) {
-  return record
-}
-
 const listAgentsRoute = createRoute({
   method: 'get',
   path: '/',
@@ -432,7 +419,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         {
-          data: page.rows.map(serializeAgent),
+          data: page.rows,
           pagination: { limit, nextCursor, hasMore: page.hasMore },
         },
         200,
@@ -451,7 +438,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
           description: body.description ?? null,
           config: configFromPayload(body),
         })
-        return c.json(serializeAgent(agent), 201)
+        return c.json(agent, 201)
       } catch (error) {
         return validationOr(c, error)
       }
@@ -467,7 +454,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!agent) {
         return notFound(c)
       }
-      return c.json(serializeAgent(agent), 200)
+      return c.json(agent, 200)
     })
     .openapi(updateAgentRoute, async (c) => {
       const { agentId } = c.req.valid('param')
@@ -492,7 +479,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
             resourceId: agentId,
             outcome: 'success',
             requestId: requestId(c),
-            before: serializeAgent(before),
+            before,
             after: { archivedAt: result.agent.metadata.archivedAt },
           })
         } else if (before.metadata.archivedAt && result.agent.metadata.archivedAt === null) {
@@ -506,7 +493,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
             after: { archivedAt: null },
           })
         }
-        return c.json(serializeAgent(result.agent), 200)
+        return c.json(result.agent, 200)
       } catch (error) {
         if (error instanceof AgentArchivedError) {
           return c.json({ error: { type: 'conflict', message: error.message } }, 409)
@@ -528,7 +515,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       const versions = await deps.agents.listVersions(auth.project.id, agentId)
       return c.json(
         {
-          data: versions.map(serializeAgentVersion),
+          data: versions,
           pagination: { limit: versions.length, nextCursor: null, hasMore: false },
         },
         200,
@@ -549,7 +536,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!row) {
         return c.json({ error: { type: 'not_found', message: 'Agent version not found' } }, 404)
       }
-      return c.json(serializeAgentVersion(row), 200)
+      return c.json(row, 200)
     })
     .openapi(listAgentHandoffCandidatesRoute, async (c) => {
       const { agentId } = c.req.valid('param')
@@ -591,7 +578,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
         return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
       }
       const memory = await readAgentMemory(deps, auth.project.id, agent)
-      return c.json(serializeAgentMemory(memory), 200)
+      return c.json(memory, 200)
     })
     .openapi(replaceAgentMemoryRoute, async (c) => {
       const { agentId } = c.req.valid('param')
@@ -613,7 +600,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
           content: body.content,
           metadata: body.metadata ?? {},
         })
-        return c.json(serializeAgentMemory(memory), 200)
+        return c.json(memory, 200)
       } catch (error) {
         return validationOr(c, error)
       }

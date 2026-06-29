@@ -9,7 +9,7 @@ import { PageHeader } from '@/console/components'
 import { isArchived, parsePackages, parseVariables, stringifyJson } from '@/console/format'
 import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
-import { api, type Environment, type EnvironmentNetworkPolicy } from '@/lib/api'
+import { api, type Environment, type EnvironmentNetworkPolicy } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { EnvironmentDetailView } from './EnvironmentDetailView'
@@ -23,7 +23,7 @@ function formStateFromEnvironment(environment: Environment): EnvironmentFormStat
     networkMode: environment.spec.networkPolicy.mode,
     allowedHosts:
       environment.spec.networkPolicy.mode === 'restricted'
-        ? environment.spec.networkPolicy.allowedHosts.join('\n')
+        ? (environment.spec.networkPolicy.allowedHosts ?? []).join('\n')
         : '',
     packages: environment.spec.packages.map((pkg) => `${pkg.name}@${pkg.version ?? 'latest'}`).join('\n'),
     variables: Object.entries(environment.spec.variables)

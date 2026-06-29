@@ -16,7 +16,7 @@ import {
   emptyBuilderDraft,
   toAgentInput,
 } from '@/features/agents/agent-builder-model'
-import { api } from '@/lib/api'
+import { api } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { QuickstartSessionStep } from './QuickstartSessionStep'

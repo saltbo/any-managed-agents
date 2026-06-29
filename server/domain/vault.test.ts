@@ -130,7 +130,7 @@ describe('[spec: vaults/version-delete] secretRefPinsVersion', () => {
     expect(secretRefPinsVersion('ama://vaults/vault_1/credentials/cred_1/versions/ver_1', version)).toBe(true)
   })
 
-  it('ignores a credential reference without a pinned version', () => {
+  it('ignores a secret reference without a pinned version', () => {
     expect(secretRefPinsVersion('ama://vaults/vault_1/credentials/cred_1', version)).toBe(false)
   })
 

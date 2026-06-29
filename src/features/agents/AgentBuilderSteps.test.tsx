@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import type { Connector, Environment, ProviderModel } from '@/lib/api'
+import type { Connector, Environment, ProviderModel } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import { type EnvironmentOverrides, environment as resourceEnvironment } from '@/test/resource-fixtures'
 import {
@@ -33,10 +33,10 @@ function buildConnector(overrides: Partial<Connector> = {}): Connector {
     id: 'connector_1',
     name: 'GitHub connector',
     description: 'Provides GitHub API access',
-    category: 'vcs',
-    trustLevel: 'trusted',
+    category: 'development',
+    trustLevel: 'verified',
     capabilities: ['read'],
-    supportedAuthModes: ['token'],
+    supportedAuthModes: ['vault_credential'],
     setupRequirements: [],
     tools: [
       {
@@ -558,7 +558,7 @@ describe('ToolsStep', () => {
         {
           name: 'tool_x',
           description: null,
-          inputSchema: null as unknown as Record<string, unknown>,
+          inputSchema: {},
           approvalMode: 'none',
           policyMetadata: {},
         },

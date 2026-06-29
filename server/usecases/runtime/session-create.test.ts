@@ -21,8 +21,8 @@ const {
   resolveSessionProviderIdMock,
   validateRuntimeProviderModelMock,
   resolveSessionProviderConfigMock,
-  serializeAgentVersionMock,
-  serializeEnvironmentVersionMock,
+  createAgentSnapshotMock,
+  createEnvironmentSnapshotMock,
   insertSessionMock,
   updateSessionWhenStateMock,
   findAgentMock,
@@ -45,8 +45,8 @@ const {
   resolveSessionProviderIdMock: vi.fn(async () => 'anthropic'),
   validateRuntimeProviderModelMock: vi.fn(async () => true),
   resolveSessionProviderConfigMock: vi.fn(async () => ({ ok: true, config: null })),
-  serializeAgentVersionMock: vi.fn(() => ({ id: 'agentver_1', providerId: 'anthropic', model: '@cf/x' })),
-  serializeEnvironmentVersionMock: vi.fn(() => ({ id: 'envver_1', hostingMode: 'cloud', runtimeConfig: {} })),
+  createAgentSnapshotMock: vi.fn(() => ({ id: 'agentver_1', providerId: 'anthropic', model: '@cf/x' })),
+  createEnvironmentSnapshotMock: vi.fn(() => ({ id: 'envver_1', hostingMode: 'cloud', runtimeConfig: {} })),
   insertSessionMock: vi.fn(async () => undefined),
   updateSessionWhenStateMock: vi.fn<
     (projectId: string, sessionId: string, expected: string | string[], fields: Record<string, unknown>) => boolean
@@ -69,8 +69,8 @@ vi.mock('./provisioning', async (importOriginal) => ({
 
 vi.mock('@server/domain/runtime/session-snapshot', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@server/domain/runtime/session-snapshot')>()),
-  serializeAgentVersion: serializeAgentVersionMock,
-  serializeEnvironmentVersion: serializeEnvironmentVersionMock,
+  createAgentSnapshot: createAgentSnapshotMock,
+  createEnvironmentSnapshot: createEnvironmentSnapshotMock,
 }))
 
 // The inline cloud launch delegates to the cloud-turn usecase; the queued path

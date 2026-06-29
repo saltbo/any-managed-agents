@@ -4,8 +4,8 @@ import { buttonVariants } from '@/components/ui/button'
 import { DetailSection, EmptyState, Meta, MetaGrid, PageHeader, StatusBadge } from '@/console/components'
 import { formatDate, stringifyJson } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
-import type { AuditRecord } from '@/lib/api'
-import { api } from '@/lib/api'
+import type { AuditRecord } from '@/lib/amarpc'
+import { api } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 
 const RESOURCE_ROUTES: Record<string, string> = {

@@ -29,7 +29,7 @@ function runnerRecord(overrides: Partial<RunnerAuthRecord> = {}): RunnerAuthReco
     name: 'Runner',
     capabilities: [],
     environmentId: null,
-    credentialRef: null,
+    secretRef: null,
     authMode: 'bearer',
     state: 'offline',
     currentLoad: 0,
@@ -57,7 +57,7 @@ function fakeDeps(repo: Partial<Deps['runners']> = {}): Deps {
     update: async (_p, id, fields) => runnerRecord({ id, ...fields }),
     heartbeat: async (_p, id, fields) => runnerRecord({ id, ...fields, lastHeartbeatAt: '2026-02-02T00:00:00.000Z' }),
     environmentUsable: async () => true,
-    credentialRefUsable: async () => ({ credentialMissing: false, versionMissing: false }),
+    secretRefUsable: async () => ({ credentialMissing: false, versionMissing: false }),
     ...repo,
   }
   return { runners } as unknown as Deps
@@ -69,7 +69,7 @@ describe('[spec: runners/register] registerRunner', () => {
       name: 'Local runner',
       capabilities: ['node'],
       environmentId: 'env_1',
-      credentialRef: { credentialId: 'cred_1' },
+      secretRef: 'ama://vaults/vault_1/credentials/cred_1',
       authMode: 'bearer',
       maxConcurrent: 2,
       metadata: { pool: 'default' },
@@ -84,7 +84,7 @@ describe('[spec: runners/register] registerRunner', () => {
         name: 'Leaky',
         capabilities: [],
         environmentId: undefined,
-        credentialRef: undefined,
+        secretRef: undefined,
         authMode: 'bearer',
         maxConcurrent: 1,
         metadata: { apiKey: 'raw' },
@@ -98,7 +98,7 @@ describe('[spec: runners/register] registerRunner', () => {
         name: 'Runner',
         capabilities: [],
         environmentId: 'env_missing',
-        credentialRef: undefined,
+        secretRef: undefined,
         authMode: 'bearer',
         maxConcurrent: 1,
         metadata: {},
@@ -106,17 +106,17 @@ describe('[spec: runners/register] registerRunner', () => {
     ).rejects.toBeInstanceOf(RunnerConflictError)
   })
 
-  it('rejects an invalid credential reference', async () => {
+  it('rejects an invalid secret reference', async () => {
     await expect(
       registerRunner(
-        fakeDeps({ credentialRefUsable: async () => ({ credentialMissing: true, versionMissing: false }) }),
+        fakeDeps({ secretRefUsable: async () => ({ credentialMissing: true, versionMissing: false }) }),
         auth,
         consoleOidc,
         {
           name: 'Runner',
           capabilities: [],
           environmentId: undefined,
-          credentialRef: { credentialId: 'cred_missing' },
+          secretRef: 'ama://vaults/vault_1/credentials/cred_missing',
           authMode: 'bearer',
           maxConcurrent: 1,
           metadata: {},
@@ -135,7 +135,7 @@ describe('[spec: runners/register] registerRunner', () => {
         name: 'Federated runner',
         capabilities: [],
         environmentId: undefined,
-        credentialRef: undefined,
+        secretRef: undefined,
         authMode: 'federated',
         maxConcurrent: 1,
         metadata: { machineId: 'mac-1' },
@@ -156,7 +156,7 @@ describe('[spec: runners/register] registerRunner', () => {
           name: 'Bad mode',
           capabilities: [],
           environmentId: undefined,
-          credentialRef: undefined,
+          secretRef: undefined,
           authMode: 'oidc',
           maxConcurrent: 1,
           metadata: {},
@@ -165,17 +165,17 @@ describe('[spec: runners/register] registerRunner', () => {
     ).rejects.toBeInstanceOf(RunnerValidationError)
   })
 
-  it('rejects an invalid credential version reference', async () => {
+  it('rejects an invalid secret version reference', async () => {
     await expect(
       registerRunner(
-        fakeDeps({ credentialRefUsable: async () => ({ credentialMissing: false, versionMissing: true }) }),
+        fakeDeps({ secretRefUsable: async () => ({ credentialMissing: false, versionMissing: true }) }),
         auth,
         consoleOidc,
         {
           name: 'Runner',
           capabilities: [],
           environmentId: undefined,
-          credentialRef: { credentialId: 'cred_1', versionId: 'ver_bad' } as never,
+          secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_bad',
           authMode: 'bearer',
           maxConcurrent: 1,
           metadata: {},
@@ -200,7 +200,7 @@ describe('[spec: runners/register] registerRunner', () => {
           name: 'Conflicting runner',
           capabilities: [],
           environmentId: undefined,
-          credentialRef: undefined,
+          secretRef: undefined,
           authMode: 'federated',
           maxConcurrent: 1,
           metadata: { machineId: 'mac-2' },

@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import { McpView } from '@/features/mcp/McpView'
-import type { Connector } from '@/lib/api'
+import type { Connector } from '@/lib/amarpc'
 
 function pagination<T>(items: T[]): ClientPagination<T> {
   return {
@@ -27,10 +27,10 @@ function connector(overrides: Partial<Connector> = {}): Connector {
     id: 'github',
     name: 'GitHub',
     description: 'Repository access',
-    category: 'source-control',
-    trustLevel: 'official',
+    category: 'development',
+    trustLevel: 'verified',
     capabilities: ['repo'],
-    supportedAuthModes: ['api_key'],
+    supportedAuthModes: ['vault_credential'],
     setupRequirements: ['credential'],
     tools: [
       {

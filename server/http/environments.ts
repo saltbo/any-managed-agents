@@ -1,7 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { normalizeEnvironmentNetworkPolicy } from '@server/contracts/environment-contracts'
 import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
-import type { Environment, EnvironmentVersion } from '@server/domain/environment'
 import { requireAuth } from '../auth/session'
 import { EnvironmentHostingModeSchema, EnvironmentNetworkPolicySchema } from '../contracts/environment-contracts'
 import {
@@ -159,14 +158,6 @@ function domainValidation(message: string, fields: Record<string, string>) {
   return { error: { type: 'validation_error', message, details: { fields } } } as const
 }
 
-function serializeEnvironment(record: Environment) {
-  return record
-}
-
-function serializeEnvironmentVersion(record: EnvironmentVersion) {
-  return record
-}
-
 const listRoute = createRoute({
   method: 'get',
   path: '/',
@@ -306,7 +297,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         {
-          data: page.rows.map(serializeEnvironment),
+          data: page.rows,
           pagination: { limit, nextCursor, hasMore: page.hasMore },
         },
         200,
@@ -325,7 +316,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
           description: body.description ?? null,
           config: configFromPayload(body),
         })
-        return c.json(serializeEnvironment(environment), 201)
+        return c.json(environment, 201)
       } catch (error) {
         return validationOr(c, error)
       }
@@ -341,7 +332,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       if (!environment) {
         return notFound(c)
       }
-      return c.json(serializeEnvironment(environment), 200)
+      return c.json(environment, 200)
     })
     .openapi(updateRoute, async (c) => {
       const { environmentId } = c.req.valid('param')
@@ -366,7 +357,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
             resourceId: environmentId,
             outcome: 'success',
             requestId: requestId(c),
-            before: serializeEnvironment(before),
+            before,
             after: { archivedAt: result.environment.metadata.archivedAt },
           })
         } else if (result.unarchived) {
@@ -380,7 +371,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
             after: { archivedAt: null },
           })
         }
-        return c.json(serializeEnvironment(result.environment), 200)
+        return c.json(result.environment, 200)
       } catch (error) {
         if (error instanceof EnvironmentArchivedError) {
           return c.json({ error: { type: 'conflict', message: error.message } }, 409)
@@ -402,7 +393,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       const versions = await deps.environments.listVersions(auth.project.id, environmentId)
       return c.json(
         {
-          data: versions.map(serializeEnvironmentVersion),
+          data: versions,
           pagination: { limit: versions.length, nextCursor: null, hasMore: false },
         },
         200,
@@ -423,7 +414,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       if (!row) {
         return c.json({ error: { type: 'not_found', message: 'Environment version not found' } }, 404)
       }
-      return c.json(serializeEnvironmentVersion(row), 200)
+      return c.json(row, 200)
     })
 }
 

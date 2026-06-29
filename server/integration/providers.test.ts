@@ -52,7 +52,7 @@ describe('[CF] providers v1 [spec: providers/api-catalog]', () => {
     const serialized = JSON.stringify(body)
     expect(serialized).not.toContain('"type"')
     expect(serialized).not.toContain('baseUrl')
-    expect(serialized).not.toContain('credentialRef')
+    expect(serialized).not.toContain('secretRef')
     expect(serialized).not.toContain('credentialStatus')
     expect(serialized).not.toContain('isDefault')
   })

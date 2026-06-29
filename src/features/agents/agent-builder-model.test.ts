@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError } from '@/lib/api'
+import { ApiError } from '@/lib/amarpc'
 import { agent as resourceAgent } from '@/test/resource-fixtures'
 import {
   agentApiExamples,

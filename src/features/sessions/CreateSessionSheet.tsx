@@ -8,7 +8,7 @@ import { emptySession } from '@/console/defaults'
 import { isArchived, parseJsonObject, parseJsonObjectArray } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import type { SessionFormState } from '@/console/types'
-import { ApiError, api, type Session, type SessionInput } from '@/lib/api'
+import { ApiError, api, type Session, type SessionInput } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 

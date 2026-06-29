@@ -10,7 +10,7 @@ import { DetailSection, PageHeader, StatusBadge } from '@/console/components'
 import { archivedLabel } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
 import { initialSessionRuntimeState, sessionRuntimeReducer } from '@/features/sessions/session-runtime'
-import { type Agent, api } from '@/lib/api'
+import { type Agent, api } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import {

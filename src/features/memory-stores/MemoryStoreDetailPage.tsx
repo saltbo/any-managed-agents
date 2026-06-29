@@ -8,7 +8,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { ConfirmAction, EmptyState, PageHeader, TablePagination, TableSurface } from '@/console/components'
 import { formatDate } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { api, type MemoryStoreMemory } from '@/lib/api'
+import { api, type MemoryStoreMemory } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { MemoryEntrySheet } from './MemoryStoreForms'

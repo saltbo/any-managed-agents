@@ -17,7 +17,7 @@ import {
 import { AgentForm } from '@/console/forms'
 import type { AgentFormState } from '@/console/types'
 import { CreateSessionSheet } from '@/features/sessions/CreateSessionSheet'
-import { type Agent, api } from '@/lib/api'
+import { type Agent, api } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 import { AgentDetailView } from './AgentDetailView'
 import { useAgentActions } from './use-agent-actions'

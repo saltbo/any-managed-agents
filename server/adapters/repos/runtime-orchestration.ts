@@ -492,7 +492,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .filter((row): row is ConnectorRecord => !!row)
     },
 
-    // ── credential reference validation ────────────────────────────────────
+    // ── secret reference validation ────────────────────────────────────
     async activeCredentialVersionExists(
       organizationId: string,
       projectId: string,
