@@ -176,8 +176,8 @@ describe('[spec: agents/console-detail] AgentDetailPage', () => {
 
   it('handles null instructions, providerId, model in agentToForm', async () => {
     const agent = buildAgent({
-      instructions: null as unknown as string,
-      providerId: null as unknown as string,
+      systemPrompt: null as unknown as string,
+      provider: null as unknown as string,
       model: null as unknown as string,
     })
     setupAgentHandlers(agent)

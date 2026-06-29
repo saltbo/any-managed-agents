@@ -11,9 +11,7 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.agent_handoff_policy import AgentHandoffPolicy
-  from ..models.agent_memory_policy import AgentMemoryPolicy
-  from ..models.agent_spec_metadata import AgentSpecMetadata
+  from ..models.agent_handoff import AgentHandoff
   from ..models.agent_subagent import AgentSubagent
   from ..models.agent_tool_attachment import AgentToolAttachment
 
@@ -29,32 +27,26 @@ T = TypeVar("T", bound="AgentSpec")
 class AgentSpec:
     """ 
         Attributes:
-            instructions (None | str):  Example: Answer with citations..
-            provider_id (None | str):  Example: provider_abc123.
+            system_prompt (None | str):  Example: Answer with citations..
+            provider (None | str):  Example: provider_abc123.
             model (None | str):  Example: @cf/moonshotai/kimi-k2.6.
             skills (list[str]):  Example: ['ama@code-review'].
             subagents (list[AgentSubagent]):  Example: [{'username': 'reviewer', 'role': 'reviewer'}].
             role (None | str):  Example: maintainer.
-            capability_tags (list[str]):  Example: ['issue-triage', 'code-review'].
-            handoff_policy (AgentHandoffPolicy):
-            memory_policy (AgentMemoryPolicy):
+            handoff (AgentHandoff):
             tools (list[AgentToolAttachment]):
             mcp_connectors (list[str]):  Example: ['github'].
-            metadata (AgentSpecMetadata):  Example: {'owner': 'platform'}.
      """
 
-    instructions: None | str
-    provider_id: None | str
+    system_prompt: None | str
+    provider: None | str
     model: None | str
     skills: list[str]
     subagents: list[AgentSubagent]
     role: None | str
-    capability_tags: list[str]
-    handoff_policy: AgentHandoffPolicy
-    memory_policy: AgentMemoryPolicy
+    handoff: AgentHandoff
     tools: list[AgentToolAttachment]
     mcp_connectors: list[str]
-    metadata: AgentSpecMetadata
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -62,16 +54,14 @@ class AgentSpec:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.agent_handoff_policy import AgentHandoffPolicy
-        from ..models.agent_memory_policy import AgentMemoryPolicy
-        from ..models.agent_spec_metadata import AgentSpecMetadata
+        from ..models.agent_handoff import AgentHandoff
         from ..models.agent_subagent import AgentSubagent
         from ..models.agent_tool_attachment import AgentToolAttachment
-        instructions: None | str
-        instructions = self.instructions
+        system_prompt: None | str
+        system_prompt = self.system_prompt
 
-        provider_id: None | str
-        provider_id = self.provider_id
+        provider: None | str
+        provider = self.provider
 
         model: None | str
         model = self.model
@@ -90,13 +80,7 @@ class AgentSpec:
         role: None | str
         role = self.role
 
-        capability_tags = self.capability_tags
-
-
-
-        handoff_policy = self.handoff_policy.to_dict()
-
-        memory_policy = self.memory_policy.to_dict()
+        handoff = self.handoff.to_dict()
 
         tools = []
         for tools_item_data in self.tools:
@@ -109,24 +93,19 @@ class AgentSpec:
 
 
 
-        metadata = self.metadata.to_dict()
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
-            "instructions": instructions,
-            "providerId": provider_id,
+            "systemPrompt": system_prompt,
+            "provider": provider,
             "model": model,
             "skills": skills,
             "subagents": subagents,
             "role": role,
-            "capabilityTags": capability_tags,
-            "handoffPolicy": handoff_policy,
-            "memoryPolicy": memory_policy,
+            "handoff": handoff,
             "tools": tools,
             "mcpConnectors": mcp_connectors,
-            "metadata": metadata,
         })
 
         return field_dict
@@ -135,26 +114,24 @@ class AgentSpec:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.agent_handoff_policy import AgentHandoffPolicy
-        from ..models.agent_memory_policy import AgentMemoryPolicy
-        from ..models.agent_spec_metadata import AgentSpecMetadata
+        from ..models.agent_handoff import AgentHandoff
         from ..models.agent_subagent import AgentSubagent
         from ..models.agent_tool_attachment import AgentToolAttachment
         d = dict(src_dict)
-        def _parse_instructions(data: object) -> None | str:
+        def _parse_system_prompt(data: object) -> None | str:
             if data is None:
                 return data
             return cast(None | str, data)
 
-        instructions = _parse_instructions(d.pop("instructions"))
+        system_prompt = _parse_system_prompt(d.pop("systemPrompt"))
 
 
-        def _parse_provider_id(data: object) -> None | str:
+        def _parse_provider(data: object) -> None | str:
             if data is None:
                 return data
             return cast(None | str, data)
 
-        provider_id = _parse_provider_id(d.pop("providerId"))
+        provider = _parse_provider(d.pop("provider"))
 
 
         def _parse_model(data: object) -> None | str:
@@ -186,15 +163,7 @@ class AgentSpec:
         role = _parse_role(d.pop("role"))
 
 
-        capability_tags = cast(list[str], d.pop("capabilityTags"))
-
-
-        handoff_policy = AgentHandoffPolicy.from_dict(d.pop("handoffPolicy"))
-
-
-
-
-        memory_policy = AgentMemoryPolicy.from_dict(d.pop("memoryPolicy"))
+        handoff = AgentHandoff.from_dict(d.pop("handoff"))
 
 
 
@@ -212,24 +181,16 @@ class AgentSpec:
         mcp_connectors = cast(list[str], d.pop("mcpConnectors"))
 
 
-        metadata = AgentSpecMetadata.from_dict(d.pop("metadata"))
-
-
-
-
         agent_spec = cls(
-            instructions=instructions,
-            provider_id=provider_id,
+            system_prompt=system_prompt,
+            provider=provider,
             model=model,
             skills=skills,
             subagents=subagents,
             role=role,
-            capability_tags=capability_tags,
-            handoff_policy=handoff_policy,
-            memory_policy=memory_policy,
+            handoff=handoff,
             tools=tools,
             mcp_connectors=mcp_connectors,
-            metadata=metadata,
         )
 
 

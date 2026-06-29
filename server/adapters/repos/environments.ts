@@ -1,11 +1,13 @@
 import type {
   Environment,
   EnvironmentConfig,
-  EnvironmentHostingMode,
-  EnvironmentPackage,
+  EnvironmentNetworking,
+  EnvironmentPackages,
+  EnvironmentScope,
   EnvironmentVariable,
   EnvironmentVersion,
 } from '@server/domain/environment'
+import { defaultEnvironmentPackages } from '@server/domain/environment'
 import { resourceMetadata, resourcePhase } from '@server/domain/resource'
 import type {
   CreateEnvironmentInput,
@@ -16,7 +18,6 @@ import type {
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { normalizeEnvironmentNetworkPolicy } from '../../contracts/environment-contracts'
 import { connectors, environments, environmentVersions } from '../../db/schema'
 import { DEFAULT_CONNECTORS } from '../../domain/connector'
 
@@ -36,17 +37,73 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
-function configFromRow(row: EnvironmentRow | EnvironmentVersionRow): EnvironmentConfig {
+function scopeValue(value: unknown): EnvironmentScope {
+  return value === 'organization' ? 'organization' : 'project'
+}
+
+function normalizePackages(value: unknown): EnvironmentPackages {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const packages = value as Record<string, unknown>
+    return {
+      ...defaultEnvironmentPackages(),
+      type: 'packages',
+      apt: stringArray(packages.apt),
+      cargo: stringArray(packages.cargo),
+      gem: stringArray(packages.gem),
+      go: stringArray(packages.go),
+      npm: stringArray(packages.npm),
+      pip: stringArray(packages.pip),
+    }
+  }
+  return defaultEnvironmentPackages()
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function networkingFromRow(row: EnvironmentRow | EnvironmentVersionRow): EnvironmentNetworking {
+  const policy = parseJson<Record<string, unknown>>(row.networkPolicy)
+  const mode = policy.mode
   return {
-    packages: parseJson<EnvironmentPackage[]>(row.packages),
+    type: mode === 'offline' ? 'closed' : mode === 'restricted' ? 'limited' : 'open',
+    allowMcpServers: policy.allowMcpServers === true,
+    allowPackageManagers: policy.allowPackageManagers !== false,
+    ...(Array.isArray(policy.allowedHosts) ? { allowedHosts: stringArray(policy.allowedHosts) } : {}),
+  }
+}
+
+function networkPolicyColumns(networking: EnvironmentNetworking) {
+  if (networking.type === 'closed') {
+    return {
+      mode: 'offline',
+      allowMcpServers: networking.allowMcpServers,
+      allowPackageManagers: networking.allowPackageManagers,
+    }
+  }
+  if (networking.type === 'limited') {
+    return {
+      mode: 'restricted',
+      allowMcpServers: networking.allowMcpServers,
+      allowPackageManagers: networking.allowPackageManagers,
+      allowedHosts: networking.allowedHosts ?? [],
+    }
+  }
+  return {
+    mode: 'unrestricted',
+    allowMcpServers: networking.allowMcpServers,
+    allowPackageManagers: networking.allowPackageManagers,
+  }
+}
+
+function configFromRow(row: EnvironmentRow | EnvironmentVersionRow): EnvironmentConfig {
+  const metadata = parseJson<Record<string, unknown>>(row.metadata)
+  return {
+    scope: scopeValue(metadata.scope),
+    type: row.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
+    networking: networkingFromRow(row),
+    packages: normalizePackages(parseJson<unknown>(row.packages)),
     variables: parseJson<Record<string, EnvironmentVariable>>(row.variables),
-    hostingMode: row.hostingMode as EnvironmentHostingMode,
-    networkPolicy: normalizeEnvironmentNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
-    mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
-    packageManagerPolicy: parseJson<Record<string, unknown>>(row.packageManagerPolicy),
-    resourceLimits: parseJson<Record<string, unknown>>(row.resourceLimits),
-    runtimeConfig: parseJson<Record<string, unknown>>(row.runtimeConfig),
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
   }
 }
 
@@ -54,13 +111,13 @@ function configColumns(config: EnvironmentConfig) {
   return {
     packages: stringify(config.packages),
     variables: stringify(config.variables),
-    hostingMode: config.hostingMode,
-    networkPolicy: stringify(config.networkPolicy),
-    mcpPolicy: stringify(config.mcpPolicy),
-    packageManagerPolicy: stringify(config.packageManagerPolicy),
-    resourceLimits: stringify(config.resourceLimits),
-    runtimeConfig: stringify(config.runtimeConfig),
-    metadata: stringify(config.metadata),
+    hostingMode: config.type,
+    networkPolicy: stringify(networkPolicyColumns(config.networking)),
+    mcpPolicy: stringify({}),
+    packageManagerPolicy: stringify({}),
+    resourceLimits: stringify({}),
+    runtimeConfig: stringify({}),
+    metadata: stringify({ scope: config.scope }),
   }
 }
 

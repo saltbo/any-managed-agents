@@ -6,7 +6,7 @@ import { archivedLabel, formatDate } from '@/console/format'
 import type { Agent, Session } from '@/lib/amarpc'
 
 function isAgent(item: Agent | Session): item is Agent {
-  return 'instructions' in item.spec
+  return 'systemPrompt' in item.spec
 }
 
 export function RelatedResourcesTable({

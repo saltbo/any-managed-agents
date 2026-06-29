@@ -82,8 +82,9 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
   it('creates an unrestricted cloud environment', () => {
     expect(quickstartEnvironmentInput({ ...defaultQuickstartEnvironmentForm, name: ' Env ' })).toMatchObject({
       name: 'Env',
-      hostingMode: 'cloud',
-      networkPolicy: { mode: 'unrestricted' },
+      type: 'cloud',
+      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
     })
   })
 
@@ -95,8 +96,12 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
       mcpAccess: true,
       packageManagerAccess: false,
     })
-    expect(input.packageManagerPolicy).toEqual({ allowedRegistries: [] })
-    expect(input.mcpPolicy).toEqual({ allowedConnectors: ['*'] })
+    expect(input.networking).toEqual({
+      type: 'limited',
+      allowMcpServers: true,
+      allowPackageManagers: false,
+      allowedHosts: [],
+    })
   })
 
   it('captures allowed hosts, MCP access, and package-manager access for limited networking', () => {
@@ -107,12 +112,12 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
       mcpAccess: false,
       packageManagerAccess: true,
     })
-    expect(input.networkPolicy).toEqual({
-      mode: 'restricted',
+    expect(input.networking).toEqual({
+      type: 'limited',
+      allowMcpServers: false,
+      allowPackageManagers: true,
       allowedHosts: ['registry.npmjs.org', 'api.github.com'],
     })
-    expect(input.mcpPolicy).toEqual({ blockedConnectors: ['*'] })
-    expect(input.packageManagerPolicy).toEqual({ allowedRegistries: ['registry.npmjs.org'] })
   })
 })
 

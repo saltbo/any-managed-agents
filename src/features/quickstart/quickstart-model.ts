@@ -86,25 +86,30 @@ export function quickstartEnvironmentInput(form: QuickstartEnvironmentForm): Env
   const base: EnvironmentInput = {
     name: form.name.trim(),
     description: 'Reusable sandbox template created in quickstart.',
-    hostingMode: 'cloud',
-    runtimeConfig: { image: 'ama-pi-runtime' },
+    type: 'cloud',
+    packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
   }
   if (form.networkChoice === 'unrestricted') {
-    return { ...base, networkPolicy: { mode: 'unrestricted' } }
+    return {
+      ...base,
+      networking: {
+        type: 'open',
+        allowMcpServers: form.mcpAccess,
+        allowPackageManagers: form.packageManagerAccess,
+      },
+    }
   }
   return {
     ...base,
-    networkPolicy: {
-      mode: 'restricted',
+    networking: {
+      type: 'limited',
+      allowMcpServers: form.mcpAccess,
+      allowPackageManagers: form.packageManagerAccess,
       allowedHosts: form.allowedHosts
         .split(/\r?\n/)
         .map((host) => host.trim())
         .filter(Boolean),
     },
-    mcpPolicy: form.mcpAccess ? { allowedConnectors: ['*'] } : { blockedConnectors: ['*'] },
-    packageManagerPolicy: form.packageManagerAccess
-      ? { allowedRegistries: ['registry.npmjs.org'] }
-      : { allowedRegistries: [] },
   }
 }
 

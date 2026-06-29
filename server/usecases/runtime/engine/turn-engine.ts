@@ -144,7 +144,7 @@ function stringifyToolOutput(result: Record<string, unknown>) {
 }
 
 function runtimeSystemPrompt(snapshot: Record<string, unknown>) {
-  const instructions = typeof snapshot.instructions === 'string' ? snapshot.instructions.trim() : ''
+  const instructions = typeof snapshot.systemPrompt === 'string' ? snapshot.systemPrompt.trim() : ''
   return (
     instructions || 'You are an AMA cloud-owned coding agent. Use tools when workspace inspection or edits are needed.'
   )

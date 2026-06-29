@@ -21,8 +21,8 @@ async function createSelfHostedEnvironment(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Self-hosted workspace ${crypto.randomUUID()}`,
-      hostingMode: 'self_hosted',
-      networkPolicy: { mode: 'unrestricted' },
+      type: 'self_hosted',
+      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
     }),
   })
   expect(res.status).toBe(201)

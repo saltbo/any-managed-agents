@@ -12,49 +12,19 @@ actions:
     remove: true
   - target: $.components.schemas['ErrorResponse']['properties']['error']['properties']['details'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['AgentSpec']['properties']['metadata'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['AgentSubagent'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentHandoffPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentHandoffTarget'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentMemoryPolicy'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['AgentToolAttachment']['properties']['inputSchema'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['AgentToolAttachment']['properties']['policyMetadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['CreateAgentRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['AgentToolAttachmentInput']['properties']['inputSchema'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['AgentToolAttachmentInput']['properties']['policyMetadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['UpdateAgentRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['AgentMemorySpec']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['ReplaceAgentMemoryRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['EnvironmentSpec']['properties']['packageManagerPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['EnvironmentSpec']['properties']['runtimeConfig'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['EnvironmentSpec']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateEnvironmentRequest']['properties']['packageManagerPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateEnvironmentRequest']['properties']['runtimeConfig'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateEnvironmentRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateEnvironmentRequest']['properties']['packageManagerPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateEnvironmentRequest']['properties']['runtimeConfig'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateEnvironmentRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['Provider']['properties']['metadata'].additionalProperties.nullable
     remove: true
@@ -110,13 +80,7 @@ actions:
     remove: true
   - target: $.components.schemas['SessionAgentSnapshot']['properties']['subagents']['items'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['SessionAgentSnapshot']['properties']['handoffPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionAgentSnapshot']['properties']['memoryPolicy'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['SessionAgentSnapshot']['properties']['tools']['items'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionAgentSnapshot']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionEnvironmentJsonObject'].additionalProperties.nullable
     remove: true

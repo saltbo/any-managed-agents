@@ -1,19 +1,22 @@
 import { Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, StatusBadge } from '@/console/components'
-import { archivedLabel, isArchived, stringifyJson } from '@/console/format'
+import { archivedLabel, isArchived } from '@/console/format'
 import { RelatedResourcesTable } from '@/features/console/related-resources-table'
 import type { Environment, Session } from '@/lib/amarpc'
 
 function networkSummary(environment: Environment) {
-  if (environment.spec.networkPolicy.mode === 'restricted') {
-    return `Restricted: ${(environment.spec.networkPolicy.allowedHosts ?? []).join(', ')}`
+  if (environment.spec.networking.type === 'limited') {
+    return `Limited: ${(environment.spec.networking.allowedHosts ?? []).join(', ')}`
   }
-  return environment.spec.networkPolicy.mode
+  return environment.spec.networking.type
 }
 
-function runtimeConfigSummary(environment: Environment) {
-  return String(environment.spec.runtimeConfig.image ?? environment.spec.runtimeConfig.mode ?? 'Default')
+function packageSummary(environment: Environment) {
+  return Object.entries(environment.spec.packages)
+    .filter(([key]) => key !== 'type')
+    .flatMap(([manager, packages]) => (packages as string[]).map((pkg) => `${manager}:${pkg}`))
+    .join(', ')
 }
 
 export function EnvironmentDetailView({
@@ -56,14 +59,15 @@ export function EnvironmentDetailView({
         }
       >
         <MetaGrid>
-          <Meta label="Packages" value={environment.spec.packages.map((item) => item.name).join(', ') || 'None'} />
+          <Meta label="Packages" value={packageSummary(environment) || 'None'} />
           <Meta label="Variables" value={Object.keys(environment.spec.variables).join(', ') || 'None'} />
-          <Meta label="Hosting mode" value={environment.spec.hostingMode} />
-          <Meta label="Runtime config" value={runtimeConfigSummary(environment)} />
-          <Meta label="Network policy" value={networkSummary(environment)} />
-          <Meta label="MCP policy" value={stringifyJson(environment.spec.mcpPolicy)} />
-          <Meta label="Package manager policy" value={stringifyJson(environment.spec.packageManagerPolicy)} />
-          <Meta label="Resource limits" value={stringifyJson(environment.spec.resourceLimits)} />
+          <Meta label="Type" value={environment.spec.type} />
+          <Meta label="Networking" value={networkSummary(environment)} />
+          <Meta label="MCP servers" value={environment.spec.networking.allowMcpServers ? 'Allowed' : 'Blocked'} />
+          <Meta
+            label="Package managers"
+            value={environment.spec.networking.allowPackageManagers ? 'Allowed' : 'Blocked'}
+          />
         </MetaGrid>
       </DetailSection>
       <RelatedResourcesTable

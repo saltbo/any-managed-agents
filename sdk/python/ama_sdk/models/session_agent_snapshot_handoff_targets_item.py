@@ -8,24 +8,27 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
 
 
 
 
 
 
-T = TypeVar("T", bound="CreateAgentRequestMetadata")
+T = TypeVar("T", bound="SessionAgentSnapshotHandoffTargetsItem")
 
 
 
 @_attrs_define
-class CreateAgentRequestMetadata:
+class SessionAgentSnapshotHandoffTargetsItem:
     """ 
-        Example:
-            {'owner': 'platform'}
-
+        Attributes:
+            role (str | Unset):
+            capability (str | Unset):
      """
 
+    role: str | Unset = UNSET
+    capability: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -33,9 +36,19 @@ class CreateAgentRequestMetadata:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+        role = self.role
+
+        capability = self.capability
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
+        field_dict.update({
+        })
+        if role is not UNSET:
+            field_dict["role"] = role
+        if capability is not UNSET:
+            field_dict["capability"] = capability
 
         return field_dict
 
@@ -44,12 +57,18 @@ class CreateAgentRequestMetadata:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        create_agent_request_metadata = cls(
+        role = d.pop("role", UNSET)
+
+        capability = d.pop("capability", UNSET)
+
+        session_agent_snapshot_handoff_targets_item = cls(
+            role=role,
+            capability=capability,
         )
 
 
-        create_agent_request_metadata.additional_properties = d
-        return create_agent_request_metadata
+        session_agent_snapshot_handoff_targets_item.additional_properties = d
+        return session_agent_snapshot_handoff_targets_item
 
     @property
     def additional_keys(self) -> list[str]:

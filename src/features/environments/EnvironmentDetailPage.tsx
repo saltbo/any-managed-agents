@@ -6,10 +6,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { PageHeader } from '@/console/components'
-import { isArchived, parsePackages, parseVariables, stringifyJson } from '@/console/format'
+import { isArchived, parsePackages, parseVariables } from '@/console/format'
 import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
-import { api, type Environment, type EnvironmentNetworkPolicy } from '@/lib/amarpc'
+import { api, type Environment, type EnvironmentNetworking } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { EnvironmentDetailView } from './EnvironmentDetailView'
@@ -19,34 +19,39 @@ function formStateFromEnvironment(environment: Environment): EnvironmentFormStat
   return {
     name: environment.metadata.name,
     description: environment.metadata.description ?? '',
-    hostingMode: environment.spec.hostingMode,
-    networkMode: environment.spec.networkPolicy.mode,
+    type: environment.spec.type,
+    networkingType: environment.spec.networking.type,
+    allowMcpServers: environment.spec.networking.allowMcpServers,
+    allowPackageManagers: environment.spec.networking.allowPackageManagers,
     allowedHosts:
-      environment.spec.networkPolicy.mode === 'restricted'
-        ? (environment.spec.networkPolicy.allowedHosts ?? []).join('\n')
-        : '',
-    packages: environment.spec.packages.map((pkg) => `${pkg.name}@${pkg.version ?? 'latest'}`).join('\n'),
+      environment.spec.networking.type === 'limited' ? (environment.spec.networking.allowedHosts ?? []).join('\n') : '',
+    packages: environment.spec.packages.npm.join('\n'),
     variables: Object.entries(environment.spec.variables)
       .map(
         ([name, variable]) =>
           `${name}=${typeof variable === 'object' && variable && 'value' in variable ? String(variable.value ?? '') : String(variable)}`,
       )
       .join('\n'),
-    runtimeConfig: stringifyJson(environment.spec.runtimeConfig),
   }
 }
 
-function networkPolicyFromForm(form: EnvironmentFormState): EnvironmentNetworkPolicy {
-  if (form.networkMode === 'restricted') {
+function networkingFromForm(form: EnvironmentFormState): EnvironmentNetworking {
+  if (form.networkingType === 'limited') {
     return {
-      mode: 'restricted',
+      type: 'limited',
+      allowMcpServers: form.allowMcpServers,
+      allowPackageManagers: form.allowPackageManagers,
       allowedHosts: form.allowedHosts
         .split(/\r?\n/)
         .map((host) => host.trim())
         .filter(Boolean),
     }
   }
-  return { mode: form.networkMode }
+  return {
+    type: form.networkingType,
+    allowMcpServers: form.allowMcpServers,
+    allowPackageManagers: form.allowPackageManagers,
+  }
 }
 
 export function EnvironmentDetailPage() {
@@ -71,11 +76,10 @@ export function EnvironmentDetailPage() {
       api.updateEnvironment(environmentId as string, {
         name: input.name,
         description: input.description,
-        hostingMode: input.hostingMode,
+        type: input.type,
+        networking: networkingFromForm(input),
         packages: parsePackages(input.packages),
         variables: parseVariables(input.variables),
-        networkPolicy: networkPolicyFromForm(input),
-        runtimeConfig: JSON.parse(input.runtimeConfig) as Record<string, unknown>,
       }),
     onSuccess: () => {
       toast.success('Environment updated')
@@ -90,7 +94,7 @@ export function EnvironmentDetailPage() {
         eyebrow="Environment"
         title={environment?.metadata.name ?? 'Environment detail'}
         description={
-          environment?.metadata.description ?? 'Inspect runtime config, package policy, network policy, and bindings.'
+          environment?.metadata.description ?? 'Inspect environment type, packages, variables, and networking.'
         }
         actions={
           environment && !isArchived(environment) ? (

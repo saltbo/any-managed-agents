@@ -130,7 +130,7 @@ export async function startSessionRuntimeForRow(
         sessionId,
         sandboxId,
         runtime: runtimeName,
-        provider: agentSnapshot.providerId,
+        provider: agentSnapshot.provider,
         model: agentSnapshot.model,
         agentSnapshot: runtimeAgentSnapshot,
         environmentSnapshot: environmentSnapshotWithRuntimeConfig,

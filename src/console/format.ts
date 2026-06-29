@@ -36,14 +36,18 @@ export function formatMillis(value: number) {
 }
 
 export function parsePackages(value: string) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [name, version] = line.split('@')
-      return version ? { name: name ?? line, version } : { name: line }
-    })
+  return {
+    type: 'packages' as const,
+    apt: [],
+    cargo: [],
+    gem: [],
+    go: [],
+    npm: value
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+    pip: [],
+  }
 }
 
 export function parseVariables(value: string) {
@@ -61,14 +65,14 @@ export function parseVariables(value: string) {
 
 // The console offers "workers-ai" as the platform-default provider option, but
 // the v1 control plane resolves the project default from a null/omitted
-// providerId — "workers-ai" is a provider type, not a provider resource id.
+// provider — "workers-ai" is the platform-default provider option.
 export const PLATFORM_DEFAULT_PROVIDER = 'workers-ai'
 
-// Spread into an agent create/update body. An omitted providerId lets the
+// Spread into an agent create/update body. An omitted provider lets the
 // control plane resolve the project default at session start.
-export function providerIdPatch(provider: string): { providerId: string } | Record<string, never> {
+export function providerPatch(provider: string): { provider: string } | Record<string, never> {
   const trimmed = provider.trim()
-  return !trimmed || trimmed === PLATFORM_DEFAULT_PROVIDER ? {} : { providerId: trimmed }
+  return !trimmed || trimmed === PLATFORM_DEFAULT_PROVIDER ? {} : { provider: trimmed }
 }
 
 export function parseTools(value: string) {

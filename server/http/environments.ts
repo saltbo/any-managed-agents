@@ -1,8 +1,12 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { normalizeEnvironmentNetworkPolicy } from '@server/contracts/environment-contracts'
 import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
 import { requireAuth } from '../auth/session'
-import { EnvironmentHostingModeSchema, EnvironmentNetworkPolicySchema } from '../contracts/environment-contracts'
+import {
+  EnvironmentNetworkingSchema,
+  EnvironmentPackagesSchema,
+  EnvironmentScopeSchema,
+  EnvironmentTypeSchema,
+} from '../contracts/environment-contracts'
 import {
   AuthenticatedOperation,
   type DepsEnv,
@@ -18,50 +22,25 @@ import { requestId } from './request-context'
 
 type EnvironmentRoutes = OpenAPIHono<DepsEnv>
 
-const JsonObjectSchema = z.record(z.string(), z.unknown())
-const PackageSchema = z.object({
-  name: z.string().min(1).max(120),
-  version: z.string().min(1).max(120).optional(),
-})
 const VariableSchema = z.object({
   description: z.string().max(500).optional(),
   required: z.boolean().optional(),
 })
-const HostingModeSchema = EnvironmentHostingModeSchema
-const NetworkPolicySchema = EnvironmentNetworkPolicySchema
-const McpPolicySchema = z
-  .object({
-    allowedConnectors: z.array(z.string().min(1).max(120)).max(100).optional(),
-    blockedConnectors: z.array(z.string().min(1).max(120)).max(100).optional(),
-    requireApprovalConnectors: z.array(z.string().min(1).max(120)).max(100).optional(),
-    requireApprovalTools: z.array(z.string().min(1).max(240)).max(200).optional(),
-    connectorApprovalModes: z.record(z.string().min(1).max(120), z.enum(['none', 'require_approval'])).optional(),
-    defaultEffect: z.enum(['allow', 'deny']).optional(),
-  })
-  .strict()
-  .openapi('EnvironmentMcpPolicy')
-const ResourceLimitsSchema = z
-  .object({
-    cpuMs: z.number().int().positive().optional(),
-    memoryMb: z.number().int().positive().optional(),
-    timeoutSeconds: z.number().int().positive().optional(),
-  })
-  .strict()
-const RuntimeConfigSchema = JsonObjectSchema
 
 const EnvironmentSpecSchema = z
   .object({
-    packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
-    variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
-    hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
-    networkPolicy: NetworkPolicySchema.openapi({
-      example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+    scope: EnvironmentScopeSchema.openapi({ example: 'organization' }),
+    type: EnvironmentTypeSchema.openapi({ example: 'cloud' }),
+    networking: EnvironmentNetworkingSchema.openapi({
+      example: {
+        type: 'limited',
+        allowMcpServers: false,
+        allowPackageManagers: true,
+        allowedHosts: ['api.example.com'],
+      },
     }),
-    mcpPolicy: McpPolicySchema.openapi({ example: { allowedConnectors: ['github'] } }),
-    packageManagerPolicy: JsonObjectSchema.openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
-    resourceLimits: ResourceLimitsSchema.openapi({ example: { memoryMb: 512 } }),
-    runtimeConfig: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
+    packages: EnvironmentPackagesSchema,
+    variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
   })
   .openapi('EnvironmentSpec')
 
@@ -98,26 +77,14 @@ const EnvironmentPayloadSchema = z
   .object({
     name: z.string().min(1).max(120).openapi({ example: 'Node workspace' }),
     description: z.string().max(1000).nullable().optional().openapi({ example: 'Default Node.js environment.' }),
-    packages: z
-      .array(PackageSchema)
-      .max(200)
-      .optional()
-      .openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
+    scope: EnvironmentScopeSchema.optional(),
+    type: EnvironmentTypeSchema.optional(),
+    networking: EnvironmentNetworkingSchema.optional(),
+    packages: EnvironmentPackagesSchema.optional(),
     variables: z
       .record(z.string(), VariableSchema)
       .optional()
       .openapi({ example: { NODE_ENV: { required: true } } }),
-    hostingMode: HostingModeSchema.optional().openapi({ example: 'cloud' }),
-    networkPolicy: NetworkPolicySchema.optional().openapi({
-      example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    }),
-    mcpPolicy: McpPolicySchema.optional().openapi({ example: { allowedConnectors: ['github'] } }),
-    packageManagerPolicy: JsonObjectSchema.optional().openapi({
-      example: { allowedRegistries: ['registry.npmjs.org'] },
-    }),
-    resourceLimits: ResourceLimitsSchema.optional().openapi({ example: { memoryMb: 512 } }),
-    runtimeConfig: RuntimeConfigSchema.optional().openapi({ example: { image: 'node:24' } }),
-    metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
   })
   .strict()
 const CreateEnvironmentSchema = EnvironmentPayloadSchema.openapi('CreateEnvironmentRequest')
@@ -422,15 +389,11 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
 
 function configFromPayload(body: z.infer<typeof EnvironmentPayloadSchema>) {
   return {
-    packages: body.packages ?? [],
+    scope: body.scope ?? ('project' as const),
+    type: body.type ?? ('cloud' as const),
+    networking: body.networking ?? { type: 'open' as const, allowMcpServers: false, allowPackageManagers: true },
+    packages: body.packages ?? { type: 'packages' as const, apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
     variables: body.variables ?? {},
-    hostingMode: body.hostingMode ?? ('cloud' as const),
-    networkPolicy: body.networkPolicy ?? normalizeEnvironmentNetworkPolicy({ mode: 'unrestricted' }),
-    mcpPolicy: body.mcpPolicy ?? {},
-    packageManagerPolicy: body.packageManagerPolicy ?? {},
-    resourceLimits: body.resourceLimits ?? {},
-    runtimeConfig: body.runtimeConfig ?? {},
-    metadata: body.metadata ?? {},
   }
 }
 
@@ -440,15 +403,11 @@ function patchFromBody(body: z.infer<typeof UpdateEnvironmentSchema>): UpdateEnv
   return {
     ...(body.name !== undefined ? { name: body.name } : {}),
     ...(body.description !== undefined ? { description: body.description } : {}),
+    ...(body.scope !== undefined ? { scope: body.scope } : {}),
+    ...(body.type !== undefined ? { type: body.type } : {}),
+    ...(body.networking !== undefined ? { networking: body.networking } : {}),
     ...(body.packages !== undefined ? { packages: body.packages } : {}),
     ...(body.variables !== undefined ? { variables: body.variables } : {}),
-    ...(body.hostingMode !== undefined ? { hostingMode: body.hostingMode } : {}),
-    ...(body.networkPolicy !== undefined ? { networkPolicy: body.networkPolicy } : {}),
-    ...(body.mcpPolicy !== undefined ? { mcpPolicy: body.mcpPolicy } : {}),
-    ...(body.packageManagerPolicy !== undefined ? { packageManagerPolicy: body.packageManagerPolicy } : {}),
-    ...(body.resourceLimits !== undefined ? { resourceLimits: body.resourceLimits } : {}),
-    ...(body.runtimeConfig !== undefined ? { runtimeConfig: body.runtimeConfig } : {}),
-    ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     ...(body.archived !== undefined ? { archived: body.archived } : {}),
   }
 }

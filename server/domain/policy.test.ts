@@ -200,14 +200,10 @@ describe('session/environment tool gating', () => {
     expect(sessionAllowsTool({ agentSnapshot: '{"tools":["mcp:c.t"]}' }, 'c', 't')).toBe(true)
   })
 
-  it('gates connectors by the environment mcp policy', () => {
-    expect(environmentAllowsConnector(null, 'c')).toBe(true)
-    expect(environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{"blockedConnectors":["c"]}}' }, 'c')).toBe(
-      false,
-    )
-    expect(environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{"defaultEffect":"deny"}}' }, 'c')).toBe(
-      false,
-    )
+  it('gates connectors by the environment networking capability flag', () => {
+    expect(environmentAllowsConnector(null)).toBe(true)
+    expect(environmentAllowsConnector({ environmentSnapshot: '{"networking":{"allowMcpServers":false}}' })).toBe(false)
+    expect(environmentAllowsConnector({ environmentSnapshot: '{"networking":{"allowMcpServers":true}}' })).toBe(true)
   })
 })
 
@@ -305,19 +301,20 @@ describe('[spec: governance/sandbox-restrictions] evaluateSandboxRuntimeDecision
     expect(evaluateSandboxRuntimeDecision({}, null, { operation: 'startup' }).allowed).toBe(true)
   })
 
-  it('applies the session environment network policy restricted mode', () => {
+  it('applies the session environment limited networking hosts', () => {
     const session = {
-      environmentSnapshot: '{"networkPolicy":{"mode":"restricted","allowedHosts":["ok.com"]}}',
+      environmentSnapshot:
+        '{"networking":{"type":"limited","allowMcpServers":false,"allowPackageManagers":true,"allowedHosts":["ok.com"]}}',
     }
     expect(evaluateSandboxRuntimeDecision({}, session, { operation: 'network', host: 'bad.com' }).rule).toBe(
-      'environment.networkPolicy.allowedHosts',
+      'environment.networking.allowedHosts',
     )
     expect(evaluateSandboxRuntimeDecision({}, session, { operation: 'network', host: 'ok.com' }).allowed).toBe(true)
   })
 
-  it('blocks network when environment network mode is offline', () => {
+  it('blocks network when environment networking is closed', () => {
     const session = {
-      environmentSnapshot: '{"networkPolicy":{"mode":"offline"}}',
+      environmentSnapshot: '{"networking":{"type":"closed","allowMcpServers":false,"allowPackageManagers":false}}',
     }
     expect(evaluateSandboxRuntimeDecision({}, session, { operation: 'network', host: 'any.com' }).rule).toBe(
       'sandboxPolicy.network',
@@ -333,10 +330,11 @@ describe('[spec: governance/sandbox-restrictions] evaluateSandboxRuntimeDecision
 
   it('blocks network when environment restricted and host is null', () => {
     const session = {
-      environmentSnapshot: '{"networkPolicy":{"mode":"restricted","allowedHosts":["ok.com"]}}',
+      environmentSnapshot:
+        '{"networking":{"type":"limited","allowMcpServers":false,"allowPackageManagers":true,"allowedHosts":["ok.com"]}}',
     }
     expect(evaluateSandboxRuntimeDecision({}, session, { operation: 'network', host: null }).rule).toBe(
-      'environment.networkPolicy.allowedHosts',
+      'environment.networking.allowedHosts',
     )
   })
 
@@ -536,20 +534,16 @@ describe('applicablePolicyLevels additional branches', () => {
 })
 
 describe('environmentAllowsConnector additional branches', () => {
-  it('allows when environment allowedConnectors includes the connector', () => {
-    expect(
-      environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{"allowedConnectors":["github"]}}' }, 'github'),
-    ).toBe(true)
+  it('allows when environment allows MCP servers', () => {
+    expect(environmentAllowsConnector({ environmentSnapshot: '{"networking":{"allowMcpServers":true}}' })).toBe(true)
   })
 
-  it('denies when connector is not in an explicit allowedConnectors list', () => {
-    expect(
-      environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{"allowedConnectors":["linear"]}}' }, 'github'),
-    ).toBe(false)
+  it('denies when environment blocks MCP servers', () => {
+    expect(environmentAllowsConnector({ environmentSnapshot: '{"networking":{"allowMcpServers":false}}' })).toBe(false)
   })
 
-  it('allows when allowedConnectors is empty and no default deny', () => {
-    expect(environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{}}' }, 'github')).toBe(true)
+  it('allows when networking omits the MCP flag', () => {
+    expect(environmentAllowsConnector({ environmentSnapshot: '{"networking":{}}' })).toBe(true)
   })
 })
 

@@ -8,14 +8,17 @@ import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Environment } from '@/lib/amarpc'
 
 function networkSummary(environment: Environment) {
-  if (environment.spec.networkPolicy.mode === 'restricted') {
-    return `Restricted: ${(environment.spec.networkPolicy.allowedHosts ?? []).join(', ')}`
+  if (environment.spec.networking.type === 'limited') {
+    return `Limited: ${(environment.spec.networking.allowedHosts ?? []).join(', ')}`
   }
-  return environment.spec.networkPolicy.mode
+  return environment.spec.networking.type
 }
 
-function runtimeConfigSummary(environment: Environment) {
-  return String(environment.spec.runtimeConfig.image ?? environment.spec.runtimeConfig.mode ?? 'Default')
+function packageSummary(environment: Environment) {
+  return Object.entries(environment.spec.packages)
+    .filter(([key]) => key !== 'type')
+    .flatMap(([manager, packages]) => (packages as string[]).map((pkg) => `${manager}:${pkg}`))
+    .join(', ')
 }
 
 export function EnvironmentsView({
@@ -40,10 +43,9 @@ export function EnvironmentsView({
         <TableRow>
           <TableHead>Environment</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead>Hosting</TableHead>
-          <TableHead>Runtime config</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Networking</TableHead>
           <TableHead>Packages</TableHead>
-          <TableHead>Network</TableHead>
           <TableHead>Updated</TableHead>
           <TableHead className="text-right">Actions</TableHead>
         </TableRow>
@@ -67,14 +69,9 @@ export function EnvironmentsView({
                 <StatusBadge value={`v${environment.status.version}`} />
               </div>
             </TableCell>
-            <TableCell>{environment.spec.hostingMode}</TableCell>
-            <TableCell className="max-w-48 truncate">{runtimeConfigSummary(environment)}</TableCell>
-            <TableCell className="max-w-56 truncate">
-              {environment.spec.packages
-                .map((item) => `${item.name}${item.version ? `@${item.version}` : ''}`)
-                .join(', ') || 'None'}
-            </TableCell>
+            <TableCell>{environment.spec.type}</TableCell>
             <TableCell className="max-w-48 truncate">{networkSummary(environment)}</TableCell>
+            <TableCell className="max-w-56 truncate">{packageSummary(environment) || 'None'}</TableCell>
             <TableCell>{formatDate(environment.metadata.updatedAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end">

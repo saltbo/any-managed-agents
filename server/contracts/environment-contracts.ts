@@ -4,6 +4,21 @@ const ALLOWED_HOST_PATTERN = /^[a-z0-9.-]+$/
 
 export const EnvironmentHostingModeSchema = z.enum(['cloud', 'self_hosted']).openapi('EnvironmentHostingMode')
 export const RuntimeSchema = z.enum(['ama', 'claude-code', 'codex', 'copilot']).openapi('Runtime')
+export const EnvironmentScopeSchema = z.enum(['project', 'organization']).openapi('EnvironmentScope')
+export const EnvironmentTypeSchema = z.enum(['cloud', 'self_hosted']).openapi('EnvironmentType')
+export const EnvironmentPackageListSchema = z.array(z.string().min(1).max(160)).max(200)
+export const EnvironmentPackagesSchema = z
+  .object({
+    type: z.literal('packages'),
+    apt: EnvironmentPackageListSchema,
+    cargo: EnvironmentPackageListSchema,
+    gem: EnvironmentPackageListSchema,
+    go: EnvironmentPackageListSchema,
+    npm: EnvironmentPackageListSchema,
+    pip: EnvironmentPackageListSchema,
+  })
+  .strict()
+  .openapi('EnvironmentPackages')
 
 export const EnvironmentNetworkPolicySchema = z
   .object({
@@ -38,9 +53,45 @@ export const EnvironmentNetworkPolicySchema = z
   })
   .openapi('EnvironmentNetworkPolicy')
 
+export const EnvironmentNetworkingSchema = z
+  .object({
+    type: z.enum(['closed', 'limited', 'open']),
+    allowMcpServers: z.boolean(),
+    allowPackageManagers: z.boolean(),
+    allowedHosts: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(253)
+          .regex(ALLOWED_HOST_PATTERN, 'Allowed hosts must be lowercase hostnames without ports or protocols.'),
+      )
+      .max(100)
+      .optional(),
+  })
+  .strict()
+  .superRefine((networking, ctx) => {
+    if (networking.type === 'limited' && (!networking.allowedHosts || networking.allowedHosts.length === 0)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['allowedHosts'],
+        message: 'Limited networking requires at least one allowed host.',
+      })
+    }
+    if (networking.type !== 'limited' && networking.allowedHosts !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['allowedHosts'],
+        message: 'Allowed hosts are only valid when networking is limited.',
+      })
+    }
+  })
+  .openapi('EnvironmentNetworking')
+
 export type EnvironmentHostingMode = z.infer<typeof EnvironmentHostingModeSchema>
 export type RuntimeName = z.infer<typeof RuntimeSchema>
 export type EnvironmentNetworkPolicy = z.infer<typeof EnvironmentNetworkPolicySchema>
+export type EnvironmentNetworking = z.infer<typeof EnvironmentNetworkingSchema>
 
 export function normalizeEnvironmentNetworkPolicy(value: unknown): EnvironmentNetworkPolicy {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {

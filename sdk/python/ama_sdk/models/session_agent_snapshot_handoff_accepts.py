@@ -8,24 +8,27 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from typing import cast
 
 
 
 
 
 
-T = TypeVar("T", bound="EnvironmentSpecRuntimeConfig")
+T = TypeVar("T", bound="SessionAgentSnapshotHandoffAccepts")
 
 
 
 @_attrs_define
-class EnvironmentSpecRuntimeConfig:
+class SessionAgentSnapshotHandoffAccepts:
     """ 
-        Example:
-            {'image': 'node:24'}
-
+        Attributes:
+            roles (list[str]):
+            capabilities (list[str]):
      """
 
+    roles: list[str]
+    capabilities: list[str]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -33,9 +36,21 @@ class EnvironmentSpecRuntimeConfig:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+        roles = self.roles
+
+
+
+        capabilities = self.capabilities
+
+
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
+        field_dict.update({
+            "roles": roles,
+            "capabilities": capabilities,
+        })
 
         return field_dict
 
@@ -44,12 +59,20 @@ class EnvironmentSpecRuntimeConfig:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        environment_spec_runtime_config = cls(
+        roles = cast(list[str], d.pop("roles"))
+
+
+        capabilities = cast(list[str], d.pop("capabilities"))
+
+
+        session_agent_snapshot_handoff_accepts = cls(
+            roles=roles,
+            capabilities=capabilities,
         )
 
 
-        environment_spec_runtime_config.additional_properties = d
-        return environment_spec_runtime_config
+        session_agent_snapshot_handoff_accepts.additional_properties = d
+        return session_agent_snapshot_handoff_accepts
 
     @property
     def additional_keys(self) -> list[str]:

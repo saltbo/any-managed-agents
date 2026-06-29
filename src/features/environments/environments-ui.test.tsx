@@ -20,12 +20,15 @@ import { useEnvironmentActions } from './use-environment-actions'
 function environment(overrides: EnvironmentOverrides = {}): Environment {
   return resourceEnvironment({
     description: 'Node 22 toolchain',
-    packages: [{ name: 'vite', version: '7' }],
+    packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['vite@7'], pip: [] },
     variables: { NODE_ENV: { description: 'environment' } },
-    hostingMode: 'self_hosted',
-    networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-    resourceLimits: {},
-    runtimeConfig: { image: 'node:22' },
+    type: 'self_hosted',
+    networking: {
+      type: 'limited',
+      allowMcpServers: false,
+      allowPackageManagers: true,
+      allowedHosts: ['registry.npmjs.org'],
+    },
     version: 2,
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
@@ -115,7 +118,7 @@ describe('[spec: environments/console-list] EnvironmentsView', () => {
     expect(screen.getByText(/Create an execution environment before creating an agent\./)).toBeTruthy()
   })
 
-  it('renders rows with name, status, hosting mode, runtime config, packages, network, and updated time', () => {
+  it('renders rows with name, status, type, packages, networking, and updated time', () => {
     const environments = [environment()]
     render(
       <MemoryRouter>
@@ -126,9 +129,8 @@ describe('[spec: environments/console-list] EnvironmentsView', () => {
     const cell = screen.getByText('Node workspace').closest('td')
     expect(cell).toBeTruthy()
     expect(screen.getByText('self_hosted')).toBeTruthy()
-    expect(screen.getByText('node:22')).toBeTruthy()
-    expect(screen.getByText('vite@7')).toBeTruthy()
-    expect(screen.getByText('Restricted: registry.npmjs.org')).toBeTruthy()
+    expect(screen.getByText('npm:vite@7')).toBeTruthy()
+    expect(screen.getByText('Limited: registry.npmjs.org')).toBeTruthy()
     expect(screen.getByText('v2')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Node workspace' }).getAttribute('href')).toBe('/environments/env_1')
   })
@@ -178,7 +180,9 @@ describe('[spec: environments/console-list] EnvironmentsView', () => {
   })
 
   it('shows "None" when environment has no packages', () => {
-    const environments = [environment({ packages: [] })]
+    const environments = [
+      environment({ packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] } }),
+    ]
     render(
       <MemoryRouter>
         <EnvironmentsView environments={environments} pagination={pagination(environments)} onArchive={vi.fn()} />
@@ -189,47 +193,31 @@ describe('[spec: environments/console-list] EnvironmentsView', () => {
   })
 
   it('renders package without version without the @ suffix', () => {
-    const environments = [environment({ packages: [{ name: 'typescript' }] })]
+    const environments = [
+      environment({
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['typescript'], pip: [] },
+      }),
+    ]
     render(
       <MemoryRouter>
         <EnvironmentsView environments={environments} pagination={pagination(environments)} onArchive={vi.fn()} />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('typescript')).toBeTruthy()
+    expect(screen.getByText('npm:typescript')).toBeTruthy()
   })
 
-  it('shows unrestricted when network policy is unrestricted', () => {
-    const environments = [environment({ networkPolicy: { mode: 'unrestricted' } })]
+  it('shows open when networking is open', () => {
+    const environments = [
+      environment({ networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true } }),
+    ]
     render(
       <MemoryRouter>
         <EnvironmentsView environments={environments} pagination={pagination(environments)} onArchive={vi.fn()} />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('unrestricted')).toBeTruthy()
-  })
-
-  it('shows runtime config mode fallback when image is absent', () => {
-    const environments = [environment({ runtimeConfig: { mode: 'sandbox' } })]
-    render(
-      <MemoryRouter>
-        <EnvironmentsView environments={environments} pagination={pagination(environments)} onArchive={vi.fn()} />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByText('sandbox')).toBeTruthy()
-  })
-
-  it('shows Default when runtime config has no image or mode', () => {
-    const environments = [environment({ runtimeConfig: {} })]
-    render(
-      <MemoryRouter>
-        <EnvironmentsView environments={environments} pagination={pagination(environments)} onArchive={vi.fn()} />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByText('Default')).toBeTruthy()
+    expect(screen.getByText('open')).toBeTruthy()
   })
 
   it('calls onArchive when archive confirm is submitted', async () => {
@@ -283,7 +271,7 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
     expect(screen.getByText('Environment profile')).toBeTruthy()
     expect(screen.getByText('v2')).toBeTruthy()
     expect(screen.getByText('self_hosted')).toBeTruthy()
-    expect(screen.getByText('Restricted: registry.npmjs.org')).toBeTruthy()
+    expect(screen.getByText('Limited: registry.npmjs.org')).toBeTruthy()
     expect(screen.getByText('Sessions using this environment')).toBeTruthy()
   })
 
@@ -309,7 +297,10 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
   })
 
   it('shows "None" for packages and variables when both are empty', () => {
-    const env = environment({ packages: [], variables: {} })
+    const env = environment({
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+      variables: {},
+    })
     render(
       <MemoryRouter>
         <EnvironmentDetailView environment={env} sessions={[]} onArchive={vi.fn()} />
@@ -320,37 +311,15 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
     expect(nones.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows unrestricted network policy in detail view', () => {
-    const env = environment({ networkPolicy: { mode: 'unrestricted' } })
+  it('shows open networking in detail view', () => {
+    const env = environment({ networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true } })
     render(
       <MemoryRouter>
         <EnvironmentDetailView environment={env} sessions={[]} onArchive={vi.fn()} />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('unrestricted')).toBeTruthy()
-  })
-
-  it('shows runtime config mode fallback when image is absent in detail view', () => {
-    const env = environment({ runtimeConfig: { mode: 'sandbox' } })
-    render(
-      <MemoryRouter>
-        <EnvironmentDetailView environment={env} sessions={[]} onArchive={vi.fn()} />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByText('sandbox')).toBeTruthy()
-  })
-
-  it('shows "Default" when runtimeConfig has no image or mode', () => {
-    const env = environment({ runtimeConfig: {} })
-    render(
-      <MemoryRouter>
-        <EnvironmentDetailView environment={env} sessions={[]} onArchive={vi.fn()} />
-      </MemoryRouter>,
-    )
-
-    expect(screen.getByText('Default')).toBeTruthy()
+    expect(screen.getByText('open')).toBeTruthy()
   })
 
   it('only shows archive button for non-archived environment', () => {
@@ -472,7 +441,7 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 
-  it('sends restricted network policy by default on submit', async () => {
+  it('sends limited networking by default on submit', async () => {
     let capturedBody: Record<string, unknown> | null = null
     server.use(
       http.post('*/api/v1/environments', async ({ request }) => {
@@ -495,7 +464,7 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(capturedBody).not.toBeNull())
-    expect((capturedBody!.networkPolicy as Record<string, unknown>).mode).toBe('restricted')
+    expect((capturedBody!.networking as Record<string, unknown>).type).toBe('limited')
     expect(capturedBody!.name).toBe('Node workspace')
   })
 
@@ -515,7 +484,7 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /Save environment/i })).toBeTruthy())
   })
 
-  it('sends unrestricted network policy when network mode is changed to unrestricted', async () => {
+  it('sends open networking when network mode is changed to open', async () => {
     stubPointerEvents()
 
     let capturedBody: Record<string, unknown> | null = null
@@ -538,17 +507,17 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
       </QueryClientProvider>,
     )
 
-    // Change network mode from restricted to unrestricted via Radix Select
+    // Change network mode from limited to open via Radix Select.
     const networkModeSelect = screen.getAllByRole('combobox')[1] as HTMLElement
     networkModeSelect.focus()
     fireEvent.pointerDown(networkModeSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(networkModeSelect)
     fireEvent.keyDown(networkModeSelect, { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByRole('option', { name: 'Unrestricted' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Open' }))
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(capturedBody).not.toBeNull())
-    expect((capturedBody!.networkPolicy as Record<string, unknown>).mode).toBe('unrestricted')
+    expect((capturedBody!.networking as Record<string, unknown>).type).toBe('open')
   })
 })
 
@@ -585,10 +554,10 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
     expect(screen.getByRole('button', { name: /Create environment/i })).toBeTruthy()
   })
 
-  it('renders search, hosting filter, and status filter controls', () => {
+  it('renders search, type filter, and status filter controls', () => {
     renderPage()
     expect(screen.getByRole('searchbox', { name: 'Search environments' })).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Filter by hosting mode' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Filter by environment type' })).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Filter by status' })).toBeTruthy()
   })
 
@@ -662,13 +631,13 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
     await waitFor(() => expect(requestedUrl).toContain('archived=true'))
   })
 
-  it('filters environments by hosting mode when hosting filter is set', async () => {
+  it('filters environments by type when type filter is set', async () => {
     renderPageWithEnvs(
       [
-        environment({ id: 'env_cloud', name: 'Cloud env', hostingMode: 'cloud' }),
-        environment({ id: 'env_self', name: 'Self env', hostingMode: 'self_hosted' }),
+        environment({ id: 'env_cloud', name: 'Cloud env', type: 'cloud' }),
+        environment({ id: 'env_self', name: 'Self env', type: 'self_hosted' }),
       ],
-      '/?hosting=cloud',
+      '/?type=cloud',
     )
 
     expect(await screen.findByText('Cloud env')).toBeTruthy()
@@ -824,9 +793,14 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => expect(screen.queryByText('Name is required')).toBeNull())
   })
 
-  it('pre-fills edit form with allowed hosts from restricted network policy', async () => {
+  it('pre-fills edit form with allowed hosts from limited networking', async () => {
     const env = environment({
-      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org', 'cdn.example.com'] },
+      networking: {
+        type: 'limited',
+        allowMcpServers: false,
+        allowPackageManagers: true,
+        allowedHosts: ['registry.npmjs.org', 'cdn.example.com'],
+      },
     })
     renderDetailPage(env)
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
@@ -842,8 +816,8 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     })
   })
 
-  it('uses empty allowed hosts string when network policy is not restricted', async () => {
-    const env = environment({ networkPolicy: { mode: 'unrestricted' } })
+  it('uses empty allowed hosts string when networking is not limited', async () => {
+    const env = environment({ networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true } })
     renderDetailPage(env)
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
@@ -933,9 +907,9 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
   it('pre-fills edit form from env with null description, no-version package, and value-type variable', async () => {
     const complexEnv = environment({
       description: null,
-      packages: [{ name: 'typescript' }],
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['typescript'], pip: [] },
       variables: { SECRET: { value: 'hidden', description: 'secret val' } as unknown as { description?: string } },
-      networkPolicy: { mode: 'unrestricted' },
+      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
     })
     renderDetailPage(complexEnv)
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
@@ -945,14 +919,16 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
         screen.getByText('Saving creates a new immutable environment version; existing sessions keep their snapshots.'),
       ).toBeTruthy(),
     )
-    const descInput = screen.getByDisplayValue('')
+    const descInput = screen.getAllByDisplayValue('')[0]
     expect(descInput).toBeTruthy()
-    expect(screen.getByDisplayValue('typescript@latest')).toBeTruthy()
+    expect(screen.getByDisplayValue('typescript')).toBeTruthy()
   })
 
-  it('sends unrestricted policy when environment networkMode is unrestricted on update', async () => {
+  it('sends open networking when environment network mode is open on update', async () => {
     let patchedBody: Record<string, unknown> | null = null
-    const envCollection = createCollection<Environment>([environment({ networkPolicy: { mode: 'unrestricted' } })])
+    const envCollection = createCollection<Environment>([
+      environment({ networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true } }),
+    ])
     server.use(
       http.get('*/api/v1/environments/:id', ({ params }) => {
         const record = envCollection.get(String(params.id))
@@ -986,7 +962,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect((patchedBody!.networkPolicy as Record<string, unknown>).mode).toBe('unrestricted')
+    expect((patchedBody!.networking as Record<string, unknown>).type).toBe('open')
   })
 
   it('handles update api error without crashing', async () => {

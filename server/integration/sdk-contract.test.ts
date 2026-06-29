@@ -57,20 +57,20 @@ async function newSdk() {
   return { ama: createAmaClient({ baseUrl: 'https://example.com', accessToken }), runId }
 }
 
-async function createAgentThroughSdk(ama: AmaClient, runId: string, refs: ReturnType<typeof externalRefs>) {
+async function createAgentThroughSdk(ama: AmaClient, runId: string) {
   return (await ama.agents.create({
     name: `${runId} external agent`,
-    instructions: 'Work items arrive from an external product over the AMA SDK.',
-    providerId: 'workers-ai',
+    systemPrompt: 'Work items arrive from an external product over the AMA SDK.',
+    provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
-    metadata: externalMetadata(refs),
   })) as Json
 }
-async function createEnvironmentThroughSdk(ama: AmaClient, runId: string, refs: ReturnType<typeof externalRefs>) {
+async function createEnvironmentThroughSdk(ama: AmaClient, runId: string) {
   return (await ama.environments.create({
     name: `${runId} external env`,
-    runtimeConfig: { image: 'ama-pi-runtime' },
-    metadata: externalMetadata(refs),
+    type: 'cloud',
+    networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+    packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
   })) as Json
 }
 const readSession = (ama: AmaClient, sessionId: string) => ama.sessions.get(sessionId) as Promise<Json>
@@ -117,15 +117,16 @@ describe('[CF] generated SDK contract', () => {
     const { ama, runId } = await newSdk()
     const refs = externalRefs(runId)
 
-    const createdAgent = await createAgentThroughSdk(ama, runId, refs)
+    const createdAgent = await createAgentThroughSdk(ama, runId)
     const createdAgentId = resourceUid(createdAgent)
     const updatedAgent = (await ama.agents.update(createdAgentId, {
       description: 'Updated by the external product through the SDK.',
     })) as Json
-    const createdEnv = await createEnvironmentThroughSdk(ama, runId, refs)
+    const createdEnv = await createEnvironmentThroughSdk(ama, runId)
     const createdEnvId = resourceUid(createdEnv)
 
-    // AMA stores only standard resource fields; external ids survive only in metadata.
+    // AMA stores only standard resource fields; external ids are not part of
+    // reusable Agent or Environment specs.
     const agent = (await ama.agents.get(resourceUid(updatedAgent))) as Json
     for (const key of Object.keys(agent)) {
       expect(STANDARD_RESOURCE_FIELDS.has(key), `agent field "${key}" is not standard`).toBe(true)
@@ -134,8 +135,8 @@ describe('[CF] generated SDK contract', () => {
     for (const key of Object.keys(environment)) {
       expect(STANDARD_RESOURCE_FIELDS.has(key), `environment field "${key}" is not standard`).toBe(true)
     }
-    expect(obj(resourceSpec(agent).metadata).externalTaskId).toBe(refs.taskId)
-    expect(obj(resourceSpec(environment).metadata).externalBoardId).toBe(refs.boardId)
+    expect(resourceSpec(agent).metadata).toBeUndefined()
+    expect(resourceSpec(environment).metadata).toBeUndefined()
     expect(obj(agent.metadata).description).toBe('Updated by the external product through the SDK.')
 
     // No product-workflow references leak outside metadata.
@@ -178,8 +179,8 @@ describe('[CF] generated SDK contract', () => {
   it('external product starts work by creating an AMA session [spec: projects/external-session]', async () => {
     const { ama, runId } = await newSdk()
     const refs = externalRefs(runId)
-    const agent = await createAgentThroughSdk(ama, runId, refs)
-    const environment = await createEnvironmentThroughSdk(ama, runId, refs)
+    const agent = await createAgentThroughSdk(ama, runId)
+    const environment = await createEnvironmentThroughSdk(ama, runId)
     const volumes = [
       { name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/any-managed-agents.git', ref: 'main' },
     ]
@@ -197,7 +198,7 @@ describe('[CF] generated SDK contract', () => {
     expect(typeof obj(obj(obj(obj(before.status).bindings).agent).snapshot).version).toBe('number')
     expect(obj(obj(obj(obj(before.status).bindings).environment).snapshot).environmentId).toBe(resourceUid(environment))
     await ama.agents.update(resourceUid(agent), {
-      instructions: 'Changed after session creation — the snapshot must not follow.',
+      systemPrompt: 'Changed after session creation — the snapshot must not follow.',
     })
     const after = await readSession(ama, sessionId)
     expect(obj(obj(after.status).bindings).agent).toEqual(obj(obj(before.status).bindings).agent)
@@ -235,8 +236,8 @@ describe('[CF] generated SDK contract', () => {
   it('external product controls a running session only through AMA endpoints [spec: projects/external-control]', async () => {
     const { ama, runId } = await newSdk()
     const refs = externalRefs(runId)
-    const agent = await createAgentThroughSdk(ama, runId, refs)
-    const environment = await createEnvironmentThroughSdk(ama, runId, refs)
+    const agent = await createAgentThroughSdk(ama, runId)
+    const environment = await createEnvironmentThroughSdk(ama, runId)
     const { session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {})
     const sessionId = String(obj(session.metadata).uid)
 

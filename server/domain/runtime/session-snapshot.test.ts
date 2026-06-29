@@ -8,18 +8,15 @@ function agentSnapshot(overrides: Partial<AgentSnapshot> = {}): AgentSnapshot {
     agentId: 'agent_1',
     projectId: 'project_1',
     version: 1,
-    instructions: 'Base instructions.',
-    providerId: 'workers-ai',
+    systemPrompt: 'Base instructions.',
+    provider: 'workers-ai',
     model: '@cf/test/model',
     skills: [],
     subagents: [],
     role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: {},
+    handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
     tools: [],
     mcpConnectors: [],
-    metadata: {},
     createdAt: '2026-06-25T00:00:00.000Z',
     ...overrides,
   }
@@ -101,12 +98,12 @@ describe('[spec: sessions/memory-store-resources] memory store volumes', () => {
         { name: 'Team memory', mountPath: '/workspace/.ama/memory-stores/memstore_1' },
       ],
     )
-    expect(augmented.instructions).toContain('Base instructions.')
-    expect(augmented.instructions).toContain('Workspace layout:')
-    expect(augmented.instructions).toContain('https://github.com/saltbo/agent-kanban.git at repos/saltbo/agent-kanban')
-    expect(augmented.instructions).toContain('Team memory')
-    expect(augmented.instructions).toContain('Review conventions.')
-    expect(augmented.instructions).toContain('.ama/memory-stores/memstore_1')
-    expect(augmented.instructions).not.toContain('secret memory content')
+    expect(augmented.systemPrompt).toContain('Base instructions.')
+    expect(augmented.systemPrompt).toContain('Workspace layout:')
+    expect(augmented.systemPrompt).toContain('https://github.com/saltbo/agent-kanban.git at repos/saltbo/agent-kanban')
+    expect(augmented.systemPrompt).toContain('Team memory')
+    expect(augmented.systemPrompt).toContain('Review conventions.')
+    expect(augmented.systemPrompt).toContain('.ama/memory-stores/memstore_1')
+    expect(augmented.systemPrompt).not.toContain('secret memory content')
   })
 })

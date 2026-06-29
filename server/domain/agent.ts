@@ -27,18 +27,26 @@ export interface AgentToolAttachmentInput {
 
 // The runtime-relevant configuration that an agent version snapshots.
 export interface AgentConfig {
-  instructions: string | null
-  providerId: string | null
+  systemPrompt: string | null
+  provider: string | null
   model: string | null
   skills: string[]
   subagents: Record<string, unknown>[]
   role: string | null
-  capabilityTags: string[]
-  handoffPolicy: Record<string, unknown>
-  memoryPolicy: Record<string, unknown>
+  handoff: AgentHandoff
   tools: AgentToolAttachment[]
   mcpConnectors: string[]
-  metadata: Record<string, unknown>
+}
+
+export interface AgentHandoff {
+  enabled: boolean
+  accepts: AgentHandoffAccepts
+  targets: HandoffTarget[]
+}
+
+export interface AgentHandoffAccepts {
+  roles: string[]
+  capabilities: string[]
 }
 
 export interface Agent {
@@ -184,13 +192,21 @@ export function validateSkills(skills: string[]): FieldErrors | null {
   return null
 }
 
-export function validateCapabilityTags(capabilityTags: string[]): FieldErrors | null {
-  for (const tag of capabilityTags) {
+export function validateHandoff(handoff: AgentHandoff): FieldErrors | null {
+  for (const tag of [...handoff.accepts.roles, ...handoff.accepts.capabilities]) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(tag)) {
-      return { capabilityTags: `Capability tag must be a stable identifier: ${tag}` }
+      return { handoff: `Handoff role and capability values must be stable identifiers: ${tag}` }
     }
     if (secretString(tag)) {
-      return { capabilityTags: 'Secret material must be stored in a vault.' }
+      return { handoff: 'Secret material must be stored in a vault.' }
+    }
+  }
+  for (const target of handoff.targets) {
+    if (target.role && secretString(target.role)) {
+      return { handoff: 'Secret material must be stored in a vault.' }
+    }
+    if (target.capability && secretString(target.capability)) {
+      return { handoff: 'Secret material must be stored in a vault.' }
     }
   }
   return null
@@ -200,21 +216,13 @@ export function validateCapabilityTags(capabilityTags: string[]): FieldErrors | 
 // error keyed to the offending field, or null.
 export function validateConfigSecrets(config: {
   subagents: Record<string, unknown>[]
-  handoffPolicy: Record<string, unknown>
-  memoryPolicy: Record<string, unknown>
-  metadata: Record<string, unknown>
+  handoff: AgentHandoff
 }): FieldErrors | null {
   if (hasSecretMaterial(config.subagents)) {
     return { subagents: 'Secret material must be stored in a vault.' }
   }
-  if (hasSecretMaterial(config.handoffPolicy)) {
-    return { handoffPolicy: 'Secret material must be stored in a vault.' }
-  }
-  if (hasSecretMaterial(config.memoryPolicy)) {
-    return { memoryPolicy: 'Secret material must be stored in a vault.' }
-  }
-  if (hasSecretMaterial(config.metadata)) {
-    return { metadata: 'Secret material must be stored in a vault.' }
+  if (hasSecretMaterial(config.handoff)) {
+    return { handoff: 'Secret material must be stored in a vault.' }
   }
   return null
 }
@@ -232,33 +240,22 @@ export function nextVersionNumber(latestVersion: number | null) {
   return (latestVersion ?? 0) + 1
 }
 
-export function memoryEnabled(memoryPolicy: Record<string, unknown>) {
-  return memoryPolicy.enabled === true
-}
-
 export interface HandoffTarget {
-  role?: string
-  capability?: string
+  role?: string | undefined
+  capability?: string | undefined
 }
 
-export function policyHandoffTargets(handoffPolicy: Record<string, unknown>): HandoffTarget[] {
-  const targets = Array.isArray(handoffPolicy.targets) ? handoffPolicy.targets : []
-  return targets
-    .filter((target): target is Record<string, unknown> => Boolean(target) && typeof target === 'object')
-    .map((target) => ({
-      ...(typeof target.role === 'string' && target.role ? { role: target.role } : {}),
-      ...(typeof target.capability === 'string' && target.capability ? { capability: target.capability } : {}),
-    }))
-    .filter((target) => target.role !== undefined || target.capability !== undefined)
+export function defaultAgentHandoff(): AgentHandoff {
+  return { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] }
 }
 
 export function matchesHandoffTarget(
   targets: HandoffTarget[],
-  candidate: { role: string | null; capabilityTags: string[] },
+  candidate: { role: string | null; handoff: AgentHandoff },
 ) {
   return targets.some(
     (target) =>
       (target.role !== undefined && candidate.role === target.role) ||
-      (target.capability !== undefined && candidate.capabilityTags.includes(target.capability)),
+      (target.capability !== undefined && candidate.handoff.accepts.capabilities.includes(target.capability)),
   )
 }

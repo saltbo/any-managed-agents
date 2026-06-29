@@ -239,11 +239,11 @@ describe('CoreStep', () => {
     )
   }
 
-  it('renders name, description, instructions, and model fields', () => {
+  it('renders name, description, system prompt, and model fields', () => {
     renderCoreStep()
     expect(screen.getByLabelText('Name')).toBeInTheDocument()
     expect(screen.getByLabelText('Description')).toBeInTheDocument()
-    expect(screen.getByLabelText('Instructions')).toBeInTheDocument()
+    expect(screen.getByLabelText('System prompt')).toBeInTheDocument()
     expect(screen.getByLabelText('Model')).toBeInTheDocument()
   })
 
@@ -262,9 +262,9 @@ describe('CoreStep', () => {
     expect(screen.getByText('Name is required.')).toBeInTheDocument()
   })
 
-  it('renders instructions error when errors.instructions is set', () => {
-    renderCoreStep({ errors: { instructions: 'Instructions are required.' } })
-    expect(screen.getByText('Instructions are required.')).toBeInTheDocument()
+  it('renders system prompt error when errors.systemPrompt is set', () => {
+    renderCoreStep({ errors: { systemPrompt: 'System prompt is required.' } })
+    expect(screen.getByText('System prompt is required.')).toBeInTheDocument()
   })
 
   it('renders current model in the list when model is set but not in catalog', () => {
@@ -654,7 +654,7 @@ describe('SandboxStep', () => {
 // ─── RolesStep ─────────────────────────────────────────────────────────────
 
 describe('RolesStep', () => {
-  it('renders role, capability tags, handoff targets, and memory fields', () => {
+  it('renders role, capability tags, and handoff targets', () => {
     render(
       <MemoryRouter>
         <RolesStep draft={emptyBuilderDraft} errors={{}} setField={vi.fn()} />
@@ -663,7 +663,6 @@ describe('RolesStep', () => {
     expect(screen.getByLabelText('Role')).toBeInTheDocument()
     expect(screen.getByLabelText('Capability tags')).toBeInTheDocument()
     expect(screen.getByLabelText('Handoff targets')).toBeInTheDocument()
-    expect(screen.getByLabelText('Enable project-scoped agent memory')).toBeInTheDocument()
   })
 
   it('renders handoff targets error when set', () => {
@@ -677,26 +676,6 @@ describe('RolesStep', () => {
       </MemoryRouter>,
     )
     expect(screen.getByText('Invalid handoff target format')).toBeInTheDocument()
-  })
-
-  it('calls setField when memory checkbox is toggled', () => {
-    const setField = vi.fn()
-    render(
-      <MemoryRouter>
-        <RolesStep draft={emptyBuilderDraft} errors={{}} setField={setField} />
-      </MemoryRouter>,
-    )
-    fireEvent.click(screen.getByLabelText('Enable project-scoped agent memory'))
-    expect(setField).toHaveBeenCalled()
-  })
-
-  it('renders memoryEnabled error when set', () => {
-    render(
-      <MemoryRouter>
-        <RolesStep draft={emptyBuilderDraft} errors={{ memoryEnabled: 'Memory error' }} setField={vi.fn()} />
-      </MemoryRouter>,
-    )
-    expect(screen.getByText('Memory error')).toBeInTheDocument()
   })
 
   it('calls setField when role is typed', () => {

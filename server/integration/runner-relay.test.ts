@@ -40,12 +40,9 @@ async function createSelfHostedEnvironment(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `CLI relay workspace ${crypto.randomUUID()}`,
-      hostingMode: 'self_hosted',
-      networkPolicy: { mode: 'unrestricted' },
-      mcpPolicy: {},
-      packageManagerPolicy: {},
-      runtimeConfig: {},
-      packages: [],
+      type: 'self_hosted',
+      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
     }),
   })
   if (res.status !== 201) throw new Error(`Environment creation failed: ${res.status} ${await res.text()}`)
@@ -58,10 +55,10 @@ async function createAgent(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `CLI relay agent ${crypto.randomUUID()}`,
-      instructions: 'Run via claude-code self-hosted.',
+      systemPrompt: 'Run via claude-code self-hosted.',
       skills: [],
       mcpConnectors: [],
-      providerId: 'workers-ai',
+      provider: 'workers-ai',
     }),
   })
   if (res.status !== 201) throw new Error(`Agent creation failed: ${res.status} ${await res.text()}`)

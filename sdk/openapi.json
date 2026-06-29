@@ -1273,12 +1273,12 @@
       "AgentSpec": {
         "type": "object",
         "properties": {
-          "instructions": {
+          "systemPrompt": {
             "type": "string",
             "nullable": true,
             "example": "Answer with citations."
           },
-          "providerId": {
+          "provider": {
             "type": "string",
             "nullable": true,
             "example": "provider_abc123"
@@ -1314,21 +1314,8 @@
             "nullable": true,
             "example": "maintainer"
           },
-          "capabilityTags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "example": [
-              "issue-triage",
-              "code-review"
-            ]
-          },
-          "handoffPolicy": {
-            "$ref": "#/components/schemas/AgentHandoffPolicy"
-          },
-          "memoryPolicy": {
-            "$ref": "#/components/schemas/AgentMemoryPolicy"
+          "handoff": {
+            "$ref": "#/components/schemas/AgentHandoff"
           },
           "tools": {
             "type": "array",
@@ -1344,30 +1331,18 @@
             "example": [
               "github"
             ]
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
           }
         },
         "required": [
-          "instructions",
-          "providerId",
+          "systemPrompt",
+          "provider",
           "model",
           "skills",
           "subagents",
           "role",
-          "capabilityTags",
-          "handoffPolicy",
-          "memoryPolicy",
+          "handoff",
           "tools",
-          "mcpConnectors",
-          "metadata"
+          "mcpConnectors"
         ]
       },
       "AgentSubagent": {
@@ -1384,11 +1359,37 @@
           "nullable": true
         }
       },
-      "AgentHandoffPolicy": {
+      "AgentHandoff": {
         "type": "object",
         "properties": {
           "enabled": {
             "type": "boolean"
+          },
+          "accepts": {
+            "type": "object",
+            "properties": {
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                }
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                }
+              }
+            },
+            "required": [
+              "roles",
+              "capabilities"
+            ],
+            "additionalProperties": false
           },
           "targets": {
             "type": "array",
@@ -1397,9 +1398,12 @@
             }
           }
         },
-        "additionalProperties": {
-          "nullable": true
-        }
+        "required": [
+          "enabled",
+          "accepts",
+          "targets"
+        ],
+        "additionalProperties": false
       },
       "AgentHandoffTarget": {
         "type": "object",
@@ -1411,26 +1415,7 @@
             "type": "string"
           }
         },
-        "additionalProperties": {
-          "nullable": true
-        }
-      },
-      "AgentMemoryPolicy": {
-        "type": "object",
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "scope": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": {
-          "nullable": true
-        }
+        "additionalProperties": false
       },
       "AgentToolAttachment": {
         "type": "object",
@@ -1530,13 +1515,13 @@
             "maxLength": 1000,
             "example": "Answers with citations."
           },
-          "instructions": {
+          "systemPrompt": {
             "type": "string",
             "nullable": true,
             "maxLength": 8000,
             "example": "Answer with citations."
           },
-          "providerId": {
+          "provider": {
             "type": "string",
             "nullable": true,
             "minLength": 1,
@@ -1580,24 +1565,8 @@
             "maxLength": 80,
             "example": "maintainer"
           },
-          "capabilityTags": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 80
-            },
-            "maxItems": 50,
-            "example": [
-              "issue-triage",
-              "code-review"
-            ]
-          },
-          "handoffPolicy": {
-            "$ref": "#/components/schemas/AgentHandoffPolicy"
-          },
-          "memoryPolicy": {
-            "$ref": "#/components/schemas/AgentMemoryPolicy"
+          "handoff": {
+            "$ref": "#/components/schemas/AgentHandoff"
           },
           "tools": {
             "type": "array",
@@ -1617,15 +1586,6 @@
             "example": [
               "github"
             ]
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
           }
         },
         "required": [
@@ -1702,13 +1662,13 @@
             "maxLength": 1000,
             "example": "Answers with citations."
           },
-          "instructions": {
+          "systemPrompt": {
             "type": "string",
             "nullable": true,
             "maxLength": 8000,
             "example": "Answer with citations."
           },
-          "providerId": {
+          "provider": {
             "type": "string",
             "nullable": true,
             "minLength": 1,
@@ -1752,24 +1712,8 @@
             "maxLength": 80,
             "example": "maintainer"
           },
-          "capabilityTags": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 80
-            },
-            "maxItems": 50,
-            "example": [
-              "issue-triage",
-              "code-review"
-            ]
-          },
-          "handoffPolicy": {
-            "$ref": "#/components/schemas/AgentHandoffPolicy"
-          },
-          "memoryPolicy": {
-            "$ref": "#/components/schemas/AgentMemoryPolicy"
+          "handoff": {
+            "$ref": "#/components/schemas/AgentHandoff"
           },
           "tools": {
             "type": "array",
@@ -1789,15 +1733,6 @@
             "example": [
               "github"
             ]
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
           },
           "archived": {
             "type": "boolean",
@@ -1895,7 +1830,7 @@
             "nullable": true,
             "example": "worker"
           },
-          "capabilityTags": {
+          "capabilities": {
             "type": "array",
             "items": {
               "type": "string"
@@ -1909,7 +1844,7 @@
           "id",
           "name",
           "role",
-          "capabilityTags"
+          "capabilities"
         ]
       },
       "AgentMemory": {
@@ -2032,32 +1967,17 @@
       "EnvironmentSpec": {
         "type": "object",
         "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/EnvironmentScope"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EnvironmentType"
+          },
+          "networking": {
+            "$ref": "#/components/schemas/EnvironmentNetworking"
+          },
           "packages": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                },
-                "version": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                }
-              },
-              "required": [
-                "name"
-              ]
-            },
-            "example": [
-              {
-                "name": "tsx",
-                "version": "latest"
-              }
-            ]
+            "$ref": "#/components/schemas/EnvironmentPackages"
           },
           "variables": {
             "type": "object",
@@ -2078,83 +1998,25 @@
                 "description": "Runtime mode"
               }
             }
-          },
-          "hostingMode": {
-            "$ref": "#/components/schemas/EnvironmentHostingMode"
-          },
-          "networkPolicy": {
-            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
-          },
-          "mcpPolicy": {
-            "$ref": "#/components/schemas/EnvironmentMcpPolicy"
-          },
-          "packageManagerPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "allowedRegistries": [
-                "registry.npmjs.org"
-              ]
-            }
-          },
-          "resourceLimits": {
-            "type": "object",
-            "properties": {
-              "cpuMs": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "memoryMb": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "timeoutSeconds": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "memoryMb": 512
-            }
-          },
-          "runtimeConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "image": "node:24"
-            }
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
           }
         },
         "required": [
+          "scope",
+          "type",
+          "networking",
           "packages",
-          "variables",
-          "hostingMode",
-          "networkPolicy",
-          "mcpPolicy",
-          "packageManagerPolicy",
-          "resourceLimits",
-          "runtimeConfig",
-          "metadata"
+          "variables"
         ]
       },
-      "EnvironmentHostingMode": {
+      "EnvironmentScope": {
+        "type": "string",
+        "enum": [
+          "project",
+          "organization"
+        ],
+        "example": "organization"
+      },
+      "EnvironmentType": {
         "type": "string",
         "enum": [
           "cloud",
@@ -2162,16 +2024,22 @@
         ],
         "example": "cloud"
       },
-      "EnvironmentNetworkPolicy": {
+      "EnvironmentNetworking": {
         "type": "object",
         "properties": {
-          "mode": {
+          "type": {
             "type": "string",
             "enum": [
-              "offline",
-              "restricted",
-              "unrestricted"
+              "closed",
+              "limited",
+              "open"
             ]
+          },
+          "allowMcpServers": {
+            "type": "boolean"
+          },
+          "allowPackageManagers": {
+            "type": "boolean"
           },
           "allowedHosts": {
             "type": "array",
@@ -2185,79 +2053,94 @@
           }
         },
         "required": [
-          "mode"
+          "type",
+          "allowMcpServers",
+          "allowPackageManagers"
         ],
         "additionalProperties": false,
         "example": {
-          "mode": "restricted",
+          "type": "limited",
+          "allowMcpServers": false,
+          "allowPackageManagers": true,
           "allowedHosts": [
-            "registry.npmjs.org"
+            "api.example.com"
           ]
         }
       },
-      "EnvironmentMcpPolicy": {
+      "EnvironmentPackages": {
         "type": "object",
         "properties": {
-          "allowedConnectors": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 120
-            },
-            "maxItems": 100
+          "type": {
+            "type": "string",
+            "enum": [
+              "packages"
+            ]
           },
-          "blockedConnectors": {
+          "apt": {
             "type": "array",
             "items": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 120
-            },
-            "maxItems": 100
-          },
-          "requireApprovalConnectors": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 120
-            },
-            "maxItems": 100
-          },
-          "requireApprovalTools": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 240
+              "maxLength": 160
             },
             "maxItems": 200
           },
-          "connectorApprovalModes": {
-            "type": "object",
-            "additionalProperties": {
+          "cargo": {
+            "type": "array",
+            "items": {
               "type": "string",
-              "enum": [
-                "none",
-                "require_approval"
-              ]
-            }
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "maxItems": 200
           },
-          "defaultEffect": {
-            "type": "string",
-            "enum": [
-              "allow",
-              "deny"
-            ]
+          "gem": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "maxItems": 200
+          },
+          "go": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "maxItems": 200
+          },
+          "npm": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "maxItems": 200
+          },
+          "pip": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "maxItems": 200
           }
         },
-        "additionalProperties": false,
-        "example": {
-          "allowedConnectors": [
-            "github"
-          ]
-        }
+        "required": [
+          "type",
+          "apt",
+          "cargo",
+          "gem",
+          "go",
+          "npm",
+          "pip"
+        ],
+        "additionalProperties": false
       },
       "EnvironmentStatus": {
         "type": "object",
@@ -2296,33 +2179,17 @@
             "maxLength": 1000,
             "example": "Default Node.js environment."
           },
+          "scope": {
+            "$ref": "#/components/schemas/EnvironmentScope"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EnvironmentType"
+          },
+          "networking": {
+            "$ref": "#/components/schemas/EnvironmentNetworking"
+          },
           "packages": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                },
-                "version": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                }
-              },
-              "required": [
-                "name"
-              ]
-            },
-            "maxItems": 200,
-            "example": [
-              {
-                "name": "tsx",
-                "version": "latest"
-              }
-            ]
+            "$ref": "#/components/schemas/EnvironmentPackages"
           },
           "variables": {
             "type": "object",
@@ -2342,68 +2209,6 @@
               "NODE_ENV": {
                 "required": true
               }
-            }
-          },
-          "hostingMode": {
-            "$ref": "#/components/schemas/EnvironmentHostingMode"
-          },
-          "networkPolicy": {
-            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
-          },
-          "mcpPolicy": {
-            "$ref": "#/components/schemas/EnvironmentMcpPolicy"
-          },
-          "packageManagerPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "allowedRegistries": [
-                "registry.npmjs.org"
-              ]
-            }
-          },
-          "resourceLimits": {
-            "type": "object",
-            "properties": {
-              "cpuMs": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "memoryMb": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "timeoutSeconds": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "memoryMb": 512
-            }
-          },
-          "runtimeConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "image": "node:24"
-            }
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
             }
           }
         },
@@ -2427,33 +2232,17 @@
             "maxLength": 1000,
             "example": "Default Node.js environment."
           },
+          "scope": {
+            "$ref": "#/components/schemas/EnvironmentScope"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EnvironmentType"
+          },
+          "networking": {
+            "$ref": "#/components/schemas/EnvironmentNetworking"
+          },
           "packages": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                },
-                "version": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 120
-                }
-              },
-              "required": [
-                "name"
-              ]
-            },
-            "maxItems": 200,
-            "example": [
-              {
-                "name": "tsx",
-                "version": "latest"
-              }
-            ]
+            "$ref": "#/components/schemas/EnvironmentPackages"
           },
           "variables": {
             "type": "object",
@@ -2473,68 +2262,6 @@
               "NODE_ENV": {
                 "required": true
               }
-            }
-          },
-          "hostingMode": {
-            "$ref": "#/components/schemas/EnvironmentHostingMode"
-          },
-          "networkPolicy": {
-            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
-          },
-          "mcpPolicy": {
-            "$ref": "#/components/schemas/EnvironmentMcpPolicy"
-          },
-          "packageManagerPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "allowedRegistries": [
-                "registry.npmjs.org"
-              ]
-            }
-          },
-          "resourceLimits": {
-            "type": "object",
-            "properties": {
-              "cpuMs": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "memoryMb": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              },
-              "timeoutSeconds": {
-                "type": "integer",
-                "minimum": 0,
-                "exclusiveMinimum": true
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "memoryMb": 512
-            }
-          },
-          "runtimeConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "image": "node:24"
-            }
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
             }
           },
           "archived": {
@@ -5400,11 +5127,11 @@
           "version": {
             "type": "integer"
           },
-          "instructions": {
+          "systemPrompt": {
             "type": "string",
             "nullable": true
           },
-          "providerId": {
+          "provider": {
             "type": "string",
             "example": "workers-ai"
           },
@@ -5431,23 +5158,53 @@
             "type": "string",
             "nullable": true
           },
-          "capabilityTags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "handoffPolicy": {
+          "handoff": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "memoryPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "accepts": {
+                "type": "object",
+                "properties": {
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "capabilities": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "roles",
+                  "capabilities"
+                ]
+              },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string"
+                    },
+                    "capability": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "enabled",
+              "accepts",
+              "targets"
+            ]
           },
           "tools": {
             "type": "array",
@@ -5464,12 +5221,6 @@
               "type": "string"
             }
           },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -5480,18 +5231,15 @@
           "agentId",
           "projectId",
           "version",
-          "instructions",
-          "providerId",
+          "systemPrompt",
+          "provider",
           "model",
           "skills",
           "subagents",
           "role",
-          "capabilityTags",
-          "handoffPolicy",
-          "memoryPolicy",
+          "handoff",
           "tools",
           "mcpConnectors",
-          "metadata",
           "createdAt"
         ]
       },
@@ -5511,34 +5259,19 @@
           "version": {
             "type": "integer"
           },
+          "scope": {
+            "$ref": "#/components/schemas/EnvironmentScope"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EnvironmentType"
+          },
+          "networking": {
+            "$ref": "#/components/schemas/EnvironmentNetworking"
+          },
           "packages": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
-            }
+            "$ref": "#/components/schemas/EnvironmentPackages"
           },
           "variables": {
-            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
-          },
-          "hostingMode": {
-            "$ref": "#/components/schemas/EnvironmentHostingMode"
-          },
-          "networkPolicy": {
-            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
-          },
-          "mcpPolicy": {
-            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
-          },
-          "packageManagerPolicy": {
-            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
-          },
-          "resourceLimits": {
-            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
-          },
-          "runtimeConfig": {
-            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
-          },
-          "metadata": {
             "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
           "createdAt": {
@@ -5551,15 +5284,11 @@
           "environmentId",
           "projectId",
           "version",
+          "scope",
+          "type",
+          "networking",
           "packages",
           "variables",
-          "hostingMode",
-          "networkPolicy",
-          "mcpPolicy",
-          "packageManagerPolicy",
-          "resourceLimits",
-          "runtimeConfig",
-          "metadata",
           "createdAt"
         ]
       },
@@ -5608,6 +5337,13 @@
           "driver",
           "backend",
           "protocol"
+        ]
+      },
+      "EnvironmentHostingMode": {
+        "type": "string",
+        "enum": [
+          "cloud",
+          "self_hosted"
         ]
       },
       "CreateSessionRequest": {

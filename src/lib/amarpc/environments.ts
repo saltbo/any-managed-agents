@@ -1,5 +1,4 @@
 import {
-  type ArrayItem,
   type ListItem,
   type ListOptions,
   type ListResponse,
@@ -21,10 +20,10 @@ export type EnvironmentVersionListResponse = RpcResponseType<EnvironmentsRpc[':e
 export type EnvironmentVersion = ListItem<EnvironmentVersionListResponse>
 export type EnvironmentSpec = Environment['spec']
 export type EnvironmentStatus = Environment['status']
-export type EnvironmentPackage = ArrayItem<EnvironmentSpec['packages']>
+export type EnvironmentPackages = EnvironmentSpec['packages']
 export type EnvironmentVariable = EnvironmentSpec['variables'][string]
-export type EnvironmentHostingMode = EnvironmentSpec['hostingMode']
-export type EnvironmentNetworkPolicy = EnvironmentSpec['networkPolicy']
+export type EnvironmentType = EnvironmentSpec['type']
+export type EnvironmentNetworking = EnvironmentSpec['networking']
 
 export const environmentsApi = {
   listEnvironments: (options: ListOptions = {}) =>

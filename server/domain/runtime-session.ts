@@ -21,6 +21,6 @@ export function sessionRuntimeConfig(metadata: Record<string, unknown>): Record<
   return objectValue(metadata.runtimeConfig)
 }
 
-export function environmentHostingMode(snapshot: { hostingMode?: unknown } | null): SessionHostingMode {
-  return snapshot?.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud'
+export function environmentHostingMode(snapshot: { type?: unknown } | null): SessionHostingMode {
+  return snapshot?.type === 'self_hosted' ? 'self_hosted' : 'cloud'
 }

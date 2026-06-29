@@ -33,7 +33,7 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
   it('stepErrors delegates to coreStepErrors for core step', () => {
     const errors = stepErrors('core', emptyBuilderDraft)
     expect(errors.name).toBeTruthy()
-    expect(errors.instructions).toBeTruthy()
+    expect(errors.systemPrompt).toBeTruthy()
   })
 
   it('stepErrors delegates to rolesStepErrors for roles step with invalid target', () => {
@@ -42,7 +42,7 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
   })
 
   it('coreStepErrors returns error when name is too long (121 chars)', () => {
-    const errors = stepErrors('core', { ...emptyBuilderDraft, name: 'A'.repeat(121), instructions: 'B' })
+    const errors = stepErrors('core', { ...emptyBuilderDraft, name: 'A'.repeat(121), systemPrompt: 'B' })
     expect(errors.name).toContain('120 characters')
   })
 
@@ -50,7 +50,7 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
     const errors = stepErrors('core', {
       ...emptyBuilderDraft,
       name: 'Valid name',
-      instructions: 'Valid instructions',
+      systemPrompt: 'Valid system prompt',
       model: '@cf/some-model',
       provider: 'workers-ai',
     })
@@ -82,9 +82,9 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
   // ─── toAgentInput ──────────────────────────────────────────────────────────
 
   it('toAgentInput includes description only when non-empty', () => {
-    const withDesc = toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', description: 'Desc' })
+    const withDesc = toAgentInput({ ...emptyBuilderDraft, name: 'A', systemPrompt: 'B', description: 'Desc' })
     expect(withDesc.description).toBe('Desc')
-    const withoutDesc = toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', description: '' })
+    const withoutDesc = toAgentInput({ ...emptyBuilderDraft, name: 'A', systemPrompt: 'B', description: '' })
     expect(withoutDesc.description).toBeUndefined()
   })
 
@@ -92,7 +92,7 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
     const result = toAgentInput({
       ...emptyBuilderDraft,
       name: 'A',
-      instructions: 'B',
+      systemPrompt: 'B',
       sandboxEnabled: false,
       skills: 'ama@coding-agent',
     })
@@ -103,65 +103,59 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
     const result = toAgentInput({
       ...emptyBuilderDraft,
       name: 'A',
-      instructions: 'B',
+      systemPrompt: 'B',
       sandboxEnabled: true,
       skills: 'ama@coding-agent\nama@test',
     })
     expect(result.skills).toEqual(['ama@coding-agent', 'ama@test'])
   })
 
-  it('toAgentInput sets handoffPolicy with targets when targets are present', () => {
+  it('toAgentInput sets handoff with targets when targets are present', () => {
     const result = toAgentInput({
       ...emptyBuilderDraft,
       name: 'A',
-      instructions: 'B',
+      systemPrompt: 'B',
       handoffTargets: 'role=worker',
     })
-    expect(result.handoffPolicy).toEqual({ targets: [{ role: 'worker' }] })
+    expect(result.handoff).toEqual({
+      enabled: true,
+      accepts: { roles: [], capabilities: [] },
+      targets: [{ role: 'worker' }],
+    })
   })
 
-  it('toAgentInput sets empty handoffPolicy when no targets', () => {
-    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', handoffTargets: '' })
-    expect(result.handoffPolicy).toEqual({})
+  it('toAgentInput disables handoff when no roles, capabilities, or targets are present', () => {
+    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', systemPrompt: 'B', handoffTargets: '' })
+    expect(result.handoff).toEqual({ enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] })
   })
 
-  it('toAgentInput sets memoryPolicy with scope when memoryEnabled is true', () => {
-    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', memoryEnabled: true })
-    expect(result.memoryPolicy).toEqual({ enabled: true, scope: 'project' })
-  })
-
-  it('toAgentInput sets memoryPolicy disabled when memoryEnabled is false', () => {
-    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', memoryEnabled: false })
-    expect(result.memoryPolicy).toEqual({ enabled: false })
-  })
-
-  it('toAgentInput maps capabilityTags from newline-separated string', () => {
+  it('toAgentInput maps capability lines to handoff accepts', () => {
     const result = toAgentInput({
       ...emptyBuilderDraft,
       name: 'A',
-      instructions: 'B',
+      systemPrompt: 'B',
       capabilityTags: 'triage\ncode-review',
     })
-    expect(result.capabilityTags).toEqual(['triage', 'code-review'])
+    expect(result.handoff?.accepts.capabilities).toEqual(['triage', 'code-review'])
   })
 
   it('toAgentInput maps role null when role is empty string', () => {
-    expect(toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', role: '' }).role).toBeNull()
+    expect(toAgentInput({ ...emptyBuilderDraft, name: 'A', systemPrompt: 'B', role: '' }).role).toBeNull()
   })
 
   it('toAgentInput maps role string when role is set', () => {
-    expect(toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', role: 'maintainer' }).role).toBe(
+    expect(toAgentInput({ ...emptyBuilderDraft, name: 'A', systemPrompt: 'B', role: 'maintainer' }).role).toBe(
       'maintainer',
     )
   })
 
   it('toAgentInput maps allowedTools to tools array', () => {
-    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', allowedTools: 'read\nwrite' })
+    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', systemPrompt: 'B', allowedTools: 'read\nwrite' })
     expect(result.tools).toEqual([{ name: 'read' }, { name: 'write' }])
   })
 
   it('toAgentInput passes mcpConnectors array directly', () => {
-    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', instructions: 'B', mcpConnectors: ['c1', 'c2'] })
+    const result = toAgentInput({ ...emptyBuilderDraft, name: 'A', systemPrompt: 'B', mcpConnectors: ['c1', 'c2'] })
     expect(result.mcpConnectors).toEqual(['c1', 'c2'])
   })
 
@@ -177,9 +171,9 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
     expect(examples.curl).not.toContain('"description"')
   })
 
-  it('agentApiExamples omits instructions when agent.instructions is null', () => {
-    const examples = agentApiExamples('https://example.com', buildAgent({ instructions: null }))
-    expect(examples.curl).not.toContain('"instructions"')
+  it('agentApiExamples omits system prompt when agent.systemPrompt is null', () => {
+    const examples = agentApiExamples('https://example.com', buildAgent({ systemPrompt: null }))
+    expect(examples.curl).not.toContain('"systemPrompt"')
   })
 
   it('agentApiExamples omits role when agent.role is null', () => {
@@ -187,9 +181,9 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
     expect(examples.curl).not.toContain('"role"')
   })
 
-  it('agentApiExamples includes instructions when set', () => {
-    const examples = agentApiExamples('https://example.com', buildAgent({ instructions: 'Do the work' }))
-    expect(examples.curl).toContain('"instructions":"Do the work"')
+  it('agentApiExamples includes system prompt when set', () => {
+    const examples = agentApiExamples('https://example.com', buildAgent({ systemPrompt: 'Do the work' }))
+    expect(examples.curl).toContain('"systemPrompt":"Do the work"')
   })
 
   it('agentApiExamples includes role when set', () => {
@@ -209,11 +203,11 @@ describe('[spec: agents/builder] agent-builder-model extensions', () => {
 
   it('apiErrorToBuilder maps server field errors to builder fields', () => {
     const err = new ApiError('unprocessable', 422, {
-      error: { details: { fields: { name: 'Name is required', instructions: 'Instructions missing' } } },
+      error: { details: { fields: { name: 'Name is required', systemPrompt: 'Instructions missing' } } },
     })
     const result = apiErrorToBuilder(err)
     expect(result.errors.name).toBe('Name is required')
-    expect(result.errors.instructions).toBe('Instructions missing')
+    expect(result.errors.systemPrompt).toBe('Instructions missing')
     expect(result.step).toBe('core')
   })
 

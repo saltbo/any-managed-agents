@@ -15,18 +15,15 @@ const auth: AuthScope = {
 
 function config(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
-    instructions: null,
-    providerId: null,
+    systemPrompt: null,
+    provider: null,
     model: null,
     skills: [],
     subagents: [],
     role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
+    handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
     tools: [],
     mcpConnectors: [],
-    metadata: {},
     ...overrides,
   }
 }
@@ -198,8 +195,8 @@ describe('[spec: agents/create] createAgent', () => {
   it('rejects a disabled provider reference', async () => {
     const deps = fakeDeps({ repo: { providerEnabled: async () => false } })
     await expect(
-      createAgent(deps, auth, { name: 'x', description: null, config: config({ providerId: 'provider_x' }) }),
-    ).rejects.toMatchObject({ fields: { providerId: expect.any(String) } })
+      createAgent(deps, auth, { name: 'x', description: null, config: config({ provider: 'provider_x' }) }),
+    ).rejects.toMatchObject({ fields: { provider: expect.any(String) } })
   })
 
   it('accepts a non-catalog model — model validity is resolved at session creation', async () => {
@@ -208,7 +205,7 @@ describe('[spec: agents/create] createAgent', () => {
     const agent = await createAgent(fakeDeps(), auth, {
       name: 'x',
       description: null,
-      config: config({ providerId: 'provider_x', model: 'opus' }),
+      config: config({ provider: 'provider_x', model: 'opus' }),
     })
     expect(agent.spec.model).toBe('opus')
   })
@@ -303,22 +300,26 @@ describe('[spec: agents/create] createAgent', () => {
     ).rejects.toMatchObject({ fields: { subagents: expect.any(String) } })
   })
 
-  it('rejects an invalid capability tag format', async () => {
+  it('rejects an invalid handoff capability format', async () => {
     await expect(
       createAgent(fakeDeps(), auth, {
         name: 'x',
         description: null,
-        config: config({ capabilityTags: ['invalid tag with space'] }),
+        config: config({
+          handoff: { enabled: true, accepts: { roles: [], capabilities: ['invalid tag with space'] }, targets: [] },
+        }),
       }),
-    ).rejects.toMatchObject({ fields: { capabilityTags: expect.any(String) } })
+    ).rejects.toMatchObject({ fields: { handoff: expect.any(String) } })
   })
 
-  it('rejects raw secret material in handoffPolicy config secrets', async () => {
+  it('rejects raw secret material in handoff config secrets', async () => {
     await expect(
       createAgent(fakeDeps(), auth, {
         name: 'x',
         description: null,
-        config: config({ handoffPolicy: { secretToken: 'raw-secret' } }),
+        config: config({
+          handoff: { enabled: true, accepts: { roles: [], capabilities: [] }, targets: [{ capability: 'raw-secret' }] },
+        }),
       }),
     ).rejects.toMatchObject({ fields: expect.objectContaining({}) })
   })
@@ -327,9 +328,9 @@ describe('[spec: agents/create] createAgent', () => {
     const agent = await createAgent(fakeDeps(), auth, {
       name: 'x',
       description: null,
-      config: config({ providerId: 'provider_x', model: 'gpt-4' }),
+      config: config({ provider: 'provider_x', model: 'gpt-4' }),
     })
-    expect(agent.spec.providerId).toBe('provider_x')
+    expect(agent.spec.provider).toBe('provider_x')
     expect(agent.spec.model).toBe('gpt-4')
   })
 
@@ -362,11 +363,11 @@ describe('[spec: agents/update] updateAgent', () => {
         },
       },
     })
-    const result = await updateAgent(deps, auth, agentRecord(), { instructions: 'New' })
+    const result = await updateAgent(deps, auth, agentRecord(), { systemPrompt: 'New' })
     expect(inserted).toHaveLength(1)
     expect(result.agent.status.version).toBe(2)
     expect(result.agent.status.currentVersionId).toBe('agentver_2')
-    expect(result.agent.spec.instructions).toBe('New')
+    expect(result.agent.spec.systemPrompt).toBe('New')
   })
 
   it('does not snapshot when only name/description change', async () => {
@@ -414,18 +415,6 @@ describe('[spec: agents/update] updateAgent', () => {
     expect(result.agent.metadata.archivedAt).toBeNull()
   })
 
-  it('merges metadata, dropping keys set to null', async () => {
-    const result = await updateAgent(
-      deps(),
-      auth,
-      agentRecord({ spec: { metadata: { owner: 'platform', remove: 'stale' } } }),
-      {
-        metadata: { owner: 'runtime', remove: null },
-      },
-    )
-    expect(result.agent.spec.metadata).toEqual({ owner: 'runtime' })
-  })
-
   function deps() {
     return fakeDeps()
   }
@@ -434,7 +423,10 @@ describe('[spec: agents/update] updateAgent', () => {
 describe('[spec: agents/handoff] resolveHandoffCandidates', () => {
   const worker = agentRecord({
     metadata: { uid: 'agent_worker' },
-    spec: { role: 'worker', capabilityTags: ['implementation'] },
+    spec: {
+      role: 'worker',
+      handoff: { enabled: true, accepts: { roles: [], capabilities: ['implementation'] }, targets: [] },
+    },
   })
   const reviewer = agentRecord({ metadata: { uid: 'agent_reviewer' }, spec: { role: 'reviewer' } })
 
@@ -455,7 +447,13 @@ describe('[spec: agents/handoff] resolveHandoffCandidates', () => {
     const deps = fakeDeps({ repo: { liveAgents: async () => [worker, reviewer] } })
     const lead = agentRecord({
       metadata: { uid: 'agent_lead' },
-      spec: { handoffPolicy: { targets: [{ capability: 'implementation' }] } },
+      spec: {
+        handoff: {
+          enabled: true,
+          accepts: { roles: [], capabilities: [] },
+          targets: [{ capability: 'implementation' }],
+        },
+      },
     })
     const candidates = await resolveHandoffCandidates(deps, 'project_1', lead, {})
     expect(candidates.map((candidate) => candidate.id)).toEqual(['agent_worker'])
@@ -464,7 +462,10 @@ describe('[spec: agents/handoff] resolveHandoffCandidates', () => {
   it('excludes the requesting agent from its own candidates', async () => {
     const self = agentRecord({
       metadata: { uid: 'agent_self' },
-      spec: { role: 'worker', capabilityTags: ['implementation'] },
+      spec: {
+        role: 'worker',
+        handoff: { enabled: true, accepts: { roles: [], capabilities: ['implementation'] }, targets: [] },
+      },
     })
     const deps = fakeDeps({ repo: { liveAgents: async () => [self, worker] } })
     const candidates = await resolveHandoffCandidates(deps, 'project_1', self, { role: 'worker' })
@@ -563,13 +564,13 @@ describe('[spec: agents/update] updateAgent — archived idempotent', () => {
     expect(result.archived).toBe(false)
   })
 
-  it('updates providerId, model, and role when explicitly patched', async () => {
+  it('updates provider, model, and role when explicitly patched', async () => {
     const result = await updateAgent(fakeDeps(), auth, agentRecord(), {
-      providerId: 'provider_new',
+      provider: 'provider_new',
       model: 'gpt-4',
       role: 'analyst',
     })
-    expect(result.agent.spec.providerId).toBe('provider_new')
+    expect(result.agent.spec.provider).toBe('provider_new')
     expect(result.agent.spec.model).toBe('gpt-4')
     expect(result.agent.spec.role).toBe('analyst')
   })
@@ -577,7 +578,10 @@ describe('[spec: agents/update] updateAgent — archived idempotent', () => {
   it('resolves a handoff by an explicit capability', async () => {
     const worker = agentRecord({
       metadata: { uid: 'agent_worker' },
-      spec: { role: 'worker', capabilityTags: ['build'] },
+      spec: {
+        role: 'worker',
+        handoff: { enabled: true, accepts: { roles: [], capabilities: ['build'] }, targets: [] },
+      },
     })
     const deps = fakeDeps({ repo: { liveAgents: async () => [worker] } })
     const candidates = await resolveHandoffCandidates(

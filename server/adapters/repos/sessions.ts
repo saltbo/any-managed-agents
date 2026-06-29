@@ -105,9 +105,8 @@ function normalizeEnvironmentSnapshot(snapshot: Record<string, unknown> | null):
   }
   return {
     ...snapshot,
-    hostingMode: hostingModeFromSnapshot(snapshot.hostingMode),
-    networkPolicy: objectValue(snapshot.networkPolicy),
-    runtimeConfig: objectValue(snapshot.runtimeConfig),
+    type: snapshot.type === 'self_hosted' ? 'self_hosted' : 'cloud',
+    networking: objectValue(snapshot.networking),
   }
 }
 
@@ -119,9 +118,9 @@ function serializeSession(row: SessionRow): Session {
   const environmentSnapshot = normalizeEnvironmentSnapshot(parseJson<Record<string, unknown>>(row.environmentSnapshot))
   const metadata = parseJson<Record<string, unknown>>(row.metadata) ?? {}
   const modelConfig = parseJson<Record<string, unknown>>(row.modelConfig) ?? {}
-  const hostingMode = hostingModeFromSnapshot(environmentSnapshot?.hostingMode)
+  const hostingMode = hostingModeFromSnapshot(environmentSnapshot?.type)
   const runtime = snapshotRuntime(metadata)
-  const provider = row.modelProvider ?? agentSnapshot.providerId
+  const provider = row.modelProvider ?? agentSnapshot.provider
   const model = sessionModel(modelConfig, agentSnapshot)
   const placement = runtimePlacement({
     hostingMode,

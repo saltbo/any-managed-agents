@@ -1,6 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
-import { normalizeToolAttachments } from '@server/domain/agent'
+import { defaultAgentHandoff, normalizeToolAttachments } from '@server/domain/agent'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -13,7 +13,6 @@ import {
 } from '../openapi'
 import {
   createAgent,
-  memoryEnabled,
   readAgentMemory,
   replaceAgentMemory,
   resolveHandoffCandidates,
@@ -30,16 +29,21 @@ const JsonObjectSchema = z.record(z.string(), z.unknown())
 // (the domain reads specific keys and ignores the rest).
 const HandoffTargetSchema = z
   .object({ role: z.string().optional(), capability: z.string().optional() })
-  .catchall(z.unknown())
+  .strict()
   .openapi('AgentHandoffTarget')
-const HandoffPolicySchema = z
-  .object({ enabled: z.boolean().optional(), targets: z.array(HandoffTargetSchema).optional() })
-  .catchall(z.unknown())
-  .openapi('AgentHandoffPolicy')
-const MemoryPolicySchema = z
-  .object({ enabled: z.boolean().optional(), mode: z.string().optional(), scope: z.string().optional() })
-  .catchall(z.unknown())
-  .openapi('AgentMemoryPolicy')
+const AgentHandoffSchema = z
+  .object({
+    enabled: z.boolean(),
+    accepts: z
+      .object({
+        roles: z.array(z.string().min(1).max(80)),
+        capabilities: z.array(z.string().min(1).max(80)),
+      })
+      .strict(),
+    targets: z.array(HandoffTargetSchema),
+  })
+  .strict()
+  .openapi('AgentHandoff')
 const SubagentSchema = z
   .object({ username: z.string().optional(), role: z.string().optional() })
   .catchall(z.unknown())
@@ -72,18 +76,15 @@ const AgentToolAttachmentInputSchema = z
 
 const AgentSpecSchema = z
   .object({
-    instructions: z.string().nullable().openapi({ example: 'Answer with citations.' }),
-    providerId: z.string().nullable().openapi({ example: 'provider_abc123' }),
+    systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
+    provider: z.string().nullable().openapi({ example: 'provider_abc123' }),
     model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
     subagents: z.array(SubagentSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
     role: z.string().nullable().openapi({ example: 'maintainer' }),
-    capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
-    handoffPolicy: HandoffPolicySchema,
-    memoryPolicy: MemoryPolicySchema,
+    handoff: AgentHandoffSchema,
     tools: z.array(AgentToolAttachmentSchema),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
-    metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
   })
   .openapi('AgentSpec')
 
@@ -120,8 +121,8 @@ const AgentPayloadSchema = z
   .object({
     name: z.string().min(1).max(120).openapi({ example: 'Research assistant' }),
     description: z.string().max(1000).nullable().optional().openapi({ example: 'Answers with citations.' }),
-    instructions: z.string().max(8000).nullable().optional().openapi({ example: 'Answer with citations.' }),
-    providerId: z.string().min(1).nullable().optional().openapi({ example: 'provider_abc123' }),
+    systemPrompt: z.string().max(8000).nullable().optional().openapi({ example: 'Answer with citations.' }),
+    provider: z.string().min(1).nullable().optional().openapi({ example: 'provider_abc123' }),
     model: z.string().min(1).nullable().optional().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     skills: z
       .array(z.string().min(1).max(256))
@@ -134,20 +135,13 @@ const AgentPayloadSchema = z
       .optional()
       .openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
     role: z.string().trim().min(1).max(80).nullable().optional().openapi({ example: 'maintainer' }),
-    capabilityTags: z
-      .array(z.string().trim().min(1).max(80))
-      .max(50)
-      .optional()
-      .openapi({ example: ['issue-triage', 'code-review'] }),
-    handoffPolicy: HandoffPolicySchema.optional(),
-    memoryPolicy: MemoryPolicySchema.optional(),
+    handoff: AgentHandoffSchema.optional(),
     tools: z.array(AgentToolAttachmentInputSchema).max(100).optional(),
     mcpConnectors: z
       .array(z.string().min(1).max(120))
       .max(50)
       .optional()
       .openapi({ example: ['github'] }),
-    metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
   })
   .strict()
 
@@ -192,7 +186,7 @@ const AgentHandoffCandidateSchema = z
     id: z.string().openapi({ example: 'agent_def456' }),
     name: z.string().openapi({ example: 'Implementation worker' }),
     role: z.string().nullable().openapi({ example: 'worker' }),
-    capabilityTags: z.array(z.string()).openapi({ example: ['implementation'] }),
+    capabilities: z.array(z.string()).openapi({ example: ['implementation'] }),
   })
   .openapi('AgentHandoffCandidate')
 const AgentHandoffCandidateListResponseSchema = listResponseSchema(
@@ -574,9 +568,6 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!agent) {
         return notFound(c)
       }
-      if (!memoryEnabled(agent.spec.memoryPolicy)) {
-        return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
-      }
       const memory = await readAgentMemory(deps, auth.project.id, agent)
       return c.json(memory, 200)
     })
@@ -591,9 +582,6 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       const agent = await deps.agents.find(auth.project.id, agentId)
       if (!agent) {
         return notFound(c)
-      }
-      if (!memoryEnabled(agent.spec.memoryPolicy)) {
-        return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
       }
       try {
         const memory = await replaceAgentMemory(deps, auth.project.id, agent, {
@@ -616,36 +604,30 @@ function patchFromBody(body: z.infer<typeof UpdateAgentSchema>): UpdateAgentPatc
   return {
     ...(body.name !== undefined ? { name: body.name } : {}),
     ...(body.description !== undefined ? { description: body.description } : {}),
-    ...(body.instructions !== undefined ? { instructions: body.instructions } : {}),
-    ...(body.providerId !== undefined ? { providerId: body.providerId } : {}),
+    ...(body.systemPrompt !== undefined ? { systemPrompt: body.systemPrompt } : {}),
+    ...(body.provider !== undefined ? { provider: body.provider } : {}),
     ...(body.model !== undefined ? { model: body.model } : {}),
     ...(body.skills !== undefined ? { skills: body.skills } : {}),
     ...(body.subagents !== undefined ? { subagents: body.subagents } : {}),
     ...(body.role !== undefined ? { role: body.role } : {}),
-    ...(body.capabilityTags !== undefined ? { capabilityTags: body.capabilityTags } : {}),
-    ...(body.handoffPolicy !== undefined ? { handoffPolicy: body.handoffPolicy } : {}),
-    ...(body.memoryPolicy !== undefined ? { memoryPolicy: body.memoryPolicy } : {}),
+    ...(body.handoff !== undefined ? { handoff: body.handoff } : {}),
     ...(body.tools !== undefined ? { tools: normalizeToolAttachments(body.tools) } : {}),
     ...(body.mcpConnectors !== undefined ? { mcpConnectors: body.mcpConnectors } : {}),
-    ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     ...(body.archived !== undefined ? { archived: body.archived } : {}),
   }
 }
 
 function configFromPayload(body: z.infer<typeof AgentPayloadSchema>) {
   return {
-    instructions: body.instructions ?? null,
-    providerId: body.providerId ?? null,
+    systemPrompt: body.systemPrompt ?? null,
+    provider: body.provider ?? null,
     model: body.model ?? null,
     skills: body.skills ?? [],
     subagents: body.subagents ?? [],
     role: body.role ?? null,
-    capabilityTags: body.capabilityTags ?? [],
-    handoffPolicy: body.handoffPolicy ?? {},
-    memoryPolicy: body.memoryPolicy ?? { enabled: false },
+    handoff: body.handoff ?? defaultAgentHandoff(),
     tools: normalizeToolAttachments(body.tools ?? []),
     mcpConnectors: body.mcpConnectors ?? [],
-    metadata: body.metadata ?? {},
   }
 }
 

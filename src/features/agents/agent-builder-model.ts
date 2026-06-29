@@ -1,4 +1,4 @@
-import { parseTools, providerIdPatch } from '@/console/format'
+import { parseTools, providerPatch } from '@/console/format'
 import { type Agent, type AgentInput, ApiError } from '@/lib/amarpc'
 
 export const BUILDER_STEPS = ['start', 'core', 'tools', 'sandbox', 'roles', 'test', 'done'] as const
@@ -17,7 +17,7 @@ export const BUILDER_STEP_TITLES: Record<BuilderStep, string> = {
 export interface AgentBuilderDraft {
   name: string
   description: string
-  instructions: string
+  systemPrompt: string
   provider: string
   model: string
   allowedTools: string
@@ -27,7 +27,6 @@ export interface AgentBuilderDraft {
   role: string
   capabilityTags: string
   handoffTargets: string
-  memoryEnabled: boolean
 }
 
 export const DEFAULT_BUILDER_PROVIDER = 'workers-ai'
@@ -36,7 +35,7 @@ export const DEFAULT_BUILDER_MODEL = '@cf/moonshotai/kimi-k2.6'
 export const emptyBuilderDraft: AgentBuilderDraft = {
   name: '',
   description: '',
-  instructions: '',
+  systemPrompt: '',
   provider: DEFAULT_BUILDER_PROVIDER,
   model: DEFAULT_BUILDER_MODEL,
   allowedTools: '',
@@ -46,7 +45,6 @@ export const emptyBuilderDraft: AgentBuilderDraft = {
   role: '',
   capabilityTags: '',
   handoffTargets: '',
-  memoryEnabled: false,
 }
 
 export interface AgentTemplate {
@@ -65,7 +63,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       ...emptyBuilderDraft,
       name: 'Coding agent',
       description: 'Executes development work in a managed sandbox.',
-      instructions: 'You are a focused coding agent. Make changes, run checks, and report the result.',
+      systemPrompt: 'You are a focused coding agent. Make changes, run checks, and report the result.',
       allowedTools: 'read\nwrite\nshell',
       sandboxEnabled: true,
       skills: 'ama@coding-agent',
@@ -79,7 +77,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       ...emptyBuilderDraft,
       name: 'Research assistant',
       description: 'Investigates questions and reports findings with sources.',
-      instructions:
+      systemPrompt:
         'You are a research assistant. Investigate the question, verify sources, and answer with citations.',
       allowedTools: 'web.search',
     },
@@ -92,13 +90,12 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       ...emptyBuilderDraft,
       name: 'Operations triage',
       description: 'Classifies incoming work and delegates by role or capability.',
-      instructions:
+      systemPrompt:
         'You are a triage agent. Classify incoming work, summarize the decision, and hand off to a matching agent.',
       allowedTools: 'read',
       role: 'maintainer',
       capabilityTags: 'triage',
       handoffTargets: 'role=worker',
-      memoryEnabled: true,
     },
   },
 ]
@@ -110,7 +107,7 @@ export function draftFromGoal(goal: string): AgentBuilderDraft {
     ...emptyBuilderDraft,
     name: `${headline.charAt(0).toUpperCase()}${headline.slice(1)} agent`.slice(0, 120),
     description: trimmed.slice(0, 1000),
-    instructions: `You are a managed agent.\nGoal: ${trimmed}\nWork in small verifiable steps and report what you did.`,
+    systemPrompt: `You are a managed agent.\nGoal: ${trimmed}\nWork in small verifiable steps and report what you did.`,
     allowedTools: 'read\nwrite\nshell',
   }
 }
@@ -123,7 +120,7 @@ export function coreStepErrors(draft: AgentBuilderDraft): BuilderFieldErrors {
   const errors: BuilderFieldErrors = {}
   if (!draft.name.trim()) errors.name = 'Name is required.'
   else if (draft.name.trim().length > 120) errors.name = 'Name must be 120 characters or fewer.'
-  if (!draft.instructions.trim()) errors.instructions = 'Instructions are required.'
+  if (!draft.systemPrompt.trim()) errors.systemPrompt = 'System prompt is required.'
   if (!draft.model.trim()) errors.model = 'Model is required.'
   if (!draft.provider.trim()) errors.provider = 'Provider is required.'
   return errors
@@ -159,32 +156,32 @@ export function toAgentInput(draft: AgentBuilderDraft): AgentInput {
   return {
     name: draft.name.trim(),
     ...(description ? { description } : {}),
-    instructions: draft.instructions.trim(),
-    ...providerIdPatch(draft.provider),
+    systemPrompt: draft.systemPrompt.trim(),
+    ...providerPatch(draft.provider),
     model: draft.model.trim(),
     skills: draft.sandboxEnabled ? parseTools(draft.skills) : [],
     tools: parseTools(draft.allowedTools).map((name) => ({ name })),
     mcpConnectors: draft.mcpConnectors,
     role: draft.role.trim() || null,
-    capabilityTags: parseTools(draft.capabilityTags),
-    handoffPolicy: targets.length > 0 ? { targets } : {},
-    memoryPolicy: draft.memoryEnabled ? { enabled: true, scope: 'project' } : { enabled: false },
+    handoff: {
+      enabled: targets.length > 0 || Boolean(draft.role.trim()) || Boolean(draft.capabilityTags.trim()),
+      accepts: { roles: draft.role.trim() ? [draft.role.trim()] : [], capabilities: parseTools(draft.capabilityTags) },
+      targets,
+    },
   }
 }
 
 const SERVER_FIELD_MAP: Record<string, { field: keyof AgentBuilderDraft; step: BuilderStep }> = {
   name: { field: 'name', step: 'core' },
   description: { field: 'description', step: 'core' },
-  instructions: { field: 'instructions', step: 'core' },
-  providerId: { field: 'provider', step: 'core' },
+  systemPrompt: { field: 'systemPrompt', step: 'core' },
+  provider: { field: 'provider', step: 'core' },
   model: { field: 'model', step: 'core' },
   tools: { field: 'allowedTools', step: 'tools' },
   mcpConnectors: { field: 'mcpConnectors', step: 'tools' },
   skills: { field: 'skills', step: 'sandbox' },
   role: { field: 'role', step: 'roles' },
-  capabilityTags: { field: 'capabilityTags', step: 'roles' },
-  handoffPolicy: { field: 'handoffTargets', step: 'roles' },
-  memoryPolicy: { field: 'memoryEnabled', step: 'roles' },
+  handoff: { field: 'handoffTargets', step: 'roles' },
 }
 
 export function apiErrorToBuilder(error: unknown): { errors: BuilderFieldErrors; step: BuilderStep | null } {
@@ -212,16 +209,14 @@ export function agentApiExamples(origin: string, agent: Agent) {
   const body = JSON.stringify({
     name: agent.metadata.name,
     ...(agent.metadata.description ? { description: agent.metadata.description } : {}),
-    ...(agent.spec.instructions ? { instructions: agent.spec.instructions } : {}),
-    providerId: agent.spec.providerId,
+    ...(agent.spec.systemPrompt ? { systemPrompt: agent.spec.systemPrompt } : {}),
+    provider: agent.spec.provider,
     model: agent.spec.model,
     skills: agent.spec.skills,
     tools: agent.spec.tools.map((tool) => ({ name: tool.name })),
     mcpConnectors: agent.spec.mcpConnectors,
     ...(agent.spec.role ? { role: agent.spec.role } : {}),
-    capabilityTags: agent.spec.capabilityTags,
-    handoffPolicy: agent.spec.handoffPolicy,
-    memoryPolicy: agent.spec.memoryPolicy,
+    handoff: agent.spec.handoff,
   })
   const curl = [
     `curl -X POST "${origin}/api/v1/agents" \\`,

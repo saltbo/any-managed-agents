@@ -48,34 +48,34 @@ describe('[CF] providers', () => {
     expect(serialized).not.toContain('secretRef')
     expect(serialized).not.toContain('baseUrl')
 
-    // A null providerId defers resolution to session start (docs §Agents).
+    // A null provider defers resolution to session start (docs §Agents).
     const deferredAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Deferred provider agent' }),
     })
     expect(deferredAgentRes.status).toBe(201)
-    await expect(deferredAgentRes.json()).resolves.toMatchObject({ spec: { providerId: null } })
+    await expect(deferredAgentRes.json()).resolves.toMatchObject({ spec: { provider: null } })
 
     // Binding to an enabled vendor + available model succeeds.
     const boundAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Workers AI agent',
-        providerId: 'workers-ai',
+        provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
       }),
     })
     expect(boundAgentRes.status).toBe(201)
-    await expect(boundAgentRes.json()).resolves.toMatchObject({ spec: { providerId: 'workers-ai' } })
+    await expect(boundAgentRes.json()).resolves.toMatchObject({ spec: { provider: 'workers-ai' } })
 
     // Binding to a disabled vendor is rejected at agent creation.
     const disabledAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Disabled vendor agent', providerId: disabledProviderId, model: disabledModelId }),
+      body: JSON.stringify({ name: 'Disabled vendor agent', provider: disabledProviderId, model: disabledModelId }),
     })
     expect(disabledAgentRes.status).toBe(400)
     await expect(disabledAgentRes.json()).resolves.toMatchObject({
-      error: { type: 'validation_error', details: { fields: { providerId: expect.any(String) } } },
+      error: { type: 'validation_error', details: { fields: { provider: expect.any(String) } } },
     })
   })
 })

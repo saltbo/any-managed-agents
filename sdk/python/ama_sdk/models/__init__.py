@@ -1,18 +1,17 @@
 """ Contains all the data models used in inputs/outputs """
 
 from .agent import Agent
+from .agent_handoff import AgentHandoff
+from .agent_handoff_accepts import AgentHandoffAccepts
 from .agent_handoff_candidate import AgentHandoffCandidate
 from .agent_handoff_candidate_list_response import AgentHandoffCandidateListResponse
-from .agent_handoff_policy import AgentHandoffPolicy
 from .agent_handoff_target import AgentHandoffTarget
 from .agent_list_response import AgentListResponse
 from .agent_memory import AgentMemory
-from .agent_memory_policy import AgentMemoryPolicy
 from .agent_memory_spec import AgentMemorySpec
 from .agent_memory_spec_metadata import AgentMemorySpecMetadata
 from .agent_memory_status import AgentMemoryStatus
 from .agent_spec import AgentSpec
-from .agent_spec_metadata import AgentSpecMetadata
 from .agent_status import AgentStatus
 from .agent_subagent import AgentSubagent
 from .agent_tool_attachment import AgentToolAttachment
@@ -61,7 +60,6 @@ from .connector_tool_input_schema import ConnectorToolInputSchema
 from .connector_tool_policy_metadata import ConnectorToolPolicyMetadata
 from .connector_trust_level import ConnectorTrustLevel
 from .create_agent_request import CreateAgentRequest
-from .create_agent_request_metadata import CreateAgentRequestMetadata
 from .create_auth_session_request import CreateAuthSessionRequest
 from .create_budget_request import CreateBudgetRequest
 from .create_budget_request_limit_type import CreateBudgetRequestLimitType
@@ -69,11 +67,6 @@ from .create_budget_request_metadata import CreateBudgetRequestMetadata
 from .create_budget_request_scope import CreateBudgetRequestScope
 from .create_budget_request_window import CreateBudgetRequestWindow
 from .create_environment_request import CreateEnvironmentRequest
-from .create_environment_request_metadata import CreateEnvironmentRequestMetadata
-from .create_environment_request_package_manager_policy import CreateEnvironmentRequestPackageManagerPolicy
-from .create_environment_request_packages_item import CreateEnvironmentRequestPackagesItem
-from .create_environment_request_resource_limits import CreateEnvironmentRequestResourceLimits
-from .create_environment_request_runtime_config import CreateEnvironmentRequestRuntimeConfig
 from .create_environment_request_variables import CreateEnvironmentRequestVariables
 from .create_environment_request_variables_additional_property import CreateEnvironmentRequestVariablesAdditionalProperty
 from .create_http_trigger_run_request import CreateHttpTriggerRunRequest
@@ -116,21 +109,16 @@ from .env_from_entry_type import EnvFromEntryType
 from .environment import Environment
 from .environment_hosting_mode import EnvironmentHostingMode
 from .environment_list_response import EnvironmentListResponse
-from .environment_mcp_policy import EnvironmentMcpPolicy
-from .environment_mcp_policy_connector_approval_modes import EnvironmentMcpPolicyConnectorApprovalModes
-from .environment_mcp_policy_connector_approval_modes_additional_property import EnvironmentMcpPolicyConnectorApprovalModesAdditionalProperty
-from .environment_mcp_policy_default_effect import EnvironmentMcpPolicyDefaultEffect
-from .environment_network_policy import EnvironmentNetworkPolicy
-from .environment_network_policy_mode import EnvironmentNetworkPolicyMode
+from .environment_networking import EnvironmentNetworking
+from .environment_networking_type import EnvironmentNetworkingType
+from .environment_packages import EnvironmentPackages
+from .environment_packages_type import EnvironmentPackagesType
+from .environment_scope import EnvironmentScope
 from .environment_spec import EnvironmentSpec
-from .environment_spec_metadata import EnvironmentSpecMetadata
-from .environment_spec_package_manager_policy import EnvironmentSpecPackageManagerPolicy
-from .environment_spec_packages_item import EnvironmentSpecPackagesItem
-from .environment_spec_resource_limits import EnvironmentSpecResourceLimits
-from .environment_spec_runtime_config import EnvironmentSpecRuntimeConfig
 from .environment_spec_variables import EnvironmentSpecVariables
 from .environment_spec_variables_additional_property import EnvironmentSpecVariablesAdditionalProperty
 from .environment_status import EnvironmentStatus
+from .environment_type import EnvironmentType
 from .environment_version import EnvironmentVersion
 from .environment_version_list_response import EnvironmentVersionListResponse
 from .environment_version_status import EnvironmentVersionStatus
@@ -254,9 +242,9 @@ from .session import Session
 from .session_abort_frame import SessionAbortFrame
 from .session_abort_frame_type import SessionAbortFrameType
 from .session_agent_snapshot import SessionAgentSnapshot
-from .session_agent_snapshot_handoff_policy import SessionAgentSnapshotHandoffPolicy
-from .session_agent_snapshot_memory_policy import SessionAgentSnapshotMemoryPolicy
-from .session_agent_snapshot_metadata import SessionAgentSnapshotMetadata
+from .session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
+from .session_agent_snapshot_handoff_accepts import SessionAgentSnapshotHandoffAccepts
+from .session_agent_snapshot_handoff_targets_item import SessionAgentSnapshotHandoffTargetsItem
 from .session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
 from .session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
 from .session_approval import SessionApproval
@@ -332,16 +320,10 @@ from .trigger_spec_metadata import TriggerSpecMetadata
 from .trigger_spec_type import TriggerSpecType
 from .trigger_status import TriggerStatus
 from .update_agent_request import UpdateAgentRequest
-from .update_agent_request_metadata import UpdateAgentRequestMetadata
 from .update_budget_request import UpdateBudgetRequest
 from .update_budget_request_metadata import UpdateBudgetRequestMetadata
 from .update_budget_request_window import UpdateBudgetRequestWindow
 from .update_environment_request import UpdateEnvironmentRequest
-from .update_environment_request_metadata import UpdateEnvironmentRequestMetadata
-from .update_environment_request_package_manager_policy import UpdateEnvironmentRequestPackageManagerPolicy
-from .update_environment_request_packages_item import UpdateEnvironmentRequestPackagesItem
-from .update_environment_request_resource_limits import UpdateEnvironmentRequestResourceLimits
-from .update_environment_request_runtime_config import UpdateEnvironmentRequestRuntimeConfig
 from .update_environment_request_variables import UpdateEnvironmentRequestVariables
 from .update_environment_request_variables_additional_property import UpdateEnvironmentRequestVariablesAdditionalProperty
 from .update_lease_request import UpdateLeaseRequest
@@ -411,18 +393,17 @@ from .work_item_state import WorkItemState
 
 __all__ = (
     "Agent",
+    "AgentHandoff",
+    "AgentHandoffAccepts",
     "AgentHandoffCandidate",
     "AgentHandoffCandidateListResponse",
-    "AgentHandoffPolicy",
     "AgentHandoffTarget",
     "AgentListResponse",
     "AgentMemory",
-    "AgentMemoryPolicy",
     "AgentMemorySpec",
     "AgentMemorySpecMetadata",
     "AgentMemoryStatus",
     "AgentSpec",
-    "AgentSpecMetadata",
     "AgentStatus",
     "AgentSubagent",
     "AgentToolAttachment",
@@ -471,7 +452,6 @@ __all__ = (
     "ConnectorToolPolicyMetadata",
     "ConnectorTrustLevel",
     "CreateAgentRequest",
-    "CreateAgentRequestMetadata",
     "CreateAuthSessionRequest",
     "CreateBudgetRequest",
     "CreateBudgetRequestLimitType",
@@ -479,11 +459,6 @@ __all__ = (
     "CreateBudgetRequestScope",
     "CreateBudgetRequestWindow",
     "CreateEnvironmentRequest",
-    "CreateEnvironmentRequestMetadata",
-    "CreateEnvironmentRequestPackageManagerPolicy",
-    "CreateEnvironmentRequestPackagesItem",
-    "CreateEnvironmentRequestResourceLimits",
-    "CreateEnvironmentRequestRuntimeConfig",
     "CreateEnvironmentRequestVariables",
     "CreateEnvironmentRequestVariablesAdditionalProperty",
     "CreateHttpTriggerRunRequest",
@@ -526,21 +501,16 @@ __all__ = (
     "Environment",
     "EnvironmentHostingMode",
     "EnvironmentListResponse",
-    "EnvironmentMcpPolicy",
-    "EnvironmentMcpPolicyConnectorApprovalModes",
-    "EnvironmentMcpPolicyConnectorApprovalModesAdditionalProperty",
-    "EnvironmentMcpPolicyDefaultEffect",
-    "EnvironmentNetworkPolicy",
-    "EnvironmentNetworkPolicyMode",
+    "EnvironmentNetworking",
+    "EnvironmentNetworkingType",
+    "EnvironmentPackages",
+    "EnvironmentPackagesType",
+    "EnvironmentScope",
     "EnvironmentSpec",
-    "EnvironmentSpecMetadata",
-    "EnvironmentSpecPackageManagerPolicy",
-    "EnvironmentSpecPackagesItem",
-    "EnvironmentSpecResourceLimits",
-    "EnvironmentSpecRuntimeConfig",
     "EnvironmentSpecVariables",
     "EnvironmentSpecVariablesAdditionalProperty",
     "EnvironmentStatus",
+    "EnvironmentType",
     "EnvironmentVersion",
     "EnvironmentVersionListResponse",
     "EnvironmentVersionStatus",
@@ -664,9 +634,9 @@ __all__ = (
     "SessionAbortFrame",
     "SessionAbortFrameType",
     "SessionAgentSnapshot",
-    "SessionAgentSnapshotHandoffPolicy",
-    "SessionAgentSnapshotMemoryPolicy",
-    "SessionAgentSnapshotMetadata",
+    "SessionAgentSnapshotHandoff",
+    "SessionAgentSnapshotHandoffAccepts",
+    "SessionAgentSnapshotHandoffTargetsItem",
     "SessionAgentSnapshotSubagentsItem",
     "SessionAgentSnapshotToolsItem",
     "SessionApproval",
@@ -742,16 +712,10 @@ __all__ = (
     "TriggerSpecType",
     "TriggerStatus",
     "UpdateAgentRequest",
-    "UpdateAgentRequestMetadata",
     "UpdateBudgetRequest",
     "UpdateBudgetRequestMetadata",
     "UpdateBudgetRequestWindow",
     "UpdateEnvironmentRequest",
-    "UpdateEnvironmentRequestMetadata",
-    "UpdateEnvironmentRequestPackageManagerPolicy",
-    "UpdateEnvironmentRequestPackagesItem",
-    "UpdateEnvironmentRequestResourceLimits",
-    "UpdateEnvironmentRequestRuntimeConfig",
     "UpdateEnvironmentRequestVariables",
     "UpdateEnvironmentRequestVariablesAdditionalProperty",
     "UpdateLeaseRequest",

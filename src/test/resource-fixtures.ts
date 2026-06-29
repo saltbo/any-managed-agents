@@ -53,21 +53,18 @@ export function agent(overrides: AgentOverrides = {}): Agent {
       ...overrides,
     }),
     spec: {
-      instructions: overrides.instructions === undefined ? 'Do the work' : overrides.instructions,
-      providerId: overrides.providerId === undefined ? 'workers-ai' : overrides.providerId,
+      systemPrompt: overrides.systemPrompt === undefined ? 'Do the work' : overrides.systemPrompt,
+      provider: overrides.provider === undefined ? 'workers-ai' : overrides.provider,
       model: overrides.model === undefined ? '@cf/moonshotai/kimi-k2.6' : overrides.model,
       skills: overrides.skills ?? ['ama@coding-agent'],
       subagents: overrides.subagents ?? [],
       role: overrides.role === undefined ? null : overrides.role,
-      capabilityTags: overrides.capabilityTags ?? [],
-      handoffPolicy: overrides.handoffPolicy ?? {},
-      memoryPolicy: overrides.memoryPolicy ?? { enabled: false },
+      handoff: overrides.handoff ?? { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
       tools: overrides.tools ?? [
         { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
         { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
       ],
       mcpConnectors: overrides.mcpConnectors ?? [],
-      metadata: overrides.metadata ?? {},
     },
     status: {
       phase: overrides.archivedAt ? 'archived' : 'active',
@@ -94,11 +91,57 @@ export function agentVersion(overrides: AgentVersionOverrides = {}): AgentVersio
   }
 }
 
+type LegacyEnvironmentPackage = { name: string; version?: string }
+type LegacyEnvironmentNetworkPolicy = { mode: 'unrestricted' | 'restricted' | 'offline'; allowedHosts?: string[] }
+
 export type EnvironmentOverrides = ResourceMetadataOverrides &
-  Partial<EnvironmentSpec> & {
+  Omit<Partial<EnvironmentSpec>, 'packages'> & {
+    packages?: EnvironmentSpec['packages'] | LegacyEnvironmentPackage[]
+    hostingMode?: EnvironmentSpec['type']
+    networkPolicy?: LegacyEnvironmentNetworkPolicy
+    runtimeConfig?: Record<string, unknown>
+    mcpPolicy?: Record<string, unknown>
+    packageManagerPolicy?: Record<string, unknown>
+    resourceLimits?: Record<string, unknown>
     currentVersionId?: string | null
     version?: number
   }
+
+function normalizeEnvironmentPackages(value: EnvironmentOverrides['packages']): EnvironmentSpec['packages'] {
+  if (!value) {
+    return { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] }
+  }
+  if (Array.isArray(value)) {
+    return {
+      type: 'packages',
+      apt: [],
+      cargo: [],
+      gem: [],
+      go: [],
+      npm: value.map((item) => `${item.name}${item.version ? `@${item.version}` : ''}`),
+      pip: [],
+    }
+  }
+  return value
+}
+
+function normalizeEnvironmentNetworking(overrides: EnvironmentOverrides): EnvironmentSpec['networking'] {
+  if (overrides.networking) {
+    return overrides.networking
+  }
+  if (overrides.networkPolicy?.mode === 'restricted') {
+    return {
+      type: 'limited',
+      allowMcpServers: false,
+      allowPackageManagers: true,
+      allowedHosts: overrides.networkPolicy.allowedHosts ?? [],
+    }
+  }
+  if (overrides.networkPolicy?.mode === 'offline') {
+    return { type: 'closed', allowMcpServers: false, allowPackageManagers: true }
+  }
+  return { type: 'limited', allowMcpServers: false, allowPackageManagers: true, allowedHosts: [] }
+}
 
 export function environment(overrides: EnvironmentOverrides = {}): Environment {
   return {
@@ -109,15 +152,11 @@ export function environment(overrides: EnvironmentOverrides = {}): Environment {
       ...overrides,
     }),
     spec: {
-      packages: overrides.packages ?? [],
+      scope: overrides.scope ?? 'project',
+      type: overrides.type ?? overrides.hostingMode ?? 'cloud',
+      networking: normalizeEnvironmentNetworking(overrides),
+      packages: normalizeEnvironmentPackages(overrides.packages),
       variables: overrides.variables ?? {},
-      hostingMode: overrides.hostingMode ?? 'cloud',
-      networkPolicy: overrides.networkPolicy ?? { mode: 'restricted', allowedHosts: [] },
-      mcpPolicy: overrides.mcpPolicy ?? {},
-      packageManagerPolicy: overrides.packageManagerPolicy ?? {},
-      resourceLimits: overrides.resourceLimits ?? { memoryMb: 1024 },
-      runtimeConfig: overrides.runtimeConfig ?? { image: 'node:24' },
-      metadata: overrides.metadata ?? {},
     },
     status: {
       phase: overrides.archivedAt ? 'archived' : 'active',

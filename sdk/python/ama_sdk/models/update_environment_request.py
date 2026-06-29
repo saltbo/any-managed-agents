@@ -8,18 +8,14 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.environment_hosting_mode import EnvironmentHostingMode
+from ..models.environment_scope import EnvironmentScope
+from ..models.environment_type import EnvironmentType
 from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.environment_mcp_policy import EnvironmentMcpPolicy
-  from ..models.environment_network_policy import EnvironmentNetworkPolicy
-  from ..models.update_environment_request_metadata import UpdateEnvironmentRequestMetadata
-  from ..models.update_environment_request_package_manager_policy import UpdateEnvironmentRequestPackageManagerPolicy
-  from ..models.update_environment_request_packages_item import UpdateEnvironmentRequestPackagesItem
-  from ..models.update_environment_request_resource_limits import UpdateEnvironmentRequestResourceLimits
-  from ..models.update_environment_request_runtime_config import UpdateEnvironmentRequestRuntimeConfig
+  from ..models.environment_networking import EnvironmentNetworking
+  from ..models.environment_packages import EnvironmentPackages
   from ..models.update_environment_request_variables import UpdateEnvironmentRequestVariables
 
 
@@ -36,31 +32,22 @@ class UpdateEnvironmentRequest:
         Attributes:
             name (str | Unset):  Example: Node workspace.
             description (None | str | Unset):  Example: Default Node.js environment..
-            packages (list[UpdateEnvironmentRequestPackagesItem] | Unset):  Example: [{'name': 'tsx', 'version': 'latest'}].
+            scope (EnvironmentScope | Unset):  Example: organization.
+            type_ (EnvironmentType | Unset):  Example: cloud.
+            networking (EnvironmentNetworking | Unset):  Example: {'type': 'limited', 'allowMcpServers': False,
+                'allowPackageManagers': True, 'allowedHosts': ['api.example.com']}.
+            packages (EnvironmentPackages | Unset):
             variables (UpdateEnvironmentRequestVariables | Unset):  Example: {'NODE_ENV': {'required': True}}.
-            hosting_mode (EnvironmentHostingMode | Unset):  Example: cloud.
-            network_policy (EnvironmentNetworkPolicy | Unset):  Example: {'mode': 'restricted', 'allowedHosts':
-                ['registry.npmjs.org']}.
-            mcp_policy (EnvironmentMcpPolicy | Unset):  Example: {'allowedConnectors': ['github']}.
-            package_manager_policy (UpdateEnvironmentRequestPackageManagerPolicy | Unset):  Example: {'allowedRegistries':
-                ['registry.npmjs.org']}.
-            resource_limits (UpdateEnvironmentRequestResourceLimits | Unset):  Example: {'memoryMb': 512}.
-            runtime_config (UpdateEnvironmentRequestRuntimeConfig | Unset):  Example: {'image': 'node:24'}.
-            metadata (UpdateEnvironmentRequestMetadata | Unset):  Example: {'owner': 'platform'}.
             archived (bool | Unset): Lifecycle transition: true archives the environment, false unarchives it.
      """
 
     name: str | Unset = UNSET
     description: None | str | Unset = UNSET
-    packages: list[UpdateEnvironmentRequestPackagesItem] | Unset = UNSET
+    scope: EnvironmentScope | Unset = UNSET
+    type_: EnvironmentType | Unset = UNSET
+    networking: EnvironmentNetworking | Unset = UNSET
+    packages: EnvironmentPackages | Unset = UNSET
     variables: UpdateEnvironmentRequestVariables | Unset = UNSET
-    hosting_mode: EnvironmentHostingMode | Unset = UNSET
-    network_policy: EnvironmentNetworkPolicy | Unset = UNSET
-    mcp_policy: EnvironmentMcpPolicy | Unset = UNSET
-    package_manager_policy: UpdateEnvironmentRequestPackageManagerPolicy | Unset = UNSET
-    resource_limits: UpdateEnvironmentRequestResourceLimits | Unset = UNSET
-    runtime_config: UpdateEnvironmentRequestRuntimeConfig | Unset = UNSET
-    metadata: UpdateEnvironmentRequestMetadata | Unset = UNSET
     archived: bool | Unset = UNSET
 
 
@@ -68,13 +55,8 @@ class UpdateEnvironmentRequest:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.environment_mcp_policy import EnvironmentMcpPolicy
-        from ..models.environment_network_policy import EnvironmentNetworkPolicy
-        from ..models.update_environment_request_metadata import UpdateEnvironmentRequestMetadata
-        from ..models.update_environment_request_package_manager_policy import UpdateEnvironmentRequestPackageManagerPolicy
-        from ..models.update_environment_request_packages_item import UpdateEnvironmentRequestPackagesItem
-        from ..models.update_environment_request_resource_limits import UpdateEnvironmentRequestResourceLimits
-        from ..models.update_environment_request_runtime_config import UpdateEnvironmentRequestRuntimeConfig
+        from ..models.environment_networking import EnvironmentNetworking
+        from ..models.environment_packages import EnvironmentPackages
         from ..models.update_environment_request_variables import UpdateEnvironmentRequestVariables
         name = self.name
 
@@ -84,47 +66,27 @@ class UpdateEnvironmentRequest:
         else:
             description = self.description
 
-        packages: list[dict[str, Any]] | Unset = UNSET
+        scope: str | Unset = UNSET
+        if not isinstance(self.scope, Unset):
+            scope = self.scope.value
+
+
+        type_: str | Unset = UNSET
+        if not isinstance(self.type_, Unset):
+            type_ = self.type_.value
+
+
+        networking: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.networking, Unset):
+            networking = self.networking.to_dict()
+
+        packages: dict[str, Any] | Unset = UNSET
         if not isinstance(self.packages, Unset):
-            packages = []
-            for packages_item_data in self.packages:
-                packages_item = packages_item_data.to_dict()
-                packages.append(packages_item)
-
-
+            packages = self.packages.to_dict()
 
         variables: dict[str, Any] | Unset = UNSET
         if not isinstance(self.variables, Unset):
             variables = self.variables.to_dict()
-
-        hosting_mode: str | Unset = UNSET
-        if not isinstance(self.hosting_mode, Unset):
-            hosting_mode = self.hosting_mode.value
-
-
-        network_policy: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.network_policy, Unset):
-            network_policy = self.network_policy.to_dict()
-
-        mcp_policy: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.mcp_policy, Unset):
-            mcp_policy = self.mcp_policy.to_dict()
-
-        package_manager_policy: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.package_manager_policy, Unset):
-            package_manager_policy = self.package_manager_policy.to_dict()
-
-        resource_limits: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.resource_limits, Unset):
-            resource_limits = self.resource_limits.to_dict()
-
-        runtime_config: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.runtime_config, Unset):
-            runtime_config = self.runtime_config.to_dict()
-
-        metadata: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.metadata, Unset):
-            metadata = self.metadata.to_dict()
 
         archived = self.archived
 
@@ -137,24 +99,16 @@ class UpdateEnvironmentRequest:
             field_dict["name"] = name
         if description is not UNSET:
             field_dict["description"] = description
+        if scope is not UNSET:
+            field_dict["scope"] = scope
+        if type_ is not UNSET:
+            field_dict["type"] = type_
+        if networking is not UNSET:
+            field_dict["networking"] = networking
         if packages is not UNSET:
             field_dict["packages"] = packages
         if variables is not UNSET:
             field_dict["variables"] = variables
-        if hosting_mode is not UNSET:
-            field_dict["hostingMode"] = hosting_mode
-        if network_policy is not UNSET:
-            field_dict["networkPolicy"] = network_policy
-        if mcp_policy is not UNSET:
-            field_dict["mcpPolicy"] = mcp_policy
-        if package_manager_policy is not UNSET:
-            field_dict["packageManagerPolicy"] = package_manager_policy
-        if resource_limits is not UNSET:
-            field_dict["resourceLimits"] = resource_limits
-        if runtime_config is not UNSET:
-            field_dict["runtimeConfig"] = runtime_config
-        if metadata is not UNSET:
-            field_dict["metadata"] = metadata
         if archived is not UNSET:
             field_dict["archived"] = archived
 
@@ -164,13 +118,8 @@ class UpdateEnvironmentRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.environment_mcp_policy import EnvironmentMcpPolicy
-        from ..models.environment_network_policy import EnvironmentNetworkPolicy
-        from ..models.update_environment_request_metadata import UpdateEnvironmentRequestMetadata
-        from ..models.update_environment_request_package_manager_policy import UpdateEnvironmentRequestPackageManagerPolicy
-        from ..models.update_environment_request_packages_item import UpdateEnvironmentRequestPackagesItem
-        from ..models.update_environment_request_resource_limits import UpdateEnvironmentRequestResourceLimits
-        from ..models.update_environment_request_runtime_config import UpdateEnvironmentRequestRuntimeConfig
+        from ..models.environment_networking import EnvironmentNetworking
+        from ..models.environment_packages import EnvironmentPackages
         from ..models.update_environment_request_variables import UpdateEnvironmentRequestVariables
         d = dict(src_dict)
         name = d.pop("name", UNSET)
@@ -185,16 +134,44 @@ class UpdateEnvironmentRequest:
         description = _parse_description(d.pop("description", UNSET))
 
 
+        _scope = d.pop("scope", UNSET)
+        scope: EnvironmentScope | Unset
+        if isinstance(_scope,  Unset):
+            scope = UNSET
+        else:
+            scope = EnvironmentScope(_scope)
+
+
+
+
+        _type_ = d.pop("type", UNSET)
+        type_: EnvironmentType | Unset
+        if isinstance(_type_,  Unset):
+            type_ = UNSET
+        else:
+            type_ = EnvironmentType(_type_)
+
+
+
+
+        _networking = d.pop("networking", UNSET)
+        networking: EnvironmentNetworking | Unset
+        if isinstance(_networking,  Unset):
+            networking = UNSET
+        else:
+            networking = EnvironmentNetworking.from_dict(_networking)
+
+
+
+
         _packages = d.pop("packages", UNSET)
-        packages: list[UpdateEnvironmentRequestPackagesItem] | Unset = UNSET
-        if _packages is not UNSET:
-            packages = []
-            for packages_item_data in _packages:
-                packages_item = UpdateEnvironmentRequestPackagesItem.from_dict(packages_item_data)
+        packages: EnvironmentPackages | Unset
+        if isinstance(_packages,  Unset):
+            packages = UNSET
+        else:
+            packages = EnvironmentPackages.from_dict(_packages)
 
 
-
-                packages.append(packages_item)
 
 
         _variables = d.pop("variables", UNSET)
@@ -207,90 +184,16 @@ class UpdateEnvironmentRequest:
 
 
 
-        _hosting_mode = d.pop("hostingMode", UNSET)
-        hosting_mode: EnvironmentHostingMode | Unset
-        if isinstance(_hosting_mode,  Unset):
-            hosting_mode = UNSET
-        else:
-            hosting_mode = EnvironmentHostingMode(_hosting_mode)
-
-
-
-
-        _network_policy = d.pop("networkPolicy", UNSET)
-        network_policy: EnvironmentNetworkPolicy | Unset
-        if isinstance(_network_policy,  Unset):
-            network_policy = UNSET
-        else:
-            network_policy = EnvironmentNetworkPolicy.from_dict(_network_policy)
-
-
-
-
-        _mcp_policy = d.pop("mcpPolicy", UNSET)
-        mcp_policy: EnvironmentMcpPolicy | Unset
-        if isinstance(_mcp_policy,  Unset):
-            mcp_policy = UNSET
-        else:
-            mcp_policy = EnvironmentMcpPolicy.from_dict(_mcp_policy)
-
-
-
-
-        _package_manager_policy = d.pop("packageManagerPolicy", UNSET)
-        package_manager_policy: UpdateEnvironmentRequestPackageManagerPolicy | Unset
-        if isinstance(_package_manager_policy,  Unset):
-            package_manager_policy = UNSET
-        else:
-            package_manager_policy = UpdateEnvironmentRequestPackageManagerPolicy.from_dict(_package_manager_policy)
-
-
-
-
-        _resource_limits = d.pop("resourceLimits", UNSET)
-        resource_limits: UpdateEnvironmentRequestResourceLimits | Unset
-        if isinstance(_resource_limits,  Unset):
-            resource_limits = UNSET
-        else:
-            resource_limits = UpdateEnvironmentRequestResourceLimits.from_dict(_resource_limits)
-
-
-
-
-        _runtime_config = d.pop("runtimeConfig", UNSET)
-        runtime_config: UpdateEnvironmentRequestRuntimeConfig | Unset
-        if isinstance(_runtime_config,  Unset):
-            runtime_config = UNSET
-        else:
-            runtime_config = UpdateEnvironmentRequestRuntimeConfig.from_dict(_runtime_config)
-
-
-
-
-        _metadata = d.pop("metadata", UNSET)
-        metadata: UpdateEnvironmentRequestMetadata | Unset
-        if isinstance(_metadata,  Unset):
-            metadata = UNSET
-        else:
-            metadata = UpdateEnvironmentRequestMetadata.from_dict(_metadata)
-
-
-
-
         archived = d.pop("archived", UNSET)
 
         update_environment_request = cls(
             name=name,
             description=description,
+            scope=scope,
+            type_=type_,
+            networking=networking,
             packages=packages,
             variables=variables,
-            hosting_mode=hosting_mode,
-            network_policy=network_policy,
-            mcp_policy=mcp_policy,
-            package_manager_policy=package_manager_policy,
-            resource_limits=resource_limits,
-            runtime_config=runtime_config,
-            metadata=metadata,
             archived=archived,
         )
 

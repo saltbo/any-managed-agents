@@ -89,7 +89,7 @@ export function SessionsView({
                   {session.metadata.name}
                 </Link>
                 <span className="truncate text-xs text-muted-foreground">
-                  {`${session.metadata.uid} · ${session.status.bindings.agent.snapshot.providerId} / ${session.status.bindings.agent.snapshot.model ?? 'None'}`}
+                  {`${session.metadata.uid} · ${session.status.bindings.agent.snapshot.provider} / ${session.status.bindings.agent.snapshot.model ?? 'None'}`}
                 </span>
               </div>
             </TableCell>
@@ -100,10 +100,10 @@ export function SessionsView({
               />
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{`${session.status.bindings.agent.snapshot.instructions ?? session.spec.agentId} · ${session.spec.agentId}`}</span>
+              <span className="block truncate">{`${session.status.bindings.agent.snapshot.systemPrompt ?? session.spec.agentId} · ${session.spec.agentId}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{`${session.status.bindings.agent.snapshot.providerId} / ${session.status.bindings.agent.snapshot.model ?? 'None'}`}</span>
+              <span className="block truncate">{`${session.status.bindings.agent.snapshot.provider} / ${session.status.bindings.agent.snapshot.model ?? 'None'}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">
@@ -153,6 +153,6 @@ function hostingRuntimeLabel(session: Session) {
   if (!environmentSnapshot) {
     return 'None'
   }
-  const hostingMode = environmentSnapshot.hostingMode === 'self_hosted' ? 'Self-hosted' : 'Cloud'
+  const hostingMode = environmentSnapshot.type === 'self_hosted' ? 'Self-hosted' : 'Cloud'
   return `${hostingMode} / ${session.status.bindings.runtime}`
 }

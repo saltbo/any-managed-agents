@@ -7,7 +7,7 @@ import { emptyEnvironment } from '@/console/defaults'
 import { parsePackages, parseVariables } from '@/console/format'
 import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
-import type { EnvironmentNetworkPolicy } from '@/lib/amarpc'
+import type { EnvironmentNetworking } from '@/lib/amarpc'
 import { api } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
@@ -19,15 +19,20 @@ function parseAllowedHosts(value: string) {
     .filter(Boolean)
 }
 
-function networkPolicy(form: EnvironmentFormState): EnvironmentNetworkPolicy {
-  if (form.networkMode === 'restricted') {
-    return { mode: 'restricted', allowedHosts: parseAllowedHosts(form.allowedHosts) }
+function networking(form: EnvironmentFormState): EnvironmentNetworking {
+  if (form.networkingType === 'limited') {
+    return {
+      type: 'limited',
+      allowMcpServers: form.allowMcpServers,
+      allowPackageManagers: form.allowPackageManagers,
+      allowedHosts: parseAllowedHosts(form.allowedHosts),
+    }
   }
-  return { mode: form.networkMode }
-}
-
-function parseRuntimeConfig(value: string) {
-  return JSON.parse(value) as Record<string, unknown>
+  return {
+    type: form.networkingType,
+    allowMcpServers: form.allowMcpServers,
+    allowPackageManagers: form.allowPackageManagers,
+  }
 }
 
 export function CreateEnvironmentSheet({
@@ -44,12 +49,10 @@ export function CreateEnvironmentSheet({
       api.createEnvironment({
         name: form.name,
         description: form.description,
-        hostingMode: form.hostingMode,
+        type: form.type,
+        networking: networking(form),
         packages: parsePackages(form.packages),
         variables: parseVariables(form.variables),
-        networkPolicy: networkPolicy(form),
-        resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
-        runtimeConfig: parseRuntimeConfig(form.runtimeConfig),
       }),
     onSuccess: () => {
       onOpenChange(false)

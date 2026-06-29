@@ -89,6 +89,7 @@ const store = {
   findEnvironment: findEnvironmentMock,
   findEnvironmentVersion: findEnvironmentVersionMock,
   resolveEnvironmentForRuntime: resolveEnvironmentForRuntimeMock,
+  agentMemoryContent: async () => null,
   insertSession: insertSessionMock,
   updateSessionWhenState: updateSessionWhenStateMock,
 }

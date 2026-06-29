@@ -18,7 +18,7 @@ export function EnvironmentsPage() {
   const [creating, setCreating] = useState(false)
   const actions = useEnvironmentActions()
   const [search, setSearch] = useUrlFilter('search')
-  const [hosting, setHosting] = useUrlFilter('hosting', 'all')
+  const [environmentType, setEnvironmentType] = useUrlFilter('type', 'all')
   const [status, setStatus] = useUrlFilter('status', 'all')
   const archived = status === 'archived'
   const environmentsQuery = useQuery({
@@ -31,17 +31,17 @@ export function EnvironmentsPage() {
       allEnvironments.filter(
         (environment) =>
           matchesSearch(search, environment.metadata.name, environment.metadata.description) &&
-          (hosting === 'all' || environment.spec.hostingMode === hosting) &&
+          (environmentType === 'all' || environment.spec.type === environmentType) &&
           (status === 'all' || archivedLabel(environment) === status),
       ),
-    [allEnvironments, search, hosting, status],
+    [allEnvironments, search, environmentType, status],
   )
   const pagination = useClientPagination(environments)
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Environments"
-        description="Runtime environment definitions for packages, variables, network policy, and resource limits."
+        description="Runtime environment definitions for packages, variables, and networking."
         actions={
           <Button type="button" onClick={() => setCreating(true)}>
             <Server data-icon="inline-start" />
@@ -58,13 +58,13 @@ export function EnvironmentsPage() {
           onChange={(event) => setSearch(event.target.value)}
           className="w-full sm:w-64"
         />
-        <Select value={hosting} onValueChange={setHosting}>
-          <SelectTrigger className="w-full sm:w-44" aria-label="Filter by hosting mode">
+        <Select value={environmentType} onValueChange={setEnvironmentType}>
+          <SelectTrigger className="w-full sm:w-44" aria-label="Filter by environment type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="all">All hosting modes</SelectItem>
+              <SelectItem value="all">All types</SelectItem>
               <SelectItem value="cloud">cloud</SelectItem>
               <SelectItem value="self_hosted">self_hosted</SelectItem>
             </SelectGroup>

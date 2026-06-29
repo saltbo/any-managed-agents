@@ -354,20 +354,15 @@ export type ResourceMetadata = {
 };
 
 export type AgentSpec = {
-    instructions: string | null;
-    providerId: string | null;
+    systemPrompt: string | null;
+    provider: string | null;
     model: string | null;
     skills: Array<string>;
     subagents: Array<AgentSubagent>;
     role: string | null;
-    capabilityTags: Array<string>;
-    handoffPolicy: AgentHandoffPolicy;
-    memoryPolicy: AgentMemoryPolicy;
+    handoff: AgentHandoff;
     tools: Array<AgentToolAttachment>;
     mcpConnectors: Array<string>;
-    metadata: {
-        [key: string]: unknown;
-    };
 };
 
 export type AgentSubagent = {
@@ -376,23 +371,18 @@ export type AgentSubagent = {
     [key: string]: unknown;
 };
 
-export type AgentHandoffPolicy = {
-    enabled?: boolean;
-    targets?: Array<AgentHandoffTarget>;
-    [key: string]: unknown;
+export type AgentHandoff = {
+    enabled: boolean;
+    accepts: {
+        roles: Array<string>;
+        capabilities: Array<string>;
+    };
+    targets: Array<AgentHandoffTarget>;
 };
 
 export type AgentHandoffTarget = {
     role?: string;
     capability?: string;
-    [key: string]: unknown;
-};
-
-export type AgentMemoryPolicy = {
-    enabled?: boolean;
-    mode?: string;
-    scope?: string;
-    [key: string]: unknown;
 };
 
 export type AgentToolAttachment = {
@@ -418,20 +408,15 @@ export type ResourcePhase = 'active' | 'archived';
 export type CreateAgentRequest = {
     name: string;
     description?: string | null;
-    instructions?: string | null;
-    providerId?: string | null;
+    systemPrompt?: string | null;
+    provider?: string | null;
     model?: string | null;
     skills?: Array<string>;
     subagents?: Array<AgentSubagent>;
     role?: string | null;
-    capabilityTags?: Array<string>;
-    handoffPolicy?: AgentHandoffPolicy;
-    memoryPolicy?: AgentMemoryPolicy;
+    handoff?: AgentHandoff;
     tools?: Array<AgentToolAttachmentInput>;
     mcpConnectors?: Array<string>;
-    metadata?: {
-        [key: string]: unknown;
-    };
 };
 
 export type AgentToolAttachmentInput = {
@@ -449,20 +434,15 @@ export type AgentToolAttachmentInput = {
 export type UpdateAgentRequest = {
     name?: string;
     description?: string | null;
-    instructions?: string | null;
-    providerId?: string | null;
+    systemPrompt?: string | null;
+    provider?: string | null;
     model?: string | null;
     skills?: Array<string>;
     subagents?: Array<AgentSubagent>;
     role?: string | null;
-    capabilityTags?: Array<string>;
-    handoffPolicy?: AgentHandoffPolicy;
-    memoryPolicy?: AgentMemoryPolicy;
+    handoff?: AgentHandoff;
     tools?: Array<AgentToolAttachmentInput>;
     mcpConnectors?: Array<string>;
-    metadata?: {
-        [key: string]: unknown;
-    };
     /**
      * Lifecycle transition: true archives the agent, false unarchives it.
      */
@@ -494,7 +474,7 @@ export type AgentHandoffCandidate = {
     id: string;
     name: string;
     role: string | null;
-    capabilityTags: Array<string>;
+    capabilities: Array<string>;
 };
 
 export type AgentMemory = {
@@ -534,51 +514,37 @@ export type Environment = {
 };
 
 export type EnvironmentSpec = {
-    packages: Array<{
-        name: string;
-        version?: string;
-    }>;
+    scope: EnvironmentScope;
+    type: EnvironmentType;
+    networking: EnvironmentNetworking;
+    packages: EnvironmentPackages;
     variables: {
         [key: string]: {
             description?: string;
             required?: boolean;
         };
     };
-    hostingMode: EnvironmentHostingMode;
-    networkPolicy: EnvironmentNetworkPolicy;
-    mcpPolicy: EnvironmentMcpPolicy;
-    packageManagerPolicy: {
-        [key: string]: unknown;
-    };
-    resourceLimits: {
-        cpuMs?: number;
-        memoryMb?: number;
-        timeoutSeconds?: number;
-    };
-    runtimeConfig: {
-        [key: string]: unknown;
-    };
-    metadata: {
-        [key: string]: unknown;
-    };
 };
 
-export type EnvironmentHostingMode = 'cloud' | 'self_hosted';
+export type EnvironmentScope = 'project' | 'organization';
 
-export type EnvironmentNetworkPolicy = {
-    mode: 'offline' | 'restricted' | 'unrestricted';
+export type EnvironmentType = 'cloud' | 'self_hosted';
+
+export type EnvironmentNetworking = {
+    type: 'closed' | 'limited' | 'open';
+    allowMcpServers: boolean;
+    allowPackageManagers: boolean;
     allowedHosts?: Array<string>;
 };
 
-export type EnvironmentMcpPolicy = {
-    allowedConnectors?: Array<string>;
-    blockedConnectors?: Array<string>;
-    requireApprovalConnectors?: Array<string>;
-    requireApprovalTools?: Array<string>;
-    connectorApprovalModes?: {
-        [key: string]: 'none' | 'require_approval';
-    };
-    defaultEffect?: 'allow' | 'deny';
+export type EnvironmentPackages = {
+    type: 'packages';
+    apt: Array<string>;
+    cargo: Array<string>;
+    gem: Array<string>;
+    go: Array<string>;
+    npm: Array<string>;
+    pip: Array<string>;
 };
 
 export type EnvironmentStatus = {
@@ -590,64 +556,30 @@ export type EnvironmentStatus = {
 export type CreateEnvironmentRequest = {
     name: string;
     description?: string | null;
-    packages?: Array<{
-        name: string;
-        version?: string;
-    }>;
+    scope?: EnvironmentScope;
+    type?: EnvironmentType;
+    networking?: EnvironmentNetworking;
+    packages?: EnvironmentPackages;
     variables?: {
         [key: string]: {
             description?: string;
             required?: boolean;
         };
-    };
-    hostingMode?: EnvironmentHostingMode;
-    networkPolicy?: EnvironmentNetworkPolicy;
-    mcpPolicy?: EnvironmentMcpPolicy;
-    packageManagerPolicy?: {
-        [key: string]: unknown;
-    };
-    resourceLimits?: {
-        cpuMs?: number;
-        memoryMb?: number;
-        timeoutSeconds?: number;
-    };
-    runtimeConfig?: {
-        [key: string]: unknown;
-    };
-    metadata?: {
-        [key: string]: unknown;
     };
 };
 
 export type UpdateEnvironmentRequest = {
     name?: string;
     description?: string | null;
-    packages?: Array<{
-        name: string;
-        version?: string;
-    }>;
+    scope?: EnvironmentScope;
+    type?: EnvironmentType;
+    networking?: EnvironmentNetworking;
+    packages?: EnvironmentPackages;
     variables?: {
         [key: string]: {
             description?: string;
             required?: boolean;
         };
-    };
-    hostingMode?: EnvironmentHostingMode;
-    networkPolicy?: EnvironmentNetworkPolicy;
-    mcpPolicy?: EnvironmentMcpPolicy;
-    packageManagerPolicy?: {
-        [key: string]: unknown;
-    };
-    resourceLimits?: {
-        cpuMs?: number;
-        memoryMb?: number;
-        timeoutSeconds?: number;
-    };
-    runtimeConfig?: {
-        [key: string]: unknown;
-    };
-    metadata?: {
-        [key: string]: unknown;
     };
     /**
      * Lifecycle transition: true archives the environment, false unarchives it.
@@ -1308,28 +1240,29 @@ export type SessionAgentSnapshot = {
     agentId: string;
     projectId: string;
     version: number;
-    instructions: string | null;
-    providerId: string;
+    systemPrompt: string | null;
+    provider: string;
     model: string | null;
     skills: Array<string>;
     subagents: Array<{
         [key: string]: unknown;
     }>;
     role: string | null;
-    capabilityTags: Array<string>;
-    handoffPolicy: {
-        [key: string]: unknown;
-    };
-    memoryPolicy: {
-        [key: string]: unknown;
+    handoff: {
+        enabled: boolean;
+        accepts: {
+            roles: Array<string>;
+            capabilities: Array<string>;
+        };
+        targets: Array<{
+            role?: string;
+            capability?: string;
+        }>;
     };
     tools: Array<{
         [key: string]: unknown;
     }>;
     mcpConnectors: Array<string>;
-    metadata: {
-        [key: string]: unknown;
-    };
     createdAt: string;
 };
 
@@ -1338,15 +1271,11 @@ export type SessionEnvironmentSnapshot = {
     environmentId: string;
     projectId: string;
     version: number;
-    packages: Array<SessionEnvironmentJsonObject>;
+    scope: EnvironmentScope;
+    type: EnvironmentType;
+    networking: EnvironmentNetworking;
+    packages: EnvironmentPackages;
     variables: SessionEnvironmentJsonObject;
-    hostingMode: EnvironmentHostingMode;
-    networkPolicy: EnvironmentNetworkPolicy;
-    mcpPolicy: SessionEnvironmentJsonObject;
-    packageManagerPolicy: SessionEnvironmentJsonObject;
-    resourceLimits: SessionEnvironmentJsonObject;
-    runtimeConfig: SessionEnvironmentJsonObject;
-    metadata: SessionEnvironmentJsonObject;
     createdAt: string;
 } | null;
 
@@ -1362,6 +1291,8 @@ export type SessionPlacement = {
     backend: string | null;
     protocol: string | null;
 } | null;
+
+export type EnvironmentHostingMode = 'cloud' | 'self_hosted';
 
 export type CreateSessionRequest = {
     agentId: string;

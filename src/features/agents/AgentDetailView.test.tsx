@@ -34,18 +34,15 @@ function buildSessionAgentSnapshot(overrides: Partial<SessionAgentSnapshot> = {}
     agentId: 'agent_1',
     projectId: 'project_1',
     version: 1,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
+    systemPrompt: 'Do the work',
+    provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
     skills: [],
     subagents: [],
     role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: {},
+    handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
     tools: [],
     mcpConnectors: [],
-    metadata: {},
     createdAt: now,
     ...overrides,
   }
@@ -153,7 +150,13 @@ describe('[spec: agents/console-detail] AgentDetailView', () => {
   })
 
   it('renders None for skills, tools, connectors, role, and tags when all are empty', () => {
-    const agent = buildAgent({ skills: [], tools: [], mcpConnectors: [], role: null, capabilityTags: [] })
+    const agent = buildAgent({
+      skills: [],
+      tools: [],
+      mcpConnectors: [],
+      role: null,
+      handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
+    })
     render(
       <MemoryRouter>
         <AgentDetailView agent={agent} versions={[]} sessions={[]} />
@@ -194,7 +197,9 @@ describe('[spec: agents/console-detail] AgentDetailView', () => {
   })
 
   it('renders capability tags value when set', () => {
-    const agent = buildAgent({ capabilityTags: ['triage', 'code-review'] })
+    const agent = buildAgent({
+      handoff: { enabled: true, accepts: { roles: [], capabilities: ['triage', 'code-review'] }, targets: [] },
+    })
     render(
       <MemoryRouter>
         <AgentDetailView agent={agent} versions={[]} sessions={[]} />

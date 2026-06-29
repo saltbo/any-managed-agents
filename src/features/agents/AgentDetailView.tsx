@@ -107,21 +107,19 @@ function AgentDetailContent({
               <MetaGrid>
                 <Meta label="Version" value={`v${currentVersionNumber}`} />
                 <Meta label="Created" value={formatDate(currentCreatedAt)} />
-                <Meta label="Provider" value={currentSpec.providerId ?? 'None'} />
+                <Meta label="Provider" value={currentSpec.provider ?? 'None'} />
                 <Meta label="Model" value={currentSpec.model ?? 'None'} />
                 <Meta label="Skills" value={currentSpec.skills.join(', ') || 'None'} />
                 <Meta label="Allowed tools" value={currentSpec.tools.map((tool) => tool.name).join(', ') || 'None'} />
                 <Meta label="MCP connectors" value={currentSpec.mcpConnectors.join(', ') || 'None'} />
                 <Meta label="Role" value={currentSpec.role ?? 'None'} />
-                <Meta label="Capability tags" value={currentSpec.capabilityTags.join(', ') || 'None'} />
-                <Meta label="Handoff policy" value={stringifyJson(currentSpec.handoffPolicy)} />
-                <Meta label="Memory policy" value={stringifyJson(currentSpec.memoryPolicy)} />
-                <Meta label="Metadata" value={stringifyJson(currentSpec.metadata)} />
+                <Meta label="Capabilities" value={currentSpec.handoff.accepts.capabilities.join(', ') || 'None'} />
+                <Meta label="Handoff" value={stringifyJson(currentSpec.handoff)} />
               </MetaGrid>
               <JsonBlock
                 value={stringifyJson({
-                  instructions: currentSpec.instructions,
-                  providerId: currentSpec.providerId,
+                  systemPrompt: currentSpec.systemPrompt,
+                  provider: currentSpec.provider,
                   model: currentSpec.model,
                 })}
               />

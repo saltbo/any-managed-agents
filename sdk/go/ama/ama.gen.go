@@ -303,22 +303,22 @@ func (e ConnectorTrustLevel) Valid() bool {
 
 // Defines values for ConnectorToolApprovalMode.
 const (
-	ConnectorToolApprovalModeAlwaysRequired ConnectorToolApprovalMode = "always_required"
-	ConnectorToolApprovalModeNone           ConnectorToolApprovalMode = "none"
-	ConnectorToolApprovalModePerCall        ConnectorToolApprovalMode = "per_call"
-	ConnectorToolApprovalModeProjectPolicy  ConnectorToolApprovalMode = "project_policy"
+	AlwaysRequired ConnectorToolApprovalMode = "always_required"
+	None           ConnectorToolApprovalMode = "none"
+	PerCall        ConnectorToolApprovalMode = "per_call"
+	ProjectPolicy  ConnectorToolApprovalMode = "project_policy"
 )
 
 // Valid indicates whether the value is a known member of the ConnectorToolApprovalMode enum.
 func (e ConnectorToolApprovalMode) Valid() bool {
 	switch e {
-	case ConnectorToolApprovalModeAlwaysRequired:
+	case AlwaysRequired:
 		return true
-	case ConnectorToolApprovalModeNone:
+	case None:
 		return true
-	case ConnectorToolApprovalModePerCall:
+	case PerCall:
 		return true
-	case ConnectorToolApprovalModeProjectPolicy:
+	case ProjectPolicy:
 		return true
 	default:
 		return false
@@ -522,73 +522,88 @@ func (e EnvFromEntryType) Valid() bool {
 
 // Defines values for EnvironmentHostingMode.
 const (
-	Cloud      EnvironmentHostingMode = "cloud"
-	SelfHosted EnvironmentHostingMode = "self_hosted"
+	EnvironmentHostingModeCloud      EnvironmentHostingMode = "cloud"
+	EnvironmentHostingModeSelfHosted EnvironmentHostingMode = "self_hosted"
 )
 
 // Valid indicates whether the value is a known member of the EnvironmentHostingMode enum.
 func (e EnvironmentHostingMode) Valid() bool {
 	switch e {
-	case Cloud:
+	case EnvironmentHostingModeCloud:
 		return true
-	case SelfHosted:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for EnvironmentMcpPolicyConnectorApprovalModes.
-const (
-	EnvironmentMcpPolicyConnectorApprovalModesNone            EnvironmentMcpPolicyConnectorApprovalModes = "none"
-	EnvironmentMcpPolicyConnectorApprovalModesRequireApproval EnvironmentMcpPolicyConnectorApprovalModes = "require_approval"
-)
-
-// Valid indicates whether the value is a known member of the EnvironmentMcpPolicyConnectorApprovalModes enum.
-func (e EnvironmentMcpPolicyConnectorApprovalModes) Valid() bool {
-	switch e {
-	case EnvironmentMcpPolicyConnectorApprovalModesNone:
-		return true
-	case EnvironmentMcpPolicyConnectorApprovalModesRequireApproval:
+	case EnvironmentHostingModeSelfHosted:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for EnvironmentMcpPolicyDefaultEffect.
+// Defines values for EnvironmentNetworkingType.
 const (
-	EnvironmentMcpPolicyDefaultEffectAllow EnvironmentMcpPolicyDefaultEffect = "allow"
-	EnvironmentMcpPolicyDefaultEffectDeny  EnvironmentMcpPolicyDefaultEffect = "deny"
+	EnvironmentNetworkingTypeClosed  EnvironmentNetworkingType = "closed"
+	EnvironmentNetworkingTypeLimited EnvironmentNetworkingType = "limited"
+	EnvironmentNetworkingTypeOpen    EnvironmentNetworkingType = "open"
 )
 
-// Valid indicates whether the value is a known member of the EnvironmentMcpPolicyDefaultEffect enum.
-func (e EnvironmentMcpPolicyDefaultEffect) Valid() bool {
+// Valid indicates whether the value is a known member of the EnvironmentNetworkingType enum.
+func (e EnvironmentNetworkingType) Valid() bool {
 	switch e {
-	case EnvironmentMcpPolicyDefaultEffectAllow:
+	case EnvironmentNetworkingTypeClosed:
 		return true
-	case EnvironmentMcpPolicyDefaultEffectDeny:
+	case EnvironmentNetworkingTypeLimited:
+		return true
+	case EnvironmentNetworkingTypeOpen:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for EnvironmentNetworkPolicyMode.
+// Defines values for EnvironmentPackagesType.
 const (
-	EnvironmentNetworkPolicyModeOffline      EnvironmentNetworkPolicyMode = "offline"
-	EnvironmentNetworkPolicyModeRestricted   EnvironmentNetworkPolicyMode = "restricted"
-	EnvironmentNetworkPolicyModeUnrestricted EnvironmentNetworkPolicyMode = "unrestricted"
+	Packages EnvironmentPackagesType = "packages"
 )
 
-// Valid indicates whether the value is a known member of the EnvironmentNetworkPolicyMode enum.
-func (e EnvironmentNetworkPolicyMode) Valid() bool {
+// Valid indicates whether the value is a known member of the EnvironmentPackagesType enum.
+func (e EnvironmentPackagesType) Valid() bool {
 	switch e {
-	case EnvironmentNetworkPolicyModeOffline:
+	case Packages:
 		return true
-	case EnvironmentNetworkPolicyModeRestricted:
+	default:
+		return false
+	}
+}
+
+// Defines values for EnvironmentScope.
+const (
+	EnvironmentScopeOrganization EnvironmentScope = "organization"
+	EnvironmentScopeProject      EnvironmentScope = "project"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentScope enum.
+func (e EnvironmentScope) Valid() bool {
+	switch e {
+	case EnvironmentScopeOrganization:
 		return true
-	case EnvironmentNetworkPolicyModeUnrestricted:
+	case EnvironmentScopeProject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnvironmentType.
+const (
+	EnvironmentTypeCloud      EnvironmentType = "cloud"
+	EnvironmentTypeSelfHosted EnvironmentType = "self_hosted"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentType enum.
+func (e EnvironmentType) Valid() bool {
+	switch e {
+	case EnvironmentTypeCloud:
+		return true
+	case EnvironmentTypeSelfHosted:
 		return true
 	default:
 		return false
@@ -1095,16 +1110,16 @@ func (e SessionApprovalDecisionRequestDecision) Valid() bool {
 
 // Defines values for SessionApprovalFrameDecision.
 const (
-	Approve SessionApprovalFrameDecision = "approve"
-	Reject  SessionApprovalFrameDecision = "reject"
+	SessionApprovalFrameDecisionApprove SessionApprovalFrameDecision = "approve"
+	SessionApprovalFrameDecisionReject  SessionApprovalFrameDecision = "reject"
 )
 
 // Valid indicates whether the value is a known member of the SessionApprovalFrameDecision enum.
 func (e SessionApprovalFrameDecision) Valid() bool {
 	switch e {
-	case Approve:
+	case SessionApprovalFrameDecisionApprove:
 		return true
-	case Reject:
+	case SessionApprovalFrameDecisionReject:
 		return true
 	default:
 		return false
@@ -1698,16 +1713,16 @@ func (e UsageRecordProviderType) Valid() bool {
 
 // Defines values for UsageRecordState.
 const (
-	Error   UsageRecordState = "error"
-	Success UsageRecordState = "success"
+	UsageRecordStateError   UsageRecordState = "error"
+	UsageRecordStateSuccess UsageRecordState = "success"
 )
 
 // Valid indicates whether the value is a known member of the UsageRecordState enum.
 func (e UsageRecordState) Valid() bool {
 	switch e {
-	case Error:
+	case UsageRecordStateError:
 		return true
-	case Success:
+	case UsageRecordStateSuccess:
 		return true
 	default:
 		return false
@@ -2298,19 +2313,19 @@ func (e ListVaultCredentialsParamsState) Valid() bool {
 
 // Defines values for ListVaultCredentialVersionsParamsState.
 const (
-	ListVaultCredentialVersionsParamsStateActive     ListVaultCredentialVersionsParamsState = "active"
-	ListVaultCredentialVersionsParamsStateRevoked    ListVaultCredentialVersionsParamsState = "revoked"
-	ListVaultCredentialVersionsParamsStateSuperseded ListVaultCredentialVersionsParamsState = "superseded"
+	Active     ListVaultCredentialVersionsParamsState = "active"
+	Revoked    ListVaultCredentialVersionsParamsState = "revoked"
+	Superseded ListVaultCredentialVersionsParamsState = "superseded"
 )
 
 // Valid indicates whether the value is a known member of the ListVaultCredentialVersionsParamsState enum.
 func (e ListVaultCredentialVersionsParamsState) Valid() bool {
 	switch e {
-	case ListVaultCredentialVersionsParamsStateActive:
+	case Active:
 		return true
-	case ListVaultCredentialVersionsParamsStateRevoked:
+	case Revoked:
 		return true
-	case ListVaultCredentialVersionsParamsStateSuperseded:
+	case Superseded:
 		return true
 	default:
 		return false
@@ -2351,12 +2366,22 @@ type Agent struct {
 	Status   AgentStatus      `json:"status"`
 }
 
+// AgentHandoff defines model for AgentHandoff.
+type AgentHandoff struct {
+	Accepts struct {
+		Capabilities []string `json:"capabilities"`
+		Roles        []string `json:"roles"`
+	} `json:"accepts"`
+	Enabled bool                 `json:"enabled"`
+	Targets []AgentHandoffTarget `json:"targets"`
+}
+
 // AgentHandoffCandidate defines model for AgentHandoffCandidate.
 type AgentHandoffCandidate struct {
-	CapabilityTags []string `json:"capabilityTags"`
-	Id             string   `json:"id"`
-	Name           string   `json:"name"`
-	Role           *string  `json:"role"`
+	Capabilities []string `json:"capabilities"`
+	Id           string   `json:"id"`
+	Name         string   `json:"name"`
+	Role         *string  `json:"role"`
 }
 
 // AgentHandoffCandidateListResponse defines model for AgentHandoffCandidateListResponse.
@@ -2365,18 +2390,10 @@ type AgentHandoffCandidateListResponse struct {
 	Pagination ListPagination          `json:"pagination"`
 }
 
-// AgentHandoffPolicy defines model for AgentHandoffPolicy.
-type AgentHandoffPolicy struct {
-	Enabled              *bool                  `json:"enabled,omitempty"`
-	Targets              *[]AgentHandoffTarget  `json:"targets,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
-}
-
 // AgentHandoffTarget defines model for AgentHandoffTarget.
 type AgentHandoffTarget struct {
-	Capability           *string                `json:"capability,omitempty"`
-	Role                 *string                `json:"role,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Capability *string `json:"capability,omitempty"`
+	Role       *string `json:"role,omitempty"`
 }
 
 // AgentListResponse defines model for AgentListResponse.
@@ -2390,14 +2407,6 @@ type AgentMemory struct {
 	Metadata ResourceMetadata  `json:"metadata"`
 	Spec     AgentMemorySpec   `json:"spec"`
 	Status   AgentMemoryStatus `json:"status"`
-}
-
-// AgentMemoryPolicy defines model for AgentMemoryPolicy.
-type AgentMemoryPolicy struct {
-	Enabled              *bool                  `json:"enabled,omitempty"`
-	Mode                 *string                `json:"mode,omitempty"`
-	Scope                *string                `json:"scope,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // AgentMemorySpec defines model for AgentMemorySpec.
@@ -2414,18 +2423,15 @@ type AgentMemoryStatus struct {
 
 // AgentSpec defines model for AgentSpec.
 type AgentSpec struct {
-	CapabilityTags []string               `json:"capabilityTags"`
-	HandoffPolicy  AgentHandoffPolicy     `json:"handoffPolicy"`
-	Instructions   *string                `json:"instructions"`
-	McpConnectors  []string               `json:"mcpConnectors"`
-	MemoryPolicy   AgentMemoryPolicy      `json:"memoryPolicy"`
-	Metadata       map[string]interface{} `json:"metadata"`
-	Model          *string                `json:"model"`
-	ProviderId     *string                `json:"providerId"`
-	Role           *string                `json:"role"`
-	Skills         []string               `json:"skills"`
-	Subagents      []AgentSubagent        `json:"subagents"`
-	Tools          []AgentToolAttachment  `json:"tools"`
+	Handoff       AgentHandoff          `json:"handoff"`
+	McpConnectors []string              `json:"mcpConnectors"`
+	Model         *string               `json:"model"`
+	Provider      *string               `json:"provider"`
+	Role          *string               `json:"role"`
+	Skills        []string              `json:"skills"`
+	Subagents     []AgentSubagent       `json:"subagents"`
+	SystemPrompt  *string               `json:"systemPrompt"`
+	Tools         []AgentToolAttachment `json:"tools"`
 }
 
 // AgentStatus defines model for AgentStatus.
@@ -2651,20 +2657,17 @@ type ConnectorToolApprovalMode string
 
 // CreateAgentRequest defines model for CreateAgentRequest.
 type CreateAgentRequest struct {
-	CapabilityTags *[]string                   `json:"capabilityTags,omitempty"`
-	Description    *string                     `json:"description,omitempty"`
-	HandoffPolicy  *AgentHandoffPolicy         `json:"handoffPolicy,omitempty"`
-	Instructions   *string                     `json:"instructions,omitempty"`
-	McpConnectors  *[]string                   `json:"mcpConnectors,omitempty"`
-	MemoryPolicy   *AgentMemoryPolicy          `json:"memoryPolicy,omitempty"`
-	Metadata       *map[string]interface{}     `json:"metadata,omitempty"`
-	Model          *string                     `json:"model,omitempty"`
-	Name           string                      `json:"name"`
-	ProviderId     *string                     `json:"providerId,omitempty"`
-	Role           *string                     `json:"role,omitempty"`
-	Skills         *[]string                   `json:"skills,omitempty"`
-	Subagents      *[]AgentSubagent            `json:"subagents,omitempty"`
-	Tools          *[]AgentToolAttachmentInput `json:"tools,omitempty"`
+	Description   *string                     `json:"description,omitempty"`
+	Handoff       *AgentHandoff               `json:"handoff,omitempty"`
+	McpConnectors *[]string                   `json:"mcpConnectors,omitempty"`
+	Model         *string                     `json:"model,omitempty"`
+	Name          string                      `json:"name"`
+	Provider      *string                     `json:"provider,omitempty"`
+	Role          *string                     `json:"role,omitempty"`
+	Skills        *[]string                   `json:"skills,omitempty"`
+	Subagents     *[]AgentSubagent            `json:"subagents,omitempty"`
+	SystemPrompt  *string                     `json:"systemPrompt,omitempty"`
+	Tools         *[]AgentToolAttachmentInput `json:"tools,omitempty"`
 }
 
 // CreateAuthSessionRequest defines model for CreateAuthSessionRequest.
@@ -2695,24 +2698,13 @@ type CreateBudgetRequestWindow string
 
 // CreateEnvironmentRequest defines model for CreateEnvironmentRequest.
 type CreateEnvironmentRequest struct {
-	Description          *string                   `json:"description,omitempty"`
-	HostingMode          *EnvironmentHostingMode   `json:"hostingMode,omitempty"`
-	McpPolicy            *EnvironmentMcpPolicy     `json:"mcpPolicy,omitempty"`
-	Metadata             *map[string]interface{}   `json:"metadata,omitempty"`
-	Name                 string                    `json:"name"`
-	NetworkPolicy        *EnvironmentNetworkPolicy `json:"networkPolicy,omitempty"`
-	PackageManagerPolicy *map[string]interface{}   `json:"packageManagerPolicy,omitempty"`
-	Packages             *[]struct {
-		Name    string  `json:"name"`
-		Version *string `json:"version,omitempty"`
-	} `json:"packages,omitempty"`
-	ResourceLimits *struct {
-		CpuMs          *int `json:"cpuMs,omitempty"`
-		MemoryMb       *int `json:"memoryMb,omitempty"`
-		TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
-	} `json:"resourceLimits,omitempty"`
-	RuntimeConfig *map[string]interface{} `json:"runtimeConfig,omitempty"`
-	Variables     *map[string]struct {
+	Description *string                `json:"description,omitempty"`
+	Name        string                 `json:"name"`
+	Networking  *EnvironmentNetworking `json:"networking,omitempty"`
+	Packages    *EnvironmentPackages   `json:"packages,omitempty"`
+	Scope       *EnvironmentScope      `json:"scope,omitempty"`
+	Type        *EnvironmentType       `json:"type,omitempty"`
+	Variables   *map[string]struct {
 		Description *string `json:"description,omitempty"`
 		Required    *bool   `json:"required,omitempty"`
 	} `json:"variables,omitempty"`
@@ -2878,49 +2870,41 @@ type EnvironmentListResponse struct {
 	Pagination ListPagination `json:"pagination"`
 }
 
-// EnvironmentMcpPolicy defines model for EnvironmentMcpPolicy.
-type EnvironmentMcpPolicy struct {
-	AllowedConnectors         *[]string                                              `json:"allowedConnectors,omitempty"`
-	BlockedConnectors         *[]string                                              `json:"blockedConnectors,omitempty"`
-	ConnectorApprovalModes    *map[string]EnvironmentMcpPolicyConnectorApprovalModes `json:"connectorApprovalModes,omitempty"`
-	DefaultEffect             *EnvironmentMcpPolicyDefaultEffect                     `json:"defaultEffect,omitempty"`
-	RequireApprovalConnectors *[]string                                              `json:"requireApprovalConnectors,omitempty"`
-	RequireApprovalTools      *[]string                                              `json:"requireApprovalTools,omitempty"`
+// EnvironmentNetworking defines model for EnvironmentNetworking.
+type EnvironmentNetworking struct {
+	AllowMcpServers      bool                      `json:"allowMcpServers"`
+	AllowPackageManagers bool                      `json:"allowPackageManagers"`
+	AllowedHosts         *[]string                 `json:"allowedHosts,omitempty"`
+	Type                 EnvironmentNetworkingType `json:"type"`
 }
 
-// EnvironmentMcpPolicyConnectorApprovalModes defines model for EnvironmentMcpPolicy.ConnectorApprovalModes.
-type EnvironmentMcpPolicyConnectorApprovalModes string
+// EnvironmentNetworkingType defines model for EnvironmentNetworking.Type.
+type EnvironmentNetworkingType string
 
-// EnvironmentMcpPolicyDefaultEffect defines model for EnvironmentMcpPolicy.DefaultEffect.
-type EnvironmentMcpPolicyDefaultEffect string
-
-// EnvironmentNetworkPolicy defines model for EnvironmentNetworkPolicy.
-type EnvironmentNetworkPolicy struct {
-	AllowedHosts *[]string                    `json:"allowedHosts,omitempty"`
-	Mode         EnvironmentNetworkPolicyMode `json:"mode"`
+// EnvironmentPackages defines model for EnvironmentPackages.
+type EnvironmentPackages struct {
+	Apt   []string                `json:"apt"`
+	Cargo []string                `json:"cargo"`
+	Gem   []string                `json:"gem"`
+	Go    []string                `json:"go"`
+	Npm   []string                `json:"npm"`
+	Pip   []string                `json:"pip"`
+	Type  EnvironmentPackagesType `json:"type"`
 }
 
-// EnvironmentNetworkPolicyMode defines model for EnvironmentNetworkPolicy.Mode.
-type EnvironmentNetworkPolicyMode string
+// EnvironmentPackagesType defines model for EnvironmentPackages.Type.
+type EnvironmentPackagesType string
+
+// EnvironmentScope defines model for EnvironmentScope.
+type EnvironmentScope string
 
 // EnvironmentSpec defines model for EnvironmentSpec.
 type EnvironmentSpec struct {
-	HostingMode          EnvironmentHostingMode   `json:"hostingMode"`
-	McpPolicy            EnvironmentMcpPolicy     `json:"mcpPolicy"`
-	Metadata             map[string]interface{}   `json:"metadata"`
-	NetworkPolicy        EnvironmentNetworkPolicy `json:"networkPolicy"`
-	PackageManagerPolicy map[string]interface{}   `json:"packageManagerPolicy"`
-	Packages             []struct {
-		Name    string  `json:"name"`
-		Version *string `json:"version,omitempty"`
-	} `json:"packages"`
-	ResourceLimits struct {
-		CpuMs          *int `json:"cpuMs,omitempty"`
-		MemoryMb       *int `json:"memoryMb,omitempty"`
-		TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
-	} `json:"resourceLimits"`
-	RuntimeConfig map[string]interface{} `json:"runtimeConfig"`
-	Variables     map[string]struct {
+	Networking EnvironmentNetworking `json:"networking"`
+	Packages   EnvironmentPackages   `json:"packages"`
+	Scope      EnvironmentScope      `json:"scope"`
+	Type       EnvironmentType       `json:"type"`
+	Variables  map[string]struct {
 		Description *string `json:"description,omitempty"`
 		Required    *bool   `json:"required,omitempty"`
 	} `json:"variables"`
@@ -2932,6 +2916,9 @@ type EnvironmentStatus struct {
 	Phase            ResourcePhase `json:"phase"`
 	Version          int           `json:"version"`
 }
+
+// EnvironmentType defines model for EnvironmentType.
+type EnvironmentType string
 
 // EnvironmentVersion defines model for EnvironmentVersion.
 type EnvironmentVersion struct {
@@ -3492,23 +3479,30 @@ type SessionAbortFrameType string
 
 // SessionAgentSnapshot defines model for SessionAgentSnapshot.
 type SessionAgentSnapshot struct {
-	AgentId        string                   `json:"agentId"`
-	CapabilityTags []string                 `json:"capabilityTags"`
-	CreatedAt      time.Time                `json:"createdAt"`
-	HandoffPolicy  map[string]interface{}   `json:"handoffPolicy"`
-	Id             string                   `json:"id"`
-	Instructions   *string                  `json:"instructions"`
-	McpConnectors  []string                 `json:"mcpConnectors"`
-	MemoryPolicy   map[string]interface{}   `json:"memoryPolicy"`
-	Metadata       map[string]interface{}   `json:"metadata"`
-	Model          *string                  `json:"model"`
-	ProjectId      string                   `json:"projectId"`
-	ProviderId     string                   `json:"providerId"`
-	Role           *string                  `json:"role"`
-	Skills         []string                 `json:"skills"`
-	Subagents      []map[string]interface{} `json:"subagents"`
-	Tools          []map[string]interface{} `json:"tools"`
-	Version        int                      `json:"version"`
+	AgentId   string    `json:"agentId"`
+	CreatedAt time.Time `json:"createdAt"`
+	Handoff   struct {
+		Accepts struct {
+			Capabilities []string `json:"capabilities"`
+			Roles        []string `json:"roles"`
+		} `json:"accepts"`
+		Enabled bool `json:"enabled"`
+		Targets []struct {
+			Capability *string `json:"capability,omitempty"`
+			Role       *string `json:"role,omitempty"`
+		} `json:"targets"`
+	} `json:"handoff"`
+	Id            string                   `json:"id"`
+	McpConnectors []string                 `json:"mcpConnectors"`
+	Model         *string                  `json:"model"`
+	ProjectId     string                   `json:"projectId"`
+	Provider      string                   `json:"provider"`
+	Role          *string                  `json:"role"`
+	Skills        []string                 `json:"skills"`
+	Subagents     []map[string]interface{} `json:"subagents"`
+	SystemPrompt  *string                  `json:"systemPrompt"`
+	Tools         []map[string]interface{} `json:"tools"`
+	Version       int                      `json:"version"`
 }
 
 // SessionApproval defines model for SessionApproval.
@@ -3644,20 +3638,16 @@ type SessionEnvironmentJsonObject map[string]interface{}
 
 // SessionEnvironmentSnapshot defines model for SessionEnvironmentSnapshot.
 type SessionEnvironmentSnapshot struct {
-	CreatedAt            time.Time                      `json:"createdAt"`
-	EnvironmentId        string                         `json:"environmentId"`
-	HostingMode          EnvironmentHostingMode         `json:"hostingMode"`
-	Id                   string                         `json:"id"`
-	McpPolicy            SessionEnvironmentJsonObject   `json:"mcpPolicy"`
-	Metadata             SessionEnvironmentJsonObject   `json:"metadata"`
-	NetworkPolicy        EnvironmentNetworkPolicy       `json:"networkPolicy"`
-	PackageManagerPolicy SessionEnvironmentJsonObject   `json:"packageManagerPolicy"`
-	Packages             []SessionEnvironmentJsonObject `json:"packages"`
-	ProjectId            string                         `json:"projectId"`
-	ResourceLimits       SessionEnvironmentJsonObject   `json:"resourceLimits"`
-	RuntimeConfig        SessionEnvironmentJsonObject   `json:"runtimeConfig"`
-	Variables            SessionEnvironmentJsonObject   `json:"variables"`
-	Version              int                            `json:"version"`
+	CreatedAt     time.Time                    `json:"createdAt"`
+	EnvironmentId string                       `json:"environmentId"`
+	Id            string                       `json:"id"`
+	Networking    EnvironmentNetworking        `json:"networking"`
+	Packages      EnvironmentPackages          `json:"packages"`
+	ProjectId     string                       `json:"projectId"`
+	Scope         EnvironmentScope             `json:"scope"`
+	Type          EnvironmentType              `json:"type"`
+	Variables     SessionEnvironmentJsonObject `json:"variables"`
+	Version       int                          `json:"version"`
 }
 
 // SessionEvent defines model for SessionEvent.
@@ -3905,21 +3895,18 @@ type TriggerStatus struct {
 // UpdateAgentRequest defines model for UpdateAgentRequest.
 type UpdateAgentRequest struct {
 	// Archived Lifecycle transition: true archives the agent, false unarchives it.
-	Archived       *bool                       `json:"archived,omitempty"`
-	CapabilityTags *[]string                   `json:"capabilityTags,omitempty"`
-	Description    *string                     `json:"description,omitempty"`
-	HandoffPolicy  *AgentHandoffPolicy         `json:"handoffPolicy,omitempty"`
-	Instructions   *string                     `json:"instructions,omitempty"`
-	McpConnectors  *[]string                   `json:"mcpConnectors,omitempty"`
-	MemoryPolicy   *AgentMemoryPolicy          `json:"memoryPolicy,omitempty"`
-	Metadata       *map[string]interface{}     `json:"metadata,omitempty"`
-	Model          *string                     `json:"model,omitempty"`
-	Name           *string                     `json:"name,omitempty"`
-	ProviderId     *string                     `json:"providerId,omitempty"`
-	Role           *string                     `json:"role,omitempty"`
-	Skills         *[]string                   `json:"skills,omitempty"`
-	Subagents      *[]AgentSubagent            `json:"subagents,omitempty"`
-	Tools          *[]AgentToolAttachmentInput `json:"tools,omitempty"`
+	Archived      *bool                       `json:"archived,omitempty"`
+	Description   *string                     `json:"description,omitempty"`
+	Handoff       *AgentHandoff               `json:"handoff,omitempty"`
+	McpConnectors *[]string                   `json:"mcpConnectors,omitempty"`
+	Model         *string                     `json:"model,omitempty"`
+	Name          *string                     `json:"name,omitempty"`
+	Provider      *string                     `json:"provider,omitempty"`
+	Role          *string                     `json:"role,omitempty"`
+	Skills        *[]string                   `json:"skills,omitempty"`
+	Subagents     *[]AgentSubagent            `json:"subagents,omitempty"`
+	SystemPrompt  *string                     `json:"systemPrompt,omitempty"`
+	Tools         *[]AgentToolAttachmentInput `json:"tools,omitempty"`
 }
 
 // UpdateBudgetRequest defines model for UpdateBudgetRequest.
@@ -3936,25 +3923,14 @@ type UpdateBudgetRequestWindow string
 // UpdateEnvironmentRequest defines model for UpdateEnvironmentRequest.
 type UpdateEnvironmentRequest struct {
 	// Archived Lifecycle transition: true archives the environment, false unarchives it.
-	Archived             *bool                     `json:"archived,omitempty"`
-	Description          *string                   `json:"description,omitempty"`
-	HostingMode          *EnvironmentHostingMode   `json:"hostingMode,omitempty"`
-	McpPolicy            *EnvironmentMcpPolicy     `json:"mcpPolicy,omitempty"`
-	Metadata             *map[string]interface{}   `json:"metadata,omitempty"`
-	Name                 *string                   `json:"name,omitempty"`
-	NetworkPolicy        *EnvironmentNetworkPolicy `json:"networkPolicy,omitempty"`
-	PackageManagerPolicy *map[string]interface{}   `json:"packageManagerPolicy,omitempty"`
-	Packages             *[]struct {
-		Name    string  `json:"name"`
-		Version *string `json:"version,omitempty"`
-	} `json:"packages,omitempty"`
-	ResourceLimits *struct {
-		CpuMs          *int `json:"cpuMs,omitempty"`
-		MemoryMb       *int `json:"memoryMb,omitempty"`
-		TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
-	} `json:"resourceLimits,omitempty"`
-	RuntimeConfig *map[string]interface{} `json:"runtimeConfig,omitempty"`
-	Variables     *map[string]struct {
+	Archived    *bool                  `json:"archived,omitempty"`
+	Description *string                `json:"description,omitempty"`
+	Name        *string                `json:"name,omitempty"`
+	Networking  *EnvironmentNetworking `json:"networking,omitempty"`
+	Packages    *EnvironmentPackages   `json:"packages,omitempty"`
+	Scope       *EnvironmentScope      `json:"scope,omitempty"`
+	Type        *EnvironmentType       `json:"type,omitempty"`
+	Variables   *map[string]struct {
 		Description *string `json:"description,omitempty"`
 		Required    *bool   `json:"required,omitempty"`
 	} `json:"variables,omitempty"`
@@ -4655,270 +4631,6 @@ type UpdateVaultCredentialJSONRequestBody = UpdateVaultCredentialRequest
 
 // CreateVaultCredentialVersionJSONRequestBody defines body for CreateVaultCredentialVersion for application/json ContentType.
 type CreateVaultCredentialVersionJSONRequestBody = CreateVaultCredentialVersionRequest
-
-// Getter for additional properties for AgentHandoffPolicy. Returns the specified
-// element and whether it was found
-func (a AgentHandoffPolicy) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for AgentHandoffPolicy
-func (a *AgentHandoffPolicy) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for AgentHandoffPolicy to handle AdditionalProperties
-func (a *AgentHandoffPolicy) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["enabled"]; found {
-		err = json.Unmarshal(raw, &a.Enabled)
-		if err != nil {
-			return fmt.Errorf("error reading 'enabled': %w", err)
-		}
-		delete(object, "enabled")
-	}
-
-	if raw, found := object["targets"]; found {
-		err = json.Unmarshal(raw, &a.Targets)
-		if err != nil {
-			return fmt.Errorf("error reading 'targets': %w", err)
-		}
-		delete(object, "targets")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for AgentHandoffPolicy to handle AdditionalProperties
-func (a AgentHandoffPolicy) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.Enabled != nil {
-		object["enabled"], err = json.Marshal(a.Enabled)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'enabled': %w", err)
-		}
-	}
-
-	if a.Targets != nil {
-		object["targets"], err = json.Marshal(a.Targets)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'targets': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for AgentHandoffTarget. Returns the specified
-// element and whether it was found
-func (a AgentHandoffTarget) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for AgentHandoffTarget
-func (a *AgentHandoffTarget) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for AgentHandoffTarget to handle AdditionalProperties
-func (a *AgentHandoffTarget) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["capability"]; found {
-		err = json.Unmarshal(raw, &a.Capability)
-		if err != nil {
-			return fmt.Errorf("error reading 'capability': %w", err)
-		}
-		delete(object, "capability")
-	}
-
-	if raw, found := object["role"]; found {
-		err = json.Unmarshal(raw, &a.Role)
-		if err != nil {
-			return fmt.Errorf("error reading 'role': %w", err)
-		}
-		delete(object, "role")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for AgentHandoffTarget to handle AdditionalProperties
-func (a AgentHandoffTarget) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.Capability != nil {
-		object["capability"], err = json.Marshal(a.Capability)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'capability': %w", err)
-		}
-	}
-
-	if a.Role != nil {
-		object["role"], err = json.Marshal(a.Role)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'role': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for AgentMemoryPolicy. Returns the specified
-// element and whether it was found
-func (a AgentMemoryPolicy) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for AgentMemoryPolicy
-func (a *AgentMemoryPolicy) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for AgentMemoryPolicy to handle AdditionalProperties
-func (a *AgentMemoryPolicy) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["enabled"]; found {
-		err = json.Unmarshal(raw, &a.Enabled)
-		if err != nil {
-			return fmt.Errorf("error reading 'enabled': %w", err)
-		}
-		delete(object, "enabled")
-	}
-
-	if raw, found := object["mode"]; found {
-		err = json.Unmarshal(raw, &a.Mode)
-		if err != nil {
-			return fmt.Errorf("error reading 'mode': %w", err)
-		}
-		delete(object, "mode")
-	}
-
-	if raw, found := object["scope"]; found {
-		err = json.Unmarshal(raw, &a.Scope)
-		if err != nil {
-			return fmt.Errorf("error reading 'scope': %w", err)
-		}
-		delete(object, "scope")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for AgentMemoryPolicy to handle AdditionalProperties
-func (a AgentMemoryPolicy) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.Enabled != nil {
-		object["enabled"], err = json.Marshal(a.Enabled)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'enabled': %w", err)
-		}
-	}
-
-	if a.Mode != nil {
-		object["mode"], err = json.Marshal(a.Mode)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'mode': %w", err)
-		}
-	}
-
-	if a.Scope != nil {
-		object["scope"], err = json.Marshal(a.Scope)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'scope': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
 
 // Getter for additional properties for AgentSubagent. Returns the specified
 // element and whether it was found

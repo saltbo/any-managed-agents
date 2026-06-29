@@ -20,8 +20,19 @@ function stubMatchMedia() {
   })
 }
 
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 beforeAll(() => {
   stubMatchMedia()
+  Object.defineProperty(window, 'ResizeObserver', {
+    writable: true,
+    configurable: true,
+    value: ResizeObserverStub,
+  })
   // Any /api/v1 request a test forgot to handle is a real gap — fail loudly.
   server.listen({ onUnhandledRequest: 'error' })
 })

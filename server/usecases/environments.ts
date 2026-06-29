@@ -2,9 +2,7 @@ import {
   type Environment,
   type EnvironmentConfig,
   hasSecretMaterial,
-  mcpPolicyConnectorIds,
   RUNTIME_CONFIG_FIELDS,
-  validateSecretFreeObjects,
 } from '@server/domain/environment'
 import type { Deps } from './deps'
 import { type AuthScope, EnvironmentArchivedError, EnvironmentValidationError } from './ports'
@@ -12,15 +10,7 @@ import { type AuthScope, EnvironmentArchivedError, EnvironmentValidationError } 
 // Validates the config against sibling resources (MCP catalog entries) and the
 // secret-free-object rules. Throws
 // EnvironmentValidationError on the first failure.
-async function validateConfig(deps: Deps, auth: AuthScope, config: EnvironmentConfig) {
-  const mcpError = await validateMcpPolicy(deps, auth.project.id, config.mcpPolicy)
-  if (mcpError) {
-    throw new EnvironmentValidationError('Invalid environment configuration', mcpError)
-  }
-  const secretError = validateSecretFreeObjects(config)
-  if (secretError) {
-    throw new EnvironmentValidationError('Invalid environment configuration', secretError)
-  }
+function validateConfig(config: EnvironmentConfig) {
   if (hasSecretMaterial(config.variables)) {
     throw new EnvironmentValidationError('Invalid environment configuration', {
       variables: 'Secret material must be stored in a vault.',
@@ -28,21 +18,12 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: EnvironmentCo
   }
 }
 
-async function validateMcpPolicy(deps: Deps, _projectId: string, mcpPolicy: Record<string, unknown>) {
-  for (const connectorId of mcpPolicyConnectorIds(mcpPolicy)) {
-    if (!(await deps.environments.connectorAvailable(connectorId))) {
-      return { mcpPolicy: `MCP connector is not available in the platform catalog: ${connectorId}` }
-    }
-  }
-  return null
-}
-
 export async function createEnvironment(
   deps: Deps,
   auth: AuthScope,
   input: { name: string; description: string | null; config: EnvironmentConfig },
 ): Promise<Environment> {
-  await validateConfig(deps, auth, input.config)
+  validateConfig(input.config)
   const createdAt = new Date().toISOString()
   const environment = await deps.environments.insert(
     { projectId: auth.project.id, name: input.name, description: input.description, config: input.config },
@@ -59,15 +40,11 @@ export async function createEnvironment(
 export interface UpdateEnvironmentPatch {
   name?: string
   description?: string | null
+  scope?: EnvironmentConfig['scope']
+  type?: EnvironmentConfig['type']
+  networking?: EnvironmentConfig['networking']
   packages?: EnvironmentConfig['packages']
   variables?: EnvironmentConfig['variables']
-  hostingMode?: EnvironmentConfig['hostingMode']
-  networkPolicy?: EnvironmentConfig['networkPolicy']
-  mcpPolicy?: EnvironmentConfig['mcpPolicy']
-  packageManagerPolicy?: EnvironmentConfig['packageManagerPolicy']
-  resourceLimits?: EnvironmentConfig['resourceLimits']
-  runtimeConfig?: EnvironmentConfig['runtimeConfig']
-  metadata?: EnvironmentConfig['metadata']
   archived?: boolean
 }
 
@@ -113,17 +90,13 @@ export async function updateEnvironment(
   }
 
   const next: EnvironmentConfig = {
+    scope: configFields.scope ?? environment.spec.scope,
+    type: configFields.type ?? environment.spec.type,
+    networking: configFields.networking ?? environment.spec.networking,
     packages: configFields.packages ?? environment.spec.packages,
     variables: configFields.variables ?? environment.spec.variables,
-    hostingMode: configFields.hostingMode ?? environment.spec.hostingMode,
-    networkPolicy: configFields.networkPolicy ?? environment.spec.networkPolicy,
-    mcpPolicy: configFields.mcpPolicy ?? environment.spec.mcpPolicy,
-    packageManagerPolicy: configFields.packageManagerPolicy ?? environment.spec.packageManagerPolicy,
-    resourceLimits: configFields.resourceLimits ?? environment.spec.resourceLimits,
-    runtimeConfig: configFields.runtimeConfig ?? environment.spec.runtimeConfig,
-    metadata: configFields.metadata ?? environment.spec.metadata,
   }
-  await validateConfig(deps, auth, next)
+  validateConfig(next)
 
   const updatedAt = new Date().toISOString()
   const runtimeChanged = RUNTIME_CONFIG_FIELDS.some((field) => configFields[field] !== undefined)

@@ -15,22 +15,22 @@ import {
 const validDraft = {
   ...emptyBuilderDraft,
   name: 'Review agent',
-  instructions: 'Review changes carefully.',
+  systemPrompt: 'Review changes carefully.',
 }
 
 describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder model', () => {
   it('drafts a configuration from a natural-language goal', () => {
     const draft = draftFromGoal('Review incoming pull requests and summarize risky changes for the team')
     expect(draft.name).toBe('Review incoming pull requests and summarize agent')
-    expect(draft.instructions).toContain('Review incoming pull requests')
+    expect(draft.systemPrompt).toContain('Review incoming pull requests')
     expect(draft.model).toBe('@cf/moonshotai/kimi-k2.6')
     expect(draft.allowedTools).toBe('read\nwrite\nshell')
   })
 
-  it('requires name, instructions, provider, and model in the core step', () => {
+  it('requires name, system prompt, provider, and model in the core step', () => {
     expect(coreStepErrors(emptyBuilderDraft)).toMatchObject({
       name: expect.any(String),
-      instructions: expect.any(String),
+      systemPrompt: expect.any(String),
     })
     expect(coreStepErrors(validDraft)).toEqual({})
   })
@@ -46,7 +46,7 @@ describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder m
     })
   })
 
-  it('builds a generic agent input including roles, handoff, and memory policy', () => {
+  it('builds a generic agent input including roles and handoff', () => {
     const input = toAgentInput({
       ...validDraft,
       sandboxEnabled: true,
@@ -54,22 +54,22 @@ describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder m
       role: 'maintainer',
       capabilityTags: 'triage',
       handoffTargets: 'role=worker\ncapability=implementation',
-      memoryEnabled: true,
     })
     expect(input).toMatchObject({
       name: 'Review agent',
-      instructions: 'Review changes carefully.',
+      systemPrompt: 'Review changes carefully.',
       skills: ['ama@coding-agent'],
       role: 'maintainer',
-      capabilityTags: ['triage'],
-      handoffPolicy: { targets: [{ role: 'worker' }, { capability: 'implementation' }] },
-      memoryPolicy: { enabled: true, scope: 'project' },
+      handoff: {
+        enabled: true,
+        accepts: { roles: ['maintainer'], capabilities: ['triage'] },
+        targets: [{ role: 'worker' }, { capability: 'implementation' }],
+      },
     })
     expect(toAgentInput(validDraft)).toMatchObject({
       skills: [],
       role: null,
-      handoffPolicy: {},
-      memoryPolicy: { enabled: false },
+      handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
     })
   })
 
@@ -93,16 +93,14 @@ describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder m
       id: 'agent_123',
       name: 'Review agent',
       description: null,
-      instructions: 'Review changes.',
-      providerId: 'workers-ai',
+      systemPrompt: 'Review changes.',
+      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       skills: [],
       tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
       mcpConnectors: [],
       role: 'maintainer',
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: { enabled: false },
+      handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
     })
     const examples = agentApiExamples('https://ama.example.com', agent)
     expect(examples.curl).toContain('https://ama.example.com/api/v1/agents')

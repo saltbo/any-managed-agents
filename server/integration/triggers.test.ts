@@ -21,7 +21,9 @@ async function createEnvironment(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Trigger workspace ${crypto.randomUUID()}`,
-      runtimeConfig: { image: 'ama-tool-executor' },
+      type: 'cloud',
+      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
     }),
   })
   expect(res.status).toBe(201)
@@ -34,8 +36,8 @@ async function createAgent(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Trigger agent ${crypto.randomUUID()}`,
-      instructions: 'Run scheduled work.',
-      providerId: 'workers-ai',
+      systemPrompt: 'Run scheduled work.',
+      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
     }),
   })

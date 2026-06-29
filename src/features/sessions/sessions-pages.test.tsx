@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import type { Agent, Environment, ListResponse, Session, SessionEvent } from '@/lib/amarpc'
+import type { Agent, Environment, ListResponse, MemoryStore, Session, SessionEvent } from '@/lib/amarpc'
 import { ApiError } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
@@ -156,6 +156,10 @@ function agentsList(agents: Agent[] = []) {
 
 function environmentsList(envs: Environment[] = []) {
   return http.get('*/api/v1/environments', () => HttpResponse.json(listOf(envs)))
+}
+
+function memoryStoresList(memoryStores: MemoryStore[] = []) {
+  return http.get('*/api/v1/memory-stores', () => HttpResponse.json(listOf(memoryStores)))
 }
 
 function sessionPatch(session: Session) {
@@ -320,16 +324,12 @@ describe('SessionsView', () => {
         id: 'envver_1',
         environmentId: 'env_1',
         projectId: 'project_1',
-        packages: [],
-        variables: {},
-        hostingMode: 'self_hosted',
-        networkPolicy: { mode: 'restricted', allowedHosts: [] },
-        mcpPolicy: {},
-        packageManagerPolicy: {},
-        resourceLimits: { memoryMb: 1024 },
-        runtimeConfig: { image: 'node:24' },
-        metadata: {},
         version: 1,
+        scope: 'project',
+        type: 'self_hosted',
+        networking: { type: 'limited', allowMcpServers: false, allowPackageManagers: true, allowedHosts: [] },
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+        variables: {},
         createdAt: now,
       },
     })
@@ -402,18 +402,16 @@ describe('SessionsView', () => {
         agentId: 'agent_1',
         projectId: 'project_1',
         version: 1,
-        instructions: 'Do work',
-        providerId: 'workers-ai',
+        systemPrompt: 'Do work',
+        provider: 'workers-ai',
         model: null,
         skills: [],
         subagents: [],
         role: null,
-        capabilityTags: [],
-        handoffPolicy: {},
-        memoryPolicy: { enabled: false },
+        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
         tools: [],
         mcpConnectors: [],
-        metadata: {},
+
         createdAt: now,
       },
     })
@@ -442,18 +440,16 @@ describe('SessionsView', () => {
         agentId: 'agent_fallback_id',
         projectId: 'project_1',
         version: 1,
-        instructions: null,
-        providerId: 'workers-ai',
+        systemPrompt: null,
+        provider: 'workers-ai',
         model: '@cf/meta/llama',
         skills: [],
         subagents: [],
         role: null,
-        capabilityTags: [],
-        handoffPolicy: {},
-        memoryPolicy: { enabled: false },
+        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
         tools: [],
         mcpConnectors: [],
-        metadata: {},
+
         createdAt: now,
       },
     })
@@ -527,18 +523,16 @@ describe('SessionDetailView', () => {
         agentId: 'agent_no_name',
         projectId: 'project_1',
         version: 1,
-        instructions: null,
-        providerId: 'workers-ai',
+        systemPrompt: null,
+        provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         skills: [],
         subagents: [],
         role: null,
-        capabilityTags: [],
-        handoffPolicy: {},
-        memoryPolicy: { enabled: false },
+        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
         tools: [],
         mcpConnectors: [],
-        metadata: {},
+
         createdAt: now,
       },
     })
@@ -808,16 +802,12 @@ describe('SessionDetailView', () => {
         id: 'envver_1',
         environmentId: 'env_1',
         projectId: 'project_1',
-        packages: [],
-        variables: {},
-        hostingMode: 'cloud',
-        networkPolicy: { mode: 'restricted', allowedHosts: [] },
-        mcpPolicy: {},
-        packageManagerPolicy: {},
-        resourceLimits: { memoryMb: 1024 },
-        runtimeConfig: { image: 'node:24' },
-        metadata: {},
         version: 1,
+        scope: 'project',
+        type: 'cloud',
+        networking: { type: 'limited', allowMcpServers: false, allowPackageManagers: true, allowedHosts: [] },
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+        variables: {},
         createdAt: now,
       },
     })
@@ -848,18 +838,16 @@ describe('SessionDetailView', () => {
         agentId: 'agent_1',
         projectId: 'project_1',
         version: 1,
-        instructions: 'Do the work',
-        providerId: 'workers-ai',
+        systemPrompt: 'Do the work',
+        provider: 'workers-ai',
         model: null,
         skills: [],
         subagents: [],
         role: null,
-        capabilityTags: [],
-        handoffPolicy: {},
-        memoryPolicy: { enabled: false },
+        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
         tools: [],
         mcpConnectors: [],
-        metadata: {},
+
         createdAt: now,
       },
     })
@@ -881,18 +869,16 @@ describe('SessionDetailView', () => {
         agentId: 'agent_1',
         projectId: 'project_1',
         version: 1,
-        instructions: 'Do the work',
-        providerId: 'workers-ai',
+        systemPrompt: 'Do the work',
+        provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         skills: [],
         subagents: [],
         role: null,
-        capabilityTags: [],
-        handoffPolicy: {},
-        memoryPolicy: { enabled: false },
+        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
         tools: [{ name: 123 }],
         mcpConnectors: [],
-        metadata: {},
+
         createdAt: now,
       },
     })
@@ -1388,7 +1374,7 @@ describe('CreateSessionSheet — formatCreateSessionError', () => {
   })
 
   it('renders the sheet form when open=true', async () => {
-    server.use(agentsList([buildAgent()]), environmentsList([buildEnvironment()]))
+    server.use(agentsList([buildAgent()]), environmentsList([buildEnvironment()]), memoryStoresList())
 
     const queryClient = makeQueryClient()
     render(
@@ -1420,6 +1406,7 @@ describe('CreateSessionSheet — formatCreateSessionError', () => {
     server.use(
       agentsList([buildAgent()]),
       environmentsList([buildEnvironment()]),
+      memoryStoresList(),
       http.post('*/api/v1/sessions', () => HttpResponse.json(newSession, { status: 201 })),
     )
 
@@ -1461,6 +1448,7 @@ describe('CreateSessionSheet — formatCreateSessionError', () => {
     server.use(
       agentsList([buildAgent()]),
       environmentsList([buildEnvironment()]),
+      memoryStoresList(),
       http.post('*/api/v1/sessions', () =>
         HttpResponse.json(
           {
@@ -1513,7 +1501,7 @@ describe('CreateSessionSheet — formatCreateSessionError', () => {
   })
 
   it('useEffect auto-selects first active agent and environment when agents load', async () => {
-    server.use(agentsList([buildAgent()]), environmentsList([buildEnvironment()]))
+    server.use(agentsList([buildAgent()]), environmentsList([buildEnvironment()]), memoryStoresList())
 
     const queryClient = makeQueryClient()
     render(

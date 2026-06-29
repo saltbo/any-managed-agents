@@ -1,4 +1,6 @@
 import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
+import type { AgentHandoff } from '../agent'
+import { defaultEnvironmentPackages, type EnvironmentNetworking, type EnvironmentPackages } from '../environment'
 import { workspaceSystemPromptBlock } from '../workspace'
 import type { Volume, VolumeMount } from './execution-inputs'
 
@@ -14,24 +16,48 @@ export function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function normalizeHandoff(value: unknown, capabilityTags: string[]): AgentHandoff {
+  const handoff = objectValue(value)
+  const accepts = objectValue(handoff.accepts)
+  const capabilities = stringArray(accepts.capabilities)
+  return {
+    enabled: handoff.enabled === true,
+    accepts: {
+      roles: stringArray(accepts.roles),
+      capabilities: capabilities.length > 0 ? capabilities : capabilityTags,
+    },
+    targets: Array.isArray(handoff.targets)
+      ? handoff.targets
+          .filter((target): target is Record<string, unknown> => Boolean(target) && typeof target === 'object')
+          .map((target) => ({
+            ...(typeof target.role === 'string' && target.role ? { role: target.role } : {}),
+            ...(typeof target.capability === 'string' && target.capability ? { capability: target.capability } : {}),
+          }))
+          .filter((target) => target.role !== undefined || target.capability !== undefined)
+      : [],
+  }
+}
+
 export function createAgentSnapshot(row: AgentVersionRow, providerId: string) {
+  const capabilityTags = JSON.parse(row.capabilityTags) as string[]
   return {
     id: row.id,
     agentId: row.agentId,
     projectId: row.projectId,
     version: row.version,
-    instructions: row.instructions,
-    providerId,
+    systemPrompt: row.instructions,
+    provider: providerId,
     model: row.model,
     skills: JSON.parse(row.skills) as string[],
     subagents: JSON.parse(row.subagents) as Record<string, unknown>[],
     role: row.role,
-    capabilityTags: JSON.parse(row.capabilityTags) as string[],
-    handoffPolicy: JSON.parse(row.handoffPolicy) as Record<string, unknown>,
-    memoryPolicy: JSON.parse(row.memoryPolicy) as Record<string, unknown>,
+    handoff: normalizeHandoff(JSON.parse(row.handoffPolicy) as Record<string, unknown>, capabilityTags),
     tools: JSON.parse(row.tools) as Record<string, unknown>[],
     mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
-    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     createdAt: row.createdAt,
   }
 }
@@ -51,25 +77,53 @@ export function agentSnapshotWithWorkspaceContext(
   if (!block) {
     return agentSnapshot
   }
-  const instructions = agentSnapshot.instructions?.trim()
+  const systemPrompt = agentSnapshot.systemPrompt?.trim()
   return {
     ...agentSnapshot,
-    instructions: instructions ? `${instructions}\n\n${block}` : block,
+    systemPrompt: systemPrompt ? `${systemPrompt}\n\n${block}` : block,
+  }
+}
+
+function normalizePackages(value: unknown): EnvironmentPackages {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return defaultEnvironmentPackages()
+  }
+  const packages = value as Record<string, unknown>
+  return {
+    ...defaultEnvironmentPackages(),
+    type: 'packages',
+    apt: stringArray(packages.apt),
+    cargo: stringArray(packages.cargo),
+    gem: stringArray(packages.gem),
+    go: stringArray(packages.go),
+    npm: stringArray(packages.npm),
+    pip: stringArray(packages.pip),
+  }
+}
+
+function networkingFromRow(row: EnvironmentVersionRow): EnvironmentNetworking {
+  const policy = JSON.parse(row.networkPolicy) as Record<string, unknown>
+  return {
+    type: policy.mode === 'offline' ? 'closed' : policy.mode === 'restricted' ? 'limited' : 'open',
+    allowMcpServers: policy.allowMcpServers === true,
+    allowPackageManagers: policy.allowPackageManagers !== false,
+    ...(Array.isArray(policy.allowedHosts) ? { allowedHosts: stringArray(policy.allowedHosts) } : {}),
   }
 }
 
 export function createEnvironmentSnapshot(row: EnvironmentVersionRow) {
+  const metadata = JSON.parse(row.metadata) as Record<string, unknown>
   return {
-    ...row,
-    packages: JSON.parse(row.packages) as Record<string, unknown>[],
+    id: row.id,
+    environmentId: row.environmentId,
+    projectId: row.projectId,
+    version: row.version,
+    scope: metadata.scope === 'organization' ? ('organization' as const) : ('project' as const),
+    type: row.hostingMode === 'self_hosted' ? ('self_hosted' as const) : ('cloud' as const),
+    networking: networkingFromRow(row),
+    packages: normalizePackages(JSON.parse(row.packages) as unknown),
     variables: JSON.parse(row.variables) as Record<string, unknown>,
-    hostingMode: row.hostingMode,
-    networkPolicy: JSON.parse(row.networkPolicy) as Record<string, unknown>,
-    mcpPolicy: JSON.parse(row.mcpPolicy) as Record<string, unknown>,
-    packageManagerPolicy: JSON.parse(row.packageManagerPolicy) as Record<string, unknown>,
-    resourceLimits: JSON.parse(row.resourceLimits) as Record<string, unknown>,
-    runtimeConfig: JSON.parse(row.runtimeConfig) as Record<string, unknown>,
-    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    createdAt: row.createdAt,
   }
 }
 
@@ -84,8 +138,7 @@ export function normalizeEnvironmentSnapshot(
   const snapshotRecord = snapshot as Record<string, unknown>
   return {
     ...snapshotRecord,
-    hostingMode: snapshotRecord.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
-    networkPolicy: objectValue(snapshotRecord.networkPolicy),
-    runtimeConfig: objectValue(snapshotRecord.runtimeConfig),
-  } as EnvironmentSnapshot
+    type: snapshotRecord.type === 'self_hosted' ? 'self_hosted' : 'cloud',
+    networking: objectValue(snapshotRecord.networking),
+  } as unknown as EnvironmentSnapshot
 }

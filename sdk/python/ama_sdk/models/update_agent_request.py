@@ -12,11 +12,9 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.agent_handoff_policy import AgentHandoffPolicy
-  from ..models.agent_memory_policy import AgentMemoryPolicy
+  from ..models.agent_handoff import AgentHandoff
   from ..models.agent_subagent import AgentSubagent
   from ..models.agent_tool_attachment_input import AgentToolAttachmentInput
-  from ..models.update_agent_request_metadata import UpdateAgentRequestMetadata
 
 
 
@@ -32,35 +30,29 @@ class UpdateAgentRequest:
         Attributes:
             name (str | Unset):  Example: Research assistant.
             description (None | str | Unset):  Example: Answers with citations..
-            instructions (None | str | Unset):  Example: Answer with citations..
-            provider_id (None | str | Unset):  Example: provider_abc123.
+            system_prompt (None | str | Unset):  Example: Answer with citations..
+            provider (None | str | Unset):  Example: provider_abc123.
             model (None | str | Unset):  Example: @cf/moonshotai/kimi-k2.6.
             skills (list[str] | Unset):  Example: ['ama@code-review'].
             subagents (list[AgentSubagent] | Unset):  Example: [{'username': 'reviewer', 'role': 'reviewer'}].
             role (None | str | Unset):  Example: maintainer.
-            capability_tags (list[str] | Unset):  Example: ['issue-triage', 'code-review'].
-            handoff_policy (AgentHandoffPolicy | Unset):
-            memory_policy (AgentMemoryPolicy | Unset):
+            handoff (AgentHandoff | Unset):
             tools (list[AgentToolAttachmentInput] | Unset):
             mcp_connectors (list[str] | Unset):  Example: ['github'].
-            metadata (UpdateAgentRequestMetadata | Unset):  Example: {'owner': 'platform'}.
             archived (bool | Unset): Lifecycle transition: true archives the agent, false unarchives it.
      """
 
     name: str | Unset = UNSET
     description: None | str | Unset = UNSET
-    instructions: None | str | Unset = UNSET
-    provider_id: None | str | Unset = UNSET
+    system_prompt: None | str | Unset = UNSET
+    provider: None | str | Unset = UNSET
     model: None | str | Unset = UNSET
     skills: list[str] | Unset = UNSET
     subagents: list[AgentSubagent] | Unset = UNSET
     role: None | str | Unset = UNSET
-    capability_tags: list[str] | Unset = UNSET
-    handoff_policy: AgentHandoffPolicy | Unset = UNSET
-    memory_policy: AgentMemoryPolicy | Unset = UNSET
+    handoff: AgentHandoff | Unset = UNSET
     tools: list[AgentToolAttachmentInput] | Unset = UNSET
     mcp_connectors: list[str] | Unset = UNSET
-    metadata: UpdateAgentRequestMetadata | Unset = UNSET
     archived: bool | Unset = UNSET
 
 
@@ -68,11 +60,9 @@ class UpdateAgentRequest:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.agent_handoff_policy import AgentHandoffPolicy
-        from ..models.agent_memory_policy import AgentMemoryPolicy
+        from ..models.agent_handoff import AgentHandoff
         from ..models.agent_subagent import AgentSubagent
         from ..models.agent_tool_attachment_input import AgentToolAttachmentInput
-        from ..models.update_agent_request_metadata import UpdateAgentRequestMetadata
         name = self.name
 
         description: None | str | Unset
@@ -81,17 +71,17 @@ class UpdateAgentRequest:
         else:
             description = self.description
 
-        instructions: None | str | Unset
-        if isinstance(self.instructions, Unset):
-            instructions = UNSET
+        system_prompt: None | str | Unset
+        if isinstance(self.system_prompt, Unset):
+            system_prompt = UNSET
         else:
-            instructions = self.instructions
+            system_prompt = self.system_prompt
 
-        provider_id: None | str | Unset
-        if isinstance(self.provider_id, Unset):
-            provider_id = UNSET
+        provider: None | str | Unset
+        if isinstance(self.provider, Unset):
+            provider = UNSET
         else:
-            provider_id = self.provider_id
+            provider = self.provider
 
         model: None | str | Unset
         if isinstance(self.model, Unset):
@@ -120,19 +110,9 @@ class UpdateAgentRequest:
         else:
             role = self.role
 
-        capability_tags: list[str] | Unset = UNSET
-        if not isinstance(self.capability_tags, Unset):
-            capability_tags = self.capability_tags
-
-
-
-        handoff_policy: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.handoff_policy, Unset):
-            handoff_policy = self.handoff_policy.to_dict()
-
-        memory_policy: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.memory_policy, Unset):
-            memory_policy = self.memory_policy.to_dict()
+        handoff: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.handoff, Unset):
+            handoff = self.handoff.to_dict()
 
         tools: list[dict[str, Any]] | Unset = UNSET
         if not isinstance(self.tools, Unset):
@@ -149,10 +129,6 @@ class UpdateAgentRequest:
 
 
 
-        metadata: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.metadata, Unset):
-            metadata = self.metadata.to_dict()
-
         archived = self.archived
 
 
@@ -164,10 +140,10 @@ class UpdateAgentRequest:
             field_dict["name"] = name
         if description is not UNSET:
             field_dict["description"] = description
-        if instructions is not UNSET:
-            field_dict["instructions"] = instructions
-        if provider_id is not UNSET:
-            field_dict["providerId"] = provider_id
+        if system_prompt is not UNSET:
+            field_dict["systemPrompt"] = system_prompt
+        if provider is not UNSET:
+            field_dict["provider"] = provider
         if model is not UNSET:
             field_dict["model"] = model
         if skills is not UNSET:
@@ -176,18 +152,12 @@ class UpdateAgentRequest:
             field_dict["subagents"] = subagents
         if role is not UNSET:
             field_dict["role"] = role
-        if capability_tags is not UNSET:
-            field_dict["capabilityTags"] = capability_tags
-        if handoff_policy is not UNSET:
-            field_dict["handoffPolicy"] = handoff_policy
-        if memory_policy is not UNSET:
-            field_dict["memoryPolicy"] = memory_policy
+        if handoff is not UNSET:
+            field_dict["handoff"] = handoff
         if tools is not UNSET:
             field_dict["tools"] = tools
         if mcp_connectors is not UNSET:
             field_dict["mcpConnectors"] = mcp_connectors
-        if metadata is not UNSET:
-            field_dict["metadata"] = metadata
         if archived is not UNSET:
             field_dict["archived"] = archived
 
@@ -197,11 +167,9 @@ class UpdateAgentRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.agent_handoff_policy import AgentHandoffPolicy
-        from ..models.agent_memory_policy import AgentMemoryPolicy
+        from ..models.agent_handoff import AgentHandoff
         from ..models.agent_subagent import AgentSubagent
         from ..models.agent_tool_attachment_input import AgentToolAttachmentInput
-        from ..models.update_agent_request_metadata import UpdateAgentRequestMetadata
         d = dict(src_dict)
         name = d.pop("name", UNSET)
 
@@ -215,24 +183,24 @@ class UpdateAgentRequest:
         description = _parse_description(d.pop("description", UNSET))
 
 
-        def _parse_instructions(data: object) -> None | str | Unset:
+        def _parse_system_prompt(data: object) -> None | str | Unset:
             if data is None:
                 return data
             if isinstance(data, Unset):
                 return data
             return cast(None | str | Unset, data)
 
-        instructions = _parse_instructions(d.pop("instructions", UNSET))
+        system_prompt = _parse_system_prompt(d.pop("systemPrompt", UNSET))
 
 
-        def _parse_provider_id(data: object) -> None | str | Unset:
+        def _parse_provider(data: object) -> None | str | Unset:
             if data is None:
                 return data
             if isinstance(data, Unset):
                 return data
             return cast(None | str | Unset, data)
 
-        provider_id = _parse_provider_id(d.pop("providerId", UNSET))
+        provider = _parse_provider(d.pop("provider", UNSET))
 
 
         def _parse_model(data: object) -> None | str | Unset:
@@ -270,25 +238,12 @@ class UpdateAgentRequest:
         role = _parse_role(d.pop("role", UNSET))
 
 
-        capability_tags = cast(list[str], d.pop("capabilityTags", UNSET))
-
-
-        _handoff_policy = d.pop("handoffPolicy", UNSET)
-        handoff_policy: AgentHandoffPolicy | Unset
-        if isinstance(_handoff_policy,  Unset):
-            handoff_policy = UNSET
+        _handoff = d.pop("handoff", UNSET)
+        handoff: AgentHandoff | Unset
+        if isinstance(_handoff,  Unset):
+            handoff = UNSET
         else:
-            handoff_policy = AgentHandoffPolicy.from_dict(_handoff_policy)
-
-
-
-
-        _memory_policy = d.pop("memoryPolicy", UNSET)
-        memory_policy: AgentMemoryPolicy | Unset
-        if isinstance(_memory_policy,  Unset):
-            memory_policy = UNSET
-        else:
-            memory_policy = AgentMemoryPolicy.from_dict(_memory_policy)
+            handoff = AgentHandoff.from_dict(_handoff)
 
 
 
@@ -308,33 +263,20 @@ class UpdateAgentRequest:
         mcp_connectors = cast(list[str], d.pop("mcpConnectors", UNSET))
 
 
-        _metadata = d.pop("metadata", UNSET)
-        metadata: UpdateAgentRequestMetadata | Unset
-        if isinstance(_metadata,  Unset):
-            metadata = UNSET
-        else:
-            metadata = UpdateAgentRequestMetadata.from_dict(_metadata)
-
-
-
-
         archived = d.pop("archived", UNSET)
 
         update_agent_request = cls(
             name=name,
             description=description,
-            instructions=instructions,
-            provider_id=provider_id,
+            system_prompt=system_prompt,
+            provider=provider,
             model=model,
             skills=skills,
             subagents=subagents,
             role=role,
-            capability_tags=capability_tags,
-            handoff_policy=handoff_policy,
-            memory_policy=memory_policy,
+            handoff=handoff,
             tools=tools,
             mcp_connectors=mcp_connectors,
-            metadata=metadata,
             archived=archived,
         )
 

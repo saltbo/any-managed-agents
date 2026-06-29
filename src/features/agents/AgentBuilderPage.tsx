@@ -148,7 +148,7 @@ export function AgentBuilderPage() {
   const publish = useMutation({
     mutationFn: () => {
       if (draftAgent) {
-        return api.updateAgent(draftAgent.metadata.uid, { ...toAgentInput(draft), metadata: { builderDraft: null } })
+        return api.updateAgent(draftAgent.metadata.uid, toAgentInput(draft))
       }
       return api.createAgent(toAgentInput(draft))
     },

@@ -22,8 +22,8 @@ async function createSelfHostedEnvironment(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Self-hosted workspace ${crypto.randomUUID()}`,
-      hostingMode: 'self_hosted',
-      networkPolicy: { mode: 'unrestricted' },
+      type: 'self_hosted',
+      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
     }),
   })
   expect(res.status).toBe(201)
@@ -36,9 +36,9 @@ async function createAgent(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Runner-backed agent ${crypto.randomUUID()}`,
-      instructions: 'Use AMA-owned self-hosted runner work.',
+      systemPrompt: 'Use AMA-owned self-hosted runner work.',
       tools: [{ name: 'sandbox.exec' }],
-      providerId: 'workers-ai',
+      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
     }),
   })

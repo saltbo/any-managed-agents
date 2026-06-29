@@ -57,7 +57,7 @@ export function AgentsView({
                 <StatusBadge value={`v${agent.status.version}`} />
               </div>
             </TableCell>
-            <TableCell className="max-w-64 truncate">{`${agent.spec.providerId ?? 'None'} / ${agent.spec.model ?? 'None'}`}</TableCell>
+            <TableCell className="max-w-64 truncate">{`${agent.spec.provider ?? 'None'} / ${agent.spec.model ?? 'None'}`}</TableCell>
             <TableCell className="max-w-48 truncate">{agent.spec.skills.join(', ') || 'None'}</TableCell>
             <TableCell className="max-w-48 truncate">
               {agent.spec.tools.map((tool) => tool.name).join(', ') || 'None'}

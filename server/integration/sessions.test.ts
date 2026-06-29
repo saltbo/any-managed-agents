@@ -32,15 +32,48 @@ async function waitForSessionState(sessionId: string, authorization: string, sta
 }
 
 async function createEnvironment(authorization: string, data: Record<string, unknown> = {}) {
+  const { hostingMode, networkPolicy, packages, mcpPolicy, packageManagerPolicy, runtimeConfig, ...rest } = data
+  const environmentPackages =
+    packages && !Array.isArray(packages)
+      ? packages
+      : {
+          type: 'packages',
+          apt: [],
+          cargo: [],
+          gem: [],
+          go: [],
+          npm: Array.isArray(packages)
+            ? packages.map((item) =>
+                item && typeof item === 'object'
+                  ? `${(item as { name?: string }).name ?? ''}${(item as { version?: string }).version ? `@${(item as { version?: string }).version}` : ''}`
+                  : String(item),
+              )
+            : ['@earendil-works/pi-agent-core@prebuilt'],
+          pip: [],
+        }
+  const networking =
+    networkPolicy && typeof networkPolicy === 'object' && (networkPolicy as { mode?: unknown }).mode === 'offline'
+      ? { type: 'closed', allowMcpServers: false, allowPackageManagers: false }
+      : networkPolicy &&
+          typeof networkPolicy === 'object' &&
+          (networkPolicy as { mode?: unknown }).mode === 'restricted'
+        ? {
+            type: 'limited',
+            allowMcpServers: false,
+            allowPackageManagers: true,
+            allowedHosts: ((networkPolicy as { allowedHosts?: unknown }).allowedHosts as string[] | undefined) ?? [
+              'registry.npmjs.org',
+            ],
+          }
+        : { type: 'open', allowMcpServers: true, allowPackageManagers: true }
   const res = await jsonFetch('/api/v1/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: `AMA workspace ${crypto.randomUUID()}`,
-      packages: [{ name: '@earendil-works/pi-agent-core', version: 'prebuilt' }],
-      mcpPolicy: { allowedConnectors: ['github'] },
-      packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
-      runtimeConfig: { image: 'ama-tool-executor' },
-      ...data,
+      type: hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
+      networking,
+      packages: environmentPackages,
+      ...rest,
     }),
   })
   if (res.status !== 201) {
@@ -48,26 +81,42 @@ async function createEnvironment(authorization: string, data: Record<string, unk
   }
   const environment = (await res.json()) as {
     metadata: { uid: string }
-    spec: { hostingMode?: string }
+    spec: { type?: string }
   }
-  return { id: environment.metadata.uid, hostingMode: environment.spec.hostingMode }
+  return { id: environment.metadata.uid, hostingMode: environment.spec.type }
 }
 
 async function createAgent(authorization: string, data: Record<string, unknown> = {}) {
+  const { instructions, providerId, memoryPolicy: _memoryPolicy, handoffPolicy, capabilityTags, ...rest } = data
+  const handoff =
+    handoffPolicy && typeof handoffPolicy === 'object'
+      ? {
+          enabled: true,
+          accepts: { roles: [], capabilities: Array.isArray(capabilityTags) ? capabilityTags : [] },
+          targets: ((handoffPolicy as { targets?: unknown }).targets as unknown[] | undefined) ?? [],
+        }
+      : capabilityTags
+        ? {
+            enabled: true,
+            accepts: { roles: [], capabilities: Array.isArray(capabilityTags) ? capabilityTags : [] },
+            targets: [],
+          }
+        : undefined
   const res = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Cloud session agent',
-      instructions: 'Work through AMA runtime.',
+      systemPrompt: typeof instructions === 'string' ? instructions : 'Work through AMA runtime.',
       skills: ['ama@cloud-session'],
       mcpConnectors: ['github'],
       // Agents must pin a provider before a session can be created. The cloud
       // runtime ('ama') routes through the Workers AI binding, which only
       // recognizes the 'workers-ai' provider and supplies a default model when
-      // none is pinned. The seeded global provider row backs the agent.providerId
+      // none is pinned. The seeded global provider row backs the agent provider
       // FK and the cloud catalog check.
-      providerId: 'workers-ai',
-      ...data,
+      provider: typeof providerId === 'string' ? providerId : 'workers-ai',
+      ...(handoff ? { handoff } : {}),
+      ...rest,
     }),
   })
   expect(res.status).toBe(201)
@@ -300,13 +349,13 @@ describe('[CF] /api/v1/sessions', () => {
         bindings: {
           agent: {
             versionId: string
-            snapshot: { instructions: string; skills: string[]; mcpConnectors: string[]; providerId: string }
+            snapshot: { systemPrompt: string; skills: string[]; mcpConnectors: string[]; provider: string }
           }
           environment: {
             versionId: string | null
             snapshot: {
-              mcpPolicy: Record<string, unknown>
-              packageManagerPolicy: Record<string, unknown>
+              networking: Record<string, unknown>
+              packages: { npm: string[] }
             }
           }
         }
@@ -337,16 +386,16 @@ describe('[CF] /api/v1/sessions', () => {
           agent: {
             versionId: agent.currentVersionId,
             snapshot: {
-              instructions: 'Work through AMA runtime.',
+              systemPrompt: 'Work through AMA runtime.',
               skills: ['ama@cloud-session'],
               mcpConnectors: ['github'],
-              providerId: 'workers-ai',
+              provider: 'workers-ai',
             },
           },
           environment: {
             snapshot: {
-              mcpPolicy: { allowedConnectors: ['github'] },
-              packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
+              networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+              packages: { npm: ['@earendil-works/pi-agent-core@prebuilt'] },
             },
           },
         },
@@ -730,7 +779,7 @@ describe('[CF] /api/v1/sessions', () => {
       status: {
         phase: 'pending',
         reason: 'waiting-for-runner',
-        bindings: { environment: { snapshot: { hostingMode: 'self_hosted' } } },
+        bindings: { environment: { snapshot: { type: 'self_hosted' } } },
         placement: {
           hostingMode: 'self_hosted',
           provider: 'workers-ai',
@@ -775,7 +824,7 @@ describe('[CF] /api/v1/sessions', () => {
       env: Record<string, string>
       envFrom: Array<{ type: 'secret'; name: string; secretRef: string }>
       provider: string
-      agentSnapshot: { instructions: string }
+      agentSnapshot: { systemPrompt: string }
     }
     expect(storedPayload.volumes).toEqual([
       {
@@ -798,13 +847,13 @@ describe('[CF] /api/v1/sessions', () => {
       { name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban', readOnly: true },
       { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStoreId}`, readOnly: true },
     ])
-    expect(storedPayload.agentSnapshot.instructions).toContain('Workspace layout:')
-    expect(storedPayload.agentSnapshot.instructions).toContain(
+    expect(storedPayload.agentSnapshot.systemPrompt).toContain('Workspace layout:')
+    expect(storedPayload.agentSnapshot.systemPrompt).toContain(
       'https://github.com/saltbo/agent-kanban.git at repos/saltbo/agent-kanban',
     )
-    expect(storedPayload.agentSnapshot.instructions).toContain('Team memory')
-    expect(storedPayload.agentSnapshot.instructions).toContain(`.ama/memory-stores/${memoryStoreId}`)
-    expect(storedPayload.agentSnapshot.instructions).not.toContain('Review for correctness first.')
+    expect(storedPayload.agentSnapshot.systemPrompt).toContain('Team memory')
+    expect(storedPayload.agentSnapshot.systemPrompt).toContain(`.ama/memory-stores/${memoryStoreId}`)
+    expect(storedPayload.agentSnapshot.systemPrompt).not.toContain('Review for correctness first.')
     expect(storedPayload.provider).toBe('workers-ai')
     expect(storedPayload.env).not.toHaveProperty('AK_AGENT_KEY')
     expect(storedPayload.envFrom).toEqual([
@@ -1127,9 +1176,14 @@ describe('[CF] /api/v1/sessions', () => {
         bindings: {
           environment: {
             snapshot: {
-              hostingMode: 'cloud',
-              runtimeConfig: { image: 'ama-runtime', timeoutSeconds: 120 },
-              networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+              type: 'cloud',
+              networking: {
+                type: 'limited',
+                allowMcpServers: false,
+                allowPackageManagers: true,
+                allowedHosts: ['registry.npmjs.org'],
+              },
+              packages: { npm: ['@earendil-works/pi-agent-core@prebuilt'] },
             },
           },
         },
@@ -1401,7 +1455,7 @@ describe('[CF] /api/v1/sessions', () => {
       status: {
         phase: 'pending',
         reason: 'waiting-for-runner',
-        bindings: { environment: { snapshot: { hostingMode: 'self_hosted' } } },
+        bindings: { environment: { snapshot: { type: 'self_hosted' } } },
       },
     })
   })
@@ -1886,11 +1940,13 @@ describe('[CF] /api/v1/sessions', () => {
 
     await jsonFetch(`/api/v1/environments/${environment.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ packages: [{ name: 'vite' }] }),
+      body: JSON.stringify({
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['vite'], pip: [] },
+      }),
     })
     await jsonFetch(`/api/v1/agents/${agent.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ instructions: 'Updated instructions.' }),
+      body: JSON.stringify({ systemPrompt: 'Updated instructions.' }),
     })
 
     const rereadRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}`, authorization)
@@ -1901,7 +1957,7 @@ describe('[CF] /api/v1/sessions', () => {
         bindings: {
           agent: {
             snapshot: {
-              instructions: 'Work through AMA runtime.',
+              systemPrompt: 'Work through AMA runtime.',
               version: 1,
               skills: ['ama@cloud-session'],
               mcpConnectors: ['github'],
@@ -1909,9 +1965,8 @@ describe('[CF] /api/v1/sessions', () => {
           },
           environment: {
             snapshot: {
-              packages: [{ name: '@earendil-works/pi-agent-core', version: 'prebuilt' }],
-              mcpPolicy: { allowedConnectors: ['github'] },
-              packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
+              packages: { npm: ['@earendil-works/pi-agent-core@prebuilt'] },
+              networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
             },
           },
         },

@@ -44,7 +44,9 @@ describe('route schema and handler alignment [spec: api-contracts/schema-alignme
     // 'content' is read for the memory PUT handler; 'archived' is the update-only
     // lifecycle transition — neither belongs to the agent create write schema.
     const handled = sortedUnique(
-      bodyFields(routeSources.agents).filter((field) => field !== 'content' && field !== 'archived'),
+      bodyFields(routeSources.agents).filter(
+        (field) => field !== 'content' && field !== 'metadata' && field !== 'archived',
+      ),
     )
     const createFields = schemaFields(doc, 'CreateAgentRequest')
     const updateFields = schemaFields(doc, 'UpdateAgentRequest')

@@ -1,8 +1,10 @@
 import type { AmaSessionEventType } from '@shared/session-events'
+import type { AgentHandoff } from './agent'
 import type {
-  EnvironmentHostingMode,
-  EnvironmentNetworkPolicy,
-  EnvironmentPackage,
+  EnvironmentNetworking,
+  EnvironmentPackages,
+  EnvironmentScope,
+  EnvironmentType,
   EnvironmentVariable,
 } from './environment'
 import type { EnvFromEntry, Volume, VolumeMount } from './runtime/execution-inputs'
@@ -107,18 +109,15 @@ export interface SessionAgentSnapshot {
   agentId: string
   projectId: string
   version: number
-  instructions: string | null
-  providerId: string
+  systemPrompt: string | null
+  provider: string
   model: string | null
   skills: string[]
   subagents: Record<string, unknown>[]
   role: string | null
-  capabilityTags: string[]
-  handoffPolicy: Record<string, unknown>
-  memoryPolicy: Record<string, unknown>
+  handoff: AgentHandoff
   tools: Record<string, unknown>[]
   mcpConnectors: string[]
-  metadata: Record<string, unknown>
   createdAt: string
 }
 
@@ -127,15 +126,11 @@ export interface SessionEnvironmentSnapshot {
   environmentId: string
   projectId: string
   version: number
-  packages: EnvironmentPackage[]
+  scope: EnvironmentScope
+  type: EnvironmentType
+  networking: EnvironmentNetworking
+  packages: EnvironmentPackages
   variables: Record<string, EnvironmentVariable>
-  hostingMode: EnvironmentHostingMode
-  networkPolicy: EnvironmentNetworkPolicy
-  mcpPolicy: Record<string, unknown>
-  packageManagerPolicy: Record<string, unknown>
-  resourceLimits: Record<string, unknown>
-  runtimeConfig: Record<string, unknown>
-  metadata: Record<string, unknown>
   createdAt: string
 }
 

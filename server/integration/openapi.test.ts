@@ -281,7 +281,8 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('Environment')
     expect(doc.components?.schemas).toHaveProperty('EnvironmentVersion')
     expect(doc.components?.schemas).toHaveProperty('EnvironmentHostingMode')
-    expect(doc.components?.schemas).toHaveProperty('EnvironmentNetworkPolicy')
+    expect(doc.components?.schemas).toHaveProperty('EnvironmentNetworking')
+    expect(doc.components?.schemas).toHaveProperty('EnvironmentPackages')
     expect(doc.components?.schemas).toHaveProperty('Runtime')
     expect(doc.components?.schemas).toHaveProperty('Session')
     expect(doc.components?.schemas).toHaveProperty('SessionEnvironmentSnapshot')
@@ -328,7 +329,9 @@ describe('[CF] OpenAPI documentation', () => {
 
     for (const schemaName of ['CreateEnvironmentRequest', 'UpdateEnvironmentRequest', 'SessionEnvironmentSnapshot']) {
       const properties = schemaProperties(doc, schemaName)
-      expect(properties).toEqual(expect.arrayContaining(['hostingMode', 'runtimeConfig']))
+      expect(properties).toEqual(expect.arrayContaining(['type', 'networking', 'packages']))
+      expect(properties).not.toContain('hostingMode')
+      expect(properties).not.toContain('runtimeConfig')
       expect(properties).not.toContain('runtime')
       expect(properties).not.toContain('runtimeType')
       expect(properties).not.toContain('runtimeImage')
@@ -516,7 +519,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(await res.text()).toContain('/api/v1/openapi.json')
   })
 
-  it('keeps session environment snapshots on the strict environment network policy contract', async () => {
+  it('keeps session environment snapshots on the strict environment networking contract', async () => {
     const doc = await fetchOpenApi()
     const schemas = doc.components?.schemas as Record<
       string,
@@ -524,8 +527,9 @@ describe('[CF] OpenAPI documentation', () => {
         properties?: Record<string, unknown>
       }
     >
-    const environmentNetworkPolicy = schemas.EnvironmentNetworkPolicy as {
+    const environmentNetworking = schemas.EnvironmentNetworking as {
       properties?: {
+        type?: unknown
         allowedHosts?: {
           maxItems?: number
           items?: { minLength?: number; maxLength?: number; pattern?: string }
@@ -535,12 +539,14 @@ describe('[CF] OpenAPI documentation', () => {
       additionalProperties?: boolean
     }
 
-    expect(schemas.SessionEnvironmentSnapshot.properties?.networkPolicy).toEqual({
-      $ref: '#/components/schemas/EnvironmentNetworkPolicy',
+    expect(schemas.SessionEnvironmentSnapshot.properties?.networking).toEqual({
+      $ref: '#/components/schemas/EnvironmentNetworking',
     })
-    expect(environmentNetworkPolicy.required).toContain('mode')
-    expect(environmentNetworkPolicy.additionalProperties).toBe(false)
-    expect(environmentNetworkPolicy.properties?.allowedHosts).toMatchObject({
+    expect(environmentNetworking.required).toEqual(
+      expect.arrayContaining(['type', 'allowMcpServers', 'allowPackageManagers']),
+    )
+    expect(environmentNetworking.additionalProperties).toBe(false)
+    expect(environmentNetworking.properties?.allowedHosts).toMatchObject({
       maxItems: 100,
       items: {
         minLength: 1,

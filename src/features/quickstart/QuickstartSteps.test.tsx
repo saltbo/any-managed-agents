@@ -471,7 +471,7 @@ describe('QuickstartAgentStep [draft=null — start view]', () => {
 })
 
 describe('QuickstartAgentStep [draft≠null — review view]', () => {
-  const draft: AgentBuilderDraft = { ...emptyBuilderDraft, name: 'My Agent', instructions: 'Do stuff' }
+  const draft: AgentBuilderDraft = { ...emptyBuilderDraft, name: 'My Agent', systemPrompt: 'Do stuff' }
 
   // CoreStep inside QuickstartAgentStep calls useQuery for the global model
   // catalog — MSW handles GET /api/v1/providers/models.

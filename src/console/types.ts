@@ -1,24 +1,24 @@
 export interface EnvironmentFormState {
   name: string
   description: string
-  hostingMode: 'cloud' | 'self_hosted'
-  networkMode: 'unrestricted' | 'restricted' | 'offline'
+  type: 'cloud' | 'self_hosted'
+  networkingType: 'open' | 'limited' | 'closed'
+  allowMcpServers: boolean
+  allowPackageManagers: boolean
   allowedHosts: string
   packages: string
   variables: string
-  runtimeConfig: string
 }
 
 export interface AgentFormState {
   name: string
   description: string
-  instructions: string
+  systemPrompt: string
   provider: string
   model: string
   skills: string
   allowedTools: string
   mcpConnectors: string
-  metadata: string
 }
 
 export interface SessionFormState {

@@ -26,13 +26,13 @@ class AgentHandoffCandidate:
             id (str):  Example: agent_def456.
             name (str):  Example: Implementation worker.
             role (None | str):  Example: worker.
-            capability_tags (list[str]):  Example: ['implementation'].
+            capabilities (list[str]):  Example: ['implementation'].
      """
 
     id: str
     name: str
     role: None | str
-    capability_tags: list[str]
+    capabilities: list[str]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -47,7 +47,7 @@ class AgentHandoffCandidate:
         role: None | str
         role = self.role
 
-        capability_tags = self.capability_tags
+        capabilities = self.capabilities
 
 
 
@@ -58,7 +58,7 @@ class AgentHandoffCandidate:
             "id": id,
             "name": name,
             "role": role,
-            "capabilityTags": capability_tags,
+            "capabilities": capabilities,
         })
 
         return field_dict
@@ -80,14 +80,14 @@ class AgentHandoffCandidate:
         role = _parse_role(d.pop("role"))
 
 
-        capability_tags = cast(list[str], d.pop("capabilityTags"))
+        capabilities = cast(list[str], d.pop("capabilities"))
 
 
         agent_handoff_candidate = cls(
             id=id,
             name=name,
             role=role,
-            capability_tags=capability_tags,
+            capabilities=capabilities,
         )
 
 

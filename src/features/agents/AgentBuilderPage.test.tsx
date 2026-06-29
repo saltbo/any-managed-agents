@@ -1,7 +1,7 @@
 /**
  * AgentBuilderPage — integration tests via MSW + real api client.
  * Fetches: GET /api/v1/providers, GET /api/v1/connectors, GET /api/v1/environments,
- *           GET /api/v1/providers/:id/models, POST /api/v1/agents, PATCH /api/v1/agents/:id,
+ *           GET /api/v1/providers/models, POST /api/v1/agents, PATCH /api/v1/agents/:id,
  *           POST /api/v1/sessions, GET /api/v1/sessions/:id, GET /api/v1/sessions/:id/events
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -50,6 +50,7 @@ function setupDefaultHandlers(
 ) {
   server.use(
     http.get('*/api/v1/providers', () => HttpResponse.json(emptyList)),
+    http.get('*/api/v1/providers/models', () => HttpResponse.json(emptyList)),
     http.get('*/api/v1/connectors', () => HttpResponse.json(emptyList)),
     http.get('*/api/v1/environments', () =>
       HttpResponse.json({
@@ -57,7 +58,6 @@ function setupDefaultHandlers(
         pagination: { limit: 50, hasMore: false, nextCursor: null },
       }),
     ),
-    http.get('*/api/v1/providers/:id/models', () => HttpResponse.json(emptyList)),
     http.get('*/api/v1/sessions/:id', () =>
       overrides.sessionResponse
         ? HttpResponse.json(overrides.sessionResponse)
@@ -239,7 +239,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     renderBuilderPage('?step=core')
     await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My Published Agent' } })
-    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Do the work' } })
+    fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Do the work' } })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
@@ -263,7 +263,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     renderBuilderPage('?step=core')
     await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My Agent' } })
-    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Do the work' } })
+    fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Do the work' } })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
@@ -296,7 +296,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     renderBuilderPage('?step=core')
     await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My Agent' } })
-    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Do the work' } })
+    fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Do the work' } })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
@@ -315,7 +315,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     renderBuilderPage('?step=core')
     await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Test Agent' } })
-    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Do work' } })
+    fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Do work' } })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
@@ -359,7 +359,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     renderBuilderPage('?step=core')
     await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Test Agent' } })
-    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Do the work' } })
+    fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Do the work' } })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
@@ -388,7 +388,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     renderBuilderPage('?step=core')
     await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Test Agent' } })
-    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Do work' } })
+    fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Do work' } })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
@@ -434,7 +434,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     renderBuilderPage('?step=core')
     await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Draft Agent' } })
-    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Do work' } })
+    fireEvent.change(screen.getByLabelText('System prompt'), { target: { value: 'Do work' } })
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))

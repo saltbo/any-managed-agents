@@ -137,8 +137,8 @@ describe('[spec: agents/console-list] AgentsPage', () => {
 
   it('filters agents by provider when a specific provider is selected', async () => {
     stubPointerCapture()
-    const agent1 = buildAgent({ id: 'agent_1', providerId: 'workers-ai', name: 'WA Agent' })
-    const agent2 = buildAgent({ id: 'agent_2', providerId: 'anthropic', name: 'Anthropic Agent' })
+    const agent1 = buildAgent({ id: 'agent_1', provider: 'workers-ai', name: 'WA Agent' })
+    const agent2 = buildAgent({ id: 'agent_2', provider: 'anthropic', name: 'Anthropic Agent' })
     const agentsColl = createCollection([agent1, agent2])
     server.use(
       ...resourceHandlers('agents', agentsColl, (body, i) => buildAgent({ id: `agent_new_${i}`, ...body })),

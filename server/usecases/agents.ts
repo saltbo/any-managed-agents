@@ -6,11 +6,8 @@ import {
   type HandoffTarget,
   hasSecretMaterial,
   matchesHandoffTarget,
-  memoryEnabled,
-  mergeMetadata,
-  policyHandoffTargets,
-  validateCapabilityTags,
   validateConfigSecrets,
+  validateHandoff,
   validateSkills,
   validateToolAttachments,
 } from '@server/domain/agent'
@@ -23,7 +20,7 @@ import { AgentArchivedError, type AgentHandoffCandidate, AgentValidationError, t
 // AgentValidationError on the first failure. `auth` is needed only to resolve
 // the effective tool policy, and only when tools are present.
 async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) {
-  const providerError = await validateProviderRef(deps, auth.project.id, config.providerId)
+  const providerError = await validateProviderRef(deps, auth.project.id, config.provider)
   if (providerError) {
     throw new AgentValidationError('Invalid agent configuration', providerError)
   }
@@ -36,9 +33,9 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) 
       subagents: 'Secret material must be stored in a vault.',
     })
   }
-  const capabilityError = validateCapabilityTags(config.capabilityTags)
-  if (capabilityError) {
-    throw new AgentValidationError('Invalid agent configuration', capabilityError)
+  const handoffError = validateHandoff(config.handoff)
+  if (handoffError) {
+    throw new AgentValidationError('Invalid agent configuration', handoffError)
   }
   const toolPolicy = config.tools.length > 0 ? await deps.policy.resolveToolPolicy(auth) : {}
   const toolsError = validateToolAttachments(config.tools, toolPolicy)
@@ -55,7 +52,7 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) 
   }
 }
 
-// A null providerId defers project-default resolution to session start, so it
+// A null provider defers project-default resolution to session start, so it
 // needs no validation here. The model is NOT checked against the catalog here:
 // an agent is environment-agnostic at creation, so the hosting mode is unknown,
 // and a self-hosted agent legitimately pins a runner-native model id (e.g.
@@ -63,12 +60,12 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) 
 // resolved at session creation, where the environment — and thus whether the
 // catalog (cloud) or the runner's capabilities (self-hosted) is authoritative —
 // is known.
-async function validateProviderRef(deps: Deps, projectId: string, providerId: string | null) {
-  if (!providerId) {
+async function validateProviderRef(deps: Deps, projectId: string, provider: string | null) {
+  if (!provider) {
     return null
   }
-  if (!(await deps.agents.providerEnabled(projectId, providerId))) {
-    return { providerId: 'Provider is disabled or unavailable for this project.' }
+  if (!(await deps.agents.providerEnabled(projectId, provider))) {
+    return { provider: 'Provider is disabled or unavailable for this project.' }
   }
   return null
 }
@@ -104,35 +101,29 @@ export async function createAgent(
 // The runtime config fields whose presence in a PATCH body forces a new version
 // snapshot. (name/description are not runtime config — they never version.)
 const RUNTIME_CONFIG_FIELDS = [
-  'instructions',
-  'providerId',
+  'systemPrompt',
+  'provider',
   'model',
   'skills',
   'subagents',
   'role',
-  'capabilityTags',
-  'handoffPolicy',
-  'memoryPolicy',
+  'handoff',
   'tools',
   'mcpConnectors',
-  'metadata',
 ] as const
 
 export interface UpdateAgentPatch {
   name?: string
   description?: string | null
-  instructions?: string | null
-  providerId?: string | null
+  systemPrompt?: string | null
+  provider?: string | null
   model?: string | null
   skills?: string[]
   subagents?: Record<string, unknown>[]
   role?: string | null
-  capabilityTags?: string[]
-  handoffPolicy?: Record<string, unknown>
-  memoryPolicy?: Record<string, unknown>
+  handoff?: AgentConfig['handoff']
   tools?: AgentToolAttachment[]
   mcpConnectors?: string[]
-  metadata?: Record<string, unknown>
   archived?: boolean
 }
 
@@ -175,18 +166,15 @@ export async function updateAgent(
   }
 
   const next: AgentConfig = {
-    instructions: fields.instructions !== undefined ? fields.instructions : agent.spec.instructions,
-    providerId: fields.providerId !== undefined ? fields.providerId : agent.spec.providerId,
+    systemPrompt: fields.systemPrompt !== undefined ? fields.systemPrompt : agent.spec.systemPrompt,
+    provider: fields.provider !== undefined ? fields.provider : agent.spec.provider,
     model: fields.model !== undefined ? fields.model : agent.spec.model,
     skills: fields.skills ?? agent.spec.skills,
     subagents: fields.subagents ?? agent.spec.subagents,
     role: fields.role !== undefined ? fields.role : agent.spec.role,
-    capabilityTags: fields.capabilityTags ?? agent.spec.capabilityTags,
-    handoffPolicy: fields.handoffPolicy ?? agent.spec.handoffPolicy,
-    memoryPolicy: fields.memoryPolicy ?? agent.spec.memoryPolicy,
+    handoff: fields.handoff ?? agent.spec.handoff,
     tools: fields.tools ?? agent.spec.tools,
     mcpConnectors: fields.mcpConnectors ?? agent.spec.mcpConnectors,
-    metadata: mergeMetadata(agent.spec.metadata, fields.metadata),
   }
   await validateConfig(deps, auth, next)
 
@@ -228,9 +216,7 @@ export async function resolveHandoffCandidates(
   requested: HandoffTarget,
 ): Promise<AgentHandoffCandidate[]> {
   const targets =
-    requested.role !== undefined || requested.capability !== undefined
-      ? [requested]
-      : policyHandoffTargets(agent.spec.handoffPolicy)
+    requested.role !== undefined || requested.capability !== undefined ? [requested] : agent.spec.handoff.targets
   if (targets.length === 0) {
     throw new AgentValidationError('No handoff target requested', {
       target: 'Request a role or capability, or configure handoff policy targets on the agent.',
@@ -243,12 +229,11 @@ export async function resolveHandoffCandidates(
       id: row.metadata.uid,
       name: row.metadata.name,
       role: row.spec.role,
-      capabilityTags: row.spec.capabilityTags,
+      capabilities: row.spec.handoff.accepts.capabilities,
     }))
 }
 
 // Reads agent memory, lazily materializing an empty singleton on first read.
-// Throws AgentValidationError-free; the route checks memoryEnabled and 409s.
 export async function readAgentMemory(deps: Deps, projectId: string, agent: Agent): Promise<AgentMemory> {
   const existing = await deps.agents.findMemory(projectId, agent.metadata.uid)
   if (existing) {
@@ -304,5 +289,3 @@ export async function replaceAgentMemory(
     spec: { ...existing.spec, content: input.content, metadata: input.metadata },
   }
 }
-
-export { memoryEnabled }

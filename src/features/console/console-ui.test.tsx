@@ -44,7 +44,7 @@ function buildProject(overrides: Partial<Project> = {}): Project {
 function buildAgent(overrides: AgentOverrides = {}): Agent {
   return resourceAgent({
     name: 'My Agent',
-    instructions: 'Do things',
+    systemPrompt: 'Do things',
     model: '@cf/model',
     skills: [],
     tools: [],

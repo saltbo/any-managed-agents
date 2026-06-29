@@ -13,25 +13,6 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-async function connectMcp(authorization: string) {
-  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
-    method: 'POST',
-    body: JSON.stringify({ name: 'MCP credentials' }),
-  })
-  expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      name: 'GitHub token',
-      type: 'opaque',
-      secret: { stringData: { value: 'raw-github-token' } },
-    }),
-  })
-  expect(credentialRes.status).toBe(201)
-  await credentialRes.json()
-}
-
 describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
@@ -98,18 +79,20 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       body: JSON.stringify({
         name: 'Node workspace',
         description: 'Default Node.js environment.',
-        packages: [{ name: 'tsx', version: 'latest' }],
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['tsx@latest'], pip: [] },
         variables: { NODE_ENV: { description: 'Runtime mode' } },
-        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-        resourceLimits: { memoryMb: 512 },
-        runtimeConfig: { image: 'node:24' },
-        metadata: { owner: 'platform' },
+        networking: {
+          type: 'limited',
+          allowMcpServers: false,
+          allowPackageManagers: true,
+          allowedHosts: ['registry.npmjs.org'],
+        },
       }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
       metadata: { uid: string; name: string; archivedAt: string | null }
-      spec: { hostingMode: string; networkPolicy: Record<string, unknown> }
+      spec: { type: string; networking: Record<string, unknown> }
       status: { currentVersionId: string; version: number; phase: string }
       credentials?: unknown
     }
@@ -123,13 +106,23 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       metadata: { uid: createdId, name: 'Node workspace', archivedAt: null },
-      spec: { hostingMode: 'cloud', networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] } },
+      spec: {
+        type: 'cloud',
+        networking: {
+          type: 'limited',
+          allowMcpServers: false,
+          allowPackageManagers: true,
+          allowedHosts: ['registry.npmjs.org'],
+        },
+      },
       status: { version: 1 },
     })
 
     const updateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ packages: [{ name: 'vite' }] }),
+      body: JSON.stringify({
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['vite'], pip: [] },
+      }),
     })
     expect(updateRes.status).toBe(200)
     const updated = (await updateRes.json()) as { status: { version: number; currentVersionId: string } }
@@ -150,13 +143,11 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const versionsRes = await jsonFetch(`/api/v1/environments/${createdId}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
-      data: Array<{ spec: { packages: Array<{ name: string }> }; status: { version: number } }>
+      data: Array<{ spec: { packages: { npm: string[] } }; status: { version: number } }>
       pagination: Record<string, unknown>
     }
     expect(versions.data.map((version) => version.status.version)).toEqual([2, 1])
-    expect(versions.data.find((version) => version.status.version === 1)?.spec.packages).toEqual([
-      { name: 'tsx', version: 'latest' },
-    ])
+    expect(versions.data.find((version) => version.status.version === 1)?.spec.packages.npm).toEqual(['tsx@latest'])
     expect(versions.pagination).not.toHaveProperty('firstId')
     expect(versions.pagination).not.toHaveProperty('lastId')
 
@@ -164,7 +155,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     expect(versionItemRes.status).toBe(200)
     await expect(versionItemRes.json()).resolves.toMatchObject({
       status: { environmentId: createdId, version: 1 },
-      spec: { packages: [{ name: 'tsx', version: 'latest' }] },
+      spec: { packages: { npm: ['tsx@latest'] } },
     })
 
     const missingVersionRes = await jsonFetch(`/api/v1/environments/${createdId}/versions/99`, authorization)
@@ -208,7 +199,9 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
 
     const archivedUpdateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ packages: [{ name: 'esbuild' }] }),
+      body: JSON.stringify({
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['esbuild'], pip: [] },
+      }),
     })
     expect(archivedUpdateRes.status).toBe(409)
     await expect(archivedUpdateRes.json()).resolves.toMatchObject({
@@ -312,62 +305,52 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     })
   })
 
-  it('validates network policy, mcp policy, and secret-free configuration objects [spec: environments/api-validation]', async () => {
+  it('validates networking and secret-free variables [spec: environments/api-validation]', async () => {
     const authorization = await signIn()
 
     const invalidNetworkRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Invalid network workspace',
-        networkPolicy: { mode: 'restricted' },
+        networking: { type: 'limited', allowMcpServers: false, allowPackageManagers: true },
       }),
     })
     expect(invalidNetworkRes.status).toBe(400)
 
-    const unknownConnectorRes = await jsonFetch('/api/v1/environments', authorization, {
+    const oldMcpPolicyRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Unknown connector workspace',
+        name: 'Old MCP policy workspace',
         mcpPolicy: { allowedConnectors: ['missing-connector'] },
       }),
     })
-    expect(unknownConnectorRes.status).toBe(400)
-    await expect(unknownConnectorRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { mcpPolicy: expect.any(String) } } },
+    expect(oldMcpPolicyRes.status).toBe(400)
+    await expect(oldMcpPolicyRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', message: 'Invalid request' },
     })
 
-    await connectMcp(authorization)
-    const connectedRes = await jsonFetch('/api/v1/environments', authorization, {
+    const secretVariableRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Connected workspace',
-        mcpPolicy: { allowedConnectors: ['github'], connectorApprovalModes: { github: 'require_approval' } },
+        name: 'Secret variable workspace',
+        variables: { apiKey: { description: 'raw-secret' } },
       }),
     })
-    expect(connectedRes.status).toBe(201)
-
-    const secretMetadataRes = await jsonFetch('/api/v1/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Secret metadata workspace',
-        metadata: { apiKey: 'raw-secret' },
-      }),
-    })
-    expect(secretMetadataRes.status).toBe(400)
-    await expect(secretMetadataRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { metadata: expect.any(String) } } },
+    expect(secretVariableRes.status).toBe(400)
+    await expect(secretVariableRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { variables: expect.any(String) } } },
     })
 
-    const secretRuntimeRes = await jsonFetch('/api/v1/environments', authorization, {
+    const oldRuntimeConfigRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Secret runtime workspace',
+        name: 'Old runtime config workspace',
         runtimeConfig: { npmToken: 'raw-secret' },
       }),
     })
-    expect(secretRuntimeRes.status).toBe(400)
-    await expect(secretRuntimeRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { runtimeConfig: expect.any(String) } } },
+    expect(oldRuntimeConfigRes.status).toBe(400)
+    await expect(oldRuntimeConfigRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', message: 'Invalid request' },
     })
   })
 

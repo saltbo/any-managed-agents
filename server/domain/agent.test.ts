@@ -4,13 +4,11 @@ import {
   governanceBlocksTool,
   hasSecretMaterial,
   matchesHandoffTarget,
-  memoryEnabled,
   mergeMetadata,
   nextVersionNumber,
   normalizeToolAttachments,
-  policyHandoffTargets,
-  validateCapabilityTags,
   validateConfigSecrets,
+  validateHandoff,
   validateSkills,
   validateToolAttachments,
 } from './agent'
@@ -114,16 +112,29 @@ describe('[spec: agents/validation] validateSkills', () => {
   })
 })
 
-describe('[spec: agents/validation] validateCapabilityTags', () => {
+describe('[spec: agents/validation] validateHandoff', () => {
   it('requires stable identifiers', () => {
-    expect(validateCapabilityTags(['has space'])).toMatchObject({ capabilityTags: expect.any(String) })
-    expect(validateCapabilityTags(['issue-triage', 'code-review'])).toBeNull()
+    expect(
+      validateHandoff({ enabled: true, accepts: { roles: ['has space'], capabilities: [] }, targets: [] }),
+    ).toMatchObject({ handoff: expect.any(String) })
+    expect(
+      validateHandoff({
+        enabled: true,
+        accepts: { roles: ['maintainer'], capabilities: ['issue-triage', 'code-review'] },
+        targets: [],
+      }),
+    ).toBeNull()
   })
 
-  it('rejects capability tags that look like secret material', () => {
-    // A tag that passes the format regex but is detected as a secret string
-    expect(validateCapabilityTags(['raw-secret-value-xxxxxxxxxxxxxxxxx'])).toEqual({
-      capabilityTags: 'Secret material must be stored in a vault.',
+  it('rejects handoff identifiers that look like secret material', () => {
+    expect(
+      validateHandoff({
+        enabled: true,
+        accepts: { roles: [], capabilities: ['raw-secret-value-xxxxxxxxxxxxxxxxx'] },
+        targets: [],
+      }),
+    ).toEqual({
+      handoff: 'Secret material must be stored in a vault.',
     })
   })
 })
@@ -138,26 +149,22 @@ describe('[spec: agents/validation] hasSecretMaterial', () => {
 })
 
 describe('[spec: agents/validation] validateConfigSecrets', () => {
-  const clean = { subagents: [], handoffPolicy: {}, memoryPolicy: {}, metadata: {} }
+  const clean = { subagents: [], handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] } }
 
   it('flags the offending free-form field', () => {
-    expect(validateConfigSecrets({ ...clean, metadata: { secretValue: 'raw-secret' } })).toEqual({
-      metadata: 'Secret material must be stored in a vault.',
-    })
-    expect(validateConfigSecrets({ ...clean, handoffPolicy: { token: 'raw-secret' } })).toEqual({
-      handoffPolicy: 'Secret material must be stored in a vault.',
+    expect(
+      validateConfigSecrets({
+        ...clean,
+        handoff: { enabled: true, accepts: { roles: [], capabilities: [] }, targets: [{ capability: 'raw-secret' }] },
+      }),
+    ).toEqual({
+      handoff: 'Secret material must be stored in a vault.',
     })
   })
 
   it('flags secret material in subagents array', () => {
     expect(validateConfigSecrets({ ...clean, subagents: [{ token: 'raw-secret' }] })).toEqual({
       subagents: 'Secret material must be stored in a vault.',
-    })
-  })
-
-  it('flags secret material in memoryPolicy', () => {
-    expect(validateConfigSecrets({ ...clean, memoryPolicy: { apiKey: 'raw-secret' } })).toEqual({
-      memoryPolicy: 'Secret material must be stored in a vault.',
     })
   })
 
@@ -185,28 +192,12 @@ describe('[spec: agents/lifecycle] nextVersionNumber', () => {
   })
 })
 
-describe('[spec: agents/memory] memoryEnabled', () => {
-  it('is true only when the policy enables it', () => {
-    expect(memoryEnabled({ enabled: true })).toBe(true)
-    expect(memoryEnabled({ enabled: false })).toBe(false)
-    expect(memoryEnabled({})).toBe(false)
-  })
-})
-
 describe('[spec: agents/handoff] handoff target resolution', () => {
-  it('extracts role/capability targets from a policy', () => {
-    expect(
-      policyHandoffTargets({ targets: [{ role: 'worker' }, { capability: 'implementation' }, { junk: true }] }),
-    ).toEqual([{ role: 'worker' }, { capability: 'implementation' }])
-  })
-
-  it('returns an empty list when targets is missing or not an array', () => {
-    expect(policyHandoffTargets({})).toEqual([])
-    expect(policyHandoffTargets({ targets: 'not-an-array' })).toEqual([])
-  })
-
   it('matches a candidate by role or capability', () => {
-    const candidate = { role: 'worker', capabilityTags: ['implementation'] }
+    const candidate = {
+      role: 'worker',
+      handoff: { enabled: true, accepts: { roles: [], capabilities: ['implementation'] }, targets: [] },
+    }
     expect(matchesHandoffTarget([{ role: 'worker' }], candidate)).toBe(true)
     expect(matchesHandoffTarget([{ capability: 'implementation' }], candidate)).toBe(true)
     expect(matchesHandoffTarget([{ role: 'reviewer' }], candidate)).toBe(false)

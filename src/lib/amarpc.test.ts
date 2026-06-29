@@ -296,8 +296,8 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     const agentFixture = agent({
       id: 'agent_1',
       name: 'Test Agent',
-      instructions: null,
-      providerId: null,
+      systemPrompt: null,
+      provider: null,
       model: null,
       skills: [],
       tools: [],

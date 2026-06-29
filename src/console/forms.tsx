@@ -46,12 +46,10 @@ export function EnvironmentForm({
           onChange={(description) => setValue({ ...value, description })}
         />
         <Field>
-          <FieldLabel>Hosting mode</FieldLabel>
+          <FieldLabel>Environment type</FieldLabel>
           <Select
-            value={value.hostingMode}
-            onValueChange={(hostingMode) =>
-              setValue({ ...value, hostingMode: hostingMode as EnvironmentFormState['hostingMode'] })
-            }
+            value={value.type}
+            onValueChange={(type) => setValue({ ...value, type: type as EnvironmentFormState['type'] })}
           >
             <SelectTrigger>
               <SelectValue />
@@ -70,9 +68,9 @@ export function EnvironmentForm({
         <Field>
           <FieldLabel>Network mode</FieldLabel>
           <Select
-            value={value.networkMode}
-            onValueChange={(networkMode) =>
-              setValue({ ...value, networkMode: networkMode as EnvironmentFormState['networkMode'] })
+            value={value.networkingType}
+            onValueChange={(networkingType) =>
+              setValue({ ...value, networkingType: networkingType as EnvironmentFormState['networkingType'] })
             }
           >
             <SelectTrigger>
@@ -80,17 +78,17 @@ export function EnvironmentForm({
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="restricted">Restricted</SelectItem>
-                <SelectItem value="unrestricted">Unrestricted</SelectItem>
-                <SelectItem value="offline">Offline</SelectItem>
+                <SelectItem value="limited">Limited</SelectItem>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>
-            Restricted mode allows only the hosts listed below. Offline mode blocks outbound requests.
+            Limited networking allows only the hosts listed below. Closed networking blocks outbound requests.
           </FieldDescription>
         </Field>
-        {value.networkMode === 'restricted' ? (
+        {value.networkingType === 'limited' ? (
           <TextAreaField
             label="Allowed hosts"
             description="One lowercase hostname per line. Do not include protocols, paths, or ports."
@@ -98,6 +96,22 @@ export function EnvironmentForm({
             onChange={(allowedHosts) => setValue({ ...value, allowedHosts })}
           />
         ) : null}
+        <Field className="flex flex-row items-center gap-3">
+          <Checkbox
+            id="field-allow-mcp"
+            checked={value.allowMcpServers}
+            onCheckedChange={(checked) => setValue({ ...value, allowMcpServers: checked === true })}
+          />
+          <FieldLabel htmlFor="field-allow-mcp">Allow MCP servers</FieldLabel>
+        </Field>
+        <Field className="flex flex-row items-center gap-3">
+          <Checkbox
+            id="field-allow-package-managers"
+            checked={value.allowPackageManagers}
+            onCheckedChange={(checked) => setValue({ ...value, allowPackageManagers: checked === true })}
+          />
+          <FieldLabel htmlFor="field-allow-package-managers">Allow package managers</FieldLabel>
+        </Field>
         <TextAreaField
           label="Packages"
           description="One package per line. Use name@version when a version is required."
@@ -109,12 +123,6 @@ export function EnvironmentForm({
           description="One variable per line using KEY=description. Secret values are stored separately."
           value={value.variables}
           onChange={(variables) => setValue({ ...value, variables })}
-        />
-        <TextAreaField
-          label="Runtime config"
-          description="JSON object for runtime-specific configuration. Secret values are stored separately."
-          value={value.runtimeConfig}
-          onChange={(runtimeConfig) => setValue({ ...value, runtimeConfig })}
         />
       </FieldGroup>
       <Button type="submit">
@@ -148,8 +156,8 @@ export function AgentForm({
         <TextAreaField
           label="Instructions"
           description="Operational instructions the Agent follows for every session."
-          value={value.instructions}
-          onChange={(instructions) => setValue({ ...value, instructions })}
+          value={value.systemPrompt}
+          onChange={(systemPrompt) => setValue({ ...value, systemPrompt })}
         />
         <AgentProviderModelFields value={value} setValue={setValue} />
         <TextAreaField
@@ -169,12 +177,6 @@ export function AgentForm({
           description="One connector id per line. Connectors must already be approved for the project."
           value={value.mcpConnectors}
           onChange={(mcpConnectors) => setValue({ ...value, mcpConnectors })}
-        />
-        <TextAreaField
-          label="Metadata"
-          description="JSON object for safe runtime metadata. Raw secret values belong in vaults."
-          value={value.metadata}
-          onChange={(metadata) => setValue({ ...value, metadata })}
         />
       </FieldGroup>
       <Button type="submit">
@@ -279,7 +281,7 @@ export function SessionForm({
           </Select>
           <FieldDescription>
             {selectedAgent
-              ? `Agent provider/model: ${selectedAgent.spec.providerId ?? 'None'} / ${selectedAgent.spec.model ?? 'None'}`
+              ? `Agent provider/model: ${selectedAgent.spec.provider ?? 'None'} / ${selectedAgent.spec.model ?? 'None'}`
               : 'The session will run the current version of this agent.'}
           </FieldDescription>
         </Field>
@@ -301,7 +303,7 @@ export function SessionForm({
           </Select>
           <FieldDescription>
             {selectedEnvironment
-              ? `Hosting mode: ${hostingModeLabel(selectedEnvironment.spec.hostingMode)}`
+              ? `Environment type: ${hostingModeLabel(selectedEnvironment.spec.type)}`
               : 'Select the hosting and policy environment for this session.'}
           </FieldDescription>
         </Field>
@@ -474,7 +476,7 @@ function memoryRefForStore(storeId: string) {
   return `ama://memories/${encodeURIComponent(storeId)}`
 }
 
-function hostingModeLabel(value: Environment['spec']['hostingMode']) {
+function hostingModeLabel(value: Environment['spec']['type']) {
   return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
 }
 

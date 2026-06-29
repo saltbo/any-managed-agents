@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { emptyAgent } from '@/console/defaults'
-import { parseJsonObject, parseTools, providerIdPatch } from '@/console/format'
+import { parseTools, providerPatch } from '@/console/format'
 import { AgentForm } from '@/console/forms'
 import type { AgentFormState } from '@/console/types'
 import { api } from '@/lib/amarpc'
@@ -19,13 +19,12 @@ export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpen
       api.createAgent({
         name: form.name,
         description: form.description,
-        instructions: form.instructions,
-        ...providerIdPatch(form.provider),
+        systemPrompt: form.systemPrompt,
+        ...providerPatch(form.provider),
         model: /* v8 ignore start */ form.model || /* v8 ignore stop */ null,
         skills: parseTools(form.skills),
         tools: parseTools(form.allowedTools).map((name) => ({ name })),
         mcpConnectors: parseTools(form.mcpConnectors),
-        metadata: parseJsonObject(form.metadata, 'Metadata'),
       }),
     onSuccess: () => {
       onOpenChange(false)

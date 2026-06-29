@@ -247,10 +247,6 @@ async function sessionInitialPrompt(
   agent: AgentRow,
   initialPrompt: string | undefined,
 ) {
-  const memoryPolicy = parseJson<Record<string, unknown>>(agent.memoryPolicy) ?? {}
-  if (memoryPolicy.enabled !== true) {
-    return initialPrompt
-  }
   const content = await store.agentMemoryContent(projectId, agent.id)
   return composeInitialPrompt(content, initialPrompt)
 }
@@ -305,10 +301,10 @@ function selfHostedSessionWorkItem(
     protocol: 'ama-runner-work',
     type: 'session.start',
     sessionId: values.session.id,
-    hostingMode: values.environmentSnapshot?.hostingMode ?? 'self_hosted',
+    hostingMode: values.environmentSnapshot?.type ?? 'self_hosted',
     runtime: values.runtime,
     runtimeConfig: values.runtimeConfig,
-    provider: values.agentSnapshot.providerId,
+    provider: values.agentSnapshot.provider,
     ...(values.agentSnapshot.model ? { model: values.agentSnapshot.model } : {}),
     runtimeDriver: runtimeDriverName(values.runtime, 'self_hosted'),
     agentSnapshot: values.agentSnapshot,
@@ -321,8 +317,8 @@ function selfHostedSessionWorkItem(
     resume: values.resume ?? false,
     resumeToken: values.resumeToken ?? null,
     requiredRunnerCapability:
-      values.environmentSnapshot?.hostingMode === 'self_hosted'
-        ? runtimeRequiredRunnerCapability(values.runtime, values.agentSnapshot.providerId, values.agentSnapshot.model)
+      values.environmentSnapshot?.type === 'self_hosted'
+        ? runtimeRequiredRunnerCapability(values.runtime, values.agentSnapshot.provider, values.agentSnapshot.model)
         : null,
   }
   return {
@@ -582,7 +578,7 @@ export async function createSessionForAgent(
     validatedVolumes.volumeMounts,
   )
   const baseEnvironmentSnapshot = normalizeEnvironmentSnapshot(createEnvironmentSnapshot(environmentVersion))
-  const runtimeConfig = options.runtimeConfig ?? baseEnvironmentSnapshot?.runtimeConfig ?? {}
+  const runtimeConfig = options.runtimeConfig ?? {}
   const environmentSnapshot = baseEnvironmentSnapshot
   const hostingMode = environmentHostingMode(environmentSnapshot)
   const runtime = options.runtime

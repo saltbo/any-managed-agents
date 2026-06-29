@@ -4,7 +4,10 @@ import type { Context } from 'hono'
 import { isRunnerOidcAuth, requireAuth, requireSessionEventsAuth } from '../auth/session'
 import {
   EnvironmentHostingModeSchema,
-  EnvironmentNetworkPolicySchema,
+  EnvironmentNetworkingSchema,
+  EnvironmentPackagesSchema,
+  EnvironmentScopeSchema,
+  EnvironmentTypeSchema,
   RuntimeSchema,
 } from '../contracts/environment-contracts'
 import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
@@ -46,6 +49,12 @@ const MAX_EVENT_BATCH = 100
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const SessionEnvironmentJsonObjectSchema = JsonObjectSchema.openapi('SessionEnvironmentJsonObject')
+const SessionHandoffTargetSchema = z.object({ role: z.string().optional(), capability: z.string().optional() })
+const SessionHandoffSchema = z.object({
+  enabled: z.boolean(),
+  accepts: z.object({ roles: z.array(z.string()), capabilities: z.array(z.string()) }),
+  targets: z.array(SessionHandoffTargetSchema),
+})
 
 const AgentVersionSnapshotSchema = z
   .object({
@@ -53,18 +62,15 @@ const AgentVersionSnapshotSchema = z
     agentId: z.string(),
     projectId: z.string(),
     version: z.number().int(),
-    instructions: z.string().nullable(),
-    providerId: z.string().openapi({ example: 'workers-ai' }),
+    systemPrompt: z.string().nullable(),
+    provider: z.string().openapi({ example: 'workers-ai' }),
     model: z.string().nullable(),
     skills: z.array(z.string()),
     subagents: z.array(JsonObjectSchema),
     role: z.string().nullable(),
-    capabilityTags: z.array(z.string()),
-    handoffPolicy: JsonObjectSchema,
-    memoryPolicy: JsonObjectSchema,
+    handoff: SessionHandoffSchema,
     tools: z.array(JsonObjectSchema),
     mcpConnectors: z.array(z.string()),
-    metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
   })
   .openapi('SessionAgentSnapshot')
@@ -75,15 +81,11 @@ const EnvironmentVersionSnapshotSchema = z
     environmentId: z.string(),
     projectId: z.string(),
     version: z.number().int(),
-    packages: z.array(SessionEnvironmentJsonObjectSchema),
+    scope: EnvironmentScopeSchema,
+    type: EnvironmentTypeSchema,
+    networking: EnvironmentNetworkingSchema,
+    packages: EnvironmentPackagesSchema,
     variables: SessionEnvironmentJsonObjectSchema,
-    hostingMode: EnvironmentHostingModeSchema,
-    networkPolicy: EnvironmentNetworkPolicySchema,
-    mcpPolicy: SessionEnvironmentJsonObjectSchema,
-    packageManagerPolicy: SessionEnvironmentJsonObjectSchema,
-    resourceLimits: SessionEnvironmentJsonObjectSchema,
-    runtimeConfig: SessionEnvironmentJsonObjectSchema,
-    metadata: SessionEnvironmentJsonObjectSchema,
     createdAt: z.string().datetime(),
   })
   .openapi('SessionEnvironmentSnapshot')

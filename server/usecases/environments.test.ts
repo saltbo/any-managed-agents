@@ -15,15 +15,11 @@ const auth: AuthScope = {
 
 function config(overrides: Partial<EnvironmentConfig> = {}): EnvironmentConfig {
   return {
-    packages: [],
+    scope: 'project',
+    type: 'cloud',
+    networking: { type: 'open', allowMcpServers: false, allowPackageManagers: true },
+    packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
     variables: {},
-    hostingMode: 'cloud',
-    networkPolicy: { mode: 'unrestricted' },
-    mcpPolicy: {},
-    packageManagerPolicy: {},
-    resourceLimits: {},
-    runtimeConfig: {},
-    metadata: {},
     ...overrides,
   }
 }
@@ -165,27 +161,6 @@ describe('[spec: environments/create] createEnvironment', () => {
     expect(environment.status.version).toBe(2)
     expect(setCurrent).toEqual(['envver_new'])
   })
-
-  it('rejects a disconnected mcp connector', async () => {
-    const deps = fakeDeps({ repo: { connectorAvailable: async () => false } })
-    await expect(
-      createEnvironment(deps, auth, {
-        name: 'x',
-        description: null,
-        config: config({ mcpPolicy: { allowedConnectors: ['linear'] } }),
-      }),
-    ).rejects.toMatchObject({ fields: { mcpPolicy: expect.any(String) } })
-  })
-
-  it('rejects secret material in free-form config objects', async () => {
-    await expect(
-      createEnvironment(fakeDeps(), auth, {
-        name: 'x',
-        description: null,
-        config: config({ metadata: { apiKey: 'raw-secret' } }),
-      }),
-    ).rejects.toBeInstanceOf(EnvironmentValidationError)
-  })
 })
 
 describe('[spec: environments/update] updateEnvironment', () => {
@@ -207,7 +182,9 @@ describe('[spec: environments/update] updateEnvironment', () => {
         },
       },
     })
-    const result = await updateEnvironment(deps, auth, environmentRecord(), { packages: [{ name: 'vite' }] })
+    const result = await updateEnvironment(deps, auth, environmentRecord(), {
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['vite'], pip: [] },
+    })
     expect(inserted).toHaveLength(1)
     expect(result.environment.status.version).toBe(2)
     expect(result.environment.status.currentVersionId).toBe('envver_2')
@@ -242,7 +219,7 @@ describe('[spec: environments/update] updateEnvironment', () => {
         auth,
         environmentRecord({ metadata: { archivedAt: '2026-01-02T00:00:00.000Z' }, status: { phase: 'archived' } }),
         {
-          packages: [{ name: 'x' }],
+          packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['x'], pip: [] },
         },
       ),
     ).rejects.toBeInstanceOf(EnvironmentArchivedError)
@@ -294,15 +271,6 @@ describe('[spec: environments/create] createEnvironment — secret variables', (
         config: config({ variables: { API_KEY: 'raw-secret' } as unknown as EnvironmentConfig['variables'] }),
       }),
     ).rejects.toBeInstanceOf(EnvironmentValidationError)
-  })
-
-  it('accepts environments with catalog mcp connectors in the mcp policy', async () => {
-    const environment = await createEnvironment(fakeDeps(), auth, {
-      name: 'With MCP',
-      description: null,
-      config: config({ mcpPolicy: { allowedConnectors: ['linear'] } }),
-    })
-    expect(environment.spec.mcpPolicy).toMatchObject({ allowedConnectors: ['linear'] })
   })
 })
 

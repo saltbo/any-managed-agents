@@ -141,7 +141,7 @@ describe('[spec: agents/console-list] AgentsView', () => {
   })
 
   it('renders model as None/None when providerId and model are null', () => {
-    const agent = buildAgent({ providerId: null, model: null })
+    const agent = buildAgent({ provider: null, model: null })
     render(
       <MemoryRouter>
         <AgentsView

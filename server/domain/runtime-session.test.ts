@@ -20,8 +20,8 @@ describe('runtime-session domain rules [spec: sessions/runtime-metadata]', () =>
   })
 
   it('derives the hosting mode from the environment snapshot', () => {
-    expect(environmentHostingMode({ hostingMode: 'self_hosted' })).toBe('self_hosted')
-    expect(environmentHostingMode({ hostingMode: 'cloud' })).toBe('cloud')
+    expect(environmentHostingMode({ type: 'self_hosted' })).toBe('self_hosted')
+    expect(environmentHostingMode({ type: 'cloud' })).toBe('cloud')
     expect(environmentHostingMode({})).toBe('cloud')
     expect(environmentHostingMode(null)).toBe('cloud')
   })

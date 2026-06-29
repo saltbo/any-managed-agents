@@ -447,27 +447,14 @@ export function sessionAllowsTool(
   )
 }
 
-export function environmentAllowsConnector(
-  session: { environmentSnapshot: string | null } | null,
-  connectorId: string,
-) {
+export function environmentAllowsConnector(session: { environmentSnapshot: string | null } | null) {
   if (!session?.environmentSnapshot) {
     return true
   }
 
-  const snapshot = parsePolicyJson<{ mcpPolicy?: unknown }>(session.environmentSnapshot, {})
-  const mcpPolicy = stringRecord(snapshot.mcpPolicy)
-  const blockedConnectors = stringArray(mcpPolicy.blockedConnectors)
-  if (includesWildcard(blockedConnectors, connectorId)) {
-    return false
-  }
-
-  const allowedConnectors = stringArray(mcpPolicy.allowedConnectors)
-  if (allowedConnectors.length === 0) {
-    return mcpPolicy.defaultEffect !== 'deny'
-  }
-
-  return includesWildcard(allowedConnectors, connectorId)
+  const snapshot = parsePolicyJson<{ networking?: unknown }>(session.environmentSnapshot, {})
+  const networking = stringRecord(snapshot.networking)
+  return networking.allowMcpServers !== false
 }
 
 // ─── Sandbox runtime decision ─────────────────────────────────────────────────
@@ -489,8 +476,8 @@ function hostAllowed(allowedHosts: string[], host: string | null | undefined) {
   return allowedHosts.map(normalizeHost).some((allowedHost) => allowedHost === '*' || allowedHost === normalizedHost)
 }
 
-function environmentNetworkMode(networkPolicy: Record<string, unknown>) {
-  return networkPolicy.mode === 'restricted' || networkPolicy.mode === 'offline' ? networkPolicy.mode : 'unrestricted'
+function environmentNetworkMode(networking: Record<string, unknown>) {
+  return networking.type === 'limited' || networking.type === 'closed' ? networking.type : 'open'
 }
 
 function commandMatches(pattern: string, command: string) {
@@ -512,11 +499,11 @@ function mergedSandboxPolicy(
   session: { environmentSnapshot: string | null } | null,
 ) {
   const environmentSnapshot = session?.environmentSnapshot
-    ? parsePolicyJson<{ networkPolicy?: unknown }>(session.environmentSnapshot, {})
+    ? parsePolicyJson<{ networking?: unknown }>(session.environmentSnapshot, {})
     : {}
   return {
     governance: effectivePolicy,
-    environmentNetwork: stringRecord(environmentSnapshot.networkPolicy),
+    environmentNetwork: stringRecord(environmentSnapshot.networking),
   }
 }
 
@@ -547,7 +534,12 @@ export function evaluateSandboxRuntimeDecision(
     const networkPolicies = [policies.governance.network, environmentMode]
     if (
       networkPolicies.some(
-        (network) => network === 'disabled' || network === 'deny' || network === 'offline' || network === false,
+        (network) =>
+          network === 'disabled' ||
+          network === 'deny' ||
+          network === 'offline' ||
+          network === 'closed' ||
+          network === false,
       )
     ) {
       return {
@@ -569,11 +561,11 @@ export function evaluateSandboxRuntimeDecision(
     }
 
     const environmentAllowedHosts = stringArray(policies.environmentNetwork.allowedHosts)
-    if (environmentMode === 'restricted' && !hostAllowed(environmentAllowedHosts, values.host)) {
+    if (environmentMode === 'limited' && !hostAllowed(environmentAllowedHosts, values.host)) {
       return {
         allowed: false,
         category: 'sandbox_network',
-        rule: 'environment.networkPolicy.allowedHosts',
+        rule: 'environment.networking.allowedHosts',
         message: 'Sandbox network host is not allowed by policy.',
       }
     }

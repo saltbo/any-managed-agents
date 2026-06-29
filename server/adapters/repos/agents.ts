@@ -1,4 +1,11 @@
-import type { Agent, AgentConfig, AgentMemory, AgentToolAttachment, AgentVersion } from '@server/domain/agent'
+import type {
+  Agent,
+  AgentConfig,
+  AgentHandoff,
+  AgentMemory,
+  AgentToolAttachment,
+  AgentVersion,
+} from '@server/domain/agent'
 import { DEFAULT_CONNECTORS } from '@server/domain/connector'
 import { resourceMetadata, resourcePhase } from '@server/domain/resource'
 import type {
@@ -29,37 +36,62 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
-function configFromRow(row: AgentRow | AgentVersionRow): AgentConfig {
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function normalizeHandoff(value: unknown, capabilityTags: string[]): AgentHandoff {
+  const policy = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+  const accepts =
+    policy.accepts && typeof policy.accepts === 'object' ? (policy.accepts as Record<string, unknown>) : {}
+  const targets = Array.isArray(policy.targets)
+    ? policy.targets
+        .filter((target): target is Record<string, unknown> => Boolean(target) && typeof target === 'object')
+        .map((target) => ({
+          ...(typeof target.role === 'string' && target.role ? { role: target.role } : {}),
+          ...(typeof target.capability === 'string' && target.capability ? { capability: target.capability } : {}),
+        }))
+        .filter((target) => target.role !== undefined || target.capability !== undefined)
+    : []
   return {
-    instructions: row.instructions,
-    providerId: row.providerId,
+    enabled: policy.enabled === true,
+    accepts: {
+      roles: stringArray(accepts.roles),
+      capabilities: stringArray(accepts.capabilities).length > 0 ? stringArray(accepts.capabilities) : capabilityTags,
+    },
+    targets,
+  }
+}
+
+function configFromRow(row: AgentRow | AgentVersionRow): AgentConfig {
+  const capabilityTags = parseJson<string[]>(row.capabilityTags)
+  return {
+    systemPrompt: row.instructions,
+    provider: row.providerId,
     model: row.model,
     skills: parseJson<string[]>(row.skills),
     subagents: parseJson<Record<string, unknown>[]>(row.subagents),
     role: row.role,
-    capabilityTags: parseJson<string[]>(row.capabilityTags),
-    handoffPolicy: parseJson<Record<string, unknown>>(row.handoffPolicy),
-    memoryPolicy: parseJson<Record<string, unknown>>(row.memoryPolicy),
+    handoff: normalizeHandoff(parseJson<Record<string, unknown>>(row.handoffPolicy), capabilityTags),
     tools: parseJson<AgentToolAttachment[]>(row.tools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
   }
 }
 
 function configColumns(config: AgentConfig) {
   return {
-    instructions: config.instructions,
-    providerId: config.providerId,
+    instructions: config.systemPrompt,
+    providerId: config.provider,
     model: config.model,
     skills: stringify(config.skills),
     subagents: stringify(config.subagents),
     role: config.role,
-    capabilityTags: stringify(config.capabilityTags),
-    handoffPolicy: stringify(config.handoffPolicy),
-    memoryPolicy: stringify(config.memoryPolicy),
+    capabilityTags: stringify(config.handoff.accepts.capabilities),
+    handoffPolicy: stringify(config.handoff),
+    memoryPolicy: stringify({}),
     tools: stringify(config.tools),
     mcpConnectors: stringify(config.mcpConnectors),
-    metadata: stringify(config.metadata),
+    metadata: stringify({}),
   }
 }
 

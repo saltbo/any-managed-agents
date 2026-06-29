@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  hasSecretMaterial,
-  mcpPolicyConnectorIds,
-  RUNTIME_CONFIG_FIELDS,
-  stringArray,
-  validateSecretFreeObjects,
-} from './environment'
+import { hasSecretMaterial, RUNTIME_CONFIG_FIELDS, stringArray } from './environment'
 
 describe('[spec: environments/secret-material] hasSecretMaterial', () => {
   it('flags objects with secret-suggesting keys', () => {
@@ -27,47 +21,6 @@ describe('[spec: environments/secret-material] hasSecretMaterial', () => {
   })
 })
 
-describe('[spec: environments/secret-material] validateSecretFreeObjects', () => {
-  const clean = { metadata: {}, mcpPolicy: {}, packageManagerPolicy: {}, runtimeConfig: {} }
-
-  it('returns null when every object is secret-free', () => {
-    expect(validateSecretFreeObjects(clean)).toBeNull()
-  })
-
-  it('keys the error to the offending field', () => {
-    expect(validateSecretFreeObjects({ ...clean, metadata: { apiKey: 'x' } })).toEqual({
-      metadata: expect.any(String),
-    })
-    expect(validateSecretFreeObjects({ ...clean, runtimeConfig: { npmToken: 'x' } })).toEqual({
-      runtimeConfig: expect.any(String),
-    })
-    expect(validateSecretFreeObjects({ ...clean, mcpPolicy: { token: 'x' } })).toEqual({
-      mcpPolicy: expect.any(String),
-    })
-    expect(validateSecretFreeObjects({ ...clean, packageManagerPolicy: { password: 'x' } })).toEqual({
-      packageManagerPolicy: expect.any(String),
-    })
-  })
-})
-
-describe('[spec: environments/mcp-policy] mcpPolicyConnectorIds', () => {
-  it('collects connectors across allow/block/approval lists and approval modes', () => {
-    const ids = mcpPolicyConnectorIds({
-      allowedConnectors: ['github'],
-      blockedConnectors: ['linear'],
-      requireApprovalConnectors: ['slack'],
-      connectorApprovalModes: { jira: 'require_approval' },
-    })
-    expect(ids.sort()).toEqual(['github', 'jira', 'linear', 'slack'])
-  })
-
-  it('drops the wildcard and de-duplicates', () => {
-    expect(mcpPolicyConnectorIds({ allowedConnectors: ['github', '*'], blockedConnectors: ['github'] })).toEqual([
-      'github',
-    ])
-  })
-})
-
 describe('environment domain helpers', () => {
   it('stringArray keeps only strings', () => {
     expect(stringArray(['a', 1, 'b', null])).toEqual(['a', 'b'])
@@ -78,6 +31,6 @@ describe('environment domain helpers', () => {
     expect(RUNTIME_CONFIG_FIELDS).not.toContain('name')
     expect(RUNTIME_CONFIG_FIELDS).not.toContain('description')
     expect(RUNTIME_CONFIG_FIELDS).toContain('packages')
-    expect(RUNTIME_CONFIG_FIELDS).toContain('networkPolicy')
+    expect(RUNTIME_CONFIG_FIELDS).toContain('networking')
   })
 })

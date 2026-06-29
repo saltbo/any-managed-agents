@@ -12,9 +12,7 @@ from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.session_agent_snapshot_handoff_policy import SessionAgentSnapshotHandoffPolicy
-  from ..models.session_agent_snapshot_memory_policy import SessionAgentSnapshotMemoryPolicy
-  from ..models.session_agent_snapshot_metadata import SessionAgentSnapshotMetadata
+  from ..models.session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
   from ..models.session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
   from ..models.session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
 
@@ -34,18 +32,15 @@ class SessionAgentSnapshot:
             agent_id (str):
             project_id (str):
             version (int):
-            instructions (None | str):
-            provider_id (str):  Example: workers-ai.
+            system_prompt (None | str):
+            provider (str):  Example: workers-ai.
             model (None | str):
             skills (list[str]):
             subagents (list[SessionAgentSnapshotSubagentsItem]):
             role (None | str):
-            capability_tags (list[str]):
-            handoff_policy (SessionAgentSnapshotHandoffPolicy):
-            memory_policy (SessionAgentSnapshotMemoryPolicy):
+            handoff (SessionAgentSnapshotHandoff):
             tools (list[SessionAgentSnapshotToolsItem]):
             mcp_connectors (list[str]):
-            metadata (SessionAgentSnapshotMetadata):
             created_at (datetime.datetime):
      """
 
@@ -53,18 +48,15 @@ class SessionAgentSnapshot:
     agent_id: str
     project_id: str
     version: int
-    instructions: None | str
-    provider_id: str
+    system_prompt: None | str
+    provider: str
     model: None | str
     skills: list[str]
     subagents: list[SessionAgentSnapshotSubagentsItem]
     role: None | str
-    capability_tags: list[str]
-    handoff_policy: SessionAgentSnapshotHandoffPolicy
-    memory_policy: SessionAgentSnapshotMemoryPolicy
+    handoff: SessionAgentSnapshotHandoff
     tools: list[SessionAgentSnapshotToolsItem]
     mcp_connectors: list[str]
-    metadata: SessionAgentSnapshotMetadata
     created_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -73,9 +65,7 @@ class SessionAgentSnapshot:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.session_agent_snapshot_handoff_policy import SessionAgentSnapshotHandoffPolicy
-        from ..models.session_agent_snapshot_memory_policy import SessionAgentSnapshotMemoryPolicy
-        from ..models.session_agent_snapshot_metadata import SessionAgentSnapshotMetadata
+        from ..models.session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
         from ..models.session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
         from ..models.session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
         id = self.id
@@ -86,10 +76,10 @@ class SessionAgentSnapshot:
 
         version = self.version
 
-        instructions: None | str
-        instructions = self.instructions
+        system_prompt: None | str
+        system_prompt = self.system_prompt
 
-        provider_id = self.provider_id
+        provider = self.provider
 
         model: None | str
         model = self.model
@@ -108,13 +98,7 @@ class SessionAgentSnapshot:
         role: None | str
         role = self.role
 
-        capability_tags = self.capability_tags
-
-
-
-        handoff_policy = self.handoff_policy.to_dict()
-
-        memory_policy = self.memory_policy.to_dict()
+        handoff = self.handoff.to_dict()
 
         tools = []
         for tools_item_data in self.tools:
@@ -127,8 +111,6 @@ class SessionAgentSnapshot:
 
 
 
-        metadata = self.metadata.to_dict()
-
         created_at = self.created_at.isoformat()
 
 
@@ -139,18 +121,15 @@ class SessionAgentSnapshot:
             "agentId": agent_id,
             "projectId": project_id,
             "version": version,
-            "instructions": instructions,
-            "providerId": provider_id,
+            "systemPrompt": system_prompt,
+            "provider": provider,
             "model": model,
             "skills": skills,
             "subagents": subagents,
             "role": role,
-            "capabilityTags": capability_tags,
-            "handoffPolicy": handoff_policy,
-            "memoryPolicy": memory_policy,
+            "handoff": handoff,
             "tools": tools,
             "mcpConnectors": mcp_connectors,
-            "metadata": metadata,
             "createdAt": created_at,
         })
 
@@ -160,9 +139,7 @@ class SessionAgentSnapshot:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.session_agent_snapshot_handoff_policy import SessionAgentSnapshotHandoffPolicy
-        from ..models.session_agent_snapshot_memory_policy import SessionAgentSnapshotMemoryPolicy
-        from ..models.session_agent_snapshot_metadata import SessionAgentSnapshotMetadata
+        from ..models.session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
         from ..models.session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
         from ..models.session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
         d = dict(src_dict)
@@ -174,15 +151,15 @@ class SessionAgentSnapshot:
 
         version = d.pop("version")
 
-        def _parse_instructions(data: object) -> None | str:
+        def _parse_system_prompt(data: object) -> None | str:
             if data is None:
                 return data
             return cast(None | str, data)
 
-        instructions = _parse_instructions(d.pop("instructions"))
+        system_prompt = _parse_system_prompt(d.pop("systemPrompt"))
 
 
-        provider_id = d.pop("providerId")
+        provider = d.pop("provider")
 
         def _parse_model(data: object) -> None | str:
             if data is None:
@@ -213,15 +190,7 @@ class SessionAgentSnapshot:
         role = _parse_role(d.pop("role"))
 
 
-        capability_tags = cast(list[str], d.pop("capabilityTags"))
-
-
-        handoff_policy = SessionAgentSnapshotHandoffPolicy.from_dict(d.pop("handoffPolicy"))
-
-
-
-
-        memory_policy = SessionAgentSnapshotMemoryPolicy.from_dict(d.pop("memoryPolicy"))
+        handoff = SessionAgentSnapshotHandoff.from_dict(d.pop("handoff"))
 
 
 
@@ -239,11 +208,6 @@ class SessionAgentSnapshot:
         mcp_connectors = cast(list[str], d.pop("mcpConnectors"))
 
 
-        metadata = SessionAgentSnapshotMetadata.from_dict(d.pop("metadata"))
-
-
-
-
         created_at = datetime.datetime.fromisoformat(d.pop("createdAt"))
 
 
@@ -254,18 +218,15 @@ class SessionAgentSnapshot:
             agent_id=agent_id,
             project_id=project_id,
             version=version,
-            instructions=instructions,
-            provider_id=provider_id,
+            system_prompt=system_prompt,
+            provider=provider,
             model=model,
             skills=skills,
             subagents=subagents,
             role=role,
-            capability_tags=capability_tags,
-            handoff_policy=handoff_policy,
-            memory_policy=memory_policy,
+            handoff=handoff,
             tools=tools,
             mcp_connectors=mcp_connectors,
-            metadata=metadata,
             created_at=created_at,
         )
 

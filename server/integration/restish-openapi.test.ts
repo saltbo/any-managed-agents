@@ -75,8 +75,13 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
       method: 'POST',
       body: JSON.stringify({
         name: 'Restish e2e environment',
-        packages: [{ name: 'tsx', version: 'latest' }],
-        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['tsx@latest'], pip: [] },
+        networking: {
+          type: 'limited',
+          allowMcpServers: false,
+          allowPackageManagers: true,
+          allowedHosts: ['registry.npmjs.org'],
+        },
       }),
     })
     expect(environmentRes.status).toBe(201)
@@ -90,8 +95,8 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
       method: 'POST',
       body: JSON.stringify({
         name: 'Restish e2e agent',
-        instructions: 'Run e2e checks through documented control-plane operations.',
-        providerId: 'workers-ai',
+        systemPrompt: 'Run e2e checks through documented control-plane operations.',
+        provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
       }),
     })

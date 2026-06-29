@@ -6,17 +6,26 @@
 import type { ResourceMetadata, ResourcePhase } from './resource'
 
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted'
+export type EnvironmentScope = 'project' | 'organization'
+export type EnvironmentType = 'cloud' | 'self_hosted'
 
 // Optional fields explicitly admit `undefined` so a zod-inferred request body
 // (which carries `T | undefined` under exactOptionalPropertyTypes) is accepted.
-export interface EnvironmentNetworkPolicy {
-  mode: 'offline' | 'restricted' | 'unrestricted'
+export interface EnvironmentNetworking {
+  type: 'closed' | 'limited' | 'open'
+  allowMcpServers: boolean
+  allowPackageManagers: boolean
   allowedHosts?: string[] | undefined
 }
 
-export interface EnvironmentPackage {
-  name: string
-  version?: string | undefined
+export interface EnvironmentPackages {
+  type: 'packages'
+  apt: string[]
+  cargo: string[]
+  gem: string[]
+  go: string[]
+  npm: string[]
+  pip: string[]
 }
 
 export interface EnvironmentVariable {
@@ -26,15 +35,11 @@ export interface EnvironmentVariable {
 
 // The runtime-relevant configuration that an environment version snapshots.
 export interface EnvironmentConfig {
-  packages: EnvironmentPackage[]
+  scope: EnvironmentScope
+  type: EnvironmentType
+  networking: EnvironmentNetworking
+  packages: EnvironmentPackages
   variables: Record<string, EnvironmentVariable>
-  hostingMode: EnvironmentHostingMode
-  networkPolicy: EnvironmentNetworkPolicy
-  mcpPolicy: Record<string, unknown>
-  packageManagerPolicy: Record<string, unknown>
-  resourceLimits: Record<string, unknown>
-  runtimeConfig: Record<string, unknown>
-  metadata: Record<string, unknown>
 }
 
 export interface Environment {
@@ -62,17 +67,7 @@ export interface EnvironmentVersionStatus {
 
 // The config fields whose presence in a PATCH body forces a new version
 // snapshot. (name/description are not runtime config — they never version.)
-export const RUNTIME_CONFIG_FIELDS = [
-  'packages',
-  'variables',
-  'hostingMode',
-  'networkPolicy',
-  'mcpPolicy',
-  'packageManagerPolicy',
-  'resourceLimits',
-  'runtimeConfig',
-  'metadata',
-] as const
+export const RUNTIME_CONFIG_FIELDS = ['scope', 'type', 'networking', 'packages', 'variables'] as const
 
 // Validation failures are keyed by the field that caused them; the http layer
 // maps a non-null result to a 400 validation error envelope.
@@ -107,38 +102,6 @@ export function stringArray(value: unknown): string[] {
 
 // The free-form JSON config fields that must never carry raw secret material —
 // secrets belong in a vault secret reference, not inline configuration.
-export function validateSecretFreeObjects(values: {
-  metadata: Record<string, unknown>
-  mcpPolicy: Record<string, unknown>
-  packageManagerPolicy: Record<string, unknown>
-  runtimeConfig: Record<string, unknown>
-}): FieldErrors | null {
-  if (hasSecretMaterial(values.metadata)) {
-    return { metadata: 'Secret material must be stored in a vault.' }
-  }
-  if (hasSecretMaterial(values.mcpPolicy)) {
-    return { mcpPolicy: 'Secret material must be stored in a vault.' }
-  }
-  if (hasSecretMaterial(values.packageManagerPolicy)) {
-    return { packageManagerPolicy: 'Secret material must be stored in a vault.' }
-  }
-  if (hasSecretMaterial(values.runtimeConfig)) {
-    return { runtimeConfig: 'Secret material must be stored in a vault.' }
-  }
-  return null
-}
-
-// The MCP connector ids referenced (positively or negatively) by an mcp policy.
-// '*' is a wildcard and never resolves to a concrete connection.
-export function mcpPolicyConnectorIds(mcpPolicy: Record<string, unknown>): string[] {
-  const approvalModes = mcpPolicy.connectorApprovalModes
-  const ids = [
-    ...stringArray(mcpPolicy.allowedConnectors),
-    ...stringArray(mcpPolicy.blockedConnectors),
-    ...stringArray(mcpPolicy.requireApprovalConnectors),
-    ...(approvalModes && typeof approvalModes === 'object' && !Array.isArray(approvalModes)
-      ? Object.keys(approvalModes)
-      : []),
-  ]
-  return [...new Set(ids)].filter((id) => id !== '*')
+export function defaultEnvironmentPackages(): EnvironmentPackages {
+  return { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] }
 }

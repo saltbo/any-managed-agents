@@ -22,7 +22,7 @@ export function parseRuntimeAgentSnapshot(value: string | null) {
 }
 
 // Single source for the session's runtime provider + model. The session's pinned
-// modelProvider wins; otherwise the agent snapshot's providerId (falling back to
+// modelProvider wins; otherwise the agent snapshot's provider (falling back to
 // the platform default). The model prefers the session modelConfig, then the
 // agent snapshot, else null (the engine resolves the provider default).
 export function resolveSessionProviderModel(
@@ -31,7 +31,7 @@ export function resolveSessionProviderModel(
   modelConfig: Record<string, unknown>,
 ): { provider: string; model: string | null } {
   const provider =
-    session.modelProvider ?? (typeof agentSnapshot.providerId === 'string' ? agentSnapshot.providerId : 'workers-ai')
+    session.modelProvider ?? (typeof agentSnapshot.provider === 'string' ? agentSnapshot.provider : 'workers-ai')
   const model =
     typeof modelConfig.model === 'string'
       ? modelConfig.model

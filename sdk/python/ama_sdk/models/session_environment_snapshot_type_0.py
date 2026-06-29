@@ -8,12 +8,14 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.environment_hosting_mode import EnvironmentHostingMode
+from ..models.environment_scope import EnvironmentScope
+from ..models.environment_type import EnvironmentType
 from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.environment_network_policy import EnvironmentNetworkPolicy
+  from ..models.environment_networking import EnvironmentNetworking
+  from ..models.environment_packages import EnvironmentPackages
   from ..models.session_environment_json_object import SessionEnvironmentJsonObject
 
 
@@ -32,16 +34,12 @@ class SessionEnvironmentSnapshotType0:
             environment_id (str):
             project_id (str):
             version (int):
-            packages (list[SessionEnvironmentJsonObject]):
+            scope (EnvironmentScope):  Example: organization.
+            type_ (EnvironmentType):  Example: cloud.
+            networking (EnvironmentNetworking):  Example: {'type': 'limited', 'allowMcpServers': False,
+                'allowPackageManagers': True, 'allowedHosts': ['api.example.com']}.
+            packages (EnvironmentPackages):
             variables (SessionEnvironmentJsonObject):
-            hosting_mode (EnvironmentHostingMode):  Example: cloud.
-            network_policy (EnvironmentNetworkPolicy):  Example: {'mode': 'restricted', 'allowedHosts':
-                ['registry.npmjs.org']}.
-            mcp_policy (SessionEnvironmentJsonObject):
-            package_manager_policy (SessionEnvironmentJsonObject):
-            resource_limits (SessionEnvironmentJsonObject):
-            runtime_config (SessionEnvironmentJsonObject):
-            metadata (SessionEnvironmentJsonObject):
             created_at (datetime.datetime):
      """
 
@@ -49,15 +47,11 @@ class SessionEnvironmentSnapshotType0:
     environment_id: str
     project_id: str
     version: int
-    packages: list[SessionEnvironmentJsonObject]
+    scope: EnvironmentScope
+    type_: EnvironmentType
+    networking: EnvironmentNetworking
+    packages: EnvironmentPackages
     variables: SessionEnvironmentJsonObject
-    hosting_mode: EnvironmentHostingMode
-    network_policy: EnvironmentNetworkPolicy
-    mcp_policy: SessionEnvironmentJsonObject
-    package_manager_policy: SessionEnvironmentJsonObject
-    resource_limits: SessionEnvironmentJsonObject
-    runtime_config: SessionEnvironmentJsonObject
-    metadata: SessionEnvironmentJsonObject
     created_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -66,7 +60,8 @@ class SessionEnvironmentSnapshotType0:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.environment_network_policy import EnvironmentNetworkPolicy
+        from ..models.environment_networking import EnvironmentNetworking
+        from ..models.environment_packages import EnvironmentPackages
         from ..models.session_environment_json_object import SessionEnvironmentJsonObject
         id = self.id
 
@@ -76,28 +71,15 @@ class SessionEnvironmentSnapshotType0:
 
         version = self.version
 
-        packages = []
-        for packages_item_data in self.packages:
-            packages_item = packages_item_data.to_dict()
-            packages.append(packages_item)
+        scope = self.scope.value
 
+        type_ = self.type_.value
 
+        networking = self.networking.to_dict()
+
+        packages = self.packages.to_dict()
 
         variables = self.variables.to_dict()
-
-        hosting_mode = self.hosting_mode.value
-
-        network_policy = self.network_policy.to_dict()
-
-        mcp_policy = self.mcp_policy.to_dict()
-
-        package_manager_policy = self.package_manager_policy.to_dict()
-
-        resource_limits = self.resource_limits.to_dict()
-
-        runtime_config = self.runtime_config.to_dict()
-
-        metadata = self.metadata.to_dict()
 
         created_at = self.created_at.isoformat()
 
@@ -109,15 +91,11 @@ class SessionEnvironmentSnapshotType0:
             "environmentId": environment_id,
             "projectId": project_id,
             "version": version,
+            "scope": scope,
+            "type": type_,
+            "networking": networking,
             "packages": packages,
             "variables": variables,
-            "hostingMode": hosting_mode,
-            "networkPolicy": network_policy,
-            "mcpPolicy": mcp_policy,
-            "packageManagerPolicy": package_manager_policy,
-            "resourceLimits": resource_limits,
-            "runtimeConfig": runtime_config,
-            "metadata": metadata,
             "createdAt": created_at,
         })
 
@@ -127,7 +105,8 @@ class SessionEnvironmentSnapshotType0:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.environment_network_policy import EnvironmentNetworkPolicy
+        from ..models.environment_networking import EnvironmentNetworking
+        from ..models.environment_packages import EnvironmentPackages
         from ..models.session_environment_json_object import SessionEnvironmentJsonObject
         d = dict(src_dict)
         id = d.pop("id")
@@ -138,52 +117,27 @@ class SessionEnvironmentSnapshotType0:
 
         version = d.pop("version")
 
-        packages = []
-        _packages = d.pop("packages")
-        for packages_item_data in (_packages):
-            packages_item = SessionEnvironmentJsonObject.from_dict(packages_item_data)
+        scope = EnvironmentScope(d.pop("scope"))
 
 
 
-            packages.append(packages_item)
+
+        type_ = EnvironmentType(d.pop("type"))
+
+
+
+
+        networking = EnvironmentNetworking.from_dict(d.pop("networking"))
+
+
+
+
+        packages = EnvironmentPackages.from_dict(d.pop("packages"))
+
+
 
 
         variables = SessionEnvironmentJsonObject.from_dict(d.pop("variables"))
-
-
-
-
-        hosting_mode = EnvironmentHostingMode(d.pop("hostingMode"))
-
-
-
-
-        network_policy = EnvironmentNetworkPolicy.from_dict(d.pop("networkPolicy"))
-
-
-
-
-        mcp_policy = SessionEnvironmentJsonObject.from_dict(d.pop("mcpPolicy"))
-
-
-
-
-        package_manager_policy = SessionEnvironmentJsonObject.from_dict(d.pop("packageManagerPolicy"))
-
-
-
-
-        resource_limits = SessionEnvironmentJsonObject.from_dict(d.pop("resourceLimits"))
-
-
-
-
-        runtime_config = SessionEnvironmentJsonObject.from_dict(d.pop("runtimeConfig"))
-
-
-
-
-        metadata = SessionEnvironmentJsonObject.from_dict(d.pop("metadata"))
 
 
 
@@ -198,15 +152,11 @@ class SessionEnvironmentSnapshotType0:
             environment_id=environment_id,
             project_id=project_id,
             version=version,
+            scope=scope,
+            type_=type_,
+            networking=networking,
             packages=packages,
             variables=variables,
-            hosting_mode=hosting_mode,
-            network_policy=network_policy,
-            mcp_policy=mcp_policy,
-            package_manager_policy=package_manager_policy,
-            resource_limits=resource_limits,
-            runtime_config=runtime_config,
-            metadata=metadata,
             created_at=created_at,
         )
 

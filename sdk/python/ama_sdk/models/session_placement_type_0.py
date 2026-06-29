@@ -24,7 +24,7 @@ T = TypeVar("T", bound="SessionPlacementType0")
 class SessionPlacementType0:
     """ 
         Attributes:
-            hosting_mode (EnvironmentHostingMode):  Example: cloud.
+            hosting_mode (EnvironmentHostingMode):
             provider (str):  Example: workers-ai.
             model (None | str):  Example: @cf/moonshotai/kimi-k2.6.
             driver (None | str):  Example: ama-cloud.

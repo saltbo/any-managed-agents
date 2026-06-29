@@ -49,11 +49,11 @@ export function SessionDetailView({
   const volumes = session.spec.volumes
   const shortSessionId = `${sessionId.slice(0, 5)}...${sessionId.slice(-7)}`
   const duration = formatDuration(session.status.startedAt, session.status.stoppedAt)
-  const agentName = agentDisplayName || agentSnapshot.instructions || session.spec.agentId
+  const agentName = agentDisplayName || agentSnapshot.systemPrompt || session.spec.agentId
   const environmentName = String(environmentDisplayName ?? session.spec.environmentId ?? 'Environment')
-  const agentProviderModel = `${agentSnapshot.providerId} / ${agentSnapshot.model ?? 'None'}`
+  const agentProviderModel = `${agentSnapshot.provider} / ${agentSnapshot.model ?? 'None'}`
   const hostingRuntime = environmentSnapshot
-    ? `${hostingModeLabel(environmentSnapshot.hostingMode)} / ${session.status.bindings.runtime}`
+    ? `${hostingModeLabel(environmentSnapshot.type)} / ${session.status.bindings.runtime}`
     : 'No environment snapshot'
   return (
     <div className="flex min-h-[calc(100dvh-5rem)] flex-col bg-background lg:min-h-screen">
@@ -151,7 +151,7 @@ export function SessionDetailView({
             <dl className="grid gap-2 pt-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
               <SessionFact label="Agent provider/model" value={agentProviderModel} />
               <SessionFact label="Hosting / runtime" value={hostingRuntime} />
-              <SessionFact label="Hosting mode" value={environmentSnapshot?.hostingMode ?? 'None'} />
+              <SessionFact label="Environment type" value={environmentSnapshot?.type ?? 'None'} />
               <SessionFact label="Runtime status" value={session.status.reason ?? phase} />
             </dl>
           </div>
@@ -185,7 +185,7 @@ export function SessionDetailView({
                 <MetaGrid>
                   <Meta label="Agent id" value={session.spec.agentId} />
                   <Meta label="Version" value={`v${agentSnapshot.version}`} />
-                  <Meta label="Provider" value={agentSnapshot.providerId} />
+                  <Meta label="Provider" value={agentSnapshot.provider} />
                   <Meta label="Model" value={agentSnapshot.model ?? 'None'} />
                   <Meta label="Skills" value={agentSnapshot.skills.join(', ') || 'None'} />
                   <Meta label="Tools" value={agentSnapshotToolNames(session).join(', ') || 'None'} />
@@ -193,8 +193,8 @@ export function SessionDetailView({
                 </MetaGrid>
               }
               json={{
-                instructions: agentSnapshot.instructions,
-                metadata: agentSnapshot.metadata,
+                systemPrompt: agentSnapshot.systemPrompt,
+                handoff: agentSnapshot.handoff,
               }}
             />
           ) : null}
@@ -206,22 +206,14 @@ export function SessionDetailView({
                 <MetaGrid>
                   <Meta label="Environment id" value={session.spec.environmentId ?? 'None'} />
                   <Meta label="Version" value={`v${environmentSnapshot.version}`} />
-                  <Meta label="Hosting mode" value={environmentSnapshot.hostingMode} />
+                  <Meta label="Type" value={environmentSnapshot.type} />
                   <Meta label="Runtime" value={session.status.bindings.runtime} />
-                  <Meta label="Runtime config" value={stringifyJson(environmentSnapshot.runtimeConfig)} />
-                  <Meta
-                    label="Packages"
-                    value={environmentSnapshot.packages.map((item) => item.name).join(', ') || 'None'}
-                  />
+                  <Meta label="Packages" value={environmentPackageSummary(environmentSnapshot.packages) || 'None'} />
                   <Meta label="Variables" value={Object.keys(environmentSnapshot.variables).join(', ') || 'None'} />
                 </MetaGrid>
               }
               json={{
-                networkPolicy: environmentSnapshot.networkPolicy,
-                mcpPolicy: environmentSnapshot.mcpPolicy,
-                packageManagerPolicy: environmentSnapshot.packageManagerPolicy,
-                resourceLimits: environmentSnapshot.resourceLimits,
-                metadata: environmentSnapshot.metadata,
+                networking: environmentSnapshot.networking,
               }}
             />
           ) : null}
@@ -290,6 +282,21 @@ function agentSnapshotToolNames(session: Session) {
   return session.status.bindings.agent.snapshot.tools
     .map((tool) => (typeof tool.name === 'string' ? tool.name : null))
     .filter((name): name is string => Boolean(name))
+}
+
+function environmentPackageSummary(packages: {
+  type: 'packages'
+  apt: string[]
+  cargo: string[]
+  gem: string[]
+  go: string[]
+  npm: string[]
+  pip: string[]
+}) {
+  return Object.entries(packages)
+    .filter(([key]) => key !== 'type')
+    .flatMap(([manager, values]) => (values as string[]).map((value) => `${manager}:${value}`))
+    .join(', ')
 }
 
 function gitVolumes(session: Session) {

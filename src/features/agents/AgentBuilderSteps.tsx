@@ -71,7 +71,7 @@ export function StartStep({
           onChange={(event) => setGoal(event.target.value)}
         />
         <FieldDescription>
-          Describe what this agent should do. The builder drafts the name, instructions, model choice, tool policy, and
+          Describe what this agent should do. The builder drafts the name, system prompt, model choice, tool policy, and
           MCP connectors. You review one decision at a time and can edit everything before saving.
         </FieldDescription>
       </Field>
@@ -122,11 +122,11 @@ export function CoreStep({ draft, errors, setField }: StepProps) {
         error={errors.description}
       />
       <TextAreaField
-        label="Instructions"
-        description="Operational instructions the agent follows in every session."
-        value={draft.instructions}
-        onChange={(value) => setField('instructions', value)}
-        error={errors.instructions}
+        label="System prompt"
+        description="Instruction text the agent follows in every session."
+        value={draft.systemPrompt}
+        onChange={(value) => setField('systemPrompt', value)}
+        error={errors.systemPrompt}
       />
       <Field data-invalid={errors.model || errors.provider ? true : undefined}>
         <FieldLabel htmlFor="builder-model">Model</FieldLabel>
@@ -306,19 +306,6 @@ export function RolesStep({ draft, errors, setField }: StepProps) {
         onChange={(value) => setField('handoffTargets', value)}
         error={errors.handoffTargets}
       />
-      <Field orientation="horizontal" data-invalid={errors.memoryEnabled ? true : undefined}>
-        <Checkbox
-          id="builder-memory-enabled"
-          checked={draft.memoryEnabled}
-          onCheckedChange={(checked) => setField('memoryEnabled', checked === true)}
-        />
-        <FieldLabel htmlFor="builder-memory-enabled">Enable project-scoped agent memory</FieldLabel>
-      </Field>
-      <FieldDescription>
-        Enabled memory exposes the generic agent memory API for long-running agents. Worker-style agents can leave
-        memory disabled.
-      </FieldDescription>
-      {errors.memoryEnabled ? <FieldError>{errors.memoryEnabled}</FieldError> : null}
     </div>
   )
 }

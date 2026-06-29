@@ -79,7 +79,7 @@ export interface AgentHandoffCandidate {
   id: string
   name: string
   role: string | null
-  capabilityTags: string[]
+  capabilities: string[]
 }
 
 export interface AgentListQuery {

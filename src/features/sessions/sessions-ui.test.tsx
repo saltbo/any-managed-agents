@@ -38,8 +38,13 @@ function buildAgent(overrides: AgentOverrides = {}): Agent {
 
 function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
   return resourceEnvironment({
-    packages: [{ name: 'tsx', version: 'latest' }],
-    networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+    packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['tsx@latest'], pip: [] },
+    networking: {
+      type: 'limited',
+      allowMcpServers: false,
+      allowPackageManagers: true,
+      allowedHosts: ['registry.npmjs.org'],
+    },
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
@@ -111,13 +116,13 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         }}
         setValue={vi.fn()}
         agents={[buildAgent()]}
-        environments={[buildEnvironment({ hostingMode: 'self_hosted' })]}
+        environments={[buildEnvironment({ type: 'self_hosted' })]}
         onSubmit={vi.fn()}
       />,
     )
 
     expect(screen.getByText('Agent provider/model: workers-ai / @cf/moonshotai/kimi-k2.6')).toBeTruthy()
-    expect(screen.getByText('Hosting mode: Self-hosted')).toBeTruthy()
+    expect(screen.getByText('Environment type: Self-hosted')).toBeTruthy()
     expect(screen.getByText('Runtime is selected per session.')).toBeTruthy()
     expect(screen.getAllByText('AMA').length).toBeGreaterThan(0)
   })
@@ -229,7 +234,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     const session = buildSession({
       environmentSnapshot: {
         ...buildSession().status.bindings.environment.snapshot!,
-        hostingMode: 'self_hosted',
+        type: 'self_hosted',
       },
       spec: { ...buildSession().spec, runtime: 'codex' },
       status: {
@@ -274,7 +279,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       reason: 'waiting-for-runner',
       environmentSnapshot: {
         ...buildSession().status.bindings.environment.snapshot!,
-        hostingMode: 'self_hosted',
+        type: 'self_hosted',
       },
       spec: { ...buildSession().spec, runtime: 'codex' },
       status: {
@@ -305,7 +310,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     expect(screen.getByText('workers-ai / @cf/moonshotai/kimi-k2.6')).toBeTruthy()
     expect(screen.getByText('Hosting / runtime')).toBeTruthy()
     expect(screen.getByText('Self-hosted / codex')).toBeTruthy()
-    expect(screen.getByText('Hosting mode')).toBeTruthy()
+    expect(screen.getByText('Environment type')).toBeTruthy()
     expect(screen.getByText('self_hosted')).toBeTruthy()
     expect(screen.getByText('Runtime status')).toBeTruthy()
     expect(screen.getByText('waiting-for-runner')).toBeTruthy()
