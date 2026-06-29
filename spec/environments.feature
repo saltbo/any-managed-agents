@@ -1,25 +1,19 @@
 Feature: Environments
   Projects define reusable execution environment descriptions for agent work:
-  packages, variables, secret references, hosting mode, runtime, network policy,
-  resource limits, and MCP constraints. An environment is a versioned definition,
-  not a running sandbox; sessions snapshot it. Persona, instructions, provider,
-  model, and policy stay on the agent.
+  type, networking, packages, and variable declarations. An environment is a
+  versioned definition, not a running sandbox; sessions snapshot it. Persona,
+  system prompt, provider, model, MCP connectors, volumes, secrets, and policy
+  stay on their owning resources.
 
   # ── Configuration rules (domain: pure validation, no D1) ──
 
   @environments/secret-material @domain
   Scenario: Reject secret material in free-form environment configuration
-    Given environment metadata, MCP policy, package-manager policy, and runtime config objects
+    Given environment metadata, package lists, variable declarations, and networking objects
     When the configuration is validated for secret material
     Then objects with secret-suggesting keys are flagged at any depth
     And the validation error is keyed to the offending field
     And secret-free configuration passes
-
-  @environments/mcp-policy @domain
-  Scenario: Resolve MCP connector constraints from environment policy
-    Given an environment restricts MCP connectors through allow, block, approval, and approval-mode lists
-    When the referenced connector ids are collected
-    Then connectors across every list are gathered, the wildcard is dropped, and ids are de-duplicated
 
   # ── Lifecycle (usecase: business branches over fake ports) ──
 
@@ -27,8 +21,8 @@ Feature: Environments
   Scenario: Create an environment with default execution policy and validated references
     When the user creates an environment
     Then version 1 snapshots the normalized policy and becomes current
-    And package lists, variables, secret references, hosting mode, network policy, resource limits, and runtime config have stable defaults
-    And inactive credential references, unusable pinned credential versions, disconnected MCP connectors, and secret material are rejected with field-level details
+    And type, networking, package lists, and variable declarations have stable defaults
+    And removed legacy fields and secret material are rejected with field-level details
 
   @environments/update @usecase
   Scenario: Version environment changes and archive safely
@@ -51,17 +45,16 @@ Feature: Environments
   @environments/api-validation @api
   Scenario: Validate environment policy and secret references over the API
     Given a signed-in user has access to a project
-    When the user submits package, variable, network, MCP, resource, and credential-reference configuration
-    Then normalized policy fields are stored and raw secret values are rejected
-    And secret references are returned only as safe names and references
-    And invalid network, MCP, package, host-pattern, and credential references return field-level details
+    When the user submits package, variable, and network configuration
+    Then normalized fields are stored and raw secret values are rejected
+    And invalid network, package, host-pattern, and removed legacy fields return field-level details
 
-	  @environments/api-pagination @api
-	  Scenario: List environments with pagination, filters, and tenant scope
-	    Given a project has active and archived environments created across multiple dates
-	    When the user lists environments with a page size
-	    Then the response includes data and cursor pagination metadata
-	    And archived environments are hidden unless archived filtering is requested
+  @environments/api-pagination @api
+  Scenario: List environments with pagination, filters, and tenant scope
+    Given a project has active and archived environments created across multiple dates
+    When the user lists environments with a page size
+    Then the response includes data and cursor pagination metadata
+    And archived environments are hidden unless archived filtering is requested
     And created-date filters and project scope are respected
 
   @environments/api-openapi @api
@@ -85,13 +78,13 @@ Feature: Environments
     Given a project has environments or none
     When the user opens the environments page
     Then the empty state explains environments are reusable templates, not running containers
-    And rows show name, status, hosting mode, runtime config, packages, network policy, and updated time
+    And rows show name, status, type, packages, networking, and updated time
     And the create flow captures the environment definition and returns to the browsable list
 
   @environments/console-detail @web
   Scenario: Inspect environment detail without exposing secrets
     Given an environment exists
     When the user opens the environment detail page
-    Then the header shows name, status, current version, runtime config, and timestamps
-    And variables and secret references are shown without raw secret values
+    Then the header shows name, status, current version, type, and timestamps
+    And variable declarations are shown without raw secret values
     And sessions that selected the environment are listed
