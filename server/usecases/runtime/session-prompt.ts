@@ -10,13 +10,13 @@
 // verbatim from the former server/runtime/session-prompt module; only dependency
 // acquisition changed.
 
+import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import {
   normalizeEnvironmentSnapshot,
   parseAgentSnapshot,
   parseJson,
   type serializeEnvironmentVersion,
 } from '@server/domain/runtime/session-snapshot'
-import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import { now } from '@server/domain/runtime/util'
 import { runtimeSupportsLivePrompts } from '@server/domain/runtime-catalog'
 import { sessionRuntimeConfig, sessionRuntimeFromMetadata } from '@server/domain/runtime-session'

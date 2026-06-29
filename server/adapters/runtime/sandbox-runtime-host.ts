@@ -207,7 +207,6 @@ async function prepareCloudWorkspace(
     env: Record<string, string>
   },
 ) {
-  const manifest = workspaceVolumeManifest(values.manifest)
   if (values.env.GIT_AUTHOR_NAME) {
     await execOrThrow(sandbox, `git config --global user.name ${shellQuote(values.env.GIT_AUTHOR_NAME)}`)
   }

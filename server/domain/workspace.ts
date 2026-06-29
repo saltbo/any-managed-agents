@@ -1,9 +1,9 @@
 import { gitRepositoryMountPath, normalizeGitRepositoryUrl } from './git-repository'
 import { isMemoryStoreAccess, memoryStoreIdFromRef, memoryStoreMountPath } from './memory-store'
 import {
+  type GitRepositoryVolume,
   isGitRepositoryVolume,
   isMemoryVolume,
-  type GitRepositoryVolume,
   type MemoryVolume,
   type Volume,
   type VolumeMount,
@@ -62,25 +62,25 @@ export function workspaceSpec(volumes: Volume[], volumeMounts: VolumeMount[]): W
 }
 
 export function workspaceSystemPromptBlock(spec: WorkspaceSpec): string | null {
-  const repositories = spec.volumes
-    .filter(isGitRepositoryVolume)
-    .map((volume) => {
-      const url = String(volume.url ?? '')
-      const mountPath = relativeWorkspacePath(volumeMountPath(volume.name, spec.volumeMounts) ?? gitRepositoryMountPath(url))
-      return `- ${url} at ${mountPath}`
-    })
-  const memoryStores = spec.volumes
-    .filter(isMemoryVolume)
-    .map((volume) => {
-      const storeId = memoryStoreIdFromRef(String(volume.memoryRef ?? '')) ?? String(volume.memoryRef ?? '')
-      const access = volume.access === 'read_write' ? 'read_write' : 'read_only'
-      const mountPath = relativeWorkspacePath(volumeMountPath(volume.name, spec.volumeMounts) ?? memoryStoreMountPath(storeId))
-      const description =
-        typeof volume.description === 'string' && volume.description.trim()
-          ? `\n  Description: ${volume.description.trim()}`
-          : ''
-      return `- ${volume.storeName || volume.name || storeId} (${access}) at ${mountPath}${description}`
-    })
+  const repositories = spec.volumes.filter(isGitRepositoryVolume).map((volume) => {
+    const url = String(volume.url ?? '')
+    const mountPath = relativeWorkspacePath(
+      volumeMountPath(volume.name, spec.volumeMounts) ?? gitRepositoryMountPath(url),
+    )
+    return `- ${url} at ${mountPath}`
+  })
+  const memoryStores = spec.volumes.filter(isMemoryVolume).map((volume) => {
+    const storeId = memoryStoreIdFromRef(String(volume.memoryRef ?? '')) ?? String(volume.memoryRef ?? '')
+    const access = volume.access === 'read_write' ? 'read_write' : 'read_only'
+    const mountPath = relativeWorkspacePath(
+      volumeMountPath(volume.name, spec.volumeMounts) ?? memoryStoreMountPath(storeId),
+    )
+    const description =
+      typeof volume.description === 'string' && volume.description.trim()
+        ? `\n  Description: ${volume.description.trim()}`
+        : ''
+    return `- ${volume.storeName || volume.name || storeId} (${access}) at ${mountPath}${description}`
+  })
   if (repositories.length === 0 && memoryStores.length === 0) {
     return null
   }
@@ -132,7 +132,8 @@ export function normalizeWorkspaceSpec(spec: WorkspaceSpec) {
       if (!mountPath.startsWith('/workspace/.ama/memory-stores/')) {
         return {
           fields: {
-            [`volumeMounts.${mountIndex}.mountPath`]: 'Memory store mounts must stay under /workspace/.ama/memory-stores.',
+            [`volumeMounts.${mountIndex}.mountPath`]:
+              'Memory store mounts must stay under /workspace/.ama/memory-stores.',
           },
         }
       }

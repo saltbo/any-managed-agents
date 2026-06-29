@@ -24,7 +24,9 @@ export function McpView({
       <Card>
         <CardHeader>
           <CardTitle>MCP connectors</CardTitle>
-          <CardDescription>Platform MCP server catalog entries with capabilities, auth mode, and setup metadata.</CardDescription>
+          <CardDescription>
+            Platform MCP server catalog entries with capabilities, auth mode, and setup metadata.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <TableSurface

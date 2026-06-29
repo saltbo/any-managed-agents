@@ -1,11 +1,11 @@
 import type {
+  RuntimeSessionHandle,
   SessionEventQuery,
   SessionListPage,
   SessionListQuery,
   SessionMessageListPage,
   SessionMessageListQuery,
   SessionRepo,
-  RuntimeSessionHandle,
 } from '@server/usecases/ports'
 import {
   AMA_SESSION_EVENT_TYPES,
@@ -20,19 +20,19 @@ import { leases, runners, sessionApprovals, sessionEvents, sessionMessages, sess
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 import { runtimePlacement, sessionSocketPath } from '../../domain/runtime/driver'
 import {
-  hostingModeFromSnapshot,
   type ApprovalState,
+  hostingModeFromSnapshot,
   type MessageDelivery,
   type MessageState,
   type Session,
-  type SessionApproval,
   type SessionAgentSnapshot,
+  type SessionApproval,
   type SessionConnection,
   type SessionEnvironmentSnapshot,
   type SessionEvent,
   type SessionMessage,
-  sessionEventVisibility,
   type SessionState,
+  sessionEventVisibility,
 } from '../../domain/session'
 import { redactSensitiveValue } from '../../redaction'
 
@@ -51,14 +51,8 @@ function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-type SerializedAgentVersion = {
-  id: string
-  providerId: string
-  model: string | null
-} & Record<string, unknown>
-
 function parseAgentSnapshot(value: string | null) {
-  return parseJson<SerializedAgentVersion>(value)
+  return parseJson<SessionAgentSnapshot>(value)
 }
 
 function snapshotRuntime(metadata: Record<string, unknown>): RuntimeName {
@@ -97,7 +91,7 @@ function approvalState(value: string): ApprovalState {
   throw new Error(`Invalid session approval state: ${value}`)
 }
 
-function sessionModel(modelConfig: Record<string, unknown>, agentSnapshot: SerializedAgentVersion) {
+function sessionModel(modelConfig: Record<string, unknown>, agentSnapshot: SessionAgentSnapshot) {
   return typeof modelConfig.model === 'string'
     ? modelConfig.model
     : typeof agentSnapshot.model === 'string'
@@ -166,7 +160,7 @@ function serializeSession(row: SessionRow): Session {
       bindings: {
         agent: {
           versionId: row.agentVersionId ?? '',
-          snapshot: agentSnapshot as unknown as SessionAgentSnapshot,
+          snapshot: agentSnapshot,
         },
         environment: {
           id: row.environmentId,

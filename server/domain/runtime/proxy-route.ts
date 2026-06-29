@@ -113,10 +113,7 @@ export function sandboxOperationFromRuntimePath(path: string, body: unknown) {
   return null
 }
 
-export type RuntimeRoute =
-  | { kind: 'ws' }
-  | { kind: 'rpc' }
-  | { kind: 'passthrough' }
+export type RuntimeRoute = { kind: 'ws' } | { kind: 'rpc' } | { kind: 'passthrough' }
 
 export function parseRuntimeProxyRoute(path: string, method: string): RuntimeRoute {
   if (path === '/ws') {

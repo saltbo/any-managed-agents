@@ -1,8 +1,8 @@
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import type {
   CreateTriggerInput,
-  ListPageResult,
   EnvFromEntry,
+  ListPageResult,
   TriggerListQuery,
   TriggerRecord,
   TriggerRepo,

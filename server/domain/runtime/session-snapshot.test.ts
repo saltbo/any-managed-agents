@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { agentSnapshotWithWorkspaceContext, type SerializedAgentVersion } from './session-snapshot'
 import { normalizeWorkspaceSpec, workspaceSpec } from '../workspace'
+import { agentSnapshotWithWorkspaceContext, type SerializedAgentVersion } from './session-snapshot'
 
 function agentSnapshot(overrides: Partial<SerializedAgentVersion> = {}): SerializedAgentVersion {
   return {
@@ -28,17 +28,23 @@ function agentSnapshot(overrides: Partial<SerializedAgentVersion> = {}): Seriali
 describe('[spec: sessions/memory-store-resources] memory store volumes', () => {
   it('accepts managed memory store volumes and rejects unsafe mounts', () => {
     expect(
-      normalizeWorkspaceSpec(workspaceSpec(
-        [{ name: 'memory-memstore_1', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' }],
-        [{ name: 'memory-memstore_1', mountPath: '/workspace/.ama/memory-stores/memstore_1' }],
-      )).volumes,
-    ).toEqual([{ name: 'memory-memstore_1', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' }])
+      normalizeWorkspaceSpec(
+        workspaceSpec(
+          [{ name: 'memory-memstore_1', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' }],
+          [{ name: 'memory-memstore_1', mountPath: '/workspace/.ama/memory-stores/memstore_1' }],
+        ),
+      ).volumes,
+    ).toEqual([
+      { name: 'memory-memstore_1', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' },
+    ])
 
     expect(
-      normalizeWorkspaceSpec(workspaceSpec(
-        [{ name: 'memory-memstore_1', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' }],
-        [{ name: 'memory-memstore_1', mountPath: '/workspace/custom' }],
-      )),
+      normalizeWorkspaceSpec(
+        workspaceSpec(
+          [{ name: 'memory-memstore_1', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' }],
+          [{ name: 'memory-memstore_1', mountPath: '/workspace/custom' }],
+        ),
+      ),
     ).toEqual({
       fields: { 'volumeMounts.0.mountPath': 'Memory store mounts must stay under /workspace/.ama/memory-stores.' },
     })
@@ -46,22 +52,33 @@ describe('[spec: sessions/memory-store-resources] memory store volumes', () => {
 
   it('requires access and unique store ids per session', () => {
     expect(
-      normalizeWorkspaceSpec(workspaceSpec(
-        [{ name: 'memory-memstore_1', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'writer' as never }],
-        [{ name: 'memory-memstore_1', mountPath: '/workspace/.ama/memory-stores/memstore_1' }],
-      )),
+      normalizeWorkspaceSpec(
+        workspaceSpec(
+          [
+            {
+              name: 'memory-memstore_1',
+              type: 'memory',
+              memoryRef: 'ama://memories/memstore_1',
+              access: 'writer' as never,
+            },
+          ],
+          [{ name: 'memory-memstore_1', mountPath: '/workspace/.ama/memory-stores/memstore_1' }],
+        ),
+      ),
     ).toEqual({ fields: { 'volumes.0.access': 'Use read_only or read_write.' } })
     expect(
-      normalizeWorkspaceSpec(workspaceSpec(
-        [
-          { name: 'memory-a', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' },
-          { name: 'memory-b', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_write' },
-        ],
-        [
-          { name: 'memory-a', mountPath: '/workspace/.ama/memory-stores/memstore_1' },
-          { name: 'memory-b', mountPath: '/workspace/.ama/memory-stores/memstore_1' },
-        ],
-      )),
+      normalizeWorkspaceSpec(
+        workspaceSpec(
+          [
+            { name: 'memory-a', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' },
+            { name: 'memory-b', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_write' },
+          ],
+          [
+            { name: 'memory-a', mountPath: '/workspace/.ama/memory-stores/memstore_1' },
+            { name: 'memory-b', mountPath: '/workspace/.ama/memory-stores/memstore_1' },
+          ],
+        ),
+      ),
     ).toEqual({ fields: { 'volumeMounts.1.mountPath': 'Mount path must be unique within a session.' } })
   })
 
@@ -86,9 +103,7 @@ describe('[spec: sessions/memory-store-resources] memory store volumes', () => {
     )
     expect(augmented.instructions).toContain('Base instructions.')
     expect(augmented.instructions).toContain('Workspace layout:')
-    expect(augmented.instructions).toContain(
-      'https://github.com/saltbo/agent-kanban.git at repos/saltbo/agent-kanban',
-    )
+    expect(augmented.instructions).toContain('https://github.com/saltbo/agent-kanban.git at repos/saltbo/agent-kanban')
     expect(augmented.instructions).toContain('Team memory')
     expect(augmented.instructions).toContain('Review conventions.')
     expect(augmented.instructions).toContain('.ama/memory-stores/memstore_1')

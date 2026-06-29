@@ -1,6 +1,6 @@
 import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
-import { type Volume, type VolumeMount } from './execution-inputs'
 import { workspaceSystemPromptBlock } from '../workspace'
+import type { Volume, VolumeMount } from './execution-inputs'
 
 // Snapshot serialization (DB row -> immutable session snapshot) and volume
 // normalization for the session runtime data plane. Pure shaping/validation with

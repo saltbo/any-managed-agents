@@ -2,12 +2,7 @@ import type { BudgetRule, BudgetUsageRecord, PolicyLevel } from '@server/domain/
 import type { AuthScope, PolicyEvalRepo, PolicyProvider } from '@server/usecases/ports'
 import { and, desc, eq, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import {
-  budgets,
-  policies,
-  providers,
-  usageRecords,
-} from '../../db/schema'
+import { budgets, policies, providers, usageRecords } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -91,6 +86,5 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
         window: budget.window,
       }))
     },
-
   }
 }

@@ -1,9 +1,4 @@
-import {
-  hasSecretMaterial,
-  mergeSessionUserMetadata,
-  type Session,
-  type SessionMessage,
-} from '@server/domain/session'
+import { hasSecretMaterial, mergeSessionUserMetadata, type Session, type SessionMessage } from '@server/domain/session'
 import type { Deps } from './deps'
 import {
   type AuthScope,

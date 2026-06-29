@@ -1624,10 +1624,7 @@ describe('SessionsPage', () => {
 
   it('filters sessions by search text', async () => {
     server.use(
-      sessionsList([
-        buildSession({ name: 'Alpha session' }),
-        buildSession({ id: 'session_2', name: 'Beta session' }),
-      ]),
+      sessionsList([buildSession({ name: 'Alpha session' }), buildSession({ id: 'session_2', name: 'Beta session' })]),
     )
 
     renderSessionsPage()

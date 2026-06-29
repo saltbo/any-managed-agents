@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, SessionMessage } from '@server/domain/session'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
 import { type AuthScope, type RuntimeSessionHandle, SessionValidationError } from './ports'
 
@@ -168,7 +168,10 @@ function fakeDeps(
   }
   const runtime: Required<RuntimeSessionOverrides> = {
     createSession: async () => ({ ok: true, value: sessionRecord() }),
-    stopSession: async () => ({ ok: true, value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }) }),
+    stopSession: async () => ({
+      ok: true,
+      value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }),
+    }),
     archiveSession: async () => ({
       ok: true,
       value: sessionRecord({
@@ -450,7 +453,10 @@ describe('[spec: sessions/stop] updateSession — stop transition', () => {
     let archived = false
     const deps = fakeDeps({
       sessionRuntime: {
-        stopSession: async () => ({ ok: true, value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }) }),
+        stopSession: async () => ({
+          ok: true,
+          value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }),
+        }),
         archiveSession: async () => {
           archived = true
           return {
@@ -473,7 +479,10 @@ describe('[spec: sessions/stop] updateSession — stop transition', () => {
   it('throws when findRuntimeRow returns null after stop+archive', async () => {
     const deps = fakeDeps({
       sessionRuntime: {
-        stopSession: async () => ({ ok: true, value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }) }),
+        stopSession: async () => ({
+          ok: true,
+          value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }),
+        }),
       },
       sessions: {
         findRuntimeRow: async () => null,

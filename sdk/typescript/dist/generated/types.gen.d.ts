@@ -1455,7 +1455,7 @@ export type VaultCredential = {
     vaultId: string;
     projectId: string | null;
     name: string;
-    type: 'Opaque' | 'kubernetes.io/basic-auth' | 'kubernetes.io/ssh-auth' | 'kubernetes.io/tls' | 'ama.dev/private-key-jwk' | 'ama.dev/oauth-token';
+    type: 'opaque' | 'ama.dev/basic-auth' | 'ama.dev/ssh-auth' | 'ama.dev/tls' | 'ama.dev/private-key-jwk' | 'ama.dev/oauth-token';
     metadata: {
         [key: string]: unknown;
     };
@@ -1490,7 +1490,7 @@ export type VaultJsonObject = {
 };
 export type CreateVaultCredentialRequest = {
     name: string;
-    type: 'Opaque' | 'kubernetes.io/basic-auth' | 'kubernetes.io/ssh-auth' | 'kubernetes.io/tls' | 'ama.dev/private-key-jwk' | 'ama.dev/oauth-token';
+    type: 'opaque' | 'ama.dev/basic-auth' | 'ama.dev/ssh-auth' | 'ama.dev/tls' | 'ama.dev/private-key-jwk' | 'ama.dev/oauth-token';
     metadata?: {
         [key: string]: unknown;
     };

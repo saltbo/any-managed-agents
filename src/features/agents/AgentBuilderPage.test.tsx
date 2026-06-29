@@ -453,7 +453,10 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     const env = buildEnvironment()
     let agentCreated = false
     let agentPatched = false
-    setupDefaultHandlers({ environments: [env], sessionResponse: buildSession({ id: session.metadata.uid, phase: 'idle' }) })
+    setupDefaultHandlers({
+      environments: [env],
+      sessionResponse: buildSession({ id: session.metadata.uid, phase: 'idle' }),
+    })
     server.use(
       http.post('*/api/v1/agents', () => {
         agentCreated = true

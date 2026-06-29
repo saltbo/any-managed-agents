@@ -30,7 +30,11 @@ export function normalizeGitRepositoryUrl(value: string): string | null {
 
 export function gitRepositoryMountPath(url: string): string {
   const parsed = new URL(url)
-  const path = parsed.pathname.replace(/\.git$/i, '').split('/').filter(Boolean).join('/')
+  const path = parsed.pathname
+    .replace(/\.git$/i, '')
+    .split('/')
+    .filter(Boolean)
+    .join('/')
   return `/workspace/repos/${parsed.hostname}/${path}`
 }
 

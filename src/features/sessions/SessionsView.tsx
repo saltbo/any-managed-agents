@@ -117,7 +117,9 @@ export function SessionsView({
               <span className="block truncate">{formatDate(session.metadata.updatedAt)}</span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{formatDuration(session.status.startedAt, session.status.stoppedAt)}</span>
+              <span className="block truncate">
+                {formatDuration(session.status.startedAt, session.status.stoppedAt)}
+              </span>
             </TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">

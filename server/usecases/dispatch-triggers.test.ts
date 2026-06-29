@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, SessionMessage } from '@server/domain/session'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
 import type { AuthScope, ClaimedRun, DueTrigger, TriggerRecord } from './ports'
 
@@ -497,7 +497,11 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
 
   it('passes scheduled trigger env and envFrom through to createSession', async () => {
     const envFrom = [
-      { type: 'secret' as const, name: 'AK_AGENT_KEY', secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1' },
+      {
+        type: 'secret' as const,
+        name: 'AK_AGENT_KEY',
+        secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1',
+      },
     ]
     const trigger = dueTrigger({
       env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
@@ -998,7 +1002,11 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
 
   it('passes HTTP trigger env and envFrom through to createSession', async () => {
     const envFrom = [
-      { type: 'secret' as const, name: 'AK_AGENT_KEY', secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1' },
+      {
+        type: 'secret' as const,
+        name: 'AK_AGENT_KEY',
+        secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1',
+      },
     ]
     const trigger = httpTrigger({
       env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },

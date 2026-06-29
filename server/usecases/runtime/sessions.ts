@@ -17,7 +17,6 @@ import type {
   PromptDispatchResult,
   RuntimeSessionHandle,
   SessionCreateOptions,
-  SessionRuntimeError,
   SessionRuntimeOutcome,
 } from '../ports'
 import { decideSessionApproval } from './session-approval'

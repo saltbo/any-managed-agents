@@ -10,8 +10,8 @@
 // effects (usage accounting, browser fan-out, R2 archive); this module owns the
 // rows.
 
+import { type SessionEvent, sessionEventVisibility } from '@server/domain/session'
 import { redactSensitiveValue } from '@server/redaction'
-import { sessionEventVisibility, type SessionEvent } from '@server/domain/session'
 import type { SessionEventPage, SessionEventQuery } from '@server/usecases/ports'
 import {
   type CanonicalAmaSessionEvent,

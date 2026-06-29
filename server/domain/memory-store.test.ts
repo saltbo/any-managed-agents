@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { amaMemoryRef, isMemoryStoreAccess, memoryStoreIdFromRef, memoryStoreMountPath, normalizeMemoryPath } from './memory-store'
+import {
+  amaMemoryRef,
+  isMemoryStoreAccess,
+  memoryStoreIdFromRef,
+  memoryStoreMountPath,
+  normalizeMemoryPath,
+} from './memory-store'
 
 describe('[spec: sessions/memory-store-resources] memory store domain helpers', () => {
   it('builds managed mount paths under the AMA memory root', () => {

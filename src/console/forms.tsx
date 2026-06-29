@@ -337,10 +337,10 @@ export function SessionForm({
           value={value.metadata}
           onChange={(metadata) => setValue({ ...value, metadata })}
         />
-	        <TextAreaField
-	          label="Volumes"
-	          description='JSON array of mountable inputs, such as {"name":"source","type":"git_repository","url":"https://github.com/org/repo.git"}.'
-	          value={value.volumes}
+        <TextAreaField
+          label="Volumes"
+          description='JSON array of mountable inputs, such as {"name":"source","type":"git_repository","url":"https://github.com/org/repo.git"}.'
+          value={value.volumes}
           onChange={(volumes) => setValue({ ...value, volumes })}
         />
         <TextAreaField
@@ -382,7 +382,11 @@ function MemoryStoreAttachmentField({
       nextVolumes.push({ name, type: 'memory', memoryRef, access: 'read_only' })
       nextMounts.push({ name, mountPath: `/workspace/.ama/memory-stores/${storeId}`, readOnly: true })
     }
-    setValue({ ...value, volumes: JSON.stringify(nextVolumes, null, 2), volumeMounts: JSON.stringify(nextMounts, null, 2) })
+    setValue({
+      ...value,
+      volumes: JSON.stringify(nextVolumes, null, 2),
+      volumeMounts: JSON.stringify(nextMounts, null, 2),
+    })
   }
   function updateAccess(storeId: string, access: MemoryStoreAccess) {
     const name = memoryVolumeName(storeId)
@@ -393,7 +397,11 @@ function MemoryStoreAttachmentField({
     const nextMounts = volumeMounts.map((mount) =>
       mount.name === name ? { ...mount, readOnly: access !== 'read_write' } : mount,
     )
-    setValue({ ...value, volumes: JSON.stringify(nextVolumes, null, 2), volumeMounts: JSON.stringify(nextMounts, null, 2) })
+    setValue({
+      ...value,
+      volumes: JSON.stringify(nextVolumes, null, 2),
+      volumeMounts: JSON.stringify(nextMounts, null, 2),
+    })
   }
   return (
     <Field>

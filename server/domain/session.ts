@@ -5,8 +5,8 @@ import type {
   EnvironmentPackage,
   EnvironmentVariable,
 } from './environment'
-import type { RuntimeName } from './runtime-catalog'
 import type { EnvFromEntry, Volume, VolumeMount } from './runtime/execution-inputs'
+import type { RuntimeName } from './runtime-catalog'
 
 // Pure session rules and entities. No drizzle, no env, no hono. The operational state
 // machine, hosting-mode derivation, prompt-delivery decision, approval-state

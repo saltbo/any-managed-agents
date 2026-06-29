@@ -9,13 +9,13 @@
 // reader, and runner channel arrive as ports on `deps`; canonical events go
 // through the events usecase. The module is infra-free.
 
+import { memoryStoreIdFromRef } from '@server/domain/memory-store'
 import {
   isMemoryVolume,
   type MemoryVolume,
   type Volume,
   type VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
-import { memoryStoreIdFromRef } from '@server/domain/memory-store'
 import { now, RUNTIME_START_TIMEOUT_MS, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
 import type {
@@ -161,12 +161,7 @@ async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, se
     if (!storeId) {
       continue
     }
-    await deps.sessionOrchestration.replaceMemoryStoreMemories(
-      auth.project.id,
-      storeId,
-      snapshot.memories,
-      updatedAt,
-    )
+    await deps.sessionOrchestration.replaceMemoryStoreMemories(auth.project.id, storeId, snapshot.memories, updatedAt)
   }
 }
 

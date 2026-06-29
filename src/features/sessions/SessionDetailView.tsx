@@ -213,10 +213,7 @@ export function SessionDetailView({
                     label="Packages"
                     value={environmentSnapshot.packages.map((item) => item.name).join(', ') || 'None'}
                   />
-                  <Meta
-                    label="Variables"
-                    value={Object.keys(environmentSnapshot.variables).join(', ') || 'None'}
-                  />
+                  <Meta label="Variables" value={Object.keys(environmentSnapshot.variables).join(', ') || 'None'} />
                 </MetaGrid>
               }
               json={{
@@ -238,7 +235,9 @@ export function SessionDetailView({
                   <Meta label="Git repositories" value={String(gitVolumes(session).length)} />
                   <Meta
                     label="Memory stores"
-                    value={memoryStoreVolumes(session).length === 0 ? 'None' : String(memoryStoreVolumes(session).length)}
+                    value={
+                      memoryStoreVolumes(session).length === 0 ? 'None' : String(memoryStoreVolumes(session).length)
+                    }
                   />
                   <Meta label="Workspace manifest" value="/workspace/.ama/resources.json" />
                   <Meta label="Setup status" value="Declared for runtime executor setup" />

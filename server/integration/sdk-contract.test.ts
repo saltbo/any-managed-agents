@@ -210,7 +210,9 @@ describe('[CF] generated SDK contract', () => {
     const refs = externalRefs(runId)
     const agent = await createAgentThroughSdk(ama, runId, refs)
     const environment = await createEnvironmentThroughSdk(ama, runId, refs)
-    const volumes = [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/any-managed-agents.git', ref: 'main' }]
+    const volumes = [
+      { name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/any-managed-agents.git', ref: 'main' },
+    ]
 
     const { created, session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {
       volumes,

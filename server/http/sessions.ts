@@ -16,6 +16,7 @@ import {
   AuthenticatedOperation,
   csvResponse,
   type DepsEnv,
+  EnvFromEntrySchema,
   ErrorResponseSchema,
   eventListQuerySchema,
   formatListCursor,
@@ -23,13 +24,9 @@ import {
   listResponseSchema,
   negotiateMediaType,
   parseListCursor,
-  EnvFromEntrySchema,
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
-import {
-  type SessionRuntimeError,
-  SessionValidationError,
-} from '../usecases/ports'
+import { type SessionRuntimeError, SessionValidationError } from '../usecases/ports'
 import {
   createSession as createRuntimeSession,
   decideApproval as decideRuntimeApproval,
@@ -324,10 +321,7 @@ const UpdateSessionSchema = z
   .strict()
   .refine(
     (body) =>
-      body.name !== undefined ||
-      body.metadata !== undefined ||
-      body.state !== undefined ||
-      body.archived !== undefined,
+      body.name !== undefined || body.metadata !== undefined || body.state !== undefined || body.archived !== undefined,
     { message: 'Provide at least one of name, metadata, state, or archived.' },
   )
   .openapi('UpdateSessionRequest')
@@ -510,7 +504,9 @@ function serializeSession(record: Session): z.infer<typeof SessionSchema> {
         environment: {
           id: record.status.bindings.environment.id,
           versionId: record.status.bindings.environment.versionId,
-          snapshot: record.status.bindings.environment.snapshot as z.infer<typeof EnvironmentVersionSnapshotSchema> | null,
+          snapshot: record.status.bindings.environment.snapshot as z.infer<
+            typeof EnvironmentVersionSnapshotSchema
+          > | null,
         },
         runtime: record.status.bindings.runtime,
       },
@@ -1070,9 +1066,8 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last
-        ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid })
-        : null
+      const nextCursor =
+        page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         { data: page.rows.map(serializeSession), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
