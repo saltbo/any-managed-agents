@@ -85,7 +85,7 @@ export function createRunnerChannel(env: Env, resolveDoName: (sessionId: string)
         volumeMounts: input.volumeMounts,
       })
       return Array.isArray(result.stores)
-        ? (result.stores as Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>)
+        ? (result.stores as Array<{ memoryRef: string; memories: Array<{ path: string; content: string }> }>)
         : []
     },
   }

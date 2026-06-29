@@ -639,7 +639,7 @@ describe('SessionDetailView', () => {
     renderDetailView({
       spec: {
         ...buildSession().spec,
-        volumes: [{ name: 'repo', type: 'github_repository', owner: 'acme', repo: 'app', ref: 'main' }],
+        volumes: [{ name: 'repo', type: 'git_repository', url: 'https://gitlab.com/acme/app.git', ref: 'main' }],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace' }],
       },
     })
@@ -648,7 +648,7 @@ describe('SessionDetailView', () => {
     fireEvent.click(resourcesButtons[0]!)
 
     await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
-    expect(screen.getByText('GitHub repositories')).toBeTruthy()
+    expect(screen.getByText('Git repositories')).toBeTruthy()
   })
 
   it('calls onStop after stop action is confirmed', async () => {
@@ -827,7 +827,7 @@ describe('SessionDetailView', () => {
     renderDetailView({
       spec: {
         ...buildSession().spec,
-        volumes: [{ name: 'repo', type: 'github_repository', owner: 'acme', repo: 'app', ref: 'main' }],
+        volumes: [{ name: 'repo', type: 'git_repository', url: 'https://gitlab.com/acme/app.git', ref: 'main' }],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace' }],
       },
     })
@@ -869,7 +869,7 @@ describe('SessionDetailView', () => {
     renderDetailView({
       spec: {
         ...buildSession().spec,
-        volumes: [{ name: 'memory', type: 'memory_store', storeId: 'memstore_1', access: 'read_only' }],
+        volumes: [{ name: 'memory', type: 'memory', memoryRef: 'ama://memories/memstore_1', access: 'read_only' }],
         volumeMounts: [{ name: 'memory', mountPath: '/workspace/.ama/memory-stores/memstore_1' }],
       },
     })
@@ -953,18 +953,17 @@ describe('SessionDetailView', () => {
     expect(screen.getAllByText('None').length).toBeGreaterThan(0)
   })
 
-  it('includes credentialRef in safeResourceView when resource has a credential reference', async () => {
+  it('includes secretRef in safeResourceView when a git volume has a secret reference', async () => {
     renderDetailView({
       spec: {
         ...buildSession().spec,
         volumes: [
           {
             name: 'repo',
-            type: 'github_repository',
-            owner: 'acme',
-            repo: 'app',
+            type: 'git_repository',
+            url: 'https://github.com/acme/app.git',
             ref: 'main',
-            credentialRef: { credentialId: 'cred_abc', versionId: 'ver_abc' },
+            secretRef: 'ama://vaults/vault_abc/credentials/git-token/versions/ver_abc',
           },
         ],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace' }],
@@ -975,7 +974,7 @@ describe('SessionDetailView', () => {
     fireEvent.click(resourcesButtons[0]!)
 
     await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
-    expect(screen.getByText(/cred_abc/)).toBeTruthy()
+    expect(screen.getByText(/git-token/)).toBeTruthy()
     expect(screen.getByText(/ver_abc/)).toBeTruthy()
   })
 })

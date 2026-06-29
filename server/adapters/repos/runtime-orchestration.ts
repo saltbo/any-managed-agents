@@ -40,7 +40,7 @@ import {
   workItems,
 } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
-import { memoryStoreMountPath } from '../../domain/memory-store'
+import { amaMemoryRef, memoryStoreMountPath } from '../../domain/memory-store'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -325,8 +325,8 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .where(and(eq(memoryStoreMemories.storeId, storeId), eq(memoryStoreMemories.projectId, projectId)))
         .orderBy(asc(memoryStoreMemories.path))
       return {
-        type: 'memory_store',
-        storeId,
+        type: 'memory',
+        memoryRef: amaMemoryRef(storeId),
         name: store.name,
         description: store.description,
         access,
@@ -458,7 +458,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .where(and(eq(connectionTools.connectionId, connectionId), eq(connectionTools.availability, 'available')))
     },
 
-    // ── credential validation (resource refs + secret env) ─────────────────
+    // ── credential reference validation ────────────────────────────────────
     async activeCredentialVersionExists(
       organizationId: string,
       projectId: string,
@@ -495,7 +495,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
       return Boolean(credential)
     },
 
-    // ── secret-env resolution (runtime dispatch) ───────────────────────────
+    // ── secret materialization (runtime dispatch) ──────────────────────────
     async secretVersionForResolution(
       organizationId: string,
       projectId: string,

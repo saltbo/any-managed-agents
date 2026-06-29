@@ -593,21 +593,20 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 func TestRunOnceCompletesSessionLeaseWithWritableMemoryStoreSnapshot(t *testing.T) {
 	workDir := t.TempDir()
 	lease := codexSessionStartLease("update the heartbeat")
-	lease.workItem.Payload["volumes"] = []any{ama.JSON{
-		"type":    "memory_store",
-		"storeId": "memstore_1",
-		"name":    "maintainer-memory",
-		"access":  "read_write",
-		"memories": []any{ama.JSON{
-			"path":    "ak-maintainer-heartbeat.md",
-			"content": "initial heartbeat\n",
+	lease.workItem.Payload["workspaceManifest"] = ama.JSON{
+		"root": "/workspace",
+		"mounts": []any{ama.JSON{
+			"type":      "memory",
+			"name":      "maintainer-memory",
+			"mountPath": "/workspace/.ama/memory-stores/memstore_1",
+			"memoryRef": "ama://memories/memstore_1",
+			"access":    "read_write",
+			"files": []any{ama.JSON{
+				"path":    "ak-maintainer-heartbeat.md",
+				"content": "initial heartbeat\n",
+			}},
 		}},
-	}}
-	lease.workItem.Payload["volumeMounts"] = []any{ama.JSON{
-		"name":      "maintainer-memory",
-		"mountPath": "/workspace/.ama/memory-stores/memstore_1",
-		"readOnly":  false,
-	}}
+	}
 	hubChannel := newFakeSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
 	client := &fakeAMAServer{lease: lease, hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{
@@ -641,7 +640,7 @@ func TestRunOnceCompletesSessionLeaseWithWritableMemoryStoreSnapshot(t *testing.
 		t.Fatalf("expected memoryStores result, got %#v", updateResult(client.updates[0]))
 	}
 	store, ok := stores[0].(map[string]any)
-	if !ok || store["storeId"] != "memstore_1" {
+	if !ok || store["memoryRef"] != "ama://memories/memstore_1" {
 		t.Fatalf("expected one memstore snapshot, got %#v", stores)
 	}
 	memories, ok := store["memories"].([]any)

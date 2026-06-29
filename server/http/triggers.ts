@@ -211,7 +211,7 @@ function errorBody(type: string, message: string, details?: Record<string, unkno
   return { error: { type, message, ...(details ? { details } : {}) } } as const
 }
 
-function normalizeSecretEnv(entries: z.infer<typeof EnvFromEntrySchema>[]): EnvFromEntry[] {
+function normalizeEnvFrom(entries: z.infer<typeof EnvFromEntrySchema>[]): EnvFromEntry[] {
   return entries.map((entry) => ({
     type: 'secret',
     name: entry.name,
@@ -446,7 +446,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
             name: body.name,
             promptTemplate: body.promptTemplate,
             env: body.env ?? {},
-            envFrom: normalizeSecretEnv(body.envFrom ?? []),
+            envFrom: normalizeEnvFrom(body.envFrom ?? []),
             volumes: body.volumes ?? [],
             volumeMounts: body.volumeMounts ?? [],
             schedule:
@@ -669,7 +669,7 @@ function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTrigger
     ...(body.name !== undefined ? { name: body.name } : {}),
     ...(body.promptTemplate !== undefined ? { promptTemplate: body.promptTemplate } : {}),
     ...(body.env !== undefined ? { env: body.env } : {}),
-    ...(body.envFrom !== undefined ? { envFrom: normalizeSecretEnv(body.envFrom) } : {}),
+    ...(body.envFrom !== undefined ? { envFrom: normalizeEnvFrom(body.envFrom) } : {}),
     ...(body.volumes !== undefined ? { volumes: body.volumes } : {}),
     ...(body.volumeMounts !== undefined ? { volumeMounts: body.volumeMounts } : {}),
     ...(body.schedule === null

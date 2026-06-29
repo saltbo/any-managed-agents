@@ -154,8 +154,8 @@ from .environment_version_variables_additional_property import EnvironmentVersio
 from .error_response import ErrorResponse
 from .error_response_error import ErrorResponseError
 from .error_response_error_details import ErrorResponseErrorDetails
-from .git_hub_repository_volume import GitHubRepositoryVolume
-from .git_hub_repository_volume_type import GitHubRepositoryVolumeType
+from .git_repository_volume import GitRepositoryVolume
+from .git_repository_volume_type import GitRepositoryVolumeType
 from .health_response import HealthResponse
 from .health_response_runtime import HealthResponseRuntime
 from .health_response_status import HealthResponseStatus
@@ -189,9 +189,9 @@ from .memory_store_memory import MemoryStoreMemory
 from .memory_store_memory_list_response import MemoryStoreMemoryListResponse
 from .memory_store_memory_metadata import MemoryStoreMemoryMetadata
 from .memory_store_metadata import MemoryStoreMetadata
-from .memory_store_volume import MemoryStoreVolume
-from .memory_store_volume_access import MemoryStoreVolumeAccess
-from .memory_store_volume_type import MemoryStoreVolumeType
+from .memory_volume import MemoryVolume
+from .memory_volume_access import MemoryVolumeAccess
+from .memory_volume_type import MemoryVolumeType
 from .project import Project
 from .project_list_response import ProjectListResponse
 from .provider import Provider
@@ -222,13 +222,12 @@ from .runner_channel_message import RunnerChannelMessage
 from .runner_channel_metadata import RunnerChannelMetadata
 from .runner_channel_metadata_upgrade import RunnerChannelMetadataUpgrade
 from .runner_credential_ref import RunnerCredentialRef
+from .runner_git_credential import RunnerGitCredential
 from .runner_heartbeat import RunnerHeartbeat
 from .runner_heartbeat_state import RunnerHeartbeatState
 from .runner_list_response import RunnerListResponse
 from .runner_memory_snapshot import RunnerMemorySnapshot
 from .runner_metadata import RunnerMetadata
-from .runner_resolved_volume_file import RunnerResolvedVolumeFile
-from .runner_resolved_volume_mount import RunnerResolvedVolumeMount
 from .runner_runtime_inventory import RunnerRuntimeInventory
 from .runner_runtime_inventory_state import RunnerRuntimeInventoryState
 from .runner_runtime_request import RunnerRuntimeRequest
@@ -252,6 +251,11 @@ from .runner_work_payload_input import RunnerWorkPayloadInput
 from .runner_work_payload_protocol import RunnerWorkPayloadProtocol
 from .runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
 from .runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
+from .runner_workspace_file import RunnerWorkspaceFile
+from .runner_workspace_manifest import RunnerWorkspaceManifest
+from .runner_workspace_manifest_root import RunnerWorkspaceManifestRoot
+from .runner_workspace_mount import RunnerWorkspaceMount
+from .runner_workspace_mount_type import RunnerWorkspaceMountType
 from .runtime import Runtime
 from .runtime_usage import RuntimeUsage
 from .runtime_usage_window import RuntimeUsageWindow
@@ -572,8 +576,8 @@ __all__ = (
     "ErrorResponse",
     "ErrorResponseError",
     "ErrorResponseErrorDetails",
-    "GitHubRepositoryVolume",
-    "GitHubRepositoryVolumeType",
+    "GitRepositoryVolume",
+    "GitRepositoryVolumeType",
     "HealthResponse",
     "HealthResponseRuntime",
     "HealthResponseStatus",
@@ -607,9 +611,9 @@ __all__ = (
     "MemoryStoreMemoryListResponse",
     "MemoryStoreMemoryMetadata",
     "MemoryStoreMetadata",
-    "MemoryStoreVolume",
-    "MemoryStoreVolumeAccess",
-    "MemoryStoreVolumeType",
+    "MemoryVolume",
+    "MemoryVolumeAccess",
+    "MemoryVolumeType",
     "Project",
     "ProjectListResponse",
     "Provider",
@@ -640,13 +644,12 @@ __all__ = (
     "RunnerChannelMetadata",
     "RunnerChannelMetadataUpgrade",
     "RunnerCredentialRef",
+    "RunnerGitCredential",
     "RunnerHeartbeat",
     "RunnerHeartbeatState",
     "RunnerListResponse",
     "RunnerMemorySnapshot",
     "RunnerMetadata",
-    "RunnerResolvedVolumeFile",
-    "RunnerResolvedVolumeMount",
     "RunnerRuntimeInventory",
     "RunnerRuntimeInventoryState",
     "RunnerRuntimeRequest",
@@ -670,6 +673,11 @@ __all__ = (
     "RunnerWorkPayloadProtocol",
     "RunnerWorkPayloadRuntimeConfig",
     "RunnerWorkPayloadRuntimeEnv",
+    "RunnerWorkspaceFile",
+    "RunnerWorkspaceManifest",
+    "RunnerWorkspaceManifestRoot",
+    "RunnerWorkspaceMount",
+    "RunnerWorkspaceMountType",
     "Runtime",
     "RuntimeUsage",
     "RuntimeUsageWindow",

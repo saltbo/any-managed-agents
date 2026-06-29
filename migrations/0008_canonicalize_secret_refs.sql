@@ -11,7 +11,12 @@ SET `env_from` = COALESCE(
         'name',
         json_extract(`item`.`value`, '$.name'),
         'secretRef',
-        'ama://vaults/' || `version`.`vault_id` || '/credentials/' || `version`.`credential_id` || '/versions/' || `version`.`id`
+        printf(
+          'ama://vaults/%s/credentials/%s/versions/%s',
+          `version`.`vault_id`,
+          `version`.`credential_id`,
+          `version`.`id`
+        )
       )
     )
     FROM json_each(`sessions`.`env_from`) AS `item`
@@ -35,7 +40,12 @@ SET `env_from` = COALESCE(
         'name',
         json_extract(`item`.`value`, '$.name'),
         'secretRef',
-        'ama://vaults/' || `version`.`vault_id` || '/credentials/' || `version`.`credential_id` || '/versions/' || `version`.`id`
+        printf(
+          'ama://vaults/%s/credentials/%s/versions/%s',
+          `version`.`vault_id`,
+          `version`.`credential_id`,
+          `version`.`id`
+        )
       )
     )
     FROM json_each(`triggers`.`env_from`) AS `item`
@@ -50,5 +60,5 @@ WHERE `env_from` LIKE '%ama-managed:%'
   AND json_valid(`env_from`);--> statement-breakpoint
 
 UPDATE `vault_credential_versions`
-SET `secret_ref` = 'ama://vaults/' || `vault_id` || '/credentials/' || `credential_id` || '/versions/' || `id`
+SET `secret_ref` = printf('ama://vaults/%s/credentials/%s/versions/%s', `vault_id`, `credential_id`, `id`)
 WHERE `secret_ref` NOT LIKE 'ama://vaults/%';

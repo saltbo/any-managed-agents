@@ -6,22 +6,27 @@ export type WorkspaceVolumeManifest = {
 
 export type WorkspaceVolume =
   | {
-      type: 'github_repository'
+      type: 'git_repository'
       name: unknown
-      owner: unknown
-      repo: unknown
+      url: unknown
       mountPath: unknown
       ref?: string
-      credentialRef?: unknown
       status: 'declared'
     }
   | {
-      type: 'memory_store'
-      storeId: unknown
+      type: 'memory'
+      memoryRef: unknown
       name: unknown
       description: unknown
       access: unknown
       mountPath: unknown
       memories: Array<{ path: unknown }>
+      status: 'declared'
+    }
+  | {
+      type: 'secret'
+      name: unknown
+      mountPath: unknown
+      files: Array<{ path: unknown }>
       status: 'declared'
     }

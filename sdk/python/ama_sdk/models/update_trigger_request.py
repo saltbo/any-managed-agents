@@ -16,8 +16,8 @@ import datetime
 
 if TYPE_CHECKING:
   from ..models.env_from_entry import EnvFromEntry
-  from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-  from ..models.memory_store_volume import MemoryStoreVolume
+  from ..models.git_repository_volume import GitRepositoryVolume
+  from ..models.memory_volume import MemoryVolume
   from ..models.secret_volume import SecretVolume
   from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
   from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
@@ -45,7 +45,7 @@ class UpdateTriggerRequest:
             env (UpdateTriggerRequestEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             env_from (list[EnvFromEntry] | Unset):  Example: [{'type': 'secret', 'name': 'AK_AGENT_KEY', 'secretRef':
                 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
-            volumes (list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset):
+            volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset):
             volume_mounts (list[VolumeMount] | Unset):
             schedule (None | Unset | UpdateTriggerRequestScheduleType0):
             enabled (bool | Unset):
@@ -62,7 +62,7 @@ class UpdateTriggerRequest:
     prompt_template: str | Unset = UNSET
     env: UpdateTriggerRequestEnv | Unset = UNSET
     env_from: list[EnvFromEntry] | Unset = UNSET
-    volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset = UNSET
+    volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset = UNSET
     volume_mounts: list[VolumeMount] | Unset = UNSET
     schedule: None | Unset | UpdateTriggerRequestScheduleType0 = UNSET
     enabled: bool | Unset = UNSET
@@ -76,8 +76,8 @@ class UpdateTriggerRequest:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.env_from_entry import EnvFromEntry
-        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.git_repository_volume import GitRepositoryVolume
+        from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
         from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
@@ -121,7 +121,7 @@ class UpdateTriggerRequest:
                 volumes_item: dict[str, Any]
                 if isinstance(volumes_item_data, SecretVolume):
                     volumes_item = volumes_item_data.to_dict()
-                elif isinstance(volumes_item_data, GitHubRepositoryVolume):
+                elif isinstance(volumes_item_data, GitRepositoryVolume):
                     volumes_item = volumes_item_data.to_dict()
                 else:
                     volumes_item = volumes_item_data.to_dict()
@@ -202,8 +202,8 @@ class UpdateTriggerRequest:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.env_from_entry import EnvFromEntry
-        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.git_repository_volume import GitRepositoryVolume
+        from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
         from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
@@ -261,11 +261,11 @@ class UpdateTriggerRequest:
 
 
         _volumes = d.pop("volumes", UNSET)
-        volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset = UNSET
+        volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset = UNSET
         if _volumes is not UNSET:
             volumes = []
             for volumes_item_data in _volumes:
-                def _parse_volumes_item(data: object) -> GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume:
+                def _parse_volumes_item(data: object) -> GitRepositoryVolume | MemoryVolume | SecretVolume:
                     try:
                         if not isinstance(data, dict):
                             raise TypeError()
@@ -279,7 +279,7 @@ class UpdateTriggerRequest:
                     try:
                         if not isinstance(data, dict):
                             raise TypeError()
-                        componentsschemas_volume_type_1 = GitHubRepositoryVolume.from_dict(data)
+                        componentsschemas_volume_type_1 = GitRepositoryVolume.from_dict(data)
 
 
 
@@ -288,7 +288,7 @@ class UpdateTriggerRequest:
                         pass
                     if not isinstance(data, dict):
                         raise TypeError()
-                    componentsschemas_volume_type_2 = MemoryStoreVolume.from_dict(data)
+                    componentsschemas_volume_type_2 = MemoryVolume.from_dict(data)
 
 
 

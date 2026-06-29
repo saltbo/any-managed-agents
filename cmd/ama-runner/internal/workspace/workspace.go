@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,12 +22,9 @@ const WorkspaceDirName = "workspace"
 const SessionStateFileName = "state.json"
 
 type PrepareRequest struct {
-	WorkDir         string
-	SessionID       string
-	Volumes         []protocol.Volume
-	VolumeMounts    []protocol.VolumeMount
-	ResolvedVolumes []protocol.ResolvedVolumeMount
-	RuntimeEnv      map[string]string
+	WorkDir   string
+	SessionID string
+	Manifest  protocol.WorkspaceManifest
 }
 
 type Workspace struct {
@@ -43,9 +41,9 @@ type preparedWorktree struct {
 }
 
 type preparedMemoryStore struct {
-	storeID string
-	path    string
-	access  string
+	memoryRef string
+	path      string
+	access    string
 }
 
 var repositoryCacheLocks sync.Map
@@ -60,18 +58,18 @@ func repositoryCacheLock(cacheDir string) *sync.Mutex {
 }
 
 type mountedVolume struct {
-	Type        string                    `json:"type"`
-	Owner       string                    `json:"owner,omitempty"`
-	Repo        string                    `json:"repo,omitempty"`
-	Ref         string                    `json:"ref,omitempty"`
-	StoreID     string                    `json:"storeId,omitempty"`
-	Name        string                    `json:"name,omitempty"`
-	Description *string                   `json:"description,omitempty"`
-	Access      string                    `json:"access,omitempty"`
-	MountPath   string                    `json:"mountPath,omitempty"`
-	LocalPath   string                    `json:"localPath,omitempty"`
-	Memories    []protocol.MemorySnapshot `json:"memories,omitempty"`
-	Status      string                    `json:"status"`
+	Type        string                   `json:"type"`
+	URL         string                   `json:"url,omitempty"`
+	Ref         string                   `json:"ref,omitempty"`
+	MemoryRef   string                   `json:"memoryRef,omitempty"`
+	Name        string                   `json:"name,omitempty"`
+	Description *string                  `json:"description,omitempty"`
+	Access      string                   `json:"access,omitempty"`
+	MountPath   string                   `json:"mountPath,omitempty"`
+	LocalPath   string                   `json:"localPath,omitempty"`
+	Memories    []protocol.WorkspaceFile `json:"memories,omitempty"`
+	Files       []protocol.WorkspaceFile `json:"files,omitempty"`
+	Status      string                   `json:"status"`
 }
 
 func Prepare(ctx context.Context, request PrepareRequest) (*Workspace, error) {
@@ -79,13 +77,30 @@ func Prepare(ctx context.Context, request PrepareRequest) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	githubVolumes := githubRepositoryVolumes(request.Volumes)
-	memoryVolumes := memoryStoreVolumes(request.Volumes)
-	mounted := make([]mountedVolume, 0, len(githubVolumes)+len(memoryVolumes)+len(request.ResolvedVolumes))
-	worktrees := make([]preparedWorktree, 0, len(githubVolumes))
-	memoryStores := make([]preparedMemoryStore, 0, len(memoryVolumes))
-	for _, volume := range githubVolumes {
-		localPath, cacheDir, err := materializeGitHubRepository(ctx, request.WorkDir, workspace.Root, volume, request.VolumeMounts)
+	manifest := request.Manifest
+	if manifest.Root == "" {
+		manifest.Root = "/workspace"
+	}
+	gitVolumes := gitRepositoryMounts(manifest.Mounts)
+	memoryVolumeList := memoryMounts(manifest.Mounts)
+	secretVolumeList := secretMounts(manifest.Mounts)
+	mounted := make([]mountedVolume, 0, len(gitVolumes)+len(memoryVolumeList)+len(secretVolumeList))
+	worktrees := make([]preparedWorktree, 0, len(gitVolumes))
+	memoryStores := make([]preparedMemoryStore, 0, len(memoryVolumeList))
+	credentialLines := gitCredentialLines(gitVolumes)
+	gitCredentialsPath, err := writeGitCredentialStore(workspace.Dir, credentialLines)
+	if err != nil {
+		_ = workspace.Cleanup(context.Background())
+		return nil, err
+	}
+	for _, volume := range gitVolumes {
+		localPath, cacheDir, err := materializeGitRepository(
+			ctx,
+			request.WorkDir,
+			workspace.Root,
+			volume,
+			gitCredentialsPath,
+		)
 		if err != nil {
 			workspace.worktrees = worktrees
 			workspace.memoryStores = memoryStores
@@ -95,39 +110,37 @@ func Prepare(ctx context.Context, request PrepareRequest) (*Workspace, error) {
 		mounted = append(mounted, mountedVolume{
 			Type:      volume.Type,
 			Name:      volume.Name,
-			Owner:     volume.Owner,
-			Repo:      volume.Repo,
+			URL:       volume.URL,
 			Ref:       volume.Ref,
-			MountPath: mountPathForVolume(volume.Name, request.VolumeMounts, defaultGitHubMountPath(volume)),
+			MountPath: volume.MountPath,
 			LocalPath: localPath,
 			Status:    "mounted",
 		})
 		worktrees = append(worktrees, preparedWorktree{cacheDir: cacheDir, path: localPath})
 	}
-	for _, volume := range memoryVolumes {
-		localPath, err := materializeMemoryStore(workspace.Root, volume, request.VolumeMounts)
+	for _, volume := range memoryVolumeList {
+		localPath, err := materializeMemoryStore(workspace.Root, volume)
 		if err != nil {
 			workspace.worktrees = worktrees
 			workspace.memoryStores = memoryStores
 			_ = workspace.Cleanup(context.Background())
 			return nil, err
 		}
-		mountPath := mountPathForVolume(volume.Name, request.VolumeMounts, defaultMemoryStoreMountPath(volume))
 		mounted = append(mounted, mountedVolume{
 			Type:        volume.Type,
-			StoreID:     volume.StoreID,
+			MemoryRef:   volume.MemoryRef,
 			Name:        volume.Name,
 			Description: volume.Description,
 			Access:      volume.Access,
-			MountPath:   mountPath,
+			MountPath:   volume.MountPath,
 			LocalPath:   localPath,
-			Memories:    memoryManifestEntries(volume.Memories),
+			Memories:    fileManifestEntries(volume.Files),
 			Status:      "mounted",
 		})
-		memoryStores = append(memoryStores, preparedMemoryStore{storeID: volume.StoreID, path: localPath, access: volume.Access})
+		memoryStores = append(memoryStores, preparedMemoryStore{memoryRef: volume.MemoryRef, path: localPath, access: volume.Access})
 	}
-	for _, volume := range request.ResolvedVolumes {
-		localPath, err := materializeResolvedVolume(workspace.Root, volume)
+	for _, volume := range secretVolumeList {
+		localPath, err := materializeSecretMount(workspace.Root, volume)
 		if err != nil {
 			workspace.worktrees = worktrees
 			workspace.memoryStores = memoryStores
@@ -139,12 +152,13 @@ func Prepare(ctx context.Context, request PrepareRequest) (*Workspace, error) {
 			Name:      volume.Name,
 			MountPath: volume.MountPath,
 			LocalPath: localPath,
+			Files:     fileManifestEntries(volume.Files),
 			Status:    "mounted",
 		})
 	}
 	workspace.worktrees = worktrees
 	workspace.memoryStores = memoryStores
-	if err := configureWorkspaceGitCredential(ctx, workspace.Dir, worktrees, workspaceGitHubToken(request.RuntimeEnv)); err != nil {
+	if err := configureWorkspaceGitCredentials(ctx, gitCredentialsPath, worktrees); err != nil {
 		_ = workspace.Cleanup(context.Background())
 		return nil, err
 	}
@@ -249,35 +263,59 @@ func (w *Workspace) ReadWritableMemoryStores() ([]MemoryStoreSnapshot, error) {
 		if err != nil {
 			return nil, err
 		}
-		stores = append(stores, MemoryStoreSnapshot{StoreID: store.storeID, Memories: memories})
+		stores = append(stores, MemoryStoreSnapshot{MemoryRef: store.memoryRef, Memories: memories})
 	}
 	return stores, nil
 }
 
-// workspaceGitHubToken mirrors the cloud workspace token resolution:
-// GH_TOKEN wins, GITHUB_TOKEN is the alternate spelling.
-func workspaceGitHubToken(runtimeEnv map[string]string) string {
-	if token := runtimeEnv["GH_TOKEN"]; token != "" {
-		return token
+func gitCredentialLines(volumes []protocol.WorkspaceMount) []string {
+	lines := []string{}
+	for _, volume := range volumes {
+		if volume.Credential == nil {
+			continue
+		}
+		username := strings.TrimSpace(volume.Credential.Username)
+		password := strings.TrimSpace(volume.Credential.Password)
+		if username == "" || password == "" {
+			continue
+		}
+		repositoryURL, err := parseGitRepositoryURL(volume.URL)
+		if err != nil {
+			continue
+		}
+		lines = append(lines, gitCredentialLine(repositoryURL, volume.Credential))
 	}
-	return runtimeEnv["GITHUB_TOKEN"]
+	return lines
 }
 
-// configureWorkspaceGitCredential gives each mounted worktree a repo-local
-// credential helper backed by a session-scoped store file, so a plain
-// `git push` authenticates with the work item's GH_TOKEN instead of host
-// credentials (parity with the cloud prepareCloudWorkspace). The spawned
-// agent already receives GH_TOKEN via runtimeEnv, which covers gh; this
-// covers git itself. Worktree-scoped config keeps the credential out of the
-// shared repository cache and never touches the host's global config.
-func configureWorkspaceGitCredential(ctx context.Context, sessionDir string, worktrees []preparedWorktree, token string) error {
-	if token == "" || len(worktrees) == 0 {
-		return nil
+func gitCredentialLine(repositoryURL *url.URL, credential *protocol.WorkspaceGitCredential) string {
+	credentialURL := &url.URL{
+		Scheme: "https",
+		Host:   repositoryURL.Host,
+		User:   url.UserPassword(credential.Username, credential.Password),
+	}
+	return credentialURL.String() + "\n"
+}
+
+func writeGitCredentialStore(sessionDir string, credentialLines []string) (string, error) {
+	if len(credentialLines) == 0 {
+		return "", nil
 	}
 	credentialsPath := filepath.Join(sessionDir, "git-credentials")
-	credential := "https://x-access-token:" + token + "@github.com\n"
-	if err := os.WriteFile(credentialsPath, []byte(credential), 0o600); err != nil {
-		return err
+	if err := os.WriteFile(credentialsPath, []byte(strings.Join(credentialLines, "")), 0o600); err != nil {
+		return "", err
+	}
+	return credentialsPath, nil
+}
+
+// configureWorkspaceGitCredentials gives each mounted worktree a repo-local
+// credential helper backed by a session-scoped store file, so plain git commands
+// authenticate with the work item's resolved git credentials instead of host
+// credentials. Worktree-scoped config keeps credentials out of the shared
+// repository cache and never touches the host's global config.
+func configureWorkspaceGitCredentials(ctx context.Context, credentialsPath string, worktrees []preparedWorktree) error {
+	if credentialsPath == "" || len(worktrees) == 0 {
+		return nil
 	}
 	for _, worktree := range worktrees {
 		lock := repositoryCacheLock(worktree.cacheDir)
@@ -412,19 +450,20 @@ func addMountedVolumes(workDir string, workspace *Workspace, volumes []mountedVo
 			continue
 		}
 		switch volume.Type {
-		case "github_repository":
-			if !safeGitHubSegment(volume.Owner) || !safeGitHubSegment(volume.Repo) {
+		case "git_repository":
+			repositoryURL, err := parseGitRepositoryURL(volume.URL)
+			if err != nil {
 				continue
 			}
 			workspace.worktrees = append(workspace.worktrees, preparedWorktree{
-				cacheDir: filepath.Join(workDir, "repositories", volume.Owner, volume.Repo),
+				cacheDir: repositoryCacheDir(workDir, repositoryURL),
 				path:     volume.LocalPath,
 			})
-		case "memory_store":
+		case "memory":
 			workspace.memoryStores = append(workspace.memoryStores, preparedMemoryStore{
-				storeID: volume.StoreID,
-				path:    volume.LocalPath,
-				access:  volume.Access,
+				memoryRef: volume.MemoryRef,
+				path:      volume.LocalPath,
+				access:    volume.Access,
 			})
 		}
 	}

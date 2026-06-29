@@ -349,9 +349,9 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         ...buildSession().spec,
         volumes: [
           {
-            type: 'memory_store',
+            type: 'memory',
             name: 'Team memory',
-            storeId: 'memstore_1',
+            memoryRef: 'ama://memories/memstore_1',
             description: 'Shared runbook',
             access: 'read_write',
           },

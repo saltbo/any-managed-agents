@@ -236,6 +236,9 @@ export function hasSecretMaterial(value: unknown): boolean {
 }
 
 function secretKey(key: string) {
+  if (key === 'secretRef' || key === 'credentialRef' || key === 'credentialRefs') {
+    return false
+  }
   return /secret|token|password|api[_-]?key/i.test(key)
 }
 
@@ -320,32 +323,6 @@ function stringRecord(value: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(objectRecord(value)).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   )
-}
-
-// Normalizes a github_repository resource mount path to a clean /workspace
-// relative path, rejecting traversal, control characters, the reserved .ama
-// root, and disallowed segment characters.
-export function normalizeMountPath(resource: { owner: string; repo: string; mountPath?: string }): string {
-  const requested = resource.mountPath?.trim() || `repos/${resource.owner}/${resource.repo}`
-  if (/[\p{C}\\]/u.test(requested)) {
-    throw new Error('Mount path contains invalid characters.')
-  }
-  if (requested.startsWith('/') && !requested.startsWith('/workspace/')) {
-    throw new Error('Mount path must stay under /workspace.')
-  }
-  const relativePath = requested.startsWith('/workspace/') ? requested.slice('/workspace/'.length) : requested
-  const segments = relativePath.split('/')
-  if (
-    segments.length === 0 ||
-    segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..') ||
-    segments[0] === '.ama'
-  ) {
-    throw new Error('Mount path must use clean relative segments outside /workspace/.ama.')
-  }
-  if (!segments.every((segment) => /^[A-Za-z0-9._-]+$/.test(segment))) {
-    throw new Error('Mount path segments may contain only letters, numbers, dots, underscores, and hyphens.')
-  }
-  return `/workspace/${segments.join('/')}`
 }
 
 // Composes the initial prompt with the agent's persisted memory block when

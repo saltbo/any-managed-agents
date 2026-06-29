@@ -133,7 +133,7 @@ const SessionSpecSchema = z
       ],
     }),
     volumes: z.array(VolumeSchema).openapi({
-      example: [{ name: 'source', type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents' }],
+      example: [{ name: 'source', type: 'git_repository', url: 'https://github.com/saltbo/any-managed-agents.git' }],
     }),
     volumeMounts: z.array(VolumeMountSchema).openapi({
       example: [{ name: 'source', mountPath: '/workspace/repos/saltbo/any-managed-agents', readOnly: true }],

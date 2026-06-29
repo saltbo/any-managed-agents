@@ -153,7 +153,7 @@ export const codexProvider: RuntimeProvider = {
       env: sdkEnv(request),
       // Managed sessions must not inherit the host user's personal Codex Apps
       // connectors (e.g. the GitHub connector creates PRs as the host user
-      // instead of with the session's GH_TOKEN credential).
+      // instead of with the session-scoped git credential).
       config: { features: { apps: false }, ...(systemPrompt ? { developer_instructions: systemPrompt } : {}) },
       ...(codexPathOverride ? { codexPathOverride } : {}),
     })

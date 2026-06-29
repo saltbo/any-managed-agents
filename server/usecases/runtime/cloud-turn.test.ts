@@ -92,7 +92,10 @@ const deps: CloudTurnDeps = {
   cloudRuntime: {} as never,
   amaTurnExecutor: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
   cloudTurnQueue: cloudTurnQueue as never,
-  runtimeSecrets: { resolveEnv: async () => ({}), resolveVolumes: async () => [] } as never,
+  runtimeSecrets: {
+    resolveEnv: async () => ({}),
+    resolveWorkspaceManifest: async () => ({ root: '/workspace', mounts: [] }),
+  } as never,
   // runTurn is mocked, so the built callbacks are never exercised; a minimal gate
   // factory keeps buildSessionTurnCallbacks happy.
   createApprovalGate: () =>
@@ -360,7 +363,10 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     } as never,
     amaTurnExecutor: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
     cloudTurnQueue: cloudTurnQueue as never,
-    runtimeSecrets: { resolveEnv: () => resolveRuntimeEnvFromMock(), resolveVolumes: async () => [] } as never,
+    runtimeSecrets: {
+      resolveEnv: () => resolveRuntimeEnvFromMock(),
+      resolveWorkspaceManifest: async () => ({ root: '/workspace', mounts: [] }),
+    } as never,
     createApprovalGate: () =>
       ({
         shouldSuppressEvent: () => false,

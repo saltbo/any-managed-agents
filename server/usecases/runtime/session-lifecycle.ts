@@ -10,11 +10,12 @@
 // through the events usecase. The module is infra-free.
 
 import {
-  isMemoryStoreVolume,
-  type MemoryStoreVolume,
+  isMemoryVolume,
+  type MemoryVolume,
   type Volume,
   type VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
+import { memoryStoreIdFromRef } from '@server/domain/memory-store'
 import { now, RUNTIME_START_TIMEOUT_MS, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
 import type {
@@ -143,7 +144,7 @@ async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, se
   const volumes = JSON.parse(session.volumes) as Volume[]
   const volumeMounts = JSON.parse(session.volumeMounts) as VolumeMount[]
   const writableVolumes = volumes.filter(
-    (volume): volume is MemoryStoreVolume => isMemoryStoreVolume(volume) && volume.access === 'read_write',
+    (volume): volume is MemoryVolume => isMemoryVolume(volume) && volume.access === 'read_write',
   )
   if (writableVolumes.length === 0) {
     return
@@ -156,9 +157,13 @@ async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, se
   })
   const updatedAt = now()
   for (const snapshot of snapshots) {
+    const storeId = memoryStoreIdFromRef(snapshot.memoryRef)
+    if (!storeId) {
+      continue
+    }
     await deps.sessionOrchestration.replaceMemoryStoreMemories(
       auth.project.id,
-      snapshot.storeId,
+      storeId,
       snapshot.memories,
       updatedAt,
     )

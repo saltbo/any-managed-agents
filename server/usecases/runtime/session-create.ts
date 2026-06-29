@@ -1,14 +1,14 @@
 // Create-session orchestration — deps-first.
 //
-// This cluster owns building a new session: secret-material guards, resource /
-// credential / secret-env validation, provider + policy + runtime-catalog
+// This cluster owns building a new session: secret-material guards, envFrom /
+// workspace reference validation, provider + policy + runtime-catalog
 // checks, snapshot serialization, the 38-field session-row build, and the launch
 // path (self-hosted work item, queued cloud turn, or inline cloud startup). It
 // also owns the self-hosted work-item enqueue and resume-token lookup, which the
 // prompt cluster reuses.
 //
 // Deps-first: the orchestration store, audit, policy, cloud-turn queue, and
-// secret-env gateway all arrive as ports on `deps`; provider/runtime resolution
+// runtime input gateway all arrive as ports on `deps`; provider/runtime resolution
 // and the inline cloud launch run through sibling usecases. The module is
 // infra-free — it reaches for ports + domain + shared + runtime leaf shaping +
 // sibling usecases only. Logic is verbatim from the former
@@ -17,17 +17,17 @@
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import type {
   EnvFromEntry,
-  GitHubRepositoryVolume,
-  MemoryStoreVolume,
+  GitRepositoryVolume,
+  MemoryVolume,
   Volume,
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
+import { amaMemoryRef, memoryStoreIdFromRef } from '@server/domain/memory-store'
 import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
 import {
   agentSnapshotWithWorkspaceContext,
   type NormalizedEnvironmentSnapshot,
   normalizeEnvironmentSnapshot,
-  normalizeWorkspaceVolumes,
   parseJson,
   type SerializedAgentVersion,
   serializeAgentVersion,
@@ -37,6 +37,7 @@ import { newId, now, requestIdFrom, stringify } from '@server/domain/runtime/uti
 import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
 import { environmentHostingMode } from '@server/domain/runtime-session'
 import { composeInitialPrompt, hasSecretMaterial, sessionUserMetadata } from '@server/domain/session'
+import { normalizeWorkspaceSpec, workspaceSpec } from '@server/domain/workspace'
 import { safeRuntimeError } from '@server/runtime-error'
 import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import type {
@@ -57,7 +58,7 @@ const VOLUME_NAME_PATTERN = /^[A-Za-z0-9._-]+$/
 
 // The create flow delegates the inline cloud launch to the cloud-turn usecase,
 // so it needs the full CloudTurnDeps. The self-hosted / queued paths use the
-// store, audit, policy, queue, and secret-env ports directly.
+// store, audit, policy, queue, and runtime input ports directly.
 //
 // rereadStartedSession mirrors the legacy AMA_RUNTIME_MODE === 'test' branch: in
 // test mode the inline cloud launch ran synchronously so the row is re-read to
@@ -77,77 +78,43 @@ export type CreateSessionOptions = SessionCreateOptions
 
 export type CreateSessionResult = { ok: true; session: SessionRow } | { ok: false; error: SessionRuntimeError }
 
-async function validateResourceCredentialRefs(
-  store: SessionOrchestrationStore,
-  auth: AuthScope,
-  volumes: Volume[],
-) {
-  const credentialRefs = volumes
-    .filter((volume): volume is GitHubRepositoryVolume => volume.type === 'github_repository')
-    .map((volume) => volume.credentialRef)
-    .filter((credentialRef): credentialRef is { credentialId: string; versionId?: string } => credentialRef != null)
-  const seen = new Set<string>()
-  for (const credentialRef of credentialRefs) {
-    const dedupeKey = `${credentialRef.credentialId}:${credentialRef.versionId ?? ''}`
-    if (seen.has(dedupeKey)) {
-      continue
-    }
-    seen.add(dedupeKey)
-    if (credentialRef.versionId) {
-      const exists = await store.activeCredentialVersionExists(
-        auth.organization.id,
-        auth.project.id,
-        credentialRef.versionId,
-      )
-      if (!exists) {
-        return {
-          credentialRef: 'Credential version must exist, be active, and belong to this project or organization.',
-        }
-      }
-      continue
-    }
-    const exists = await store.activeCredentialExists(auth.organization.id, auth.project.id, credentialRef.credentialId)
-    if (!exists) {
-      return { credentialRef: 'Credential must exist, be active, and belong to this project or organization.' }
-    }
-  }
-  return null
-}
-
-async function resolveMemoryStoreVolumes(
+async function resolveMemoryVolumes(
   store: SessionOrchestrationStore,
   auth: AuthScope,
   volumes: Volume[],
 ): Promise<{ volumes: Volume[] } | { fields: Record<string, string> }> {
   const resolved: Volume[] = []
   for (const [index, volume] of volumes.entries()) {
-    if (volume.type !== 'memory_store') {
+    if (volume.type !== 'memory') {
       resolved.push(volume)
       continue
     }
-    const storeId = typeof volume.storeId === 'string' ? volume.storeId : ''
+    const storeId = typeof volume.memoryRef === 'string' ? memoryStoreIdFromRef(volume.memoryRef) : null
     const access = volume.access
     if (access !== 'read_only' && access !== 'read_write') {
       return { fields: { [`volumes.${index}.access`]: 'Use read_only or read_write.' } }
     }
+    if (!storeId) {
+      return { fields: { [`volumes.${index}.memoryRef`]: 'Memory reference must use ama://memories/{storeId}.' } }
+    }
     const memoryStore = await store.findActiveMemoryStoreResource(auth.project.id, storeId, access)
     if (!memoryStore) {
-      return { fields: { [`volumes.${index}.storeId`]: 'Memory store must exist and be active.' } }
+      return { fields: { [`volumes.${index}.memoryRef`]: 'Memory store must exist and be active.' } }
     }
     resolved.push({
       name: volume.name,
-      type: 'memory_store',
-      storeId,
+      type: 'memory',
+      memoryRef: amaMemoryRef(storeId),
       access,
       storeName: memoryStore.name,
       ...(memoryStore.description ? { description: memoryStore.description } : {}),
       memories: memoryStore.memories,
-    } satisfies MemoryStoreVolume)
+    } satisfies MemoryVolume)
   }
   return { volumes: resolved }
 }
 
-async function resolveSecretEnvEntries(
+async function resolveEnvFromEntries(
   store: SessionOrchestrationStore,
   auth: AuthScope,
   envFrom: EnvFromEntry[],
@@ -198,6 +165,18 @@ async function validateDeclaredVolumes(
     }
     volumeNames.add(volume.name)
     if (volume.type !== 'secret') {
+      if (volume.type === 'git_repository' && volume.secretRef) {
+        const version = await store.secretVersionForResolution(auth.organization.id, auth.project.id, volume.secretRef)
+        if (!version || version.state !== 'active') {
+          return {
+            fields: {
+              [`${field}.secretRef`]: 'Git repository secret reference must point to an active credential version.',
+            },
+          }
+        }
+        normalizedVolumes.push({ ...volume, secretRef: version.secretRef } satisfies GitRepositoryVolume)
+        continue
+      }
       normalizedVolumes.push(volume)
       continue
     }
@@ -209,7 +188,11 @@ async function validateDeclaredVolumes(
       normalizedVolumes.push({ ...volume, secretRef: version.secretRef })
       continue
     }
-    const vaultVersions = await store.vaultVersionsForResolution(auth.organization.id, auth.project.id, volume.secretRef)
+    const vaultVersions = await store.vaultVersionsForResolution(
+      auth.organization.id,
+      auth.project.id,
+      volume.secretRef,
+    )
     if (!vaultVersions) {
       return {
         fields: { [`${field}.secretRef`]: 'Secret reference must point to an active credential version or vault.' },
@@ -414,7 +397,9 @@ export async function createSessionForAgent(
       },
     }
   }
-  const normalizedWorkspaceVolumes = normalizeWorkspaceVolumes(options.volumes ?? [], options.volumeMounts ?? [])
+  const normalizedWorkspaceVolumes = normalizeWorkspaceSpec(
+    workspaceSpec(options.volumes ?? [], options.volumeMounts ?? []),
+  )
   if ('fields' in normalizedWorkspaceVolumes) {
     return {
       ok: false,
@@ -538,19 +523,7 @@ export async function createSessionForAgent(
       error: { status: 409, code: 'conflict', message: 'Selected environment is archived or unavailable' },
     }
   }
-  const credentialError = await validateResourceCredentialRefs(store, auth, normalizedWorkspaceVolumes.volumes)
-  if (credentialError) {
-    return {
-      ok: false,
-      error: {
-        status: 400,
-        code: 'validation_error',
-        message: 'Invalid session volume credential reference',
-        fields: credentialError,
-      },
-    }
-  }
-  const resolvedWorkspaceVolumes = await resolveMemoryStoreVolumes(store, auth, normalizedWorkspaceVolumes.volumes)
+  const resolvedWorkspaceVolumes = await resolveMemoryVolumes(store, auth, normalizedWorkspaceVolumes.volumes)
   if ('fields' in resolvedWorkspaceVolumes) {
     return {
       ok: false,
@@ -562,14 +535,14 @@ export async function createSessionForAgent(
       },
     }
   }
-  const validatedEnvFrom = await resolveSecretEnvEntries(store, auth, options.envFrom ?? [])
+  const validatedEnvFrom = await resolveEnvFromEntries(store, auth, options.envFrom ?? [])
   if ('fields' in validatedEnvFrom) {
     return {
       ok: false,
       error: {
         status: 400,
         code: 'validation_error',
-        message: 'Invalid session secret environment references',
+        message: 'Invalid session envFrom references',
         fields: validatedEnvFrom.fields,
       },
     }

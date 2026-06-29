@@ -1,23 +1,17 @@
 import { z } from '@hono/zod-openapi'
+import { normalizeGitRepositoryUrl } from '../domain/git-repository'
 import { MEMORY_STORE_ACCESS } from '../domain/memory-store'
-import { CredentialRefSchema } from '../openapi'
 
 // Shared execution-spec building blocks that Session and Trigger both use
 // (docs/api-v1-design.md §1.7). Volumes are the single mountable resource model:
-// repository, memory-store, and secret inputs all declare a volume and are
+// repository, memory, and secret inputs all declare a volume and are
 // attached with volumeMounts.
 
-const GitHubOwnerSchema = z
+const GitRepositoryUrlSchema = z
   .string()
   .min(1)
-  .max(39)
-  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/, 'Use a GitHub owner slug.')
-const GitHubRepoSchema = z
-  .string()
-  .min(1)
-  .max(100)
-  .regex(/^[A-Za-z0-9._-]+$/, 'Use a GitHub repository name.')
-  .refine((value) => value !== '.' && value !== '..', 'Use a GitHub repository name.')
+  .max(500)
+  .refine((value) => normalizeGitRepositoryUrl(value) !== null, 'Use a safe HTTPS Git repository URL.')
 const GitRefSchema = z
   .string()
   .min(1)
@@ -35,35 +29,35 @@ const GitRefSchema = z
   )
 const MountPathSchema = z.string().min(1).max(200)
 const SecretRefSchema = z.string().min(1).openapi({ example: 'ama://vaults/vault_abc123' })
+const MemoryRefSchema = z.string().min(1).openapi({ example: 'ama://memories/memstore_abc123' })
 const VolumeNameSchema = z
   .string()
   .min(1)
   .max(80)
   .regex(/^[A-Za-z0-9._-]+$/, 'Use a safe volume name.')
 
-export const GitHubRepositoryVolumeSchema = z
+export const GitRepositoryVolumeSchema = z
   .object({
     name: VolumeNameSchema.openapi({ example: 'source' }),
-    type: z.literal('github_repository'),
-    owner: GitHubOwnerSchema,
-    repo: GitHubRepoSchema,
+    type: z.literal('git_repository'),
+    url: GitRepositoryUrlSchema.openapi({ example: 'https://github.com/saltbo/any-managed-agents.git' }),
     ref: GitRefSchema.optional(),
-    credentialRef: CredentialRefSchema.optional(),
+    secretRef: SecretRefSchema.optional(),
   })
   .strict()
-  .openapi('GitHubRepositoryVolume')
+  .openapi('GitRepositoryVolume')
 
-export const MemoryStoreVolumeSchema = z
+export const MemoryVolumeSchema = z
   .object({
     name: VolumeNameSchema.openapi({ example: 'team-memory' }),
-    type: z.literal('memory_store'),
-    storeId: z.string().min(1).openapi({ example: 'memstore_abc123' }),
+    type: z.literal('memory'),
+    memoryRef: MemoryRefSchema,
     access: z.enum(MEMORY_STORE_ACCESS).openapi({ example: 'read_only' }),
     storeName: z.string().optional(),
     description: z.string().optional(),
   })
   .strict()
-  .openapi('MemoryStoreVolume')
+  .openapi('MemoryVolume')
 
 export const SecretVolumeSchema = z
   .object({
@@ -77,7 +71,7 @@ export const SecretVolumeSchema = z
   .openapi('SecretVolume')
 
 export const VolumeSchema = z
-  .discriminatedUnion('type', [SecretVolumeSchema, GitHubRepositoryVolumeSchema, MemoryStoreVolumeSchema])
+  .discriminatedUnion('type', [SecretVolumeSchema, GitRepositoryVolumeSchema, MemoryVolumeSchema])
   .openapi('Volume')
 
 export const VolumeMountSchema = z

@@ -3,6 +3,28 @@ export type MemoryStoreAccess = (typeof MEMORY_STORE_ACCESS)[number]
 
 export const MEMORY_STORE_MOUNT_ROOT = '/workspace/.ama/memory-stores'
 
+function uriPathSegment(value: string) {
+  return encodeURIComponent(value)
+}
+
+export function amaMemoryRef(storeId: string) {
+  return `ama://memories/${uriPathSegment(storeId)}`
+}
+
+export function memoryStoreIdFromRef(memoryRef: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(memoryRef)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'ama:' || parsed.hostname !== 'memories') {
+    return null
+  }
+  const [storeId, ...rest] = parsed.pathname.split('/').filter(Boolean)
+  return storeId && rest.length === 0 ? decodeURIComponent(storeId) : null
+}
+
 export function memoryStoreMountPath(storeId: string): string {
   return `${MEMORY_STORE_MOUNT_ROOT}/${storeId}`
 }

@@ -131,7 +131,7 @@ describe('[spec: triggers/create] createTrigger', () => {
     ).rejects.toBeInstanceOf(TriggerValidationError)
   })
 
-  it('rejects secret env', async () => {
+  it('rejects envFrom', async () => {
     await expect(
       createTrigger(fakeDeps(), auth, {
         agentId: 'agent_1',

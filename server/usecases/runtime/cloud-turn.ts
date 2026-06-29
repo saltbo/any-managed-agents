@@ -11,18 +11,13 @@
 // pause, and the message-dispatch control flow are byte-for-byte the same as the
 // former server/runtime/cloud-turn module. Only dependency ACQUISITION changed —
 // the orchestration store, runtime lifecycle/turn executor, queue, audit,
-// secret-env, and the event/turn-callbacks/provisioning helpers arrive as ports/usecases on
+// runtime input, and the event/turn-callbacks/provisioning helpers arrive as ports/usecases on
 // `deps` instead of being built from env/db. The module is infra-free: it
 // reaches for ports + domain + shared contracts + the AMA turn engine + sibling
 // usecases only.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
-import {
-  materializedRuntimeInputs,
-  type EnvFromEntry,
-  type Volume,
-  type VolumeMount,
-} from '@server/domain/runtime/execution-inputs'
+import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import { isRuntimeName, runtimeDriver, runtimeDriverName } from '@server/domain/runtime/driver'
 import { resolveSessionProviderModel } from '@server/domain/runtime/provider'
 import {
@@ -106,7 +101,7 @@ export async function startSessionRuntimeForRow(
   const store = deps.sessionOrchestration
   const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, initialPrompt } = input
   const sessionEnv = input.env
-  const sessionSecretEnv = input.envFrom ?? []
+  const sessionEnvFrom = input.envFrom ?? []
   const sessionVolumes = input.volumes ?? []
   const sessionVolumeMounts = input.volumeMounts ?? []
   const runtimeAgentSnapshot = agentSnapshotWithWorkspaceContext(agentSnapshot, sessionVolumes, sessionVolumeMounts)
@@ -122,14 +117,14 @@ export async function startSessionRuntimeForRow(
     const runtimeEnvironmentSnapshot = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
     const resolvedEnv = await deps.runtimeSecrets.resolveEnv(
       { organizationId: auth.organization.id, projectId: auth.project.id },
-      sessionSecretEnv,
+      sessionEnvFrom,
     )
-    const resolvedVolumes = await deps.runtimeSecrets.resolveVolumes(
+    const workspaceManifest = await deps.runtimeSecrets.resolveWorkspaceManifest(
       { organizationId: auth.organization.id, projectId: auth.project.id },
       sessionVolumes,
       sessionVolumeMounts,
     )
-    const runtimeInputs = materializedRuntimeInputs(sessionEnv ?? {}, resolvedEnv, resolvedVolumes)
+    const runtimeEnv = { ...(sessionEnv ?? {}), ...resolvedEnv }
     const startedRuntime = await withTimeout(
       deps.cloudRuntime.startCloudSession({
         sessionId,
@@ -142,8 +137,8 @@ export async function startSessionRuntimeForRow(
         mcpSnapshot,
         volumes: sessionVolumes,
         volumeMounts: sessionVolumeMounts,
-        runtimeEnv: runtimeInputs.env,
-        resolvedVolumes: runtimeInputs.volumes,
+        workspaceManifest,
+        runtimeEnv,
       }),
       RUNTIME_START_TIMEOUT_MS,
       'Session runtime startup timed out',

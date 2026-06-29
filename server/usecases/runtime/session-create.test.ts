@@ -128,7 +128,10 @@ const deps: CreateSessionDeps = {
     enqueue: (message: unknown) => enqueueCloudTurnMock(message),
     runsInline: () => cloudTurnsRunInlineMock(),
   } as never,
-  runtimeSecrets: { resolveEnv: async () => ({}), resolveVolumes: async () => [] } as never,
+  runtimeSecrets: {
+    resolveEnv: async () => ({}),
+    resolveWorkspaceManifest: async () => ({ root: '/workspace', mounts: [] }),
+  } as never,
   createApprovalGate: () => ({}) as never,
   rereadStartedSession: false,
 }

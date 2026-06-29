@@ -339,16 +339,16 @@
         ],
         "additionalProperties": false
       },
-      "RunnerResolvedVolumeFile": {
+      "RunnerWorkspaceFile": {
         "type": "object",
         "properties": {
           "path": {
             "type": "string",
-            "example": "GITHUB_TOKEN"
+            "example": "notes/plan.md"
           },
           "content": {
             "type": "string",
-            "example": "secret-value"
+            "example": "Project notes"
           }
         },
         "required": [
@@ -357,33 +357,104 @@
         ],
         "additionalProperties": false
       },
-      "RunnerResolvedVolumeMount": {
+      "RunnerGitCredential": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "example": "x-access-token"
+          },
+          "password": {
+            "type": "string",
+            "example": "secret-value"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerWorkspaceMount": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "example": "github-token"
+            "example": "source"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "git_repository",
+              "memory",
+              "secret"
+            ],
+            "example": "git_repository"
           },
           "mountPath": {
             "type": "string",
-            "example": "/workspace/.ama/secrets/github-token"
+            "example": "/workspace/repos/saltbo/any-managed-agents"
+          },
+          "url": {
+            "type": "string",
+            "example": "https://github.com/saltbo/any-managed-agents.git"
+          },
+          "ref": {
+            "type": "string",
+            "example": "main"
+          },
+          "credential": {
+            "$ref": "#/components/schemas/RunnerGitCredential"
+          },
+          "memoryRef": {
+            "type": "string",
+            "example": "ama://memories/memstore_abc123"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "access": {
+            "type": "string",
+            "example": "read_write"
           },
           "readOnly": {
-            "type": "boolean",
-            "example": true
+            "type": "boolean"
           },
           "files": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RunnerResolvedVolumeFile"
+              "$ref": "#/components/schemas/RunnerWorkspaceFile"
             }
           }
         },
         "required": [
           "name",
-          "mountPath",
-          "readOnly",
-          "files"
+          "type",
+          "mountPath"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerWorkspaceManifest": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string",
+            "enum": [
+              "/workspace"
+            ],
+            "example": "/workspace"
+          },
+          "mounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerWorkspaceMount"
+            }
+          }
+        },
+        "required": [
+          "root",
+          "mounts"
         ],
         "additionalProperties": false
       },
@@ -398,29 +469,25 @@
             "type": "string",
             "enum": [
               "secret",
-              "github_repository",
-              "memory_store"
+              "git_repository",
+              "memory"
             ],
-            "example": "github_repository"
+            "example": "git_repository"
           },
           "secretRef": {
             "type": "string"
           },
-          "owner": {
+          "url": {
             "type": "string",
-            "example": "saltbo"
-          },
-          "repo": {
-            "type": "string",
-            "example": "any-managed-agents"
+            "example": "https://github.com/saltbo/any-managed-agents.git"
           },
           "ref": {
             "type": "string",
             "example": "main"
           },
-          "storeId": {
+          "memoryRef": {
             "type": "string",
-            "example": "memstore_abc123"
+            "example": "ama://memories/memstore_abc123"
           },
           "description": {
             "type": "string",
@@ -559,23 +626,8 @@
               "type": "string"
             }
           },
-          "volumes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RunnerVolume"
-            }
-          },
-          "volumeMounts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RunnerVolumeMount"
-            }
-          },
-          "resolvedVolumes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RunnerResolvedVolumeMount"
-            }
+          "workspaceManifest": {
+            "$ref": "#/components/schemas/RunnerWorkspaceManifest"
           },
           "initialPrompt": {
             "type": "string",
@@ -5062,7 +5114,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120,
-            "example": "GITHUB_TOKEN"
+            "example": "API_TOKEN"
           },
           "secretRef": {
             "type": "string",
@@ -5083,18 +5135,18 @@
             "$ref": "#/components/schemas/SecretVolume"
           },
           {
-            "$ref": "#/components/schemas/GitHubRepositoryVolume"
+            "$ref": "#/components/schemas/GitRepositoryVolume"
           },
           {
-            "$ref": "#/components/schemas/MemoryStoreVolume"
+            "$ref": "#/components/schemas/MemoryVolume"
           }
         ],
         "discriminator": {
           "propertyName": "type",
           "mapping": {
             "secret": "#/components/schemas/SecretVolume",
-            "github_repository": "#/components/schemas/GitHubRepositoryVolume",
-            "memory_store": "#/components/schemas/MemoryStoreVolume"
+            "git_repository": "#/components/schemas/GitRepositoryVolume",
+            "memory": "#/components/schemas/MemoryVolume"
           }
         }
       },
@@ -5127,7 +5179,7 @@
         ],
         "additionalProperties": false
       },
-      "GitHubRepositoryVolume": {
+      "GitRepositoryVolume": {
         "type": "object",
         "properties": {
           "name": {
@@ -5140,39 +5192,34 @@
           "type": {
             "type": "string",
             "enum": [
-              "github_repository"
+              "git_repository"
             ]
           },
-          "owner": {
+          "url": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 39,
-            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"
-          },
-          "repo": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100,
-            "pattern": "^[A-Za-z0-9._-]+$"
+            "maxLength": 500,
+            "example": "https://github.com/saltbo/any-managed-agents.git"
           },
           "ref": {
             "type": "string",
             "minLength": 1,
             "maxLength": 255
           },
-          "credentialRef": {
-            "$ref": "#/components/schemas/CredentialRef"
+          "secretRef": {
+            "type": "string",
+            "minLength": 1,
+            "example": "ama://vaults/vault_abc123"
           }
         },
         "required": [
           "name",
           "type",
-          "owner",
-          "repo"
+          "url"
         ],
         "additionalProperties": false
       },
-      "MemoryStoreVolume": {
+      "MemoryVolume": {
         "type": "object",
         "properties": {
           "name": {
@@ -5185,13 +5232,13 @@
           "type": {
             "type": "string",
             "enum": [
-              "memory_store"
+              "memory"
             ]
           },
-          "storeId": {
+          "memoryRef": {
             "type": "string",
             "minLength": 1,
-            "example": "memstore_abc123"
+            "example": "ama://memories/memstore_abc123"
           },
           "access": {
             "type": "string",
@@ -5211,7 +5258,7 @@
         "required": [
           "name",
           "type",
-          "storeId",
+          "memoryRef",
           "access"
         ],
         "additionalProperties": false
@@ -5761,9 +5808,8 @@
             "example": [
               {
                 "name": "source",
-                "type": "github_repository",
-                "owner": "saltbo",
-                "repo": "any-managed-agents"
+                "type": "git_repository",
+                "url": "https://github.com/saltbo/any-managed-agents.git"
               }
             ]
           },

@@ -60,7 +60,7 @@ export const CredentialRefSchema = z
 export const EnvFromEntrySchema = z
   .object({
     type: z.literal('secret').openapi({ example: 'secret' }),
-    name: z.string().min(1).max(120).openapi({ example: 'GITHUB_TOKEN' }),
+    name: z.string().min(1).max(120).openapi({ example: 'API_TOKEN' }),
     secretRef: z
       .string()
       .min(1)

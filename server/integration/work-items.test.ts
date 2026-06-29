@@ -46,7 +46,7 @@ async function createAgent(authorization: string) {
   return (await res.json()) as { id: string }
 }
 
-async function createSessionSecretEnv(authorization: string) {
+async function createSessionEnvFrom(authorization: string) {
   const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: `Runner runtime secrets ${crypto.randomUUID()}` }),
@@ -102,7 +102,7 @@ describe('[CF] /api/v1/work-items', () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
-    const envFrom = await createSessionSecretEnv(authorization)
+    const envFrom = await createSessionEnvFrom(authorization)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
       env: { AK_API_URL: 'https://ak.example.test' },
       envFrom,

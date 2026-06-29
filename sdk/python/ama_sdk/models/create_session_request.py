@@ -17,8 +17,8 @@ if TYPE_CHECKING:
   from ..models.create_session_request_metadata import CreateSessionRequestMetadata
   from ..models.create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
   from ..models.env_from_entry import EnvFromEntry
-  from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-  from ..models.memory_store_volume import MemoryStoreVolume
+  from ..models.git_repository_volume import GitRepositoryVolume
+  from ..models.memory_volume import MemoryVolume
   from ..models.secret_volume import SecretVolume
   from ..models.volume_mount import VolumeMount
 
@@ -44,7 +44,7 @@ class CreateSessionRequest:
                 'agent_abc123'}.
             env_from (list[EnvFromEntry] | Unset):  Example: [{'type': 'secret', 'name': 'AK_AGENT_KEY', 'secretRef':
                 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
-            volumes (list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset):
+            volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset):
             volume_mounts (list[VolumeMount] | Unset):
             initial_prompt (str | Unset):  Example: Research Canadian banking bonus offers and summarize current
                 opportunities..
@@ -58,7 +58,7 @@ class CreateSessionRequest:
     metadata: CreateSessionRequestMetadata | Unset = UNSET
     env: CreateSessionRequestEnv | Unset = UNSET
     env_from: list[EnvFromEntry] | Unset = UNSET
-    volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset = UNSET
+    volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset = UNSET
     volume_mounts: list[VolumeMount] | Unset = UNSET
     initial_prompt: str | Unset = UNSET
 
@@ -71,8 +71,8 @@ class CreateSessionRequest:
         from ..models.create_session_request_metadata import CreateSessionRequestMetadata
         from ..models.create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
         from ..models.env_from_entry import EnvFromEntry
-        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.git_repository_volume import GitRepositoryVolume
+        from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
         from ..models.volume_mount import VolumeMount
         agent_id = self.agent_id
@@ -111,7 +111,7 @@ class CreateSessionRequest:
                 volumes_item: dict[str, Any]
                 if isinstance(volumes_item_data, SecretVolume):
                     volumes_item = volumes_item_data.to_dict()
-                elif isinstance(volumes_item_data, GitHubRepositoryVolume):
+                elif isinstance(volumes_item_data, GitRepositoryVolume):
                     volumes_item = volumes_item_data.to_dict()
                 else:
                     volumes_item = volumes_item_data.to_dict()
@@ -167,8 +167,8 @@ class CreateSessionRequest:
         from ..models.create_session_request_metadata import CreateSessionRequestMetadata
         from ..models.create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
         from ..models.env_from_entry import EnvFromEntry
-        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.git_repository_volume import GitRepositoryVolume
+        from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
         from ..models.volume_mount import VolumeMount
         d = dict(src_dict)
@@ -226,11 +226,11 @@ class CreateSessionRequest:
 
 
         _volumes = d.pop("volumes", UNSET)
-        volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset = UNSET
+        volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset = UNSET
         if _volumes is not UNSET:
             volumes = []
             for volumes_item_data in _volumes:
-                def _parse_volumes_item(data: object) -> GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume:
+                def _parse_volumes_item(data: object) -> GitRepositoryVolume | MemoryVolume | SecretVolume:
                     try:
                         if not isinstance(data, dict):
                             raise TypeError()
@@ -244,7 +244,7 @@ class CreateSessionRequest:
                     try:
                         if not isinstance(data, dict):
                             raise TypeError()
-                        componentsschemas_volume_type_1 = GitHubRepositoryVolume.from_dict(data)
+                        componentsschemas_volume_type_1 = GitRepositoryVolume.from_dict(data)
 
 
 
@@ -253,7 +253,7 @@ class CreateSessionRequest:
                         pass
                     if not isinstance(data, dict):
                         raise TypeError()
-                    componentsschemas_volume_type_2 = MemoryStoreVolume.from_dict(data)
+                    componentsschemas_volume_type_2 = MemoryVolume.from_dict(data)
 
 
 

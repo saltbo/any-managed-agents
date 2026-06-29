@@ -74,24 +74,38 @@ export type RunnerMemorySnapshot = {
     path: string;
     content: string;
 };
-export type RunnerResolvedVolumeFile = {
+export type RunnerWorkspaceFile = {
     path: string;
     content: string;
 };
-export type RunnerResolvedVolumeMount = {
+export type RunnerGitCredential = {
+    username: string;
+    password: string;
+};
+export type RunnerWorkspaceMount = {
     name: string;
+    type: 'git_repository' | 'memory' | 'secret';
     mountPath: string;
-    readOnly: boolean;
-    files: Array<RunnerResolvedVolumeFile>;
+    url?: string;
+    ref?: string;
+    credential?: RunnerGitCredential;
+    memoryRef?: string;
+    description?: string | null;
+    access?: string;
+    readOnly?: boolean;
+    files?: Array<RunnerWorkspaceFile>;
+};
+export type RunnerWorkspaceManifest = {
+    root: '/workspace';
+    mounts: Array<RunnerWorkspaceMount>;
 };
 export type RunnerVolume = {
     name: string;
-    type: 'secret' | 'github_repository' | 'memory_store';
+    type: 'secret' | 'git_repository' | 'memory';
     secretRef?: string;
-    owner?: string;
-    repo?: string;
+    url?: string;
     ref?: string;
-    storeId?: string;
+    memoryRef?: string;
     description?: string | null;
     access?: string;
     memories?: Array<RunnerMemorySnapshot>;
@@ -134,9 +148,7 @@ export type RunnerWorkPayload = {
     runtimeEnv?: {
         [key: string]: string;
     };
-    volumes?: Array<RunnerVolume>;
-    volumeMounts?: Array<RunnerVolumeMount>;
-    resolvedVolumes?: Array<RunnerResolvedVolumeMount>;
+    workspaceManifest?: RunnerWorkspaceManifest;
     initialPrompt?: string | null;
     resume?: boolean;
     resumeToken?: string | null;
@@ -1091,27 +1103,26 @@ export type EnvFromEntry = {
 export type Volume = ({
     type: 'secret';
 } & SecretVolume) | ({
-    type: 'github_repository';
-} & GitHubRepositoryVolume) | ({
-    type: 'memory_store';
-} & MemoryStoreVolume);
+    type: 'git_repository';
+} & GitRepositoryVolume) | ({
+    type: 'memory';
+} & MemoryVolume);
 export type SecretVolume = {
     name: string;
     type: 'secret';
     secretRef: string;
 };
-export type GitHubRepositoryVolume = {
+export type GitRepositoryVolume = {
     name: string;
-    type: 'github_repository';
-    owner: string;
-    repo: string;
+    type: 'git_repository';
+    url: string;
     ref?: string;
-    credentialRef?: CredentialRef;
+    secretRef?: string;
 };
-export type MemoryStoreVolume = {
+export type MemoryVolume = {
     name: string;
-    type: 'memory_store';
-    storeId: string;
+    type: 'memory';
+    memoryRef: string;
     access: 'read_only' | 'read_write';
     storeName?: string;
     description?: string;

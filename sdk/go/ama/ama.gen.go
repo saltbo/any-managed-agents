@@ -682,15 +682,15 @@ func (e EnvironmentNetworkPolicyMode) Valid() bool {
 	}
 }
 
-// Defines values for GitHubRepositoryVolumeType.
+// Defines values for GitRepositoryVolumeType.
 const (
-	GithubRepository GitHubRepositoryVolumeType = "github_repository"
+	GitRepositoryVolumeTypeGitRepository GitRepositoryVolumeType = "git_repository"
 )
 
-// Valid indicates whether the value is a known member of the GitHubRepositoryVolumeType enum.
-func (e GitHubRepositoryVolumeType) Valid() bool {
+// Valid indicates whether the value is a known member of the GitRepositoryVolumeType enum.
+func (e GitRepositoryVolumeType) Valid() bool {
 	switch e {
-	case GithubRepository:
+	case GitRepositoryVolumeTypeGitRepository:
 		return true
 	default:
 		return false
@@ -754,14 +754,14 @@ func (e LeaseState) Valid() bool {
 	}
 }
 
-// Defines values for MemoryStoreVolumeAccess.
+// Defines values for MemoryVolumeAccess.
 const (
-	ReadOnly  MemoryStoreVolumeAccess = "read_only"
-	ReadWrite MemoryStoreVolumeAccess = "read_write"
+	ReadOnly  MemoryVolumeAccess = "read_only"
+	ReadWrite MemoryVolumeAccess = "read_write"
 )
 
-// Valid indicates whether the value is a known member of the MemoryStoreVolumeAccess enum.
-func (e MemoryStoreVolumeAccess) Valid() bool {
+// Valid indicates whether the value is a known member of the MemoryVolumeAccess enum.
+func (e MemoryVolumeAccess) Valid() bool {
 	switch e {
 	case ReadOnly:
 		return true
@@ -772,15 +772,15 @@ func (e MemoryStoreVolumeAccess) Valid() bool {
 	}
 }
 
-// Defines values for MemoryStoreVolumeType.
+// Defines values for MemoryVolumeType.
 const (
-	MemoryStoreVolumeTypeMemoryStore MemoryStoreVolumeType = "memory_store"
+	Memory MemoryVolumeType = "memory"
 )
 
-// Valid indicates whether the value is a known member of the MemoryStoreVolumeType enum.
-func (e MemoryStoreVolumeType) Valid() bool {
+// Valid indicates whether the value is a known member of the MemoryVolumeType enum.
+func (e MemoryVolumeType) Valid() bool {
 	switch e {
-	case MemoryStoreVolumeTypeMemoryStore:
+	case Memory:
 		return true
 	default:
 		return false
@@ -999,17 +999,17 @@ func (e RunnerRuntimeInventoryState) Valid() bool {
 
 // Defines values for RunnerVolumeType.
 const (
-	RunnerVolumeTypeGithubRepository RunnerVolumeType = "github_repository"
-	RunnerVolumeTypeMemoryStore      RunnerVolumeType = "memory_store"
-	RunnerVolumeTypeSecret           RunnerVolumeType = "secret"
+	RunnerVolumeTypeGitRepository RunnerVolumeType = "git_repository"
+	RunnerVolumeTypeMemory        RunnerVolumeType = "memory"
+	RunnerVolumeTypeSecret        RunnerVolumeType = "secret"
 )
 
 // Valid indicates whether the value is a known member of the RunnerVolumeType enum.
 func (e RunnerVolumeType) Valid() bool {
 	switch e {
-	case RunnerVolumeTypeGithubRepository:
+	case RunnerVolumeTypeGitRepository:
 		return true
-	case RunnerVolumeTypeMemoryStore:
+	case RunnerVolumeTypeMemory:
 		return true
 	case RunnerVolumeTypeSecret:
 		return true
@@ -1027,6 +1027,42 @@ const (
 func (e RunnerWorkPayloadProtocol) Valid() bool {
 	switch e {
 	case AmaRunnerWork:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerWorkspaceManifestRoot.
+const (
+	Workspace RunnerWorkspaceManifestRoot = "/workspace"
+)
+
+// Valid indicates whether the value is a known member of the RunnerWorkspaceManifestRoot enum.
+func (e RunnerWorkspaceManifestRoot) Valid() bool {
+	switch e {
+	case Workspace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerWorkspaceMountType.
+const (
+	RunnerWorkspaceMountTypeGitRepository RunnerWorkspaceMountType = "git_repository"
+	RunnerWorkspaceMountTypeMemory        RunnerWorkspaceMountType = "memory"
+	RunnerWorkspaceMountTypeSecret        RunnerWorkspaceMountType = "secret"
+)
+
+// Valid indicates whether the value is a known member of the RunnerWorkspaceMountType enum.
+func (e RunnerWorkspaceMountType) Valid() bool {
+	switch e {
+	case RunnerWorkspaceMountTypeGitRepository:
+		return true
+	case RunnerWorkspaceMountTypeMemory:
+		return true
+	case RunnerWorkspaceMountTypeSecret:
 		return true
 	default:
 		return false
@@ -3143,18 +3179,17 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
-// GitHubRepositoryVolume defines model for GitHubRepositoryVolume.
-type GitHubRepositoryVolume struct {
-	CredentialRef *CredentialRef             `json:"credentialRef,omitempty"`
-	Name          string                     `json:"name"`
-	Owner         string                     `json:"owner"`
-	Ref           *string                    `json:"ref,omitempty"`
-	Repo          string                     `json:"repo"`
-	Type          GitHubRepositoryVolumeType `json:"type"`
+// GitRepositoryVolume defines model for GitRepositoryVolume.
+type GitRepositoryVolume struct {
+	Name      string                  `json:"name"`
+	Ref       *string                 `json:"ref,omitempty"`
+	SecretRef *string                 `json:"secretRef,omitempty"`
+	Type      GitRepositoryVolumeType `json:"type"`
+	Url       string                  `json:"url"`
 }
 
-// GitHubRepositoryVolumeType defines model for GitHubRepositoryVolume.Type.
-type GitHubRepositoryVolumeType string
+// GitRepositoryVolumeType defines model for GitRepositoryVolume.Type.
+type GitRepositoryVolumeType string
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
@@ -3238,21 +3273,21 @@ type MemoryStoreMemoryListResponse struct {
 	Pagination ListPagination      `json:"pagination"`
 }
 
-// MemoryStoreVolume defines model for MemoryStoreVolume.
-type MemoryStoreVolume struct {
-	Access      MemoryStoreVolumeAccess `json:"access"`
-	Description *string                 `json:"description,omitempty"`
-	Name        string                  `json:"name"`
-	StoreId     string                  `json:"storeId"`
-	StoreName   *string                 `json:"storeName,omitempty"`
-	Type        MemoryStoreVolumeType   `json:"type"`
+// MemoryVolume defines model for MemoryVolume.
+type MemoryVolume struct {
+	Access      MemoryVolumeAccess `json:"access"`
+	Description *string            `json:"description,omitempty"`
+	MemoryRef   string             `json:"memoryRef"`
+	Name        string             `json:"name"`
+	StoreName   *string            `json:"storeName,omitempty"`
+	Type        MemoryVolumeType   `json:"type"`
 }
 
-// MemoryStoreVolumeAccess defines model for MemoryStoreVolume.Access.
-type MemoryStoreVolumeAccess string
+// MemoryVolumeAccess defines model for MemoryVolume.Access.
+type MemoryVolumeAccess string
 
-// MemoryStoreVolumeType defines model for MemoryStoreVolume.Type.
-type MemoryStoreVolumeType string
+// MemoryVolumeType defines model for MemoryVolume.Type.
+type MemoryVolumeType string
 
 // Project defines model for Project.
 type Project struct {
@@ -3431,6 +3466,12 @@ type RunnerChannelMetadata struct {
 // RunnerChannelMetadataUpgrade defines model for RunnerChannelMetadata.Upgrade.
 type RunnerChannelMetadataUpgrade string
 
+// RunnerGitCredential defines model for RunnerGitCredential.
+type RunnerGitCredential struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
 // RunnerHeartbeat defines model for RunnerHeartbeat.
 type RunnerHeartbeat struct {
 	CurrentLoad      int                      `json:"currentLoad"`
@@ -3454,20 +3495,6 @@ type RunnerListResponse struct {
 type RunnerMemorySnapshot struct {
 	Content string `json:"content"`
 	Path    string `json:"path"`
-}
-
-// RunnerResolvedVolumeFile defines model for RunnerResolvedVolumeFile.
-type RunnerResolvedVolumeFile struct {
-	Content string `json:"content"`
-	Path    string `json:"path"`
-}
-
-// RunnerResolvedVolumeMount defines model for RunnerResolvedVolumeMount.
-type RunnerResolvedVolumeMount struct {
-	Files     []RunnerResolvedVolumeFile `json:"files"`
-	MountPath string                     `json:"mountPath"`
-	Name      string                     `json:"name"`
-	ReadOnly  bool                       `json:"readOnly"`
 }
 
 // RunnerRuntimeInventory defines model for RunnerRuntimeInventory.
@@ -3530,13 +3557,12 @@ type RunnerVolume struct {
 	Access      *string                 `json:"access,omitempty"`
 	Description *string                 `json:"description,omitempty"`
 	Memories    *[]RunnerMemorySnapshot `json:"memories,omitempty"`
+	MemoryRef   *string                 `json:"memoryRef,omitempty"`
 	Name        string                  `json:"name"`
-	Owner       *string                 `json:"owner,omitempty"`
 	Ref         *string                 `json:"ref,omitempty"`
-	Repo        *string                 `json:"repo,omitempty"`
 	SecretRef   *string                 `json:"secretRef,omitempty"`
-	StoreId     *string                 `json:"storeId,omitempty"`
 	Type        RunnerVolumeType        `json:"type"`
+	Url         *string                 `json:"url,omitempty"`
 }
 
 // RunnerVolumeType defines model for RunnerVolume.Type.
@@ -3551,34 +3577,65 @@ type RunnerVolumeMount struct {
 
 // RunnerWorkPayload defines model for RunnerWorkPayload.
 type RunnerWorkPayload struct {
-	AgentSnapshot            *map[string]*interface{}     `json:"agentSnapshot,omitempty"`
-	Approved                 *bool                        `json:"approved,omitempty"`
-	EnvironmentSnapshot      *map[string]*interface{}     `json:"environmentSnapshot,omitempty"`
-	HostingMode              *string                      `json:"hostingMode,omitempty"`
-	InitialPrompt            *string                      `json:"initialPrompt,omitempty"`
-	Input                    *map[string]*interface{}     `json:"input,omitempty"`
-	Model                    *string                      `json:"model,omitempty"`
-	Protocol                 *RunnerWorkPayloadProtocol   `json:"protocol,omitempty"`
-	Provider                 *string                      `json:"provider,omitempty"`
-	RequiredRunnerCapability *string                      `json:"requiredRunnerCapability,omitempty"`
-	ResolvedVolumes          *[]RunnerResolvedVolumeMount `json:"resolvedVolumes,omitempty"`
-	Resume                   *bool                        `json:"resume,omitempty"`
-	ResumeToken              *string                      `json:"resumeToken,omitempty"`
-	Runtime                  *string                      `json:"runtime,omitempty"`
-	RuntimeConfig            *map[string]*interface{}     `json:"runtimeConfig,omitempty"`
-	RuntimeDriver            *string                      `json:"runtimeDriver,omitempty"`
-	RuntimeEnv               *map[string]string           `json:"runtimeEnv,omitempty"`
-	SessionId                *string                      `json:"sessionId,omitempty"`
-	ToolCall                 *RunnerToolCall              `json:"toolCall,omitempty"`
-	ToolCallId               *string                      `json:"toolCallId,omitempty"`
-	ToolName                 *string                      `json:"toolName,omitempty"`
-	Type                     *string                      `json:"type,omitempty"`
-	VolumeMounts             *[]RunnerVolumeMount         `json:"volumeMounts,omitempty"`
-	Volumes                  *[]RunnerVolume              `json:"volumes,omitempty"`
+	AgentSnapshot            *map[string]*interface{}   `json:"agentSnapshot,omitempty"`
+	Approved                 *bool                      `json:"approved,omitempty"`
+	EnvironmentSnapshot      *map[string]*interface{}   `json:"environmentSnapshot,omitempty"`
+	HostingMode              *string                    `json:"hostingMode,omitempty"`
+	InitialPrompt            *string                    `json:"initialPrompt,omitempty"`
+	Input                    *map[string]*interface{}   `json:"input,omitempty"`
+	Model                    *string                    `json:"model,omitempty"`
+	Protocol                 *RunnerWorkPayloadProtocol `json:"protocol,omitempty"`
+	Provider                 *string                    `json:"provider,omitempty"`
+	RequiredRunnerCapability *string                    `json:"requiredRunnerCapability,omitempty"`
+	Resume                   *bool                      `json:"resume,omitempty"`
+	ResumeToken              *string                    `json:"resumeToken,omitempty"`
+	Runtime                  *string                    `json:"runtime,omitempty"`
+	RuntimeConfig            *map[string]*interface{}   `json:"runtimeConfig,omitempty"`
+	RuntimeDriver            *string                    `json:"runtimeDriver,omitempty"`
+	RuntimeEnv               *map[string]string         `json:"runtimeEnv,omitempty"`
+	SessionId                *string                    `json:"sessionId,omitempty"`
+	ToolCall                 *RunnerToolCall            `json:"toolCall,omitempty"`
+	ToolCallId               *string                    `json:"toolCallId,omitempty"`
+	ToolName                 *string                    `json:"toolName,omitempty"`
+	Type                     *string                    `json:"type,omitempty"`
+	WorkspaceManifest        *RunnerWorkspaceManifest   `json:"workspaceManifest,omitempty"`
 }
 
 // RunnerWorkPayloadProtocol defines model for RunnerWorkPayload.Protocol.
 type RunnerWorkPayloadProtocol string
+
+// RunnerWorkspaceFile defines model for RunnerWorkspaceFile.
+type RunnerWorkspaceFile struct {
+	Content string `json:"content"`
+	Path    string `json:"path"`
+}
+
+// RunnerWorkspaceManifest defines model for RunnerWorkspaceManifest.
+type RunnerWorkspaceManifest struct {
+	Mounts []RunnerWorkspaceMount      `json:"mounts"`
+	Root   RunnerWorkspaceManifestRoot `json:"root"`
+}
+
+// RunnerWorkspaceManifestRoot defines model for RunnerWorkspaceManifest.Root.
+type RunnerWorkspaceManifestRoot string
+
+// RunnerWorkspaceMount defines model for RunnerWorkspaceMount.
+type RunnerWorkspaceMount struct {
+	Access      *string                  `json:"access,omitempty"`
+	Credential  *RunnerGitCredential     `json:"credential,omitempty"`
+	Description *string                  `json:"description,omitempty"`
+	Files       *[]RunnerWorkspaceFile   `json:"files,omitempty"`
+	MemoryRef   *string                  `json:"memoryRef,omitempty"`
+	MountPath   string                   `json:"mountPath"`
+	Name        string                   `json:"name"`
+	ReadOnly    *bool                    `json:"readOnly,omitempty"`
+	Ref         *string                  `json:"ref,omitempty"`
+	Type        RunnerWorkspaceMountType `json:"type"`
+	Url         *string                  `json:"url,omitempty"`
+}
+
+// RunnerWorkspaceMountType defines model for RunnerWorkspaceMount.Type.
+type RunnerWorkspaceMountType string
 
 // Runtime defines model for Runtime.
 type Runtime string
@@ -5463,24 +5520,24 @@ func (t *Volume) MergeSecretVolume(v SecretVolume) error {
 	return err
 }
 
-// AsGitHubRepositoryVolume returns the union data inside the Volume as a GitHubRepositoryVolume
-func (t Volume) AsGitHubRepositoryVolume() (GitHubRepositoryVolume, error) {
-	var body GitHubRepositoryVolume
+// AsGitRepositoryVolume returns the union data inside the Volume as a GitRepositoryVolume
+func (t Volume) AsGitRepositoryVolume() (GitRepositoryVolume, error) {
+	var body GitRepositoryVolume
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromGitHubRepositoryVolume overwrites any union data inside the Volume as the provided GitHubRepositoryVolume
-func (t *Volume) FromGitHubRepositoryVolume(v GitHubRepositoryVolume) error {
-	v.Type = "github_repository"
+// FromGitRepositoryVolume overwrites any union data inside the Volume as the provided GitRepositoryVolume
+func (t *Volume) FromGitRepositoryVolume(v GitRepositoryVolume) error {
+	v.Type = "git_repository"
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeGitHubRepositoryVolume performs a merge with any union data inside the Volume, using the provided GitHubRepositoryVolume
-func (t *Volume) MergeGitHubRepositoryVolume(v GitHubRepositoryVolume) error {
-	v.Type = "github_repository"
+// MergeGitRepositoryVolume performs a merge with any union data inside the Volume, using the provided GitRepositoryVolume
+func (t *Volume) MergeGitRepositoryVolume(v GitRepositoryVolume) error {
+	v.Type = "git_repository"
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5491,24 +5548,24 @@ func (t *Volume) MergeGitHubRepositoryVolume(v GitHubRepositoryVolume) error {
 	return err
 }
 
-// AsMemoryStoreVolume returns the union data inside the Volume as a MemoryStoreVolume
-func (t Volume) AsMemoryStoreVolume() (MemoryStoreVolume, error) {
-	var body MemoryStoreVolume
+// AsMemoryVolume returns the union data inside the Volume as a MemoryVolume
+func (t Volume) AsMemoryVolume() (MemoryVolume, error) {
+	var body MemoryVolume
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromMemoryStoreVolume overwrites any union data inside the Volume as the provided MemoryStoreVolume
-func (t *Volume) FromMemoryStoreVolume(v MemoryStoreVolume) error {
-	v.Type = "memory_store"
+// FromMemoryVolume overwrites any union data inside the Volume as the provided MemoryVolume
+func (t *Volume) FromMemoryVolume(v MemoryVolume) error {
+	v.Type = "memory"
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeMemoryStoreVolume performs a merge with any union data inside the Volume, using the provided MemoryStoreVolume
-func (t *Volume) MergeMemoryStoreVolume(v MemoryStoreVolume) error {
-	v.Type = "memory_store"
+// MergeMemoryVolume performs a merge with any union data inside the Volume, using the provided MemoryVolume
+func (t *Volume) MergeMemoryVolume(v MemoryVolume) error {
+	v.Type = "memory"
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5533,10 +5590,10 @@ func (t Volume) ValueByDiscriminator() (interface{}, error) {
 		return nil, err
 	}
 	switch discriminator {
-	case "github_repository":
-		return t.AsGitHubRepositoryVolume()
-	case "memory_store":
-		return t.AsMemoryStoreVolume()
+	case "git_repository":
+		return t.AsGitRepositoryVolume()
+	case "memory":
+		return t.AsMemoryVolume()
 	case "secret":
 		return t.AsSecretVolume()
 	default:

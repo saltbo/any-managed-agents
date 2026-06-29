@@ -141,48 +141,59 @@ describe('session-runtime', () => {
 
   it('builds a deterministic workspace volume manifest', () => {
     expect(
-      workspaceVolumeManifest(
-        [
+      workspaceVolumeManifest({
+        root: '/workspace',
+        mounts: [
           {
             name: 'zeta',
-            type: 'github_repository',
-            owner: 'saltbo',
-            repo: 'zeta',
+            type: 'git_repository',
+            mountPath: '/workspace/repos/saltbo/zeta',
+            url: 'https://github.com/saltbo/zeta.git',
             ref: 'main',
           },
           {
             name: 'alpha',
-            type: 'github_repository',
-            owner: 'saltbo',
-            repo: 'alpha',
+            type: 'git_repository',
+            mountPath: '/workspace/repos/saltbo/alpha',
+            url: 'https://github.com/saltbo/alpha.git',
             ref: 'release',
-            credentialRef: { credentialId: 'vaultcred_123' },
+            credential: {
+              username: 'x-access-token',
+              password: 'secret-value',
+            },
+          },
+          {
+            name: 'token',
+            type: 'secret',
+            mountPath: '/workspace/.ama/secrets/token',
+            readOnly: true,
+            files: [{ path: 'value', content: 'secret-value' }],
           },
         ],
-        [
-          { name: 'zeta', mountPath: '/workspace/repos/saltbo/zeta' },
-          { name: 'alpha', mountPath: '/workspace/repos/saltbo/alpha' },
-        ],
-      ),
+      }),
     ).toEqual({
       version: 1,
       workspaceRoot: '/workspace',
       volumes: [
         {
-          type: 'github_repository',
-          name: 'alpha',
-          owner: 'saltbo',
-          repo: 'alpha',
-          ref: 'release',
-          mountPath: '/workspace/repos/saltbo/alpha',
-          credentialRef: { credentialId: 'vaultcred_123' },
+          type: 'secret',
+          name: 'token',
+          mountPath: '/workspace/.ama/secrets/token',
+          files: [{ path: 'value' }],
           status: 'declared',
         },
         {
-          type: 'github_repository',
+          type: 'git_repository',
+          name: 'alpha',
+          url: 'https://github.com/saltbo/alpha.git',
+          ref: 'release',
+          mountPath: '/workspace/repos/saltbo/alpha',
+          status: 'declared',
+        },
+        {
+          type: 'git_repository',
           name: 'zeta',
-          owner: 'saltbo',
-          repo: 'zeta',
+          url: 'https://github.com/saltbo/zeta.git',
           ref: 'main',
           mountPath: '/workspace/repos/saltbo/zeta',
           status: 'declared',
@@ -497,10 +508,18 @@ describe('session-runtime', () => {
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
         mcpSnapshot: { connectors: ['github'] },
         runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
-        volumes: [
-          { name: 'source', type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' },
-        ],
-        volumeMounts: [{ name: 'source', mountPath: '/workspace/repos/saltbo/any-managed-agents' }],
+        workspaceManifest: {
+          root: '/workspace',
+          mounts: [
+            {
+              name: 'source',
+              type: 'git_repository',
+              mountPath: '/workspace/repos/saltbo/any-managed-agents',
+              url: 'https://github.com/saltbo/any-managed-agents.git',
+              ref: 'main',
+            },
+          ],
+        },
       }),
     ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
@@ -520,7 +539,7 @@ describe('session-runtime', () => {
       AK_AGENT_ID: 'agent_123',
     })
     expect(mockSandbox.exec).toHaveBeenCalledWith(
-      "git clone https://github.com/saltbo/any-managed-agents.git '/workspace/repos/saltbo/any-managed-agents'",
+      "git clone 'https://github.com/saltbo/any-managed-agents.git' '/workspace/repos/saltbo/any-managed-agents'",
       { timeout: 120_000 },
     )
     expect(mockSandbox.exec).toHaveBeenCalledWith(

@@ -687,8 +687,8 @@ export type SessionEnvironmentSnapshot = NonNullable<Session['status']['bindings
 export type EnvFromEntry = ArrayItem<Session['spec']['envFrom']>
 export type Volume = ArrayItem<Session['spec']['volumes']>
 export type VolumeMount = ArrayItem<Session['spec']['volumeMounts']>
-export type GitHubRepositoryVolume = Extract<Volume, { type: 'github_repository' }>
-export type MemoryStoreVolume = Extract<Volume, { type: 'memory_store' }>
+export type GitRepositoryVolume = Extract<Volume, { type: 'git_repository' }>
+export type MemoryStoreVolume = Extract<Volume, { type: 'memory' }>
 export type MemoryStoreAccess = MemoryStoreVolume['access']
 
 type RpcResponse = Pick<Response, 'headers' | 'json' | 'ok' | 'status' | 'statusText' | 'text'>

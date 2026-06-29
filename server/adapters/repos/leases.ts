@@ -1,4 +1,4 @@
-import { normalizeMemoryPath } from '@server/domain/memory-store'
+import { memoryStoreIdFromRef, normalizeMemoryPath } from '@server/domain/memory-store'
 import type {
   ClaimLeaseInput,
   FinishLeaseInput,
@@ -29,7 +29,7 @@ import { redactSensitiveValue } from '../../redaction'
 type Db = ReturnType<typeof drizzle>
 type LeaseRow = typeof leases.$inferSelect
 type WorkItemRow = typeof workItems.$inferSelect
-type MemoryStoreSnapshot = { storeId: string; memories: Array<{ path: string; content: string }> }
+type MemoryStoreSnapshot = { memoryRef: string; storeId: string; memories: Array<{ path: string; content: string }> }
 
 const DEFAULT_LEASE_DURATION_SECONDS = 60
 
@@ -59,7 +59,11 @@ function memoryStoreSnapshotsFromResult(result: Record<string, unknown> | undefi
       continue
     }
     const raw = value as Record<string, unknown>
-    if (typeof raw.storeId !== 'string' || !Array.isArray(raw.memories)) {
+    if (typeof raw.memoryRef !== 'string' || !Array.isArray(raw.memories)) {
+      continue
+    }
+    const storeId = memoryStoreIdFromRef(raw.memoryRef)
+    if (!storeId) {
       continue
     }
     const memories = raw.memories
@@ -70,7 +74,7 @@ function memoryStoreSnapshotsFromResult(result: Record<string, unknown> | undefi
         path: normalizeMemoryPath(String(memory.path ?? '')),
         content: String(memory.content ?? ''),
       }))
-    snapshots.push({ storeId: raw.storeId, memories })
+    snapshots.push({ memoryRef: raw.memoryRef, storeId, memories })
   }
   return snapshots
 }

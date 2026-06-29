@@ -300,7 +300,7 @@ describe('[CF] /api/v1/triggers', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        name: 'Rejected secret env heartbeat',
+        name: 'Rejected envFrom heartbeat',
         promptTemplate: 'Should not persist either.',
         schedule: { intervalSeconds: 3600 },
         env: { AK_API_TOKEN: 'raw-token-value' },
@@ -368,7 +368,7 @@ describe('[CF] /api/v1/triggers', () => {
         runtime: 'ama',
         name: 'Banking bonus heartbeat',
         promptTemplate: 'Research current Canadian banking bonus offers.',
-        volumes: [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+        volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
         env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
         envFrom: [
@@ -393,7 +393,7 @@ describe('[CF] /api/v1/triggers', () => {
     expect(trigger).toMatchObject({
       enabled: true,
       nextDueAt: dueAt,
-      volumes: [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+      volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
       volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
       env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
       envFrom: [

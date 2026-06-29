@@ -123,9 +123,10 @@ plane is fake; runner startup, lease claim, workspace preparation, runtime
 execution, local event storage, live relay, backfill, Codex follow-up prompts,
 runner interruption/resume, lease completion, and memory-store writeback are
 real. Set `AMA_SMOKE_RUNTIME=codex|claude-code|copilot` to force a specific
-runtime. Set `AMA_SMOKE_GITHUB_REPO=owner/repo` to also exercise real GitHub
-repository clone/mount and session-scoped git credential isolation. This may
-consume real runtime/model quota and, when GitHub is enabled, external network.
+runtime. The smoke mounts `https://github.com/saltbo/slink.git` by default to
+exercise real Git repository clone/mount behavior; set `AMA_SMOKE_GIT_TOKEN` only
+when you need to exercise session-scoped git credential isolation. This may
+consume real runtime/model quota and uses external network for the Git mount.
 
 `pnpm run smoke:bridge` is the cheap deterministic bridge check used by GitHub
 Actions. It is not a full AMA smoke.

@@ -6,7 +6,6 @@ import {
   hostingModeFromSandbox,
   hostingModeFromSnapshot,
   mergeSessionUserMetadata,
-  normalizeMountPath,
   sessionAcceptsPrompts,
   sessionIsTerminal,
 } from './session'
@@ -45,6 +44,7 @@ describe('[spec: sessions/workspace-safety] secret material detection', () => {
     expect(hasSecretMaterial({ apiKey: 'x' })).toBe(true)
     expect(hasSecretMaterial({ nested: [{ password: 'x' }] })).toBe(true)
     expect(hasSecretMaterial({ plain: 'value' })).toBe(false)
+    expect(hasSecretMaterial({ secretRef: 'ama://vaults/vault_1/credentials/token/versions/ver_1' })).toBe(false)
   })
 
   it('flags urls carrying embedded credentials', () => {
@@ -66,21 +66,6 @@ describe('mergeSessionUserMetadata', () => {
       labels: { lane: 'new' },
       annotations: { keep: 'yes', ticket: 'AMA-1' },
     })
-  })
-})
-
-describe('normalizeMountPath', () => {
-  it('defaults to repos/owner/repo under /workspace', () => {
-    expect(normalizeMountPath({ owner: 'saltbo', repo: 'ama' })).toBe('/workspace/repos/saltbo/ama')
-  })
-
-  it('rejects traversal and the reserved .ama root', () => {
-    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: '../escape' })).toThrow()
-    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: '.ama/x' })).toThrow()
-  })
-
-  it('rejects absolute paths outside /workspace', () => {
-    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: '/etc/passwd' })).toThrow()
   })
 })
 
@@ -116,31 +101,5 @@ describe('[spec: sessions/workspace-safety] hasEmbeddedCredentialUrl additional 
   it('recurses through arrays of values', () => {
     expect(hasEmbeddedCredentialUrl(['https://u:p@host', 'https://ok.com'])).toBe(true)
     expect(hasEmbeddedCredentialUrl(['https://ok.com', 'plain'])).toBe(false)
-  })
-})
-
-describe('[spec: sessions/workspace-safety] normalizeMountPath additional branches', () => {
-  it('rejects paths containing control characters', () => {
-    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'path\x00with-null' })).toThrow(
-      'Mount path contains invalid characters.',
-    )
-  })
-
-  it('rejects mount path segments with special characters', () => {
-    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'a/b@c' })).toThrow(
-      'Mount path segments may contain only letters, numbers, dots, underscores, and hyphens.',
-    )
-  })
-
-  it('accepts an absolute /workspace/ path', () => {
-    expect(normalizeMountPath({ owner: 'o', repo: 'r', mountPath: '/workspace/my-repo' })).toBe('/workspace/my-repo')
-  })
-
-  it('rejects a path with empty segments from double-slash', () => {
-    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'a//b' })).toThrow()
-  })
-
-  it('rejects a path with a dot segment', () => {
-    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'a/./b' })).toThrow()
   })
 })

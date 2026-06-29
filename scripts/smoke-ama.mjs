@@ -32,20 +32,26 @@ const RESUMED_MARKER = 'AMA_SMOKE_RESUMED'
 const MEMORY_UPDATED_MARKER = 'AMA_SMOKE_MEMORY_UPDATED'
 const SYSTEM_PROMPT_MARKER = 'AMA_SMOKE_SYSTEM_PROMPT_REACHED'
 const RESULT_MARKER = 'AMA_SMOKE_RUNTIME_OK'
+const DEFAULT_SMOKE_GIT_REPOSITORY_URL = 'https://github.com/saltbo/slink.git'
 const timeoutMs = Number(process.env.AMA_SMOKE_TIMEOUT_MS ?? 4 * 60 * 1000)
 
-function githubSmokeConfig() {
-  const repo = process.env.AMA_SMOKE_GITHUB_REPO?.trim()
-  if (!repo) return undefined
-  const [owner, name] = repo.split('/')
-  if (!owner || !name || repo.split('/').length !== 2) {
-    fail('AMA_SMOKE_GITHUB_REPO must use owner/repo format')
+function gitSmokeConfig() {
+  const repositoryUrl = DEFAULT_SMOKE_GIT_REPOSITORY_URL
+  const parsed = new URL(repositoryUrl)
+  if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    fail('Default smoke Git repository URL must be a safe HTTPS git repository URL')
   }
+  const repositoryPath = [parsed.hostname, ...parsed.pathname.replace(/\.git$/i, '').split('/').filter(Boolean)]
+  if (repositoryPath.length < 3) {
+    fail('Default smoke Git repository URL must include a repository path')
+  }
+  const token = process.env.AMA_SMOKE_GIT_TOKEN?.trim()
   return {
-    owner,
-    repo: name,
-    ref: process.env.AMA_SMOKE_GITHUB_REF?.trim() || '',
-    token: process.env.AMA_SMOKE_GITHUB_TOKEN?.trim() || 'ama-smoke-fake-gh-token',
+    url: repositoryUrl,
+    ref: process.env.AMA_SMOKE_GIT_REF?.trim() || '',
+    token,
+    mountPath: `/workspace/repos/${repositoryPath.join('/')}`,
+    relativePath: `repos/${repositoryPath.join('/')}`,
   }
 }
 
@@ -210,17 +216,17 @@ function newLease(state = 'active') {
   }
 }
 
-function createWorkItem(runtime, githubConfig) {
+function createWorkItem(runtime, gitConfig) {
   const initialPrompt = [
     'Run the AMA end-to-end smoke check.',
     `1. Confirm these workspace files do not exist: .ama/resources.json, .ama/agent.json, .ama/system-prompt.md.`,
     `2. Confirm .ama/memory-stores/${MEMORY_STORE_ID}/heartbeat.md exists.`,
     `3. Write exactly "${RESULT_MARKER}\\n" to ama-smoke-result.txt in the workspace root.`,
     `4. Replace .ama/memory-stores/${MEMORY_STORE_ID}/heartbeat.md with exactly "${MEMORY_UPDATED_MARKER}\\n".`,
-    ...(githubConfig
-      ? [`5. Confirm repos/${githubConfig.owner}/${githubConfig.repo} exists.`]
+    ...(gitConfig
+      ? [`5. Confirm ${gitConfig.relativePath} exists.`]
       : []),
-    `${githubConfig ? '6' : '5'}. Reply with exactly "${SMOKE_DONE_MARKER}".`,
+    `${gitConfig ? '6' : '5'}. Reply with exactly "${SMOKE_DONE_MARKER}".`,
     'Do not perform any unrelated work.',
   ].join('\n')
 
@@ -228,32 +234,35 @@ function createWorkItem(runtime, githubConfig) {
     ...runtime.runtimeConfig,
     ...(runtime.name === 'codex' ? { codexIdleKeepAliveMs: 5000 } : {}),
   }
-  const volumes = [
-    ...(githubConfig
+  const workspaceMounts = [
+    ...(gitConfig
       ? [
           {
             name: 'repo',
-            type: 'github_repository',
-            owner: githubConfig.owner,
-            repo: githubConfig.repo,
-            ref: githubConfig.ref,
+            type: 'git_repository',
+            mountPath: gitConfig.mountPath,
+            url: gitConfig.url,
+            ref: gitConfig.ref,
+            ...(gitConfig.token
+              ? {
+                  credential: {
+                    username: 'x-access-token',
+                    password: gitConfig.token,
+                  },
+                }
+              : {}),
           },
         ]
       : []),
     {
       name: 'memory',
-      type: 'memory_store',
-      storeId: MEMORY_STORE_ID,
+      type: 'memory',
+      mountPath: `/workspace/.ama/memory-stores/${MEMORY_STORE_ID}`,
+      memoryRef: `ama://memories/${MEMORY_STORE_ID}`,
       description: 'AMA smoke memory',
       access: 'read_write',
-      memories: [{ path: 'heartbeat.md', content: 'AMA_SMOKE_MEMORY_INITIAL\n' }],
+      files: [{ path: 'heartbeat.md', content: 'AMA_SMOKE_MEMORY_INITIAL\n' }],
     },
-  ]
-  const volumeMounts = [
-    ...(githubConfig
-      ? [{ name: 'repo', mountPath: `/workspace/repos/${githubConfig.owner}/${githubConfig.repo}` }]
-      : []),
-    { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${MEMORY_STORE_ID}` },
   ]
 
   return {
@@ -277,9 +286,11 @@ function createWorkItem(runtime, githubConfig) {
       model: runtime.model,
       runtimeDriver: `${runtime.name}-self-hosted`,
       requiredRunnerCapability: runtime.name,
-      runtimeEnv: githubConfig ? { GH_TOKEN: githubConfig.token } : {},
-      volumes,
-      volumeMounts,
+      runtimeEnv: {},
+      workspaceManifest: {
+        root: '/workspace',
+        mounts: workspaceMounts,
+      },
       agentSnapshot: {
         instructions: [
           'These developer instructions are part of the AMA smoke test.',
@@ -295,7 +306,7 @@ function createWorkItem(runtime, githubConfig) {
   }
 }
 
-function createControlPlane(runtime, githubConfig) {
+function createControlPlane(runtime, gitConfig) {
   const state = {
     runnerCreates: [],
     heartbeats: [],
@@ -310,7 +321,7 @@ function createControlPlane(runtime, githubConfig) {
     unauthorized: [],
     leased: false,
     completed: false,
-    workItem: createWorkItem(runtime, githubConfig),
+    workItem: createWorkItem(runtime, gitConfig),
   }
 
   const server = createServer(async (request, response) => {
@@ -678,7 +689,7 @@ function findWorkspace(workDir) {
   return { sessionDir, workspace }
 }
 
-function assertSmokeState(workDir, controlPlaneState, runtime, githubConfig) {
+function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   const { sessionDir, workspace } = findWorkspace(workDir)
   const eventLog = join(sessionDir, 'events.jsonl')
   const events = readJSONL(eventLog)
@@ -704,7 +715,7 @@ function assertSmokeState(workDir, controlPlaneState, runtime, githubConfig) {
   const memoryStores = completed.result?.memoryStores
   const heartbeat = Array.isArray(memoryStores)
     ? memoryStores
-        .find((store) => store.storeId === MEMORY_STORE_ID)
+        .find((store) => store.memoryRef === `ama://memories/${MEMORY_STORE_ID}`)
         ?.memories?.find((memory) => memory.path === 'heartbeat.md')
     : undefined
   if (heartbeat?.content !== `${MEMORY_UPDATED_MARKER}\n`) {
@@ -728,18 +739,22 @@ function assertSmokeState(workDir, controlPlaneState, runtime, githubConfig) {
   if (readFileSync(join(workspace, 'system-prompt-proof.txt'), 'utf8') !== `${SYSTEM_PROMPT_MARKER}\n`) {
     fail('agent developer instructions did not reach the runtime', workspace)
   }
-  if (githubConfig) {
-    const repoPath = join(workspace, 'repos', githubConfig.owner, githubConfig.repo)
-    if (!existsSync(repoPath)) fail('GitHub repository resource was not mounted', repoPath)
-    if (!existsSync(join(sessionDir, 'git-credentials'))) fail('session-scoped git credentials file was not created', sessionDir)
-    if (existsSync(join(workspace, 'git-credentials'))) fail('git credentials leaked into workspace root', workspace)
-    const credentials = readFileSync(join(sessionDir, 'git-credentials'), 'utf8')
-    if (!credentials.includes(githubConfig.token)) fail('session git credential store does not contain the smoke token')
-    const helpers = run('git', ['-C', repoPath, 'config', '--worktree', '--get-all', 'credential.helper']).stdout
-    if (!helpers.includes(join(sessionDir, 'git-credentials'))) {
-      fail('repository worktree does not use session-scoped credential helper', helpers)
+  if (gitConfig) {
+    const repoPath = join(workspace, ...gitConfig.relativePath.split('/'))
+    if (!existsSync(repoPath)) fail('Git repository resource was not mounted', repoPath)
+    if (gitConfig.token) {
+      if (!existsSync(join(sessionDir, 'git-credentials'))) fail('session-scoped git credentials file was not created', sessionDir)
+      if (existsSync(join(workspace, 'git-credentials'))) fail('git credentials leaked into workspace root', workspace)
+      const credentials = readFileSync(join(sessionDir, 'git-credentials'), 'utf8')
+      if (!credentials.includes(gitConfig.token)) fail('session git credential store does not contain the smoke token')
+      const helpers = run('git', ['-C', repoPath, 'config', '--worktree', '--get-all', 'credential.helper']).stdout
+      if (!helpers.includes(join(sessionDir, 'git-credentials'))) {
+        fail('repository worktree does not use session-scoped credential helper', helpers)
+      }
+      if (serializedEvents.includes(gitConfig.token)) fail('Git token leaked into session event log')
+    } else if (existsSync(join(sessionDir, 'git-credentials'))) {
+      fail('session-scoped git credentials file was created without a smoke token', sessionDir)
     }
-    if (serializedEvents.includes(githubConfig.token)) fail('GitHub token leaked into session event log')
   }
   if (controlPlaneState.unauthorized.length > 0) {
     fail('runner made unauthenticated control-plane requests', controlPlaneState.unauthorized.join('\n'))
@@ -866,13 +881,9 @@ async function runResumeSmoke(runtime, runnerPath, root) {
 
 async function main() {
   const runtime = selectRuntime()
-  const githubConfig = githubSmokeConfig()
+  const gitConfig = gitSmokeConfig()
   info(`selected runtime: ${runtime.name} (${runtime.binary})`)
-  if (githubConfig) {
-    info(`GitHub resource smoke enabled: ${githubConfig.owner}/${githubConfig.repo}${githubConfig.ref ? `#${githubConfig.ref}` : ''}`)
-  } else {
-    info('GitHub resource smoke skipped; set AMA_SMOKE_GITHUB_REPO=owner/repo to enable the real GitHub path')
-  }
+  info(`Git repository smoke enabled: ${gitConfig.url}${gitConfig.ref ? `#${gitConfig.ref}` : ''}`)
 
   run('pnpm', ['run', 'bridge:build'])
   const root = mkdtempSync(join(tmpdir(), 'ama-smoke-'))
@@ -881,7 +892,7 @@ async function main() {
   const runnerPath = join(root, 'ama-runner')
   run('go', ['build', '-o', runnerPath, '.'], { cwd: join(ROOT, 'cmd', 'ama-runner') })
 
-  const { server, state } = createControlPlane(runtime, githubConfig)
+  const { server, state } = createControlPlane(runtime, gitConfig)
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
   const origin = `http://${address.address}:${address.port}`
@@ -894,7 +905,7 @@ async function main() {
     await waitFor(() => state.completed, 'completed lease')
     sendBackfillRequest(state)
     await waitFor(() => state.backfillResponses.length > 0, 'session backfill response')
-    const result = assertSmokeState(workDir, state, runtime, githubConfig)
+    const result = assertSmokeState(workDir, state, runtime, gitConfig)
     const backfill = state.backfillResponses[0]
     if (!Array.isArray(backfill.events) || backfill.events.length !== result.events.length) {
       fail('backfill response did not return the full event log', JSON.stringify(backfill, null, 2))

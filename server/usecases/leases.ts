@@ -70,14 +70,15 @@ export async function claimLease(
     // The repo released the reserved runner slot when the work-item race lost.
     throw new RunnerConflictError('Work item was claimed by another runner')
   }
-  // Claim-time secret validation: the lease must not be handed out when the
-  // work item's secret env cannot be resolved (for example a revoked credential
-  // version). Resolved values are delivered to the runner via the work-item
-  // payload; nothing secret is stored here.
+  // Claim-time runtime input validation: the lease must not be handed out when
+  // envFrom or workspace references cannot be materialized. Resolved values are
+  // delivered to the runner via the work-item payload; nothing secret is stored
+  // here.
   const payload = candidate.rawPayload
   if (
     payload.type === 'session.start' &&
     ((Array.isArray(payload.envFrom) && payload.envFrom.length > 0) ||
+      (Array.isArray(payload.volumes) && payload.volumes.length > 0) ||
       (Array.isArray(payload.volumeMounts) && payload.volumeMounts.length > 0))
   ) {
     try {
@@ -85,7 +86,7 @@ export async function claimLease(
         { organizationId: auth.organization.id, projectId: auth.project.id },
         payload.envFrom as EnvFromEntry[],
       )
-      await deps.runtimeSecrets.resolveVolumes(
+      await deps.runtimeSecrets.resolveWorkspaceManifest(
         { organizationId: auth.organization.id, projectId: auth.project.id },
         Array.isArray(payload.volumes) ? (payload.volumes as Volume[]) : [],
         Array.isArray(payload.volumeMounts) ? (payload.volumeMounts as VolumeMount[]) : [],
@@ -106,8 +107,8 @@ export async function claimLease(
   return claimed.lease
 }
 
-// Materializes the raw work-item payload for the lease-holding runner. Secret
-// refs are projected into runtimeEnv and resolved volume files; raw refs stay
+// Materializes the raw work-item payload for the lease-holding runner. Env refs
+// become runtimeEnv, workspace refs become WorkspaceManifest, and raw refs stay
 // server-side.
 export async function materializeWorkItemPayload(
   deps: Deps,
@@ -122,7 +123,7 @@ export async function materializeWorkItemPayload(
   const volumes = Array.isArray(payload.volumes) ? (payload.volumes as Volume[]) : []
   const volumeMounts = Array.isArray(payload.volumeMounts) ? (payload.volumeMounts as VolumeMount[]) : []
   const { envFrom: _envFrom, volumes: _volumes, volumeMounts: _volumeMounts, ...runtimePayload } = payload
-  if (envFrom.length === 0 && volumeMounts.length === 0) {
+  if (envFrom.length === 0 && volumes.length === 0 && volumeMounts.length === 0) {
     return runtimePayload
   }
   const runtimeEnv =
@@ -130,6 +131,10 @@ export async function materializeWorkItemPayload(
       ? { ...(payload.runtimeEnv as Record<string, string>) }
       : {}
   const resolvedEnv = await deps.runtimeSecrets.resolveEnv(scope, envFrom)
-  const resolvedVolumes = await deps.runtimeSecrets.resolveVolumes(scope, volumes, volumeMounts)
-  return { ...runtimePayload, runtimeEnv: { ...runtimeEnv, ...resolvedEnv }, resolvedVolumes }
+  const workspaceManifest = await deps.runtimeSecrets.resolveWorkspaceManifest(scope, volumes, volumeMounts)
+  return {
+    ...runtimePayload,
+    runtimeEnv: { ...runtimeEnv, ...resolvedEnv },
+    workspaceManifest,
+  }
 }

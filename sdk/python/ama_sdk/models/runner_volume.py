@@ -28,12 +28,11 @@ class RunnerVolume:
     """ 
         Attributes:
             name (str):  Example: source.
-            type_ (RunnerVolumeType):  Example: github_repository.
+            type_ (RunnerVolumeType):  Example: git_repository.
             secret_ref (str | Unset):
-            owner (str | Unset):  Example: saltbo.
-            repo (str | Unset):  Example: any-managed-agents.
+            url (str | Unset):  Example: https://github.com/saltbo/any-managed-agents.git.
             ref (str | Unset):  Example: main.
-            store_id (str | Unset):  Example: memstore_abc123.
+            memory_ref (str | Unset):  Example: ama://memories/memstore_abc123.
             description (None | str | Unset):
             access (str | Unset):  Example: read_write.
             memories (list[RunnerMemorySnapshot] | Unset):
@@ -42,10 +41,9 @@ class RunnerVolume:
     name: str
     type_: RunnerVolumeType
     secret_ref: str | Unset = UNSET
-    owner: str | Unset = UNSET
-    repo: str | Unset = UNSET
+    url: str | Unset = UNSET
     ref: str | Unset = UNSET
-    store_id: str | Unset = UNSET
+    memory_ref: str | Unset = UNSET
     description: None | str | Unset = UNSET
     access: str | Unset = UNSET
     memories: list[RunnerMemorySnapshot] | Unset = UNSET
@@ -62,13 +60,11 @@ class RunnerVolume:
 
         secret_ref = self.secret_ref
 
-        owner = self.owner
-
-        repo = self.repo
+        url = self.url
 
         ref = self.ref
 
-        store_id = self.store_id
+        memory_ref = self.memory_ref
 
         description: None | str | Unset
         if isinstance(self.description, Unset):
@@ -96,14 +92,12 @@ class RunnerVolume:
         })
         if secret_ref is not UNSET:
             field_dict["secretRef"] = secret_ref
-        if owner is not UNSET:
-            field_dict["owner"] = owner
-        if repo is not UNSET:
-            field_dict["repo"] = repo
+        if url is not UNSET:
+            field_dict["url"] = url
         if ref is not UNSET:
             field_dict["ref"] = ref
-        if store_id is not UNSET:
-            field_dict["storeId"] = store_id
+        if memory_ref is not UNSET:
+            field_dict["memoryRef"] = memory_ref
         if description is not UNSET:
             field_dict["description"] = description
         if access is not UNSET:
@@ -128,13 +122,11 @@ class RunnerVolume:
 
         secret_ref = d.pop("secretRef", UNSET)
 
-        owner = d.pop("owner", UNSET)
-
-        repo = d.pop("repo", UNSET)
+        url = d.pop("url", UNSET)
 
         ref = d.pop("ref", UNSET)
 
-        store_id = d.pop("storeId", UNSET)
+        memory_ref = d.pop("memoryRef", UNSET)
 
         def _parse_description(data: object) -> None | str | Unset:
             if data is None:
@@ -164,10 +156,9 @@ class RunnerVolume:
             name=name,
             type_=type_,
             secret_ref=secret_ref,
-            owner=owner,
-            repo=repo,
+            url=url,
             ref=ref,
-            store_id=store_id,
+            memory_ref=memory_ref,
             description=description,
             access=access,
             memories=memories,

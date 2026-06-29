@@ -24,7 +24,7 @@ class EnvFromEntry:
     """ 
         Attributes:
             type_ (EnvFromEntryType):  Example: secret.
-            name (str):  Example: GITHUB_TOKEN.
+            name (str):  Example: API_TOKEN.
             secret_ref (str):  Example: ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123.
      """
 

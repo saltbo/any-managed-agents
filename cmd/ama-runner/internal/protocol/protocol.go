@@ -11,10 +11,9 @@ import (
 type Volume struct {
 	Type        string           `json:"type"`
 	Name        string           `json:"name"`
-	Owner       string           `json:"owner"`
-	Repo        string           `json:"repo"`
+	URL         string           `json:"url"`
 	Ref         string           `json:"ref"`
-	StoreID     string           `json:"storeId"`
+	MemoryRef   string           `json:"memoryRef"`
 	Description *string          `json:"description"`
 	Access      string           `json:"access"`
 	SecretRef   string           `json:"secretRef"`
@@ -32,16 +31,33 @@ type MemorySnapshot struct {
 	Content string `json:"content"`
 }
 
-type ResolvedVolumeFile struct {
+type WorkspaceFile struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
 }
 
-type ResolvedVolumeMount struct {
-	Name      string               `json:"name"`
-	MountPath string               `json:"mountPath"`
-	ReadOnly  bool                 `json:"readOnly"`
-	Files     []ResolvedVolumeFile `json:"files"`
+type WorkspaceGitCredential struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type WorkspaceMount struct {
+	Type        string                  `json:"type"`
+	Name        string                  `json:"name"`
+	MountPath   string                  `json:"mountPath"`
+	URL         string                  `json:"url"`
+	Ref         string                  `json:"ref"`
+	Credential  *WorkspaceGitCredential `json:"credential"`
+	MemoryRef   string                  `json:"memoryRef"`
+	Description *string                 `json:"description"`
+	Access      string                  `json:"access"`
+	ReadOnly    bool                    `json:"readOnly"`
+	Files       []WorkspaceFile         `json:"files"`
+}
+
+type WorkspaceManifest struct {
+	Root   string           `json:"root"`
+	Mounts []WorkspaceMount `json:"mounts"`
 }
 
 type RunnerChannelMessage = ama.RunnerChannelMessage
@@ -51,29 +67,27 @@ type RunnerRuntimeRequest = ama.RunnerRuntimeRequest
 type RunnerRuntimeToolCall = ama.RunnerRuntimeToolCall
 
 type WorkPayload struct {
-	Protocol                 string                `json:"protocol"`
-	Type                     string                `json:"type"`
-	SessionID                string                `json:"sessionId"`
-	HostingMode              string                `json:"hostingMode"`
-	Runtime                  string                `json:"runtime"`
-	RuntimeConfig            map[string]any        `json:"runtimeConfig"`
-	Volumes                  []Volume              `json:"volumes"`
-	VolumeMounts             []VolumeMount         `json:"volumeMounts"`
-	Provider                 string                `json:"provider"`
-	Model                    string                `json:"model"`
-	AgentSnapshot            map[string]any        `json:"agentSnapshot"`
-	RuntimeDriver            string                `json:"runtimeDriver"`
-	RequiredRunnerCapability string                `json:"requiredRunnerCapability"`
-	RuntimeEnv               map[string]string     `json:"runtimeEnv"`
-	ResolvedVolumes          []ResolvedVolumeMount `json:"resolvedVolumes"`
-	InitialPrompt            *string               `json:"initialPrompt"`
-	Resume                   bool                  `json:"resume"`
-	ResumeToken              string                `json:"resumeToken"`
-	Approved                 bool                  `json:"approved"`
-	ToolCallID               string                `json:"toolCallId"`
-	ToolName                 string                `json:"toolName"`
-	Input                    map[string]any        `json:"input"`
-	ToolCall                 *ToolCall             `json:"toolCall"`
+	Protocol                 string            `json:"protocol"`
+	Type                     string            `json:"type"`
+	SessionID                string            `json:"sessionId"`
+	HostingMode              string            `json:"hostingMode"`
+	Runtime                  string            `json:"runtime"`
+	RuntimeConfig            map[string]any    `json:"runtimeConfig"`
+	WorkspaceManifest        WorkspaceManifest `json:"workspaceManifest"`
+	Provider                 string            `json:"provider"`
+	Model                    string            `json:"model"`
+	AgentSnapshot            map[string]any    `json:"agentSnapshot"`
+	RuntimeDriver            string            `json:"runtimeDriver"`
+	RequiredRunnerCapability string            `json:"requiredRunnerCapability"`
+	RuntimeEnv               map[string]string `json:"runtimeEnv"`
+	InitialPrompt            *string           `json:"initialPrompt"`
+	Resume                   bool              `json:"resume"`
+	ResumeToken              string            `json:"resumeToken"`
+	Approved                 bool              `json:"approved"`
+	ToolCallID               string            `json:"toolCallId"`
+	ToolName                 string            `json:"toolName"`
+	Input                    map[string]any    `json:"input"`
+	ToolCall                 *ToolCall         `json:"toolCall"`
 }
 
 type ToolCall struct {
@@ -141,15 +155,13 @@ func workPayloadFromSDK(payload ama.RunnerWorkPayload) WorkPayload {
 		HostingMode:              stringValue(payload.HostingMode),
 		Runtime:                  stringValue(payload.Runtime),
 		RuntimeConfig:            jsonMap(payload.RuntimeConfig),
-		Volumes:                  volumesFromSDK(payload.Volumes),
-		VolumeMounts:             volumeMountsFromSDK(payload.VolumeMounts),
+		WorkspaceManifest:        workspaceManifestFromSDK(payload.WorkspaceManifest),
 		Provider:                 stringValue(payload.Provider),
 		Model:                    stringValue(payload.Model),
 		AgentSnapshot:            jsonMap(payload.AgentSnapshot),
 		RuntimeDriver:            stringValue(payload.RuntimeDriver),
 		RequiredRunnerCapability: stringValue(payload.RequiredRunnerCapability),
 		RuntimeEnv:               stringMap(payload.RuntimeEnv),
-		ResolvedVolumes:          resolvedVolumesFromSDK(payload.ResolvedVolumes),
 		InitialPrompt:            payload.InitialPrompt,
 		Resume:                   boolValue(payload.Resume),
 		ResumeToken:              stringValue(payload.ResumeToken),
@@ -174,23 +186,50 @@ func toolCallFromSDK(toolCall *ama.RunnerToolCall) *ToolCall {
 	}
 }
 
-func resolvedVolumesFromSDK(volumes *[]ama.RunnerResolvedVolumeMount) []ResolvedVolumeMount {
-	if volumes == nil {
-		return nil
+func workspaceManifestFromSDK(manifest *ama.RunnerWorkspaceManifest) WorkspaceManifest {
+	if manifest == nil {
+		return WorkspaceManifest{Root: "/workspace"}
 	}
-	return lo.Map(*volumes, func(volume ama.RunnerResolvedVolumeMount, _ int) ResolvedVolumeMount {
-		return ResolvedVolumeMount{
-			Name:      volume.Name,
-			MountPath: volume.MountPath,
-			ReadOnly:  volume.ReadOnly,
-			Files:     resolvedVolumeFilesFromSDK(volume.Files),
+	return WorkspaceManifest{
+		Root:   string(manifest.Root),
+		Mounts: workspaceMountsFromSDK(manifest.Mounts),
+	}
+}
+
+func workspaceMountsFromSDK(mounts []ama.RunnerWorkspaceMount) []WorkspaceMount {
+	return lo.Map(mounts, func(mount ama.RunnerWorkspaceMount, _ int) WorkspaceMount {
+		return WorkspaceMount{
+			Type:        string(mount.Type),
+			Name:        mount.Name,
+			MountPath:   mount.MountPath,
+			URL:         stringValue(mount.Url),
+			Ref:         stringValue(mount.Ref),
+			Credential:  workspaceGitCredentialFromSDK(mount.Credential),
+			MemoryRef:   stringValue(mount.MemoryRef),
+			Description: mount.Description,
+			Access:      stringValue(mount.Access),
+			ReadOnly:    boolValue(mount.ReadOnly),
+			Files:       workspaceFilesFromSDK(mount.Files),
 		}
 	})
 }
 
-func resolvedVolumeFilesFromSDK(files []ama.RunnerResolvedVolumeFile) []ResolvedVolumeFile {
-	return lo.Map(files, func(file ama.RunnerResolvedVolumeFile, _ int) ResolvedVolumeFile {
-		return ResolvedVolumeFile{Path: file.Path, Content: file.Content}
+func workspaceGitCredentialFromSDK(credential *ama.RunnerGitCredential) *WorkspaceGitCredential {
+	if credential == nil {
+		return nil
+	}
+	return &WorkspaceGitCredential{
+		Username: credential.Username,
+		Password: credential.Password,
+	}
+}
+
+func workspaceFilesFromSDK(files *[]ama.RunnerWorkspaceFile) []WorkspaceFile {
+	if files == nil {
+		return nil
+	}
+	return lo.Map(*files, func(file ama.RunnerWorkspaceFile, _ int) WorkspaceFile {
+		return WorkspaceFile{Path: file.Path, Content: file.Content}
 	})
 }
 
@@ -207,10 +246,9 @@ func volumeFromSDK(volume ama.RunnerVolume) Volume {
 	return Volume{
 		Type:        string(volume.Type),
 		Name:        volume.Name,
-		Owner:       stringValue(volume.Owner),
-		Repo:        stringValue(volume.Repo),
+		URL:         stringValue(volume.Url),
 		Ref:         stringValue(volume.Ref),
-		StoreID:     stringValue(volume.StoreId),
+		MemoryRef:   stringValue(volume.MemoryRef),
 		Description: volume.Description,
 		Access:      stringValue(volume.Access),
 		SecretRef:   stringValue(volume.SecretRef),

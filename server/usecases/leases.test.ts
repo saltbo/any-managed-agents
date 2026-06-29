@@ -75,7 +75,7 @@ function fakeDeps(overrides: {
   leases?: Partial<Deps['leases']>
   workItems?: Partial<Deps['workItems']>
   resolveEnv?: Deps['runtimeSecrets']['resolveEnv']
-  resolveVolumes?: Deps['runtimeSecrets']['resolveVolumes']
+  resolveWorkspaceManifest?: Deps['runtimeSecrets']['resolveWorkspaceManifest']
 }): Deps {
   const leases: Deps['leases'] = {
     list: async () => ({ rows: [], hasMore: false }),
@@ -98,7 +98,7 @@ function fakeDeps(overrides: {
   }
   const runtimeSecrets: Deps['runtimeSecrets'] = {
     resolveEnv: overrides.resolveEnv ?? (async () => ({})),
-    resolveVolumes: overrides.resolveVolumes ?? (async () => []),
+    resolveWorkspaceManifest: overrides.resolveWorkspaceManifest ?? (async () => ({ root: '/workspace', mounts: [] })),
   }
   return { leases, workItems, runtimeSecrets } as unknown as Deps
 }
@@ -298,7 +298,7 @@ describe('materializeWorkItemPayload', () => {
     expect(payload).toEqual({ type: 'session.start' })
   })
 
-  it('resolves secret env into runtimeEnv for session starts', async () => {
+  it('resolves envFrom into runtimeEnv for session starts', async () => {
     const deps = fakeDeps({
       workItems: {
         rawPayload: async () => ({
@@ -314,7 +314,7 @@ describe('materializeWorkItemPayload', () => {
     expect(payload).not.toHaveProperty('envFrom')
   })
 
-  it('resolves secret env when no runtimeEnv exists yet in the payload', async () => {
+  it('resolves envFrom when no runtimeEnv exists yet in the payload', async () => {
     const deps = fakeDeps({
       workItems: {
         rawPayload: async () => ({

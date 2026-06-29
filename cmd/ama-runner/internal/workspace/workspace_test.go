@@ -35,7 +35,7 @@ func TestWorkspaceSafety(t *testing.T) {
 	}
 }
 
-func TestPrepareWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
+func TestPrepareWorkspaceMountsGitRepositoryWorktree(t *testing.T) {
 	workDir := t.TempDir()
 	sourceDir := filepath.Join(t.TempDir(), "source")
 	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
@@ -49,19 +49,17 @@ func TestPrepareWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 	}
 	runGit(t, sourceDir, "add", "README.md")
 	runGit(t, sourceDir, "commit", "-m", "init")
-	cacheDir := filepath.Join(workDir, "repositories", "saltbo", "zpan")
+	cacheDir := filepath.Join(workDir, "repositories", "github.com", "saltbo", "zpan")
 	if err := os.MkdirAll(filepath.Dir(cacheDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
 
-	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: workDir, SessionID: "session_1", Volumes: []protocol.Volume{{
-		Type:  "github_repository",
-		Name:  "source",
-		Owner: "saltbo",
-		Repo:  "zpan",
-		Ref:   "main",
-	}}})
+	workspace, err := Prepare(context.Background(), PrepareRequest{
+		WorkDir:   workDir,
+		SessionID: "session_1",
+		Manifest:  workspaceManifest(gitRepositoryMount()),
+	})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
@@ -74,7 +72,7 @@ func TestPrepareWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 	if workspace.Cwd != workspace.Root {
 		t.Fatalf("expected workspace root cwd, got %q", workspace.Cwd)
 	}
-	repoPath := filepath.Join(workspace.Root, "repos", "saltbo", "zpan")
+	repoPath := filepath.Join(workspace.Root, "repos", "github.com", "saltbo", "zpan")
 	if data, err := os.ReadFile(filepath.Join(repoPath, "README.md")); err != nil || string(data) != "zpan\n" {
 		t.Fatalf("expected mounted repo content, got %q err=%v", string(data), err)
 	}
@@ -110,17 +108,14 @@ func TestPrepareWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 	workDir := t.TempDir()
 	description := "maintainer notes"
-	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: workDir, SessionID: "session_1", Volumes: []protocol.Volume{{
-		Type:        "memory_store",
-		Name:        "maintainer-memory",
-		StoreID:     "memstore_1",
-		Description: &description,
-		Access:      "read_write",
-		Memories: []protocol.MemorySnapshot{{
+	workspace, err := Prepare(context.Background(), PrepareRequest{
+		WorkDir:   workDir,
+		SessionID: "session_1",
+		Manifest: workspaceManifest(memoryMount("read_write", description, protocol.WorkspaceFile{
 			Path:    "ak-maintainer-heartbeat.md",
 			Content: "initial heartbeat\n",
-		}},
-	}}})
+		})),
+	})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
@@ -136,7 +131,7 @@ func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected memory snapshot readback, got %v", err)
 	}
-	if len(snapshots) != 1 || snapshots[0].StoreID != "memstore_1" || len(snapshots[0].Memories) != 1 {
+	if len(snapshots) != 1 || snapshots[0].MemoryRef != "ama://memories/memstore_1" || len(snapshots[0].Memories) != 1 {
 		t.Fatalf("expected one memory store snapshot, got %#v", snapshots)
 	}
 	if got := snapshots[0].Memories[0]; got.Path != "ak-maintainer-heartbeat.md" || got.Content != "updated heartbeat\n" {
@@ -149,7 +144,8 @@ func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(state), `"type": "memory_store"`) ||
+	if !strings.Contains(string(state), `"type": "memory"`) ||
+		!strings.Contains(string(state), `"memoryRef": "ama://memories/memstore_1"`) ||
 		!strings.Contains(string(state), `"status": "mounted"`) ||
 		strings.Contains(string(state), "initial heartbeat") {
 		t.Fatalf("expected mounted memory state without memory content, got %s", string(state))
@@ -158,20 +154,13 @@ func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 
 func TestWorkspaceReadsWritableMemoryStores(t *testing.T) {
 	workDir := t.TempDir()
-	volume := protocol.Volume{
-		Type:    "memory_store",
-		Name:    "maintainer-memory",
-		StoreID: "memstore_1",
-		Access:  "read_write",
-		Memories: []protocol.MemorySnapshot{{
-			Path:    "notes/plan.md",
-			Content: "initial plan\n",
-		}},
-	}
 	workspace, err := Prepare(context.Background(), PrepareRequest{
 		WorkDir:   workDir,
 		SessionID: "session_1",
-		Volumes:   []protocol.Volume{volume},
+		Manifest: workspaceManifest(memoryMount("read_write", "", protocol.WorkspaceFile{
+			Path:    "notes/plan.md",
+			Content: "initial plan\n",
+		})),
 	})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
@@ -185,7 +174,7 @@ func TestWorkspaceReadsWritableMemoryStores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected memory store read success, got %v", err)
 	}
-	if len(stores) != 1 || stores[0].StoreID != "memstore_1" || len(stores[0].Memories) != 1 {
+	if len(stores) != 1 || stores[0].MemoryRef != "ama://memories/memstore_1" || len(stores[0].Memories) != 1 {
 		t.Fatalf("expected one memory store, got %#v", stores)
 	}
 	if got := stores[0].Memories[0]; got.Path != "notes/plan.md" || got.Content != "updated plan\n" {
@@ -216,32 +205,28 @@ func TestWorkspaceAgentSystemPromptIncludesCapabilities(t *testing.T) {
 }
 
 func TestPrepareWorkspaceRejectsUnsafeMemoryPath(t *testing.T) {
-	_, err := Prepare(context.Background(), PrepareRequest{WorkDir: t.TempDir(), SessionID: "session_1", Volumes: []protocol.Volume{{
-		Type:    "memory_store",
-		Name:    "maintainer-memory",
-		StoreID: "memstore_1",
-		Access:  "read_write",
-		Memories: []protocol.MemorySnapshot{{
+	_, err := Prepare(context.Background(), PrepareRequest{
+		WorkDir:   t.TempDir(),
+		SessionID: "session_1",
+		Manifest: workspaceManifest(memoryMount("read_write", "", protocol.WorkspaceFile{
 			Path:    "../outside.md",
 			Content: "bad",
-		}},
-	}}})
+		})),
+	})
 	if err == nil || !strings.Contains(err.Error(), "memory path must stay inside") {
 		t.Fatalf("expected unsafe memory path error, got %v", err)
 	}
 }
 
 func TestCleanupWorkspaceRemovesReadOnlyMemoryStore(t *testing.T) {
-	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: t.TempDir(), SessionID: "session_1", Volumes: []protocol.Volume{{
-		Type:    "memory_store",
-		Name:    "maintainer-memory",
-		StoreID: "memstore_1",
-		Access:  "read_only",
-		Memories: []protocol.MemorySnapshot{{
+	workspace, err := Prepare(context.Background(), PrepareRequest{
+		WorkDir:   t.TempDir(),
+		SessionID: "session_1",
+		Manifest: workspaceManifest(memoryMount("read_only", "", protocol.WorkspaceFile{
 			Path:    "ak-maintainer-heartbeat.md",
 			Content: "initial heartbeat\n",
-		}},
-	}}})
+		})),
+	})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
@@ -267,24 +252,21 @@ func TestPrepareWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *test
 	}
 	runGit(t, sourceDir, "add", "README.md")
 	runGit(t, sourceDir, "commit", "-m", "init")
-	cacheDir := filepath.Join(workDir, "repositories", "saltbo", "zpan")
+	cacheDir := filepath.Join(workDir, "repositories", "github.com", "saltbo", "zpan")
 	if err := os.MkdirAll(filepath.Dir(cacheDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
-	volume := protocol.Volume{
-		Type:  "github_repository",
-		Name:  "source",
-		Owner: "saltbo",
-		Repo:  "zpan",
-		Ref:   "main",
+	volume := gitRepositoryMount()
+	volume.Credential = &protocol.WorkspaceGitCredential{
+		Username: "x-access-token",
+		Password: "ghs_session_token",
 	}
 
 	workspace, err := Prepare(context.Background(), PrepareRequest{
-		WorkDir:    workDir,
-		SessionID:  "session_1",
-		Volumes:    []protocol.Volume{volume},
-		RuntimeEnv: map[string]string{"GH_TOKEN": "ghs_session_token"},
+		WorkDir:   workDir,
+		SessionID: "session_1",
+		Manifest:  workspaceManifest(volume),
 	})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
@@ -295,7 +277,7 @@ func TestPrepareWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *test
 		t.Fatalf("expected session credential store, got %v", err)
 	}
 	if string(credentials) != "https://x-access-token:ghs_session_token@github.com\n" {
-		t.Fatalf("expected GH_TOKEN credential line, got %q", string(credentials))
+		t.Fatalf("expected git credential line, got %q", string(credentials))
 	}
 	info, err := os.Stat(credentialsPath)
 	if err != nil {
@@ -304,7 +286,7 @@ func TestPrepareWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *test
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("expected credential store mode 0600, got %v", info.Mode().Perm())
 	}
-	repoPath := filepath.Join(workspace.Root, "repos", "saltbo", "zpan")
+	repoPath := filepath.Join(workspace.Root, "repos", "github.com", "saltbo", "zpan")
 	helpers := runGitOutput(t, repoPath, "config", "--worktree", "--get-all", "credential.helper")
 	if !strings.Contains(helpers, fmt.Sprintf("store --file %q", credentialsPath)) {
 		t.Fatalf("expected worktree credential helper pointing at the session store, got %q", helpers)
@@ -314,22 +296,22 @@ func TestPrepareWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *test
 	}
 
 	// A token must stay scoped to its session: a second workspace from the
-	// same repository cache prepared without GH_TOKEN sees no helper.
+	// same repository cache prepared without a manifest credential sees no helper.
 	second, err := Prepare(context.Background(), PrepareRequest{
 		WorkDir:   workDir,
 		SessionID: "session_2",
-		Volumes:   []protocol.Volume{volume},
+		Manifest:  workspaceManifest(gitRepositoryMount()),
 	})
 	if err != nil {
 		t.Fatalf("expected second workspace preparation success, got %v", err)
 	}
 	leakCheck := exec.Command("git", "config", "--worktree", "--get-all", "credential.helper")
-	leakCheck.Dir = filepath.Join(second.Root, "repos", "saltbo", "zpan")
+	leakCheck.Dir = filepath.Join(second.Root, "repos", "github.com", "saltbo", "zpan")
 	if output, err := leakCheck.CombinedOutput(); err == nil && strings.TrimSpace(string(output)) != "" {
 		t.Fatalf("expected no credential helper leak into other sessions, got %q", string(output))
 	}
 	if _, err := os.Stat(filepath.Join(second.Dir, "git-credentials")); !os.IsNotExist(err) {
-		t.Fatalf("expected no credential store without GH_TOKEN, got err=%v", err)
+		t.Fatalf("expected no credential store without a manifest credential, got err=%v", err)
 	}
 	for _, prepared := range []*Workspace{workspace, second} {
 		if err := prepared.Cleanup(context.Background()); err != nil {
@@ -352,19 +334,13 @@ func TestPrepareWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 	}
 	runGit(t, sourceDir, "add", "README.md")
 	runGit(t, sourceDir, "commit", "-m", "init")
-	cacheDir := filepath.Join(workDir, "repositories", "saltbo", "zpan")
+	cacheDir := filepath.Join(workDir, "repositories", "github.com", "saltbo", "zpan")
 	if err := os.MkdirAll(filepath.Dir(cacheDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
 
-	volume := protocol.Volume{
-		Type:  "github_repository",
-		Name:  "source",
-		Owner: "saltbo",
-		Repo:  "zpan",
-		Ref:   "main",
-	}
+	volume := gitRepositoryMount()
 	workspaces := make(chan *Workspace, 2)
 	errs := make(chan error, 2)
 	var wg sync.WaitGroup
@@ -375,7 +351,7 @@ func TestPrepareWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 			workspace, err := Prepare(context.Background(), PrepareRequest{
 				WorkDir:   workDir,
 				SessionID: sessionID,
-				Volumes:   []protocol.Volume{volume},
+				Manifest:  workspaceManifest(volume),
 			})
 			if err != nil {
 				errs <- err
@@ -391,7 +367,7 @@ func TestPrepareWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 		t.Fatalf("expected concurrent workspace preparation success, got %v", err)
 	}
 	for workspace := range workspaces {
-		repoPath := filepath.Join(workspace.Root, "repos", "saltbo", "zpan")
+		repoPath := filepath.Join(workspace.Root, "repos", "github.com", "saltbo", "zpan")
 		if data, err := os.ReadFile(filepath.Join(repoPath, "README.md")); err != nil || string(data) != "zpan\n" {
 			t.Fatalf("expected mounted repo content, got %q err=%v", string(data), err)
 		}
@@ -417,6 +393,35 @@ func TestCleanupStaleWorkspacesRemovesExpiredSessionRoots(t *testing.T) {
 	if _, err := os.Stat(sessionRoot); !os.IsNotExist(err) {
 		t.Fatalf("expected stale session root cleanup, got err=%v", err)
 	}
+}
+
+func workspaceManifest(mounts ...protocol.WorkspaceMount) protocol.WorkspaceManifest {
+	return protocol.WorkspaceManifest{Root: "/workspace", Mounts: mounts}
+}
+
+func gitRepositoryMount() protocol.WorkspaceMount {
+	return protocol.WorkspaceMount{
+		Type:      "git_repository",
+		Name:      "source",
+		MountPath: "/workspace/repos/github.com/saltbo/zpan",
+		URL:       "https://github.com/saltbo/zpan.git",
+		Ref:       "main",
+	}
+}
+
+func memoryMount(access string, description string, files ...protocol.WorkspaceFile) protocol.WorkspaceMount {
+	mount := protocol.WorkspaceMount{
+		Type:      "memory",
+		Name:      "maintainer-memory",
+		MountPath: "/workspace/.ama/memory-stores/memstore_1",
+		MemoryRef: "ama://memories/memstore_1",
+		Access:    access,
+		Files:     files,
+	}
+	if description != "" {
+		mount.Description = &description
+	}
+	return mount
 }
 
 func runGit(t *testing.T, cwd string, args ...string) {

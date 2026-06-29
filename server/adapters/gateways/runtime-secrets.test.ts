@@ -34,10 +34,10 @@ describe('[spec: runtime-secrets/gateway] createRuntimeSecretGateway', () => {
     decryptSecretValueMock.mockReset()
   })
 
-  it('returns env and volume resolver methods', () => {
+  it('returns env and workspace resolver methods', () => {
     const gateway = createRuntimeSecretGateway(env, fakeDb)
     expect(typeof gateway.resolveEnv).toBe('function')
-    expect(typeof gateway.resolveVolumes).toBe('function')
+    expect(typeof gateway.resolveWorkspaceManifest).toBe('function')
   })
 
   it('decrypts the stored ciphertext for an AMA credential version', async () => {

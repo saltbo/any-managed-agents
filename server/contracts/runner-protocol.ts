@@ -11,33 +11,55 @@ export const RunnerMemorySnapshotSchema = z
   .strict()
   .openapi('RunnerMemorySnapshot')
 
-export const RunnerResolvedVolumeFileSchema = z
+export const RunnerWorkspaceFileSchema = z
   .object({
-    path: z.string().openapi({ example: 'GITHUB_TOKEN' }),
-    content: z.string().openapi({ example: 'secret-value' }),
+    path: z.string().openapi({ example: 'notes/plan.md' }),
+    content: z.string().openapi({ example: 'Project notes' }),
   })
   .strict()
-  .openapi('RunnerResolvedVolumeFile')
+  .openapi('RunnerWorkspaceFile')
 
-export const RunnerResolvedVolumeMountSchema = z
+export const RunnerGitCredentialSchema = z
   .object({
-    name: z.string().openapi({ example: 'github-token' }),
-    mountPath: z.string().openapi({ example: '/workspace/.ama/secrets/github-token' }),
-    readOnly: z.boolean().openapi({ example: true }),
-    files: z.array(RunnerResolvedVolumeFileSchema),
+    username: z.string().openapi({ example: 'x-access-token' }),
+    password: z.string().openapi({ example: 'secret-value' }),
   })
   .strict()
-  .openapi('RunnerResolvedVolumeMount')
+  .openapi('RunnerGitCredential')
+
+export const RunnerWorkspaceMountSchema = z
+  .object({
+    name: z.string().openapi({ example: 'source' }),
+    type: z.enum(['git_repository', 'memory', 'secret']).openapi({ example: 'git_repository' }),
+    mountPath: z.string().openapi({ example: '/workspace/repos/saltbo/any-managed-agents' }),
+    url: z.string().optional().openapi({ example: 'https://github.com/saltbo/any-managed-agents.git' }),
+    ref: z.string().optional().openapi({ example: 'main' }),
+    credential: RunnerGitCredentialSchema.optional(),
+    memoryRef: z.string().optional().openapi({ example: 'ama://memories/memstore_abc123' }),
+    description: z.string().nullable().optional(),
+    access: z.string().optional().openapi({ example: 'read_write' }),
+    readOnly: z.boolean().optional(),
+    files: z.array(RunnerWorkspaceFileSchema).optional(),
+  })
+  .strict()
+  .openapi('RunnerWorkspaceMount')
+
+export const RunnerWorkspaceManifestSchema = z
+  .object({
+    root: z.literal('/workspace').openapi({ example: '/workspace' }),
+    mounts: z.array(RunnerWorkspaceMountSchema),
+  })
+  .strict()
+  .openapi('RunnerWorkspaceManifest')
 
 export const RunnerVolumeSchema = z
   .object({
     name: z.string().openapi({ example: 'source' }),
-    type: z.enum(['secret', 'github_repository', 'memory_store']).openapi({ example: 'github_repository' }),
+    type: z.enum(['secret', 'git_repository', 'memory']).openapi({ example: 'git_repository' }),
     secretRef: z.string().optional(),
-    owner: z.string().optional().openapi({ example: 'saltbo' }),
-    repo: z.string().optional().openapi({ example: 'any-managed-agents' }),
+    url: z.string().optional().openapi({ example: 'https://github.com/saltbo/any-managed-agents.git' }),
     ref: z.string().optional().openapi({ example: 'main' }),
-    storeId: z.string().optional().openapi({ example: 'memstore_abc123' }),
+    memoryRef: z.string().optional().openapi({ example: 'ama://memories/memstore_abc123' }),
     description: z.string().nullable().optional(),
     access: z.string().optional().openapi({ example: 'read_write' }),
     memories: z.array(RunnerMemorySnapshotSchema).optional(),
@@ -80,9 +102,7 @@ export const RunnerWorkPayloadSchema = z
     runtimeDriver: z.string().optional().openapi({ example: 'codex-self-hosted' }),
     requiredRunnerCapability: z.string().nullable().optional(),
     runtimeEnv: StringMapSchema.optional(),
-    volumes: z.array(RunnerVolumeSchema).optional(),
-    volumeMounts: z.array(RunnerVolumeMountSchema).optional(),
-    resolvedVolumes: z.array(RunnerResolvedVolumeMountSchema).optional(),
+    workspaceManifest: RunnerWorkspaceManifestSchema.optional(),
     initialPrompt: z.string().nullable().optional(),
     resume: z.boolean().optional(),
     resumeToken: z.string().nullable().optional(),
@@ -156,8 +176,10 @@ export const RunnerChannelMessageSchema = z
 
 export const RUNNER_PROTOCOL_SCHEMAS = {
   RunnerMemorySnapshot: RunnerMemorySnapshotSchema,
-  RunnerResolvedVolumeFile: RunnerResolvedVolumeFileSchema,
-  RunnerResolvedVolumeMount: RunnerResolvedVolumeMountSchema,
+  RunnerWorkspaceFile: RunnerWorkspaceFileSchema,
+  RunnerGitCredential: RunnerGitCredentialSchema,
+  RunnerWorkspaceMount: RunnerWorkspaceMountSchema,
+  RunnerWorkspaceManifest: RunnerWorkspaceManifestSchema,
   RunnerVolume: RunnerVolumeSchema,
   RunnerVolumeMount: RunnerVolumeMountSchema,
   RunnerToolCall: RunnerToolCallSchema,

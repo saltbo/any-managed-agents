@@ -45,7 +45,7 @@ async function createAgent(authorization: string) {
   return (await res.json()) as { id: string }
 }
 
-async function createSessionSecretEnv(authorization: string) {
+async function createSessionEnvFrom(authorization: string) {
   const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: `Runner runtime secrets ${crypto.randomUUID()}` }),
@@ -143,7 +143,7 @@ describe('[CF] /api/v1/leases', () => {
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
     const runner = await registerActiveRunner(authorization, environment.id)
-    const envFrom = await createSessionSecretEnv(authorization)
+    const envFrom = await createSessionEnvFrom(authorization)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
       env: { AK_API_URL: 'https://ak.example.test' },
       envFrom,
@@ -253,7 +253,9 @@ describe('[CF] /api/v1/leases', () => {
     expect(memoryRes.status).toBe(201)
     const runner = await registerActiveRunner(authorization, environment.id)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
-      volumes: [{ name: 'memory', type: 'memory_store', storeId: memoryStore.id, access: 'read_write' }],
+      volumes: [
+        { name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStore.id}`, access: 'read_write' },
+      ],
       volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}` }],
     })
     const workItem = await availableWorkItem(authorization, session.id)
@@ -269,7 +271,7 @@ describe('[CF] /api/v1/leases', () => {
           exitCode: 0,
           memoryStores: [
             {
-              storeId: memoryStore.id,
+              memoryRef: `ama://memories/${memoryStore.id}`,
               memories: [{ path: 'ak-maintainer-heartbeat.md', content: 'updated heartbeat\n' }],
             },
           ],
@@ -297,7 +299,9 @@ describe('[CF] /api/v1/leases', () => {
     const memoryStore = (await memoryStoreRes.json()) as { id: string }
     const runner = await registerActiveRunner(authorization, environment.id)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
-      volumes: [{ name: 'memory', type: 'memory_store', storeId: memoryStore.id, access: 'read_write' }],
+      volumes: [
+        { name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStore.id}`, access: 'read_write' },
+      ],
       volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}` }],
     })
     const workItem = await availableWorkItem(authorization, session.id)
@@ -319,7 +323,7 @@ describe('[CF] /api/v1/leases', () => {
           exitCode: 0,
           memoryStores: [
             {
-              storeId: memoryStore.id,
+              memoryRef: `ama://memories/${memoryStore.id}`,
               memories: [{ path: 'ak-maintainer-heartbeat.md', content: 'late heartbeat\n' }],
             },
           ],

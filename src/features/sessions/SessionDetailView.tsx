@@ -239,7 +239,7 @@ export function SessionDetailView({
               meta={
                 <MetaGrid>
                   <Meta label="Count" value={String(volumes.length)} />
-                  <Meta label="GitHub repositories" value={String(githubVolumes(session).length)} />
+                  <Meta label="Git repositories" value={String(gitVolumes(session).length)} />
                   <Meta
                     label="Memory stores"
                     value={memoryStoreVolumes(session).length === 0 ? 'None' : String(memoryStoreVolumes(session).length)}
@@ -297,20 +297,20 @@ function agentSnapshotToolNames(session: Session) {
     .filter((name): name is string => Boolean(name))
 }
 
-function githubVolumes(session: Session) {
-  return session.spec.volumes.filter((volume) => volume.type === 'github_repository')
+function gitVolumes(session: Session) {
+  return session.spec.volumes.filter((volume) => volume.type === 'git_repository')
 }
 
 function memoryStoreVolumes(session: Session) {
-  return session.spec.volumes.filter((volume) => volume.type === 'memory_store')
+  return session.spec.volumes.filter((volume) => volume.type === 'memory')
 }
 
 function safeVolumeView(volume: Record<string, unknown>) {
-  if (volume.type === 'memory_store') {
+  if (volume.type === 'memory') {
     return {
       name: volume.name,
       type: volume.type,
-      storeId: volume.storeId,
+      memoryRef: volume.memoryRef,
       description: volume.description,
       access: volume.access,
       memories: Array.isArray(volume.memories)
@@ -320,26 +320,16 @@ function safeVolumeView(volume: Record<string, unknown>) {
         : [],
     }
   }
-  if (volume.type !== 'github_repository') {
+  if (volume.type !== 'git_repository') {
     return volume
   }
   return {
     name: volume.name,
     type: volume.type,
-    owner: volume.owner,
-    repo: volume.repo,
+    url: volume.url,
     ref: volume.ref,
-    ...(isCredentialRef(volume.credentialRef) ? { credentialRef: volume.credentialRef } : {}),
+    ...(typeof volume.secretRef === 'string' ? { secretRef: volume.secretRef } : {}),
   }
-}
-
-function isCredentialRef(value: unknown): value is { credentialId: string; versionId?: string } {
-  return (
-    Boolean(value) &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    typeof (value as Record<string, unknown>).credentialId === 'string'
-  )
 }
 
 function SessionMeta({

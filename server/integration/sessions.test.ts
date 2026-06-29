@@ -223,7 +223,7 @@ describe('[CF] /api/v1/sessions', () => {
         runtime: 'ama',
         name: 'Ship the first task',
         metadata: { ticket: 'AMA-1' },
-        volumes: [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+        volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban', readOnly: true }],
         env: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
         envFrom: [
@@ -278,7 +278,7 @@ describe('[CF] /api/v1/sessions', () => {
             secretRef: githubCredential.activeVersion.secretRef,
           },
         ],
-        volumes: [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+        volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
       },
       status: {
@@ -323,7 +323,10 @@ describe('[CF] /api/v1/sessions', () => {
 
     const listRes = await jsonFetch('/api/v1/sessions', authorization)
     expect(listRes.status).toBe(200)
-    const list = (await listRes.json()) as { data: Array<{ metadata: { uid: string } }>; pagination: { hasMore: boolean } }
+    const list = (await listRes.json()) as {
+      data: Array<{ metadata: { uid: string } }>
+      pagination: { hasMore: boolean }
+    }
     expect(list.data).toContainEqual(expect.objectContaining({ metadata: expect.objectContaining({ uid: createdId }) }))
     expect(list.pagination.hasMore).toBe(false)
 
@@ -350,7 +353,10 @@ describe('[CF] /api/v1/sessions', () => {
     })
     expect(taskRes.status).toBe(200)
     const afterTaskRes = await jsonFetch(`/api/v1/sessions/${createdId}`, authorization)
-    await expect(afterTaskRes.json()).resolves.toMatchObject({ metadata: { uid: createdId }, status: { phase: 'idle' } })
+    await expect(afterTaskRes.json()).resolves.toMatchObject({
+      metadata: { uid: createdId },
+      status: { phase: 'idle' },
+    })
 
     const messageRes = await jsonFetch(`/api/v1/sessions/${createdId}/messages`, authorization, {
       method: 'POST',
@@ -380,7 +386,10 @@ describe('[CF] /api/v1/sessions', () => {
     expect(messageList.data).toContainEqual(expect.objectContaining({ id: message.id }))
 
     const afterCommandRes = await jsonFetch(`/api/v1/sessions/${createdId}`, authorization)
-    await expect(afterCommandRes.json()).resolves.toMatchObject({ metadata: { uid: createdId }, status: { phase: 'idle' } })
+    await expect(afterCommandRes.json()).resolves.toMatchObject({
+      metadata: { uid: createdId },
+      status: { phase: 'idle' },
+    })
 
     const stopRes = await jsonFetch(`/api/v1/sessions/${createdId}`, authorization, {
       method: 'PATCH',
@@ -508,7 +517,9 @@ describe('[CF] /api/v1/sessions', () => {
 
     const liveListRes = await jsonFetch('/api/v1/sessions', authorization)
     const liveList = (await liveListRes.json()) as { data: Array<{ metadata: { uid: string } }> }
-    expect(liveList.data).not.toContainEqual(expect.objectContaining({ metadata: expect.objectContaining({ uid: createdId }) }))
+    expect(liveList.data).not.toContainEqual(
+      expect.objectContaining({ metadata: expect.objectContaining({ uid: createdId }) }),
+    )
 
     const archivedListRes = await jsonFetch('/api/v1/sessions?archived=true', authorization)
     expect(archivedListRes.status).toBe(200)
@@ -516,7 +527,9 @@ describe('[CF] /api/v1/sessions', () => {
       data: Array<{ metadata: { uid: string; archivedAt: string | null } }>
     }
     expect(archivedList.data).toContainEqual(
-      expect.objectContaining({ metadata: expect.objectContaining({ uid: createdId, archivedAt: expect.any(String) }) }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({ uid: createdId, archivedAt: expect.any(String) }),
+      }),
     )
 
     // Archived sessions reject edits but can be restored.
@@ -615,8 +628,8 @@ describe('[CF] /api/v1/sessions', () => {
         environmentId: environment.id,
         runtime: 'ama',
         volumes: [
-          { name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban', ref: 'main' },
-          { name: 'memory', type: 'memory_store', storeId: memoryStore.id, access: 'read_write' },
+          { name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git', ref: 'main' },
+          { name: 'memory', type: 'memory', memoryRef: `ama://memories/${memoryStore.id}`, access: 'read_write' },
         ],
         volumeMounts: [
           { name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' },
@@ -648,7 +661,12 @@ describe('[CF] /api/v1/sessions', () => {
     }
     const createdId = created.metadata.uid
     expect(created.spec.volumes).toContainEqual(
-      expect.objectContaining({ type: 'memory_store', storeId: memoryStore.id, name: 'memory', access: 'read_write' }),
+      expect.objectContaining({
+        type: 'memory',
+        memoryRef: `ama://memories/${memoryStore.id}`,
+        name: 'memory',
+        access: 'read_write',
+      }),
     )
     expect(created.spec.volumeMounts).toContainEqual({
       name: 'memory',
@@ -712,15 +730,14 @@ describe('[CF] /api/v1/sessions', () => {
     expect(storedPayload.volumes).toEqual([
       {
         name: 'repo',
-        type: 'github_repository',
-        owner: 'saltbo',
-        repo: 'agent-kanban',
+        type: 'git_repository',
+        url: 'https://github.com/saltbo/agent-kanban.git',
         ref: 'main',
       },
       {
         name: 'memory',
-        type: 'memory_store',
-        storeId: memoryStore.id,
+        type: 'memory',
+        memoryRef: `ama://memories/${memoryStore.id}`,
         storeName: 'Team memory',
         description: 'Review conventions',
         access: 'read_write',
@@ -732,7 +749,9 @@ describe('[CF] /api/v1/sessions', () => {
       { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}`, readOnly: true },
     ])
     expect(storedPayload.agentSnapshot.instructions).toContain('Workspace layout:')
-    expect(storedPayload.agentSnapshot.instructions).toContain('saltbo/agent-kanban at repos/saltbo/agent-kanban')
+    expect(storedPayload.agentSnapshot.instructions).toContain(
+      'https://github.com/saltbo/agent-kanban.git at repos/saltbo/agent-kanban',
+    )
     expect(storedPayload.agentSnapshot.instructions).toContain('Team memory')
     expect(storedPayload.agentSnapshot.instructions).toContain(`.ama/memory-stores/${memoryStore.id}`)
     expect(storedPayload.agentSnapshot.instructions).not.toContain('Review for correctness first.')
@@ -754,7 +773,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(payload.runtimeEnv.AK_AGENT_KEY).toBe('raw-github-token')
   })
 
-  it('normalizes GitHub repository volumes and rejects unsafe workspace inputs', async () => {
+  it('normalizes Git repository volumes and rejects unsafe workspace inputs', async () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -769,11 +788,10 @@ describe('[CF] /api/v1/sessions', () => {
         volumes: [
           {
             name: 'repo',
-            type: 'github_repository',
-            owner: 'saltbo',
-            repo: 'any-managed-agents',
+            type: 'git_repository',
+            url: 'https://github.com/saltbo/any-managed-agents.git',
             ref: 'feature/session-resources',
-            credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
+            secretRef: credential.activeVersion.secretRef,
           },
         ],
         volumeMounts: [{ name: 'repo', mountPath: 'repos/ama' }],
@@ -785,11 +803,10 @@ describe('[CF] /api/v1/sessions', () => {
         volumes: [
           {
             name: 'repo',
-            type: 'github_repository',
-            owner: 'saltbo',
-            repo: 'any-managed-agents',
+            type: 'git_repository',
+            url: 'https://github.com/saltbo/any-managed-agents.git',
             ref: 'feature/session-resources',
-            credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
+            secretRef: credential.activeVersion.secretRef,
           },
         ],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/ama', readOnly: true }],
@@ -802,7 +819,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        volumes: [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents' }],
+        volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/any-managed-agents.git' }],
         volumeMounts: [{ name: 'repo', mountPath: '../escape' }],
       }),
     })
@@ -821,8 +838,8 @@ describe('[CF] /api/v1/sessions', () => {
         environmentId: environment.id,
         runtime: 'ama',
         volumes: [
-          { name: 'one', type: 'github_repository', owner: 'saltbo', repo: 'one' },
-          { name: 'two', type: 'github_repository', owner: 'saltbo', repo: 'two' },
+          { name: 'one', type: 'git_repository', url: 'https://github.com/saltbo/one.git' },
+          { name: 'two', type: 'git_repository', url: 'https://gitlab.com/saltbo/two.git' },
         ],
         volumeMounts: [
           { name: 'one', mountPath: 'repos/shared' },
@@ -833,7 +850,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(duplicateMountRes.status).toBe(400)
   })
 
-  it('validates secret environment references without exposing raw secrets [spec: sessions/create-explicit-inputs]', async () => {
+  it('validates envFrom references without exposing raw secrets [spec: sessions/create-explicit-inputs]', async () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -845,7 +862,13 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        envFrom: [{ type: 'secret', name: 'AK_AGENT_KEY', secretRef: 'ama://vaults/vault_missing/credentials/cred_missing/versions/ver_missing' }],
+        envFrom: [
+          {
+            type: 'secret',
+            name: 'AK_AGENT_KEY',
+            secretRef: 'ama://vaults/vault_missing/credentials/cred_missing/versions/ver_missing',
+          },
+        ],
       }),
     })
     expect(missingRefRes.status).toBe(400)
@@ -863,7 +886,11 @@ describe('[CF] /api/v1/sessions', () => {
         environmentId: environment.id,
         runtime: 'ama',
         envFrom: [
-          { type: 'secret', name: 'AK_AGENT_KEY', secretRef: 'ama://vaults/vault_missing/credentials/cred_missing/versions/ver_missing' },
+          {
+            type: 'secret',
+            name: 'AK_AGENT_KEY',
+            secretRef: 'ama://vaults/vault_missing/credentials/cred_missing/versions/ver_missing',
+          },
         ],
       }),
     })
@@ -961,7 +988,10 @@ describe('[CF] /api/v1/sessions', () => {
     })
     expect(ingestStartRes.status).toBe(201)
 
-    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events?type=tool_execution_start`, authorization)
+    const eventsRes = await jsonFetch(
+      `/api/v1/sessions/${created.metadata.uid}/events?type=tool_execution_start`,
+      authorization,
+    )
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
     expect(events.data).toEqual(
@@ -1104,7 +1134,9 @@ describe('[CF] /api/v1/sessions', () => {
     })
 
     // The connection resource advertises the WebSocket transport + path.
-    const connection = (await (await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/connection`, authorization)).json()) as {
+    const connection = (await (
+      await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/connection`, authorization)
+    ).json()) as {
       transport: string
       path: string
     }
@@ -1431,7 +1463,9 @@ describe('[CF] /api/v1/sessions', () => {
     )
 
     const stateRes = await jsonFetch('/api/v1/sessions?state=idle', authorization)
-    const stateList = (await stateRes.json()) as { data: Array<{ metadata: { uid: string }; status: { phase: string } }> }
+    const stateList = (await stateRes.json()) as {
+      data: Array<{ metadata: { uid: string }; status: { phase: string } }>
+    }
     expect(stateList.data.map((session) => session.status.phase)).toEqual(['idle', 'idle'])
 
     const searchRes = await jsonFetch(`/api/v1/sessions?search=${agent.id}`, authorization)
@@ -1651,7 +1685,10 @@ describe('[CF] /api/v1/sessions', () => {
       status: { phase: 'error', reason: '[REDACTED]' },
     })
 
-    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events?type=runtime.error`, authorization)
+    const eventsRes = await jsonFetch(
+      `/api/v1/sessions/${created.metadata.uid}/events?type=runtime.error`,
+      authorization,
+    )
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as { data: Array<{ payload: Record<string, unknown> }> }
     expect(events.data).toHaveLength(1)

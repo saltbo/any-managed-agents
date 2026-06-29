@@ -13,8 +13,8 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.env_from_entry import EnvFromEntry
-  from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-  from ..models.memory_store_volume import MemoryStoreVolume
+  from ..models.git_repository_volume import GitRepositoryVolume
+  from ..models.memory_volume import MemoryVolume
   from ..models.secret_volume import SecretVolume
   from ..models.session_spec_env import SessionSpecEnv
   from ..models.volume_mount import VolumeMount
@@ -37,8 +37,8 @@ class SessionSpec:
             env (SessionSpecEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             env_from (list[EnvFromEntry]):  Example: [{'type': 'secret', 'name': 'AK_AGENT_KEY', 'secretRef':
                 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
-            volumes (list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume]):  Example: [{'name': 'source', 'type':
-                'github_repository', 'owner': 'saltbo', 'repo': 'any-managed-agents'}].
+            volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume]):  Example: [{'name': 'source', 'type':
+                'git_repository', 'url': 'https://github.com/saltbo/any-managed-agents.git'}].
             volume_mounts (list[VolumeMount]):  Example: [{'name': 'source', 'mountPath': '/workspace/repos/saltbo/any-
                 managed-agents', 'readOnly': True}].
      """
@@ -48,7 +48,7 @@ class SessionSpec:
     runtime: Runtime
     env: SessionSpecEnv
     env_from: list[EnvFromEntry]
-    volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume]
+    volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume]
     volume_mounts: list[VolumeMount]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -58,8 +58,8 @@ class SessionSpec:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.env_from_entry import EnvFromEntry
-        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.git_repository_volume import GitRepositoryVolume
+        from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
         from ..models.session_spec_env import SessionSpecEnv
         from ..models.volume_mount import VolumeMount
@@ -84,7 +84,7 @@ class SessionSpec:
             volumes_item: dict[str, Any]
             if isinstance(volumes_item_data, SecretVolume):
                 volumes_item = volumes_item_data.to_dict()
-            elif isinstance(volumes_item_data, GitHubRepositoryVolume):
+            elif isinstance(volumes_item_data, GitRepositoryVolume):
                 volumes_item = volumes_item_data.to_dict()
             else:
                 volumes_item = volumes_item_data.to_dict()
@@ -120,8 +120,8 @@ class SessionSpec:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.env_from_entry import EnvFromEntry
-        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
-        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.git_repository_volume import GitRepositoryVolume
+        from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
         from ..models.session_spec_env import SessionSpecEnv
         from ..models.volume_mount import VolumeMount
@@ -159,7 +159,7 @@ class SessionSpec:
         volumes = []
         _volumes = d.pop("volumes")
         for volumes_item_data in (_volumes):
-            def _parse_volumes_item(data: object) -> GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume:
+            def _parse_volumes_item(data: object) -> GitRepositoryVolume | MemoryVolume | SecretVolume:
                 try:
                     if not isinstance(data, dict):
                         raise TypeError()
@@ -173,7 +173,7 @@ class SessionSpec:
                 try:
                     if not isinstance(data, dict):
                         raise TypeError()
-                    componentsschemas_volume_type_1 = GitHubRepositoryVolume.from_dict(data)
+                    componentsschemas_volume_type_1 = GitRepositoryVolume.from_dict(data)
 
 
 
@@ -182,7 +182,7 @@ class SessionSpec:
                     pass
                 if not isinstance(data, dict):
                     raise TypeError()
-                componentsschemas_volume_type_2 = MemoryStoreVolume.from_dict(data)
+                componentsschemas_volume_type_2 = MemoryVolume.from_dict(data)
 
 
 

@@ -11,13 +11,8 @@ import type { MemoryStoreAccess } from '@server/domain/memory-store'
 import type { CatalogModel } from '@server/domain/model-catalog'
 import type { ModelAvailability, ModelCatalogState } from '@server/domain/provider'
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
-import type {
-  EnvFromEntry,
-  MemoryStoreVolume,
-  ResolvedVolumeMount,
-  Volume,
-  VolumeMount,
-} from '@server/domain/runtime/execution-inputs'
+import type { EnvFromEntry, MemoryVolume, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
+import type { WorkspaceManifest } from '@server/domain/workspace'
 import type {
   MessageDelivery,
   MessageState,
@@ -39,19 +34,11 @@ import type {
 
 export type {
   EnvFromEntry,
-  ResolvedVolumeFile,
-  ResolvedVolumeMount,
   Volume,
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
 
-export type {
-  Session,
-  SessionApproval,
-  SessionConnection,
-  SessionEvent,
-  SessionMessage,
-}
+export type { Session, SessionApproval, SessionConnection, SessionEvent, SessionMessage }
 
 // A port-level error so the http layer can map orchestration validation
 // failures to a 400 without importing usecases internals or adapters. The
@@ -611,8 +598,8 @@ export interface MemoryStoreMemoryRecord {
 }
 
 export interface ResolvedMemoryStoreResource {
-  type: 'memory_store'
-  storeId: string
+  type: 'memory'
+  memoryRef: string
   name: string
   description: string | null
   access: MemoryStoreAccess
@@ -1804,7 +1791,7 @@ export interface WorkItemListQuery {
 // DB boundary for the self-hosted work-item queue (read-only view). The only
 // implementation lives in adapters/repos. `find` returns the redacted record;
 // `rawPayload` returns the unredacted payload the lease-holding runner needs (the
-// materialize usecase resolves its secret env). `activeLeaseRunnerId` returns the
+// materialize usecase resolves runtime inputs). `activeLeaseRunnerId` returns the
 // runner currently holding a still-active lease on the work item, or null.
 export interface WorkItemRepo {
   list(query: WorkItemListQuery): Promise<ListPageResult<WorkItemRecord>>
@@ -1935,11 +1922,11 @@ export interface RuntimeSecretGateway {
     scope: { organizationId: string; projectId: string },
     items: EnvFromEntry[],
   ): Promise<Record<string, string>>
-  resolveVolumes(
+  resolveWorkspaceManifest(
     scope: { organizationId: string; projectId: string },
     volumes: Volume[],
     volumeMounts: VolumeMount[],
-  ): Promise<ResolvedVolumeMount[]>
+  ): Promise<WorkspaceManifest>
 }
 
 // --- cloud turn queue (usecase ↔ queue worker contract) ---
@@ -2016,9 +2003,9 @@ export interface RunnerChannel {
   // Reads writable memory-store files from a runner-owned sandbox workspace.
   readMemoryStoreMemories(input: {
     sessionId: string
-    volumes: MemoryStoreVolume[]
+    volumes: MemoryVolume[]
     volumeMounts: VolumeMount[]
-  }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
+  }): Promise<Array<{ memoryRef: string; memories: Array<{ path: string; content: string }> }>>
 }
 
 // --- sandbox runtime host (cloud session execution) ---
@@ -2048,10 +2035,10 @@ export interface SandboxRuntimeStartInput {
   mcpSnapshot?: Record<string, unknown>
   volumes?: Volume[]
   volumeMounts?: VolumeMount[]
+  workspaceManifest?: WorkspaceManifest
   // Already materialized runtime environment: direct env merged with resolved
   // secret refs before crossing into the runtime host.
   runtimeEnv?: Record<string, string>
-  resolvedVolumes?: ResolvedVolumeMount[]
 }
 
 export interface SandboxRuntimeStartResult {
@@ -2128,9 +2115,9 @@ export interface RuntimeWorkspaceReader {
   readMemoryStoreMemories(input: {
     sessionId: string
     sandboxId: string
-    volumes: MemoryStoreVolume[]
+    volumes: MemoryVolume[]
     volumeMounts: VolumeMount[]
-  }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
+  }): Promise<Array<{ memoryRef: string; memories: Array<{ path: string; content: string }> }>>
 }
 
 // Executes tools inside the session sandbox. The sandbox may be cloud-owned or
@@ -2435,11 +2422,7 @@ export interface RuntimeSessionHandle {
 export interface SessionRepo {
   list(query: SessionListQuery): Promise<SessionListPage>
   find(projectId: string, sessionId: string): Promise<Session | null>
-  findActiveHttpTriggerSession(
-    projectId: string,
-    triggerId: string,
-    key: string,
-  ): Promise<RuntimeSessionHandle | null>
+  findActiveHttpTriggerSession(projectId: string, triggerId: string, key: string): Promise<RuntimeSessionHandle | null>
   // The raw row (with internal columns) for runtime operations. Used by write
   // paths that hand the session to the runtime gateway.
   findRuntimeRow(projectId: string, sessionId: string): Promise<RuntimeSessionHandle | null>

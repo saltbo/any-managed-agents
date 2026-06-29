@@ -18,7 +18,12 @@ SET `env_from` = COALESCE(
         'name',
         json_extract(`item`.`value`, '$.name'),
         'secretRef',
-        'ama://vaults/' || `version`.`vault_id` || '/credentials/' || `version`.`credential_id` || '/versions/' || `version`.`id`
+        printf(
+          'ama://vaults/%s/credentials/%s/versions/%s',
+          `version`.`vault_id`,
+          `version`.`credential_id`,
+          `version`.`id`
+        )
       )
     )
     FROM json_each(`sessions`.`secret_env`) AS `item`
@@ -50,7 +55,12 @@ SET `env_from` = COALESCE(
         'name',
         json_extract(`item`.`value`, '$.name'),
         'secretRef',
-        'ama://vaults/' || `version`.`vault_id` || '/credentials/' || `version`.`credential_id` || '/versions/' || `version`.`id`
+        printf(
+          'ama://vaults/%s/credentials/%s/versions/%s',
+          `version`.`vault_id`,
+          `version`.`credential_id`,
+          `version`.`id`
+        )
       )
     )
     FROM json_each(`triggers`.`secret_env`) AS `item`
@@ -99,7 +109,7 @@ INSERT INTO `__new_vault_credential_versions` (
   `project_id`,
   `version`,
   `provider`,
-  'ama://vaults/' || `vault_id` || '/credentials/' || `credential_id` || '/versions/' || `id`,
+  `secret_ref`,
   `reference_name`,
   `state`,
   `has_secret`,
@@ -116,7 +126,7 @@ SELECT
   `project_id`,
   `version`,
   'ama',
-  `secret_ref`,
+  printf('ama://vaults/%s/credentials/%s/versions/%s', `vault_id`, `credential_id`, `id`),
   `reference_name`,
   `state`,
   `has_secret`,
