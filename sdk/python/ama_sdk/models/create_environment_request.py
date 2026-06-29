@@ -19,7 +19,6 @@ if TYPE_CHECKING:
   from ..models.create_environment_request_resource_limits import CreateEnvironmentRequestResourceLimits
   from ..models.create_environment_request_runtime_config import CreateEnvironmentRequestRuntimeConfig
   from ..models.create_environment_request_variables import CreateEnvironmentRequestVariables
-  from ..models.credential_ref import CredentialRef
   from ..models.environment_mcp_policy import EnvironmentMcpPolicy
   from ..models.environment_network_policy import EnvironmentNetworkPolicy
 
@@ -39,8 +38,6 @@ class CreateEnvironmentRequest:
             description (None | str | Unset):  Example: Default Node.js environment..
             packages (list[CreateEnvironmentRequestPackagesItem] | Unset):  Example: [{'name': 'tsx', 'version': 'latest'}].
             variables (CreateEnvironmentRequestVariables | Unset):  Example: {'NODE_ENV': {'required': True}}.
-            credential_refs (list[CredentialRef] | Unset):  Example: [{'credentialId': 'vaultcred_abc123', 'versionId':
-                'vaultver_abc123'}].
             hosting_mode (EnvironmentHostingMode | Unset):  Example: cloud.
             network_policy (EnvironmentNetworkPolicy | Unset):  Example: {'mode': 'restricted', 'allowedHosts':
                 ['registry.npmjs.org']}.
@@ -56,7 +53,6 @@ class CreateEnvironmentRequest:
     description: None | str | Unset = UNSET
     packages: list[CreateEnvironmentRequestPackagesItem] | Unset = UNSET
     variables: CreateEnvironmentRequestVariables | Unset = UNSET
-    credential_refs: list[CredentialRef] | Unset = UNSET
     hosting_mode: EnvironmentHostingMode | Unset = UNSET
     network_policy: EnvironmentNetworkPolicy | Unset = UNSET
     mcp_policy: EnvironmentMcpPolicy | Unset = UNSET
@@ -76,7 +72,6 @@ class CreateEnvironmentRequest:
         from ..models.create_environment_request_resource_limits import CreateEnvironmentRequestResourceLimits
         from ..models.create_environment_request_runtime_config import CreateEnvironmentRequestRuntimeConfig
         from ..models.create_environment_request_variables import CreateEnvironmentRequestVariables
-        from ..models.credential_ref import CredentialRef
         from ..models.environment_mcp_policy import EnvironmentMcpPolicy
         from ..models.environment_network_policy import EnvironmentNetworkPolicy
         name = self.name
@@ -99,15 +94,6 @@ class CreateEnvironmentRequest:
         variables: dict[str, Any] | Unset = UNSET
         if not isinstance(self.variables, Unset):
             variables = self.variables.to_dict()
-
-        credential_refs: list[dict[str, Any]] | Unset = UNSET
-        if not isinstance(self.credential_refs, Unset):
-            credential_refs = []
-            for credential_refs_item_data in self.credential_refs:
-                credential_refs_item = credential_refs_item_data.to_dict()
-                credential_refs.append(credential_refs_item)
-
-
 
         hosting_mode: str | Unset = UNSET
         if not isinstance(self.hosting_mode, Unset):
@@ -150,8 +136,6 @@ class CreateEnvironmentRequest:
             field_dict["packages"] = packages
         if variables is not UNSET:
             field_dict["variables"] = variables
-        if credential_refs is not UNSET:
-            field_dict["credentialRefs"] = credential_refs
         if hosting_mode is not UNSET:
             field_dict["hostingMode"] = hosting_mode
         if network_policy is not UNSET:
@@ -179,7 +163,6 @@ class CreateEnvironmentRequest:
         from ..models.create_environment_request_resource_limits import CreateEnvironmentRequestResourceLimits
         from ..models.create_environment_request_runtime_config import CreateEnvironmentRequestRuntimeConfig
         from ..models.create_environment_request_variables import CreateEnvironmentRequestVariables
-        from ..models.credential_ref import CredentialRef
         from ..models.environment_mcp_policy import EnvironmentMcpPolicy
         from ..models.environment_network_policy import EnvironmentNetworkPolicy
         d = dict(src_dict)
@@ -215,18 +198,6 @@ class CreateEnvironmentRequest:
             variables = CreateEnvironmentRequestVariables.from_dict(_variables)
 
 
-
-
-        _credential_refs = d.pop("credentialRefs", UNSET)
-        credential_refs: list[CredentialRef] | Unset = UNSET
-        if _credential_refs is not UNSET:
-            credential_refs = []
-            for credential_refs_item_data in _credential_refs:
-                credential_refs_item = CredentialRef.from_dict(credential_refs_item_data)
-
-
-
-                credential_refs.append(credential_refs_item)
 
 
         _hosting_mode = d.pop("hostingMode", UNSET)
@@ -304,7 +275,6 @@ class CreateEnvironmentRequest:
             description=description,
             packages=packages,
             variables=variables,
-            credential_refs=credential_refs,
             hosting_mode=hosting_mode,
             network_policy=network_policy,
             mcp_policy=mcp_policy,

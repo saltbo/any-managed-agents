@@ -85,7 +85,7 @@ The Environment API surface is `hostingMode`, `runtime`, and `runtimeConfig`. Ho
 
 Session creation validates the selected Agent provider/model against the selected Environment runtime and hosting mode. If the exact runtime/provider/model combination is unsupported, session creation fails before workspace allocation, sandbox creation, or self-hosted lease creation.
 
-Session creation also resolves the agent's configured provider into runtime connection details. The provider base URL joins the session runtime environment as the family-standard variable (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, or `OLLAMA_HOST`), and a provider `credentialSecretRef` that references a vault credential version travels as a runtime secret env reference (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_API_KEY`) materialized only at dispatch — on self-hosted lease claim or cloud session startup — never stored raw in D1 or session records. Session-explicit `runtimeEnv`/`runtimeSecretEnv` entries override provider-derived ones. Workers AI runs on the platform binding and contributes no connection env.
+Session creation resolves runtime inputs into safe execution references. Runtime secrets travel as `secretRef` URL references in `envFrom` or `volumes` and are materialized only at dispatch — on self-hosted lease claim or cloud session startup — never stored raw in D1 or session records. Workers AI runs on the platform binding and contributes no connection env.
 
 `cloud` sessions use AMA-managed Cloudflare infrastructure for the selected runtime. `self_hosted` environments enqueue runtime work and keep sessions pending with `statusReason: "waiting-for-runner"` until an eligible runner that supports the exact runtime/provider/model combination claims a lease. `self_hosted` session creation must not create a Cloudflare Sandbox or expose runner-local endpoints.
 
@@ -108,7 +108,7 @@ Session `volumes` may include GitHub repository declarations, mounted through `v
   "owner": "saltbo",
   "repo": "any-managed-agents",
   "ref": "main",
-  "credentialRef": "vaultcred_abc123"
+  "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
 }
 ```
 

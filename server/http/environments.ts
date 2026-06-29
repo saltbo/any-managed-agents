@@ -4,7 +4,6 @@ import { requireAuth } from '../auth/session'
 import { EnvironmentHostingModeSchema, EnvironmentNetworkPolicySchema } from '../contracts/environment-contracts'
 import {
   AuthenticatedOperation,
-  CredentialRefSchema,
   type DepsEnv,
   ErrorResponseSchema,
   formatListCursor,
@@ -53,7 +52,6 @@ const ResourceLimitsSchema = z
   })
   .strict()
 const RuntimeConfigSchema = JsonObjectSchema
-
 const EnvironmentSchema = z
   .object({
     id: z.string().openapi({ example: 'env_abc123' }),
@@ -62,9 +60,6 @@ const EnvironmentSchema = z
     description: z.string().nullable().openapi({ example: 'Default Node.js environment.' }),
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
-    credentialRefs: z.array(CredentialRefSchema).openapi({
-      example: [{ credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' }],
-    }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
@@ -90,9 +85,6 @@ const EnvironmentVersionSchema = z
     version: z.number().int().openapi({ example: 1 }),
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { required: true } } }),
-    credentialRefs: z.array(CredentialRefSchema).openapi({
-      example: [{ credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' }],
-    }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
@@ -119,11 +111,6 @@ const EnvironmentPayloadSchema = z
       .record(z.string(), VariableSchema)
       .optional()
       .openapi({ example: { NODE_ENV: { required: true } } }),
-    credentialRefs: z
-      .array(CredentialRefSchema)
-      .max(100)
-      .optional()
-      .openapi({ example: [{ credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' }] }),
     hostingMode: HostingModeSchema.optional().openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.optional().openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
@@ -185,7 +172,6 @@ function serializeEnvironment(record: EnvironmentRecord) {
     description: record.description,
     packages: record.packages,
     variables: record.variables,
-    credentialRefs: record.credentialRefs,
     hostingMode: record.hostingMode,
     networkPolicy: record.networkPolicy,
     mcpPolicy: record.mcpPolicy,
@@ -209,7 +195,6 @@ function serializeEnvironmentVersion(record: EnvironmentVersionRecord) {
     version: record.version,
     packages: record.packages,
     variables: record.variables,
-    credentialRefs: record.credentialRefs,
     hostingMode: record.hostingMode,
     networkPolicy: record.networkPolicy,
     mcpPolicy: record.mcpPolicy,
@@ -486,7 +471,6 @@ function configFromPayload(body: z.infer<typeof EnvironmentPayloadSchema>) {
   return {
     packages: body.packages ?? [],
     variables: body.variables ?? {},
-    credentialRefs: body.credentialRefs ?? [],
     hostingMode: body.hostingMode ?? ('cloud' as const),
     networkPolicy: body.networkPolicy ?? normalizeEnvironmentNetworkPolicy({ mode: 'unrestricted' }),
     mcpPolicy: body.mcpPolicy ?? {},
@@ -505,7 +489,6 @@ function patchFromBody(body: z.infer<typeof UpdateEnvironmentSchema>): UpdateEnv
     ...(body.description !== undefined ? { description: body.description } : {}),
     ...(body.packages !== undefined ? { packages: body.packages } : {}),
     ...(body.variables !== undefined ? { variables: body.variables } : {}),
-    ...(body.credentialRefs !== undefined ? { credentialRefs: body.credentialRefs } : {}),
     ...(body.hostingMode !== undefined ? { hostingMode: body.hostingMode } : {}),
     ...(body.networkPolicy !== undefined ? { networkPolicy: body.networkPolicy } : {}),
     ...(body.mcpPolicy !== undefined ? { mcpPolicy: body.mcpPolicy } : {}),

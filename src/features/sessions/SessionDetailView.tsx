@@ -217,10 +217,6 @@ export function SessionDetailView({
                     label="Variables"
                     value={Object.keys(environmentSnapshot.variables).join(', ') || 'None'}
                   />
-                  <Meta
-                    label="Credential refs"
-                    value={environmentSnapshot.credentialRefs.map((item) => item.credentialId).join(', ') || 'None'}
-                  />
                 </MetaGrid>
               }
               json={{

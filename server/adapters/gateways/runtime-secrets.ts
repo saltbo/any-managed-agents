@@ -22,12 +22,12 @@ import { createRuntimeOrchestrationRepo } from '../repos/runtime-orchestration'
 
 type Db = ReturnType<typeof drizzle>
 
-// Resolves envFrom secret handles into runtime environment values. Both
+// Resolves envFrom secret handles into env values. Both
 // dispatch paths use this seam: self-hosted lease materialization and cloud
 // session startup. AMA versions decrypt the stored ciphertext.
 // Resolved values exist only in the runtime dispatch; they are never written
 // to D1, session events, audit records, or logs.
-export async function resolveRuntimeEnvFrom(
+export async function resolveEnvFrom(
   env: Env,
   db: Db,
   scope: { organizationId: string; projectId: string },
@@ -204,7 +204,7 @@ function parseMetadata(raw: unknown): Record<string, unknown> | null {
 export function createRuntimeSecretGateway(env: Env, db: Db): RuntimeSecretGateway {
   return {
     async resolveEnv(scope, items) {
-      return resolveRuntimeEnvFrom(env, db, scope, items)
+      return resolveEnvFrom(env, db, scope, items)
     },
     async resolveWorkspaceManifest(scope, volumes, volumeMounts) {
       return resolveRuntimeWorkspaceManifest(env, db, scope, volumes, volumeMounts)

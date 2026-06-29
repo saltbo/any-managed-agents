@@ -58,10 +58,6 @@ export function EnvironmentDetailView({
         <MetaGrid>
           <Meta label="Packages" value={environment.packages.map((item) => item.name).join(', ') || 'None'} />
           <Meta label="Variables" value={Object.keys(environment.variables).join(', ') || 'None'} />
-          <Meta
-            label="Credential refs"
-            value={environment.credentialRefs.map((item) => item.credentialId).join(', ') || 'None'}
-          />
           <Meta label="Hosting mode" value={environment.hostingMode} />
           <Meta label="Runtime config" value={runtimeConfigSummary(environment)} />
           <Meta label="Network policy" value={networkSummary(environment)} />

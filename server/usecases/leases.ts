@@ -108,7 +108,7 @@ export async function claimLease(
 }
 
 // Materializes the raw work-item payload for the lease-holding runner. Env refs
-// become runtimeEnv, workspace refs become WorkspaceManifest, and raw refs stay
+// become env, workspace refs become WorkspaceManifest, and raw refs stay
 // server-side.
 export async function materializeWorkItemPayload(
   deps: Deps,
@@ -126,15 +126,15 @@ export async function materializeWorkItemPayload(
   if (envFrom.length === 0 && volumes.length === 0 && volumeMounts.length === 0) {
     return runtimePayload
   }
-  const runtimeEnv =
-    payload.runtimeEnv && typeof payload.runtimeEnv === 'object' && !Array.isArray(payload.runtimeEnv)
-      ? { ...(payload.runtimeEnv as Record<string, string>) }
+  const env =
+    payload.env && typeof payload.env === 'object' && !Array.isArray(payload.env)
+      ? { ...(payload.env as Record<string, string>) }
       : {}
   const resolvedEnv = await deps.runtimeSecrets.resolveEnv(scope, envFrom)
   const workspaceManifest = await deps.runtimeSecrets.resolveWorkspaceManifest(scope, volumes, volumeMounts)
   return {
     ...runtimePayload,
-    runtimeEnv: { ...runtimeEnv, ...resolvedEnv },
+    env: { ...env, ...resolvedEnv },
     workspaceManifest,
   }
 }

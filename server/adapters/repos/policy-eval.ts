@@ -1,16 +1,12 @@
 import type { BudgetRule, BudgetUsageRecord, PolicyLevel } from '@server/domain/policy'
-import type { AuthScope, PolicyConnection, PolicyEvalRepo, PolicyProvider } from '@server/usecases/ports'
-import { and, desc, eq, isNull, or } from 'drizzle-orm'
+import type { AuthScope, PolicyEvalRepo, PolicyProvider } from '@server/usecases/ports'
+import { and, desc, eq, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import {
   budgets,
-  connections,
-  connectionTools,
   policies,
   providers,
   usageRecords,
-  vaultCredentials,
-  vaultCredentialVersions,
 } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
@@ -96,75 +92,5 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
       }))
     },
 
-    async findConnection(projectId: string, connectorId: string): Promise<PolicyConnection | null> {
-      const row = await db
-        .select()
-        .from(connections)
-        .where(and(eq(connections.projectId, projectId), eq(connections.connectorId, connectorId)))
-        .get()
-      return row
-        ? {
-            id: row.id,
-            state: row.state,
-            credentialId: row.credentialId,
-            credentialVersionId: row.credentialVersionId,
-          }
-        : null
-    },
-
-    async findConnectionTool(connectionId, connectorId, toolName): Promise<{ availability: string } | null> {
-      const row = await db
-        .select()
-        .from(connectionTools)
-        .where(
-          and(
-            eq(connectionTools.connectionId, connectionId),
-            eq(connectionTools.connectorId, connectorId),
-            eq(connectionTools.name, toolName),
-          ),
-        )
-        .get()
-      return row ? { availability: row.availability } : null
-    },
-
-    async connectionCredentialUsable(auth: AuthScope, connection: PolicyConnection): Promise<boolean> {
-      // The connection credential check resolves the credential's active
-      // version (rather than the pinned version) and additionally requires the
-      // resolved version to be `active` — stricter than the provider check,
-      // which only rejects `revoked`.
-      const credential = connection.credentialId
-        ? await db
-            .select()
-            .from(vaultCredentials)
-            .where(
-              and(
-                eq(vaultCredentials.id, connection.credentialId),
-                eq(vaultCredentials.organizationId, auth.organization.id),
-                or(eq(vaultCredentials.projectId, auth.project.id), isNull(vaultCredentials.projectId)),
-              ),
-            )
-            .get()
-        : null
-      if (!connection.credentialVersionId) {
-        return true
-      }
-      const effectiveVersionId = credential?.activeVersionId ?? connection.credentialVersionId
-      const version = await db
-        .select()
-        .from(vaultCredentialVersions)
-        .where(
-          and(
-            eq(vaultCredentialVersions.id, effectiveVersionId),
-            eq(vaultCredentialVersions.organizationId, auth.organization.id),
-            or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
-          ),
-        )
-        .get()
-      return !(
-        version?.state !== 'active' ||
-        credential?.state === 'revoked' ||
-        (credential && version.credentialId !== credential.id)
-      )
-    },
   }
 }

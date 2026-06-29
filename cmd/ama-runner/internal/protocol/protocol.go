@@ -79,7 +79,7 @@ type WorkPayload struct {
 	AgentSnapshot            map[string]any    `json:"agentSnapshot"`
 	RuntimeDriver            string            `json:"runtimeDriver"`
 	RequiredRunnerCapability string            `json:"requiredRunnerCapability"`
-	RuntimeEnv               map[string]string `json:"runtimeEnv"`
+	Env                      map[string]string `json:"env"`
 	InitialPrompt            *string           `json:"initialPrompt"`
 	Resume                   bool              `json:"resume"`
 	ResumeToken              string            `json:"resumeToken"`
@@ -161,7 +161,7 @@ func workPayloadFromSDK(payload ama.RunnerWorkPayload) WorkPayload {
 		AgentSnapshot:            jsonMap(payload.AgentSnapshot),
 		RuntimeDriver:            stringValue(payload.RuntimeDriver),
 		RequiredRunnerCapability: stringValue(payload.RequiredRunnerCapability),
-		RuntimeEnv:               stringMap(payload.RuntimeEnv),
+		Env:                      stringMap(payload.Env),
 		InitialPrompt:            payload.InitialPrompt,
 		Resume:                   boolValue(payload.Resume),
 		ResumeToken:              stringValue(payload.ResumeToken),

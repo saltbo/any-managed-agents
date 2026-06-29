@@ -61,11 +61,11 @@ export type SessionRuntimeStartInput = {
   model: string | null
   agentSnapshot: Record<string, unknown>
   environmentSnapshot: Record<string, unknown> | null
-  mcpSnapshot?: Record<string, unknown>
+  mcpServers?: Record<string, unknown>
   volumes?: Volume[]
   volumeMounts?: VolumeMount[]
   workspaceManifest?: WorkspaceManifest
-  runtimeEnv?: Record<string, string>
+  env?: Record<string, string>
 }
 
 export type SessionRuntimeStartResult = {
@@ -294,7 +294,7 @@ export async function startSessionRuntime(
   if (env.AMA_RUNTIME_MODE !== 'test') {
     const getSandbox = await getSandboxBinding()
     const sandbox = getSandbox(env.SANDBOX, input.sandboxId, { keepAlive: true, normalizeId: true })
-    const sessionEnv = input.runtimeEnv ?? {}
+    const sessionEnv = input.env ?? {}
     if (Object.keys(sessionEnv).length > 0) {
       await sandbox.setEnvVars(sessionEnv)
     }

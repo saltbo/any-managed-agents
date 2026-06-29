@@ -69,7 +69,7 @@ func (r LeaseWorker) RunOne(ctx context.Context) error {
 }
 
 func (r LeaseWorker) claimLease(ctx context.Context) (*ama.Lease, *ama.WorkItem, error) {
-	state := ama.Available
+	state := ama.ListWorkItemsParamsStateAvailable
 	workItems, err := r.Client.WorkItems.List(ctx, &ama.ListWorkItemsParams{State: &state})
 	if err != nil {
 		return nil, nil, err
@@ -336,7 +336,7 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		SessionID:             payload.SessionID,
 		Runtime:               payload.Runtime,
 		RuntimeConfig:         payload.RuntimeConfig,
-		RuntimeEnv:            payload.RuntimeEnv,
+		Env:                   payload.Env,
 		Provider:              payload.Provider,
 		Model:                 payload.Model,
 		AgentSnapshot:         payload.AgentSnapshot,

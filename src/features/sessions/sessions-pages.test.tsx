@@ -83,7 +83,6 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
     description: null,
     packages: [{ name: 'tsx', version: 'latest' }],
     variables: {},
-    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},
@@ -357,7 +356,6 @@ describe('SessionsView', () => {
         projectId: 'project_1',
         packages: [],
         variables: {},
-        credentialRefs: [],
         hostingMode: 'self_hosted',
         networkPolicy: { mode: 'restricted', allowedHosts: [] },
         mcpPolicy: {},
@@ -838,7 +836,7 @@ describe('SessionDetailView', () => {
     await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
   })
 
-  it('renders environment sheet with credentialRefs', async () => {
+  it('renders environment sheet details', async () => {
     renderDetailView({
       environmentSnapshot: {
         id: 'envver_1',
@@ -846,7 +844,6 @@ describe('SessionDetailView', () => {
         projectId: 'project_1',
         packages: [],
         variables: {},
-        credentialRefs: [{ credentialId: 'cred_1' }],
         hostingMode: 'cloud',
         networkPolicy: { mode: 'restricted', allowedHosts: [] },
         mcpPolicy: {},
@@ -862,7 +859,6 @@ describe('SessionDetailView', () => {
     fireEvent.click(envButtons[0]!)
 
     await waitFor(() => expect(screen.getByText('Environment snapshot captured for session_1')).toBeTruthy())
-    expect(screen.getByText('cred_1')).toBeTruthy()
   })
 
   it('renders memory store volumes in volumes sheet', async () => {

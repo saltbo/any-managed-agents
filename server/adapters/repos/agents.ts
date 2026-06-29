@@ -1,4 +1,5 @@
 import type { AgentConfig, AgentToolAttachment } from '@server/domain/agent'
+import { DEFAULT_CONNECTORS } from '@server/domain/connector'
 import type {
   AgentListPage,
   AgentListQuery,
@@ -11,7 +12,7 @@ import type {
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { agentMemories, agents, agentVersions, connections, providers } from '../../db/schema'
+import { agentMemories, agents, agentVersions, connectors, providers } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 type AgentRow = typeof agents.$inferSelect
@@ -292,19 +293,16 @@ export function createAgentRepo(db: Db): AgentRepo {
       return Boolean(provider?.enabled)
     },
 
-    async connectorConnected(projectId, connectorId) {
-      const connection = await db
-        .select({ id: connections.id })
-        .from(connections)
-        .where(
-          and(
-            eq(connections.projectId, projectId),
-            eq(connections.connectorId, connectorId),
-            eq(connections.state, 'connected'),
-          ),
-        )
+    async connectorAvailable(connectorId) {
+      const connector = await db
+        .select({ availability: connectors.availability })
+        .from(connectors)
+        .where(eq(connectors.id, connectorId))
         .get()
-      return Boolean(connection)
+      if (connector) {
+        return connector.availability === 'available'
+      }
+      return DEFAULT_CONNECTORS.some((item) => item.id === connectorId && item.availability === 'available')
     },
   }
 }

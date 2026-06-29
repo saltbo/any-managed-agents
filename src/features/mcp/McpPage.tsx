@@ -8,13 +8,11 @@ import { api, type ConnectorListOptions } from '@/lib/api'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { McpView } from './McpView'
-import { useMcpActions } from './use-mcp-actions'
 
 const FILTER_KEYS = ['search', 'category', 'trustLevel', 'capability'] as const
 type FilterKey = (typeof FILTER_KEYS)[number]
 
 export function McpPage() {
-  const actions = useMcpActions()
   const [searchParams, setSearchParams] = useSearchParams()
   const filters: ConnectorListOptions = {}
   for (const key of FILTER_KEYS) {
@@ -33,12 +31,7 @@ export function McpPage() {
     queryKey: queryKeys.connectors.list(),
     queryFn: () => api.listConnectors(),
   })
-  const connectionsQuery = useQuery({
-    queryKey: queryKeys.connections.list,
-    queryFn: api.listConnections,
-  })
   const connectors = useClientPagination(connectorsQuery.data?.data ?? [])
-  const connections = useClientPagination(connectionsQuery.data?.data ?? [])
   const facetConnectors = facetsQuery.data?.data ?? []
   const categories = [...new Set(facetConnectors.map((connector) => connector.category))].sort()
   const trustLevels = [...new Set(facetConnectors.map((connector) => connector.trustLevel))].sort()
@@ -59,18 +52,18 @@ export function McpPage() {
     )
   }
 
-  const error = connectorsQuery.error ?? connectionsQuery.error
+  const error = connectorsQuery.error
   if (error) {
     return <EmptyState title="MCP unavailable" body={errorMessage(error)} />
   }
-  if (connectorsQuery.isPending || connectionsQuery.isPending) {
-    return <EmptyState title="Loading MCP" body="Reading connector catalog and project connections." />
+  if (connectorsQuery.isPending) {
+    return <EmptyState title="Loading MCP" body="Reading connector catalog." />
   }
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title="MCP"
-        description="Browse the connector catalog, then review project connections, credentials, and runtime availability."
+        description="Browse the platform MCP server catalog. Agents reference these connector ids directly."
       />
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
@@ -103,13 +96,7 @@ export function McpPage() {
           onChange={(value) => setFilter('capability', value)}
         />
       </div>
-      <McpView
-        connectors={connectors.items}
-        connectorPagination={connectors}
-        connections={connections.items}
-        connectionPagination={connections}
-        onDisconnect={actions.disconnectMcpConnection}
-      />
+      <McpView connectors={connectors.items} connectorPagination={connectors} />
     </div>
   )
 }

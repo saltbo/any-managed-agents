@@ -1,6 +1,5 @@
 import {
   type EnvironmentConfig,
-  type EnvironmentCredentialRef,
   hasSecretMaterial,
   mcpPolicyConnectorIds,
   RUNTIME_CONFIG_FIELDS,
@@ -9,19 +8,10 @@ import {
 import type { Deps } from './deps'
 import { type AuthScope, EnvironmentArchivedError, type EnvironmentRecord, EnvironmentValidationError } from './ports'
 
-// Validates the config against sibling resources (vault credentials, connected
-// MCP connectors) and the secret-free-object rules. Throws
+// Validates the config against sibling resources (MCP catalog entries) and the
+// secret-free-object rules. Throws
 // EnvironmentValidationError on the first failure.
 async function validateConfig(deps: Deps, auth: AuthScope, config: EnvironmentConfig) {
-  const credentialError = await validateCredentialRefs(
-    deps,
-    auth.organization.id,
-    auth.project.id,
-    config.credentialRefs,
-  )
-  if (credentialError) {
-    throw new EnvironmentValidationError('Invalid environment configuration', credentialError)
-  }
   const mcpError = await validateMcpPolicy(deps, auth.project.id, config.mcpPolicy)
   if (mcpError) {
     throw new EnvironmentValidationError('Invalid environment configuration', mcpError)
@@ -37,30 +27,10 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: EnvironmentCo
   }
 }
 
-// Credential references must resolve to a live vault credential visible to the
-// caller. A pinned version must belong to that credential and still be usable.
-async function validateCredentialRefs(
-  deps: Deps,
-  organizationId: string,
-  projectId: string,
-  credentialRefs: EnvironmentCredentialRef[],
-) {
-  for (const [index, ref] of credentialRefs.entries()) {
-    const field = `credentialRefs[${index}]`
-    if (!(await deps.environments.credentialActive(organizationId, projectId, ref.credentialId))) {
-      return { [field]: 'Credential reference is not an active vault credential.' }
-    }
-    if (ref.versionId && !(await deps.environments.credentialVersionUsable(ref.credentialId, ref.versionId))) {
-      return { [field]: 'Credential version is not usable for this credential.' }
-    }
-  }
-  return null
-}
-
-async function validateMcpPolicy(deps: Deps, projectId: string, mcpPolicy: Record<string, unknown>) {
+async function validateMcpPolicy(deps: Deps, _projectId: string, mcpPolicy: Record<string, unknown>) {
   for (const connectorId of mcpPolicyConnectorIds(mcpPolicy)) {
-    if (!(await deps.environments.connectorConnected(projectId, connectorId))) {
-      return { mcpPolicy: `MCP connector is not connected for this project: ${connectorId}` }
+    if (!(await deps.environments.connectorAvailable(connectorId))) {
+      return { mcpPolicy: `MCP connector is not available in the platform catalog: ${connectorId}` }
     }
   }
   return null
@@ -87,7 +57,6 @@ export interface UpdateEnvironmentPatch {
   description?: string | null
   packages?: EnvironmentConfig['packages']
   variables?: EnvironmentConfig['variables']
-  credentialRefs?: EnvironmentConfig['credentialRefs']
   hostingMode?: EnvironmentConfig['hostingMode']
   networkPolicy?: EnvironmentConfig['networkPolicy']
   mcpPolicy?: EnvironmentConfig['mcpPolicy']
@@ -134,7 +103,6 @@ export async function updateEnvironment(
   const next: EnvironmentConfig = {
     packages: configFields.packages ?? environment.packages,
     variables: configFields.variables ?? environment.variables,
-    credentialRefs: configFields.credentialRefs ?? environment.credentialRefs,
     hostingMode: configFields.hostingMode ?? environment.hostingMode,
     networkPolicy: configFields.networkPolicy ?? environment.networkPolicy,
     mcpPolicy: configFields.mcpPolicy ?? environment.mcpPolicy,

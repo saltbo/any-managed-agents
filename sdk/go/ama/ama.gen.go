@@ -235,99 +235,6 @@ func (e CatalogRefreshResultOutcome) Valid() bool {
 	}
 }
 
-// Defines values for ConnectionApprovalMode.
-const (
-	ConnectionApprovalModeAlwaysRequired ConnectionApprovalMode = "always_required"
-	ConnectionApprovalModeNone           ConnectionApprovalMode = "none"
-	ConnectionApprovalModePerCall        ConnectionApprovalMode = "per_call"
-	ConnectionApprovalModeProjectPolicy  ConnectionApprovalMode = "project_policy"
-)
-
-// Valid indicates whether the value is a known member of the ConnectionApprovalMode enum.
-func (e ConnectionApprovalMode) Valid() bool {
-	switch e {
-	case ConnectionApprovalModeAlwaysRequired:
-		return true
-	case ConnectionApprovalModeNone:
-		return true
-	case ConnectionApprovalModePerCall:
-		return true
-	case ConnectionApprovalModeProjectPolicy:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ConnectionState.
-const (
-	ConnectionStateConnected    ConnectionState = "connected"
-	ConnectionStateDisabled     ConnectionState = "disabled"
-	ConnectionStateDisconnected ConnectionState = "disconnected"
-	ConnectionStateError        ConnectionState = "error"
-)
-
-// Valid indicates whether the value is a known member of the ConnectionState enum.
-func (e ConnectionState) Valid() bool {
-	switch e {
-	case ConnectionStateConnected:
-		return true
-	case ConnectionStateDisabled:
-		return true
-	case ConnectionStateDisconnected:
-		return true
-	case ConnectionStateError:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ConnectionToolApprovalMode.
-const (
-	ConnectionToolApprovalModeAlwaysRequired ConnectionToolApprovalMode = "always_required"
-	ConnectionToolApprovalModeNone           ConnectionToolApprovalMode = "none"
-	ConnectionToolApprovalModePerCall        ConnectionToolApprovalMode = "per_call"
-	ConnectionToolApprovalModeProjectPolicy  ConnectionToolApprovalMode = "project_policy"
-)
-
-// Valid indicates whether the value is a known member of the ConnectionToolApprovalMode enum.
-func (e ConnectionToolApprovalMode) Valid() bool {
-	switch e {
-	case ConnectionToolApprovalModeAlwaysRequired:
-		return true
-	case ConnectionToolApprovalModeNone:
-		return true
-	case ConnectionToolApprovalModePerCall:
-		return true
-	case ConnectionToolApprovalModeProjectPolicy:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ConnectionToolAvailability.
-const (
-	ConnectionToolAvailabilityAvailable ConnectionToolAvailability = "available"
-	ConnectionToolAvailabilityDisabled  ConnectionToolAvailability = "disabled"
-	ConnectionToolAvailabilityError     ConnectionToolAvailability = "error"
-)
-
-// Valid indicates whether the value is a known member of the ConnectionToolAvailability enum.
-func (e ConnectionToolAvailability) Valid() bool {
-	switch e {
-	case ConnectionToolAvailabilityAvailable:
-		return true
-	case ConnectionToolAvailabilityDisabled:
-		return true
-	case ConnectionToolAvailabilityError:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ConnectorAvailability.
 const (
 	ConnectorAvailabilityAvailable   ConnectorAvailability = "available"
@@ -472,30 +379,6 @@ func (e CreateBudgetRequestWindow) Valid() bool {
 	case CreateBudgetRequestWindowDay:
 		return true
 	case CreateBudgetRequestWindowMonth:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateConnectionRequestApprovalMode.
-const (
-	CreateConnectionRequestApprovalModeAlwaysRequired CreateConnectionRequestApprovalMode = "always_required"
-	CreateConnectionRequestApprovalModeNone           CreateConnectionRequestApprovalMode = "none"
-	CreateConnectionRequestApprovalModePerCall        CreateConnectionRequestApprovalMode = "per_call"
-	CreateConnectionRequestApprovalModeProjectPolicy  CreateConnectionRequestApprovalMode = "project_policy"
-)
-
-// Valid indicates whether the value is a known member of the CreateConnectionRequestApprovalMode enum.
-func (e CreateConnectionRequestApprovalMode) Valid() bool {
-	switch e {
-	case CreateConnectionRequestApprovalModeAlwaysRequired:
-		return true
-	case CreateConnectionRequestApprovalModeNone:
-		return true
-	case CreateConnectionRequestApprovalModePerCall:
-		return true
-	case CreateConnectionRequestApprovalModeProjectPolicy:
 		return true
 	default:
 		return false
@@ -1534,24 +1417,6 @@ func (e SessionSteerFrameType) Valid() bool {
 	}
 }
 
-// Defines values for ToolCallState.
-const (
-	ToolCallStateError   ToolCallState = "error"
-	ToolCallStateSuccess ToolCallState = "success"
-)
-
-// Valid indicates whether the value is a known member of the ToolCallState enum.
-func (e ToolCallState) Valid() bool {
-	switch e {
-	case ToolCallStateError:
-		return true
-	case ToolCallStateSuccess:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for TriggerScheduleType.
 const (
 	TriggerScheduleTypeInterval TriggerScheduleType = "interval"
@@ -1618,51 +1483,6 @@ func (e UpdateBudgetRequestWindow) Valid() bool {
 	case Day:
 		return true
 	case Month:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for UpdateConnectionRequestApprovalMode.
-const (
-	UpdateConnectionRequestApprovalModeAlwaysRequired UpdateConnectionRequestApprovalMode = "always_required"
-	UpdateConnectionRequestApprovalModeNone           UpdateConnectionRequestApprovalMode = "none"
-	UpdateConnectionRequestApprovalModePerCall        UpdateConnectionRequestApprovalMode = "per_call"
-	UpdateConnectionRequestApprovalModeProjectPolicy  UpdateConnectionRequestApprovalMode = "project_policy"
-)
-
-// Valid indicates whether the value is a known member of the UpdateConnectionRequestApprovalMode enum.
-func (e UpdateConnectionRequestApprovalMode) Valid() bool {
-	switch e {
-	case UpdateConnectionRequestApprovalModeAlwaysRequired:
-		return true
-	case UpdateConnectionRequestApprovalModeNone:
-		return true
-	case UpdateConnectionRequestApprovalModePerCall:
-		return true
-	case UpdateConnectionRequestApprovalModeProjectPolicy:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for UpdateConnectionRequestState.
-const (
-	UpdateConnectionRequestStateConnected    UpdateConnectionRequestState = "connected"
-	UpdateConnectionRequestStateDisabled     UpdateConnectionRequestState = "disabled"
-	UpdateConnectionRequestStateDisconnected UpdateConnectionRequestState = "disconnected"
-)
-
-// Valid indicates whether the value is a known member of the UpdateConnectionRequestState enum.
-func (e UpdateConnectionRequestState) Valid() bool {
-	switch e {
-	case UpdateConnectionRequestStateConnected:
-		return true
-	case UpdateConnectionRequestStateDisabled:
-		return true
-	case UpdateConnectionRequestStateDisconnected:
 		return true
 	default:
 		return false
@@ -1830,16 +1650,16 @@ func (e UsageRecordProviderType) Valid() bool {
 
 // Defines values for UsageRecordState.
 const (
-	UsageRecordStateError   UsageRecordState = "error"
-	UsageRecordStateSuccess UsageRecordState = "success"
+	Error   UsageRecordState = "error"
+	Success UsageRecordState = "success"
 )
 
 // Valid indicates whether the value is a known member of the UsageRecordState enum.
 func (e UsageRecordState) Valid() bool {
 	switch e {
-	case UsageRecordStateError:
+	case Error:
 		return true
-	case UsageRecordStateSuccess:
+	case Success:
 		return true
 	default:
 		return false
@@ -1996,30 +1816,6 @@ func (e ListAgentsParamsArchived) Valid() bool {
 	case ListAgentsParamsArchivedFalse:
 		return true
 	case ListAgentsParamsArchivedTrue:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ListConnectionsParamsState.
-const (
-	ListConnectionsParamsStateConnected    ListConnectionsParamsState = "connected"
-	ListConnectionsParamsStateDisabled     ListConnectionsParamsState = "disabled"
-	ListConnectionsParamsStateDisconnected ListConnectionsParamsState = "disconnected"
-	ListConnectionsParamsStateError        ListConnectionsParamsState = "error"
-)
-
-// Valid indicates whether the value is a known member of the ListConnectionsParamsState enum.
-func (e ListConnectionsParamsState) Valid() bool {
-	switch e {
-	case ListConnectionsParamsStateConnected:
-		return true
-	case ListConnectionsParamsStateDisabled:
-		return true
-	case ListConnectionsParamsStateDisconnected:
-		return true
-	case ListConnectionsParamsStateError:
 		return true
 	default:
 		return false
@@ -2424,19 +2220,19 @@ func (e ListVaultCredentialsParamsState) Valid() bool {
 
 // Defines values for ListVaultCredentialVersionsParamsState.
 const (
-	ListVaultCredentialVersionsParamsStateActive     ListVaultCredentialVersionsParamsState = "active"
-	ListVaultCredentialVersionsParamsStateRevoked    ListVaultCredentialVersionsParamsState = "revoked"
-	ListVaultCredentialVersionsParamsStateSuperseded ListVaultCredentialVersionsParamsState = "superseded"
+	Active     ListVaultCredentialVersionsParamsState = "active"
+	Revoked    ListVaultCredentialVersionsParamsState = "revoked"
+	Superseded ListVaultCredentialVersionsParamsState = "superseded"
 )
 
 // Valid indicates whether the value is a known member of the ListVaultCredentialVersionsParamsState enum.
 func (e ListVaultCredentialVersionsParamsState) Valid() bool {
 	switch e {
-	case ListVaultCredentialVersionsParamsStateActive:
+	case Active:
 		return true
-	case ListVaultCredentialVersionsParamsStateRevoked:
+	case Revoked:
 		return true
-	case ListVaultCredentialVersionsParamsStateSuperseded:
+	case Superseded:
 		return true
 	default:
 		return false
@@ -2445,25 +2241,25 @@ func (e ListVaultCredentialVersionsParamsState) Valid() bool {
 
 // Defines values for ListWorkItemsParamsState.
 const (
-	Available ListWorkItemsParamsState = "available"
-	Cancelled ListWorkItemsParamsState = "cancelled"
-	Failed    ListWorkItemsParamsState = "failed"
-	Leased    ListWorkItemsParamsState = "leased"
-	Succeeded ListWorkItemsParamsState = "succeeded"
+	ListWorkItemsParamsStateAvailable ListWorkItemsParamsState = "available"
+	ListWorkItemsParamsStateCancelled ListWorkItemsParamsState = "cancelled"
+	ListWorkItemsParamsStateFailed    ListWorkItemsParamsState = "failed"
+	ListWorkItemsParamsStateLeased    ListWorkItemsParamsState = "leased"
+	ListWorkItemsParamsStateSucceeded ListWorkItemsParamsState = "succeeded"
 )
 
 // Valid indicates whether the value is a known member of the ListWorkItemsParamsState enum.
 func (e ListWorkItemsParamsState) Valid() bool {
 	switch e {
-	case Available:
+	case ListWorkItemsParamsStateAvailable:
 		return true
-	case Cancelled:
+	case ListWorkItemsParamsStateCancelled:
 		return true
-	case Failed:
+	case ListWorkItemsParamsStateFailed:
 		return true
-	case Leased:
+	case ListWorkItemsParamsStateLeased:
 		return true
-	case Succeeded:
+	case ListWorkItemsParamsStateSucceeded:
 		return true
 	default:
 		return false
@@ -2722,66 +2518,6 @@ type CatalogRefreshResultCategory string
 // CatalogRefreshResultOutcome defines model for CatalogRefreshResult.Outcome.
 type CatalogRefreshResultOutcome string
 
-// Connection defines model for Connection.
-type Connection struct {
-	ApprovalMode  ConnectionApprovalMode `json:"approvalMode"`
-	ConnectedAt   time.Time              `json:"connectedAt"`
-	ConnectorId   string                 `json:"connectorId"`
-	CreatedAt     time.Time              `json:"createdAt"`
-	CredentialRef struct {
-		// Embedded struct due to allOf(#/components/schemas/CredentialRef)
-		CredentialRef `yaml:",inline"`
-		// Embedded fields due to inline allOf schema
-	} `json:"credentialRef"`
-	DisconnectedAt *time.Time              `json:"disconnectedAt"`
-	EndpointUrl    *string                 `json:"endpointUrl"`
-	Id             string                  `json:"id"`
-	LastError      *map[string]interface{} `json:"lastError"`
-	Metadata       map[string]interface{}  `json:"metadata"`
-	ProjectId      string                  `json:"projectId"`
-	State          ConnectionState         `json:"state"`
-	UpdatedAt      time.Time               `json:"updatedAt"`
-}
-
-// ConnectionApprovalMode defines model for Connection.ApprovalMode.
-type ConnectionApprovalMode string
-
-// ConnectionState defines model for Connection.State.
-type ConnectionState string
-
-// ConnectionListResponse defines model for ConnectionListResponse.
-type ConnectionListResponse struct {
-	Data       []Connection   `json:"data"`
-	Pagination ListPagination `json:"pagination"`
-}
-
-// ConnectionTool defines model for ConnectionTool.
-type ConnectionTool struct {
-	ApprovalMode   ConnectionToolApprovalMode `json:"approvalMode"`
-	Availability   ConnectionToolAvailability `json:"availability"`
-	ConnectionId   string                     `json:"connectionId"`
-	ConnectorId    string                     `json:"connectorId"`
-	CreatedAt      time.Time                  `json:"createdAt"`
-	Description    *string                    `json:"description"`
-	Id             string                     `json:"id"`
-	InputSchema    map[string]interface{}     `json:"inputSchema"`
-	Name           string                     `json:"name"`
-	PolicyMetadata map[string]interface{}     `json:"policyMetadata"`
-	UpdatedAt      time.Time                  `json:"updatedAt"`
-}
-
-// ConnectionToolApprovalMode defines model for ConnectionTool.ApprovalMode.
-type ConnectionToolApprovalMode string
-
-// ConnectionToolAvailability defines model for ConnectionTool.Availability.
-type ConnectionToolAvailability string
-
-// ConnectionToolListResponse defines model for ConnectionToolListResponse.
-type ConnectionToolListResponse struct {
-	Data       []ConnectionTool `json:"data"`
-	Pagination ListPagination   `json:"pagination"`
-}
-
 // Connector defines model for Connector.
 type Connector struct {
 	Availability       ConnectorAvailability         `json:"availability"`
@@ -2873,21 +2609,8 @@ type CreateBudgetRequestScope string
 // CreateBudgetRequestWindow defines model for CreateBudgetRequest.Window.
 type CreateBudgetRequestWindow string
 
-// CreateConnectionRequest defines model for CreateConnectionRequest.
-type CreateConnectionRequest struct {
-	ApprovalMode  *CreateConnectionRequestApprovalMode `json:"approvalMode,omitempty"`
-	ConnectorId   string                               `json:"connectorId"`
-	CredentialRef *CredentialRef                       `json:"credentialRef,omitempty"`
-	EndpointUrl   *string                              `json:"endpointUrl,omitempty"`
-	Metadata      *map[string]interface{}              `json:"metadata,omitempty"`
-}
-
-// CreateConnectionRequestApprovalMode defines model for CreateConnectionRequest.ApprovalMode.
-type CreateConnectionRequestApprovalMode string
-
 // CreateEnvironmentRequest defines model for CreateEnvironmentRequest.
 type CreateEnvironmentRequest struct {
-	CredentialRefs       *[]CredentialRef          `json:"credentialRefs,omitempty"`
 	Description          *string                   `json:"description,omitempty"`
 	HostingMode          *EnvironmentHostingMode   `json:"hostingMode,omitempty"`
 	McpPolicy            *EnvironmentMcpPolicy     `json:"mcpPolicy,omitempty"`
@@ -2983,12 +2706,6 @@ type CreateSessionRequest struct {
 	Volumes       *[]Volume               `json:"volumes,omitempty"`
 }
 
-// CreateToolCallRequest defines model for CreateToolCallRequest.
-type CreateToolCallRequest struct {
-	Input     *map[string]interface{} `json:"input,omitempty"`
-	SessionId string                  `json:"sessionId"`
-}
-
 // CreateTriggerRequest defines model for CreateTriggerRequest.
 type CreateTriggerRequest struct {
 	AgentId        string                  `json:"agentId"`
@@ -3071,7 +2788,6 @@ type EnvFromEntryType string
 type Environment struct {
 	ArchivedAt           *time.Time               `json:"archivedAt"`
 	CreatedAt            time.Time                `json:"createdAt"`
-	CredentialRefs       []CredentialRef          `json:"credentialRefs"`
 	CurrentVersionId     *string                  `json:"currentVersionId"`
 	Description          *string                  `json:"description"`
 	HostingMode          EnvironmentHostingMode   `json:"hostingMode"`
@@ -3137,7 +2853,6 @@ type EnvironmentNetworkPolicyMode string
 // EnvironmentVersion defines model for EnvironmentVersion.
 type EnvironmentVersion struct {
 	CreatedAt            time.Time                `json:"createdAt"`
-	CredentialRefs       []CredentialRef          `json:"credentialRefs"`
 	EnvironmentId        string                   `json:"environmentId"`
 	HostingMode          EnvironmentHostingMode   `json:"hostingMode"`
 	Id                   string                   `json:"id"`
@@ -3289,6 +3004,12 @@ type MemoryVolumeAccess string
 // MemoryVolumeType defines model for MemoryVolume.Type.
 type MemoryVolumeType string
 
+// NullableCredentialRef defines model for NullableCredentialRef.
+type NullableCredentialRef struct {
+	CredentialId string  `json:"credentialId"`
+	VersionId    *string `json:"versionId,omitempty"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	CreatedAt time.Time `json:"createdAt"`
@@ -3415,15 +3136,11 @@ type ReplaceAgentMemoryRequest struct {
 
 // Runner defines model for Runner.
 type Runner struct {
-	ArchivedAt    *time.Time     `json:"archivedAt"`
-	AuthMode      RunnerAuthMode `json:"authMode"`
-	Capabilities  []string       `json:"capabilities"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	CredentialRef struct {
-		// Embedded struct due to allOf(#/components/schemas/CredentialRef)
-		CredentialRef `yaml:",inline"`
-		// Embedded fields due to inline allOf schema
-	} `json:"credentialRef"`
+	ArchivedAt       *time.Time               `json:"archivedAt"`
+	AuthMode         RunnerAuthMode           `json:"authMode"`
+	Capabilities     []string                 `json:"capabilities"`
+	CreatedAt        time.Time                `json:"createdAt"`
+	CredentialRef    *NullableCredentialRef   `json:"credentialRef"`
 	CurrentLoad      int                      `json:"currentLoad"`
 	EnvironmentId    *string                  `json:"environmentId"`
 	Id               string                   `json:"id"`
@@ -3579,6 +3296,7 @@ type RunnerVolumeMount struct {
 type RunnerWorkPayload struct {
 	AgentSnapshot            *map[string]*interface{}   `json:"agentSnapshot,omitempty"`
 	Approved                 *bool                      `json:"approved,omitempty"`
+	Env                      *map[string]string         `json:"env,omitempty"`
 	EnvironmentSnapshot      *map[string]*interface{}   `json:"environmentSnapshot,omitempty"`
 	HostingMode              *string                    `json:"hostingMode,omitempty"`
 	InitialPrompt            *string                    `json:"initialPrompt,omitempty"`
@@ -3592,7 +3310,6 @@ type RunnerWorkPayload struct {
 	Runtime                  *string                    `json:"runtime,omitempty"`
 	RuntimeConfig            *map[string]*interface{}   `json:"runtimeConfig,omitempty"`
 	RuntimeDriver            *string                    `json:"runtimeDriver,omitempty"`
-	RuntimeEnv               *map[string]string         `json:"runtimeEnv,omitempty"`
 	SessionId                *string                    `json:"sessionId,omitempty"`
 	ToolCall                 *RunnerToolCall            `json:"toolCall,omitempty"`
 	ToolCallId               *string                    `json:"toolCallId,omitempty"`
@@ -3833,7 +3550,6 @@ type SessionEnvironmentJsonObject map[string]interface{}
 // SessionEnvironmentSnapshot defines model for SessionEnvironmentSnapshot.
 type SessionEnvironmentSnapshot struct {
 	CreatedAt            time.Time                      `json:"createdAt"`
-	CredentialRefs       []SessionEnvironmentJsonObject `json:"credentialRefs"`
 	EnvironmentId        string                         `json:"environmentId"`
 	HostingMode          EnvironmentHostingMode         `json:"hostingMode"`
 	Id                   string                         `json:"id"`
@@ -4007,36 +3723,6 @@ type SessionSteerFrame struct {
 // SessionSteerFrameType defines model for SessionSteerFrame.Type.
 type SessionSteerFrameType string
 
-// ToolCall defines model for ToolCall.
-type ToolCall struct {
-	ConnectionId string                  `json:"connectionId"`
-	ConnectorId  string                  `json:"connectorId"`
-	CreatedAt    time.Time               `json:"createdAt"`
-	DurationMs   int                     `json:"durationMs"`
-	Error        *ToolCallError          `json:"error"`
-	Id           string                  `json:"id"`
-	Input        map[string]interface{}  `json:"input"`
-	Output       *map[string]interface{} `json:"output"`
-	SessionId    string                  `json:"sessionId"`
-	State        ToolCallState           `json:"state"`
-	ToolName     string                  `json:"toolName"`
-}
-
-// ToolCallState defines model for ToolCall.State.
-type ToolCallState string
-
-// ToolCallError defines model for ToolCallError.
-type ToolCallError struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-}
-
-// ToolCallListResponse defines model for ToolCallListResponse.
-type ToolCallListResponse struct {
-	Data       []ToolCall     `json:"data"`
-	Pagination ListPagination `json:"pagination"`
-}
-
 // Trigger defines model for Trigger.
 type Trigger struct {
 	AgentId          string                 `json:"agentId"`
@@ -4137,30 +3823,10 @@ type UpdateBudgetRequest struct {
 // UpdateBudgetRequestWindow defines model for UpdateBudgetRequest.Window.
 type UpdateBudgetRequestWindow string
 
-// UpdateConnectionRequest defines model for UpdateConnectionRequest.
-type UpdateConnectionRequest struct {
-	ApprovalMode  *UpdateConnectionRequestApprovalMode `json:"approvalMode,omitempty"`
-	CredentialRef *struct {
-		// Embedded struct due to allOf(#/components/schemas/CredentialRef)
-		CredentialRef `yaml:",inline"`
-		// Embedded fields due to inline allOf schema
-	} `json:"credentialRef,omitempty"`
-	EndpointUrl *string                       `json:"endpointUrl,omitempty"`
-	Metadata    *map[string]interface{}       `json:"metadata,omitempty"`
-	State       *UpdateConnectionRequestState `json:"state,omitempty"`
-}
-
-// UpdateConnectionRequestApprovalMode defines model for UpdateConnectionRequest.ApprovalMode.
-type UpdateConnectionRequestApprovalMode string
-
-// UpdateConnectionRequestState defines model for UpdateConnectionRequest.State.
-type UpdateConnectionRequestState string
-
 // UpdateEnvironmentRequest defines model for UpdateEnvironmentRequest.
 type UpdateEnvironmentRequest struct {
 	// Archived Lifecycle transition: true archives the environment, false unarchives it.
 	Archived             *bool                     `json:"archived,omitempty"`
-	CredentialRefs       *[]CredentialRef          `json:"credentialRefs,omitempty"`
 	Description          *string                   `json:"description,omitempty"`
 	HostingMode          *EnvironmentHostingMode   `json:"hostingMode,omitempty"`
 	McpPolicy            *EnvironmentMcpPolicy     `json:"mcpPolicy,omitempty"`
@@ -4527,22 +4193,6 @@ type ReadAuthConfigParams struct {
 	Organization *string `form:"organization,omitempty" json:"organization,omitempty"`
 }
 
-// ListConnectionsParams defines parameters for ListConnections.
-type ListConnectionsParams struct {
-	State  *ListConnectionsParamsState `form:"state,omitempty" json:"state,omitempty"`
-	Limit  *int                        `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor *string                     `form:"cursor,omitempty" json:"cursor,omitempty"`
-}
-
-// ListConnectionsParamsState defines parameters for ListConnections.
-type ListConnectionsParamsState string
-
-// ListToolCallsParams defines parameters for ListToolCalls.
-type ListToolCallsParams struct {
-	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
-}
-
 // ListConnectorsParams defines parameters for ListConnectors.
 type ListConnectorsParams struct {
 	Search       *string                           `form:"search,omitempty" json:"search,omitempty"`
@@ -4798,15 +4448,6 @@ type CreateBudgetJSONRequestBody = CreateBudgetRequest
 
 // UpdateBudgetJSONRequestBody defines body for UpdateBudget for application/json ContentType.
 type UpdateBudgetJSONRequestBody = UpdateBudgetRequest
-
-// CreateConnectionJSONRequestBody defines body for CreateConnection for application/json ContentType.
-type CreateConnectionJSONRequestBody = CreateConnectionRequest
-
-// UpdateConnectionJSONRequestBody defines body for UpdateConnection for application/json ContentType.
-type UpdateConnectionJSONRequestBody = UpdateConnectionRequest
-
-// CreateToolCallJSONRequestBody defines body for CreateToolCall for application/json ContentType.
-type CreateToolCallJSONRequestBody = CreateToolCallRequest
 
 // CreateEnvironmentJSONRequestBody defines body for CreateEnvironment for application/json ContentType.
 type CreateEnvironmentJSONRequestBody = CreateEnvironmentRequest
@@ -5759,36 +5400,6 @@ type ClientInterface interface {
 	// ReadConfigz request
 	ReadConfigz(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListConnections request
-	ListConnections(ctx context.Context, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateConnectionWithBody request with any body
-	CreateConnectionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	CreateConnection(ctx context.Context, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReadConnection request
-	ReadConnection(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// UpdateConnectionWithBody request with any body
-	UpdateConnectionWithBody(ctx context.Context, connectionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	UpdateConnection(ctx context.Context, connectionId string, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListConnectionTools request
-	ListConnectionTools(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListToolCalls request
-	ListToolCalls(ctx context.Context, connectionId string, toolName string, params *ListToolCallsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateToolCallWithBody request with any body
-	CreateToolCallWithBody(ctx context.Context, connectionId string, toolName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	CreateToolCall(ctx context.Context, connectionId string, toolName string, body CreateToolCallJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReadToolCall request
-	ReadToolCall(ctx context.Context, connectionId string, toolName string, callId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// ListConnectors request
 	ListConnectors(ctx context.Context, params *ListConnectorsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -6379,138 +5990,6 @@ func (c *APIClient) UpdateBudget(ctx context.Context, budgetId string, body Upda
 
 func (c *APIClient) ReadConfigz(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReadConfigzRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ListConnections(ctx context.Context, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListConnectionsRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreateConnectionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateConnectionRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreateConnection(ctx context.Context, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateConnectionRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReadConnection(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReadConnectionRequest(c.Server, connectionId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) UpdateConnectionWithBody(ctx context.Context, connectionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateConnectionRequestWithBody(c.Server, connectionId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) UpdateConnection(ctx context.Context, connectionId string, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateConnectionRequest(c.Server, connectionId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ListConnectionTools(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListConnectionToolsRequest(c.Server, connectionId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ListToolCalls(ctx context.Context, connectionId string, toolName string, params *ListToolCallsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListToolCallsRequest(c.Server, connectionId, toolName, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreateToolCallWithBody(ctx context.Context, connectionId string, toolName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateToolCallRequestWithBody(c.Server, connectionId, toolName, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreateToolCall(ctx context.Context, connectionId string, toolName string, body CreateToolCallJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateToolCallRequest(c.Server, connectionId, toolName, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReadToolCall(ctx context.Context, connectionId string, toolName string, callId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReadToolCallRequest(c.Server, connectionId, toolName, callId)
 	if err != nil {
 		return nil, err
 	}
@@ -8721,421 +8200,6 @@ func NewReadConfigzRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/configz")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewListConnectionsRequest generates requests for ListConnections
-func NewListConnectionsRequest(server string, params *ListConnectionsParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.State != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Cursor != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewCreateConnectionRequest calls the generic CreateConnection builder with application/json body
-func NewCreateConnectionRequest(server string, body CreateConnectionJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewCreateConnectionRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewCreateConnectionRequestWithBody generates requests for CreateConnection with any type of body
-func NewCreateConnectionRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewReadConnectionRequest generates requests for ReadConnection
-func NewReadConnectionRequest(server string, connectionId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "connectionId", connectionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewUpdateConnectionRequest calls the generic UpdateConnection builder with application/json body
-func NewUpdateConnectionRequest(server string, connectionId string, body UpdateConnectionJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewUpdateConnectionRequestWithBody(server, connectionId, "application/json", bodyReader)
-}
-
-// NewUpdateConnectionRequestWithBody generates requests for UpdateConnection with any type of body
-func NewUpdateConnectionRequestWithBody(server string, connectionId string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "connectionId", connectionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewListConnectionToolsRequest generates requests for ListConnectionTools
-func NewListConnectionToolsRequest(server string, connectionId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "connectionId", connectionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections/%s/tools", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewListToolCallsRequest generates requests for ListToolCalls
-func NewListToolCallsRequest(server string, connectionId string, toolName string, params *ListToolCallsParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "connectionId", connectionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "toolName", toolName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections/%s/tools/%s/calls", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Cursor != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewCreateToolCallRequest calls the generic CreateToolCall builder with application/json body
-func NewCreateToolCallRequest(server string, connectionId string, toolName string, body CreateToolCallJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewCreateToolCallRequestWithBody(server, connectionId, toolName, "application/json", bodyReader)
-}
-
-// NewCreateToolCallRequestWithBody generates requests for CreateToolCall with any type of body
-func NewCreateToolCallRequestWithBody(server string, connectionId string, toolName string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "connectionId", connectionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "toolName", toolName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections/%s/tools/%s/calls", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewReadToolCallRequest generates requests for ReadToolCall
-func NewReadToolCallRequest(server string, connectionId string, toolName string, callId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "connectionId", connectionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "toolName", toolName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam2 string
-
-	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "callId", callId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connections/%s/tools/%s/calls/%s", pathParam0, pathParam1, pathParam2)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -13565,36 +12629,6 @@ type ClientWithResponsesInterface interface {
 	// ReadConfigzWithResponse request
 	ReadConfigzWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ReadConfigzResponse, error)
 
-	// ListConnectionsWithResponse request
-	ListConnectionsWithResponse(ctx context.Context, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error)
-
-	// CreateConnectionWithBodyWithResponse request with any body
-	CreateConnectionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error)
-
-	CreateConnectionWithResponse(ctx context.Context, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error)
-
-	// ReadConnectionWithResponse request
-	ReadConnectionWithResponse(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*ReadConnectionResponse, error)
-
-	// UpdateConnectionWithBodyWithResponse request with any body
-	UpdateConnectionWithBodyWithResponse(ctx context.Context, connectionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
-
-	UpdateConnectionWithResponse(ctx context.Context, connectionId string, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
-
-	// ListConnectionToolsWithResponse request
-	ListConnectionToolsWithResponse(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*ListConnectionToolsResponse, error)
-
-	// ListToolCallsWithResponse request
-	ListToolCallsWithResponse(ctx context.Context, connectionId string, toolName string, params *ListToolCallsParams, reqEditors ...RequestEditorFn) (*ListToolCallsResponse, error)
-
-	// CreateToolCallWithBodyWithResponse request with any body
-	CreateToolCallWithBodyWithResponse(ctx context.Context, connectionId string, toolName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateToolCallResponse, error)
-
-	CreateToolCallWithResponse(ctx context.Context, connectionId string, toolName string, body CreateToolCallJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateToolCallResponse, error)
-
-	// ReadToolCallWithResponse request
-	ReadToolCallWithResponse(ctx context.Context, connectionId string, toolName string, callId string, reqEditors ...RequestEditorFn) (*ReadToolCallResponse, error)
-
 	// ListConnectorsWithResponse request
 	ListConnectorsWithResponse(ctx context.Context, params *ListConnectorsParams, reqEditors ...RequestEditorFn) (*ListConnectorsResponse, error)
 
@@ -14535,272 +13569,6 @@ func (r ReadConfigzResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ReadConfigzResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListConnectionsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ConnectionListResponse
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ListConnectionsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListConnectionsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListConnectionsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type CreateConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *Connection
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-	JSON403      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r CreateConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r CreateConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreateConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReadConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Connection
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReadConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReadConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReadConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type UpdateConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Connection
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r UpdateConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r UpdateConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r UpdateConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListConnectionToolsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ConnectionToolListResponse
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
-	JSON502      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ListConnectionToolsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListConnectionToolsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListConnectionToolsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListToolCallsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ToolCallListResponse
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ListToolCallsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListToolCallsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListToolCallsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type CreateToolCallResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *ToolCall
-	JSON401      *ErrorResponse
-	JSON403      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r CreateToolCallResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r CreateToolCallResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreateToolCallResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReadToolCallResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ToolCall
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReadToolCallResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReadToolCallResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReadToolCallResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17497,102 +16265,6 @@ func (c *ClientWithResponses) ReadConfigzWithResponse(ctx context.Context, reqEd
 	return ParseReadConfigzResponse(rsp)
 }
 
-// ListConnectionsWithResponse request returning *ListConnectionsResponse
-func (c *ClientWithResponses) ListConnectionsWithResponse(ctx context.Context, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error) {
-	rsp, err := c.ListConnections(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListConnectionsResponse(rsp)
-}
-
-// CreateConnectionWithBodyWithResponse request with arbitrary body returning *CreateConnectionResponse
-func (c *ClientWithResponses) CreateConnectionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error) {
-	rsp, err := c.CreateConnectionWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateConnectionResponse(rsp)
-}
-
-func (c *ClientWithResponses) CreateConnectionWithResponse(ctx context.Context, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error) {
-	rsp, err := c.CreateConnection(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateConnectionResponse(rsp)
-}
-
-// ReadConnectionWithResponse request returning *ReadConnectionResponse
-func (c *ClientWithResponses) ReadConnectionWithResponse(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*ReadConnectionResponse, error) {
-	rsp, err := c.ReadConnection(ctx, connectionId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReadConnectionResponse(rsp)
-}
-
-// UpdateConnectionWithBodyWithResponse request with arbitrary body returning *UpdateConnectionResponse
-func (c *ClientWithResponses) UpdateConnectionWithBodyWithResponse(ctx context.Context, connectionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error) {
-	rsp, err := c.UpdateConnectionWithBody(ctx, connectionId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseUpdateConnectionResponse(rsp)
-}
-
-func (c *ClientWithResponses) UpdateConnectionWithResponse(ctx context.Context, connectionId string, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error) {
-	rsp, err := c.UpdateConnection(ctx, connectionId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseUpdateConnectionResponse(rsp)
-}
-
-// ListConnectionToolsWithResponse request returning *ListConnectionToolsResponse
-func (c *ClientWithResponses) ListConnectionToolsWithResponse(ctx context.Context, connectionId string, reqEditors ...RequestEditorFn) (*ListConnectionToolsResponse, error) {
-	rsp, err := c.ListConnectionTools(ctx, connectionId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListConnectionToolsResponse(rsp)
-}
-
-// ListToolCallsWithResponse request returning *ListToolCallsResponse
-func (c *ClientWithResponses) ListToolCallsWithResponse(ctx context.Context, connectionId string, toolName string, params *ListToolCallsParams, reqEditors ...RequestEditorFn) (*ListToolCallsResponse, error) {
-	rsp, err := c.ListToolCalls(ctx, connectionId, toolName, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListToolCallsResponse(rsp)
-}
-
-// CreateToolCallWithBodyWithResponse request with arbitrary body returning *CreateToolCallResponse
-func (c *ClientWithResponses) CreateToolCallWithBodyWithResponse(ctx context.Context, connectionId string, toolName string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateToolCallResponse, error) {
-	rsp, err := c.CreateToolCallWithBody(ctx, connectionId, toolName, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateToolCallResponse(rsp)
-}
-
-func (c *ClientWithResponses) CreateToolCallWithResponse(ctx context.Context, connectionId string, toolName string, body CreateToolCallJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateToolCallResponse, error) {
-	rsp, err := c.CreateToolCall(ctx, connectionId, toolName, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateToolCallResponse(rsp)
-}
-
-// ReadToolCallWithResponse request returning *ReadToolCallResponse
-func (c *ClientWithResponses) ReadToolCallWithResponse(ctx context.Context, connectionId string, toolName string, callId string, reqEditors ...RequestEditorFn) (*ReadToolCallResponse, error) {
-	rsp, err := c.ReadToolCall(ctx, connectionId, toolName, callId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReadToolCallResponse(rsp)
-}
-
 // ListConnectorsWithResponse request returning *ListConnectorsResponse
 func (c *ClientWithResponses) ListConnectorsWithResponse(ctx context.Context, params *ListConnectorsParams, reqEditors ...RequestEditorFn) (*ListConnectorsResponse, error) {
 	rsp, err := c.ListConnectors(ctx, params, reqEditors...)
@@ -19288,396 +17960,6 @@ func ParseReadConfigzResponse(rsp *http.Response) (*ReadConfigzResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListConnectionsResponse parses an HTTP response from a ListConnectionsWithResponse call
-func ParseListConnectionsResponse(rsp *http.Response) (*ListConnectionsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListConnectionsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ConnectionListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseCreateConnectionResponse parses an HTTP response from a CreateConnectionWithResponse call
-func ParseCreateConnectionResponse(rsp *http.Response) (*CreateConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &CreateConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Connection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReadConnectionResponse parses an HTTP response from a ReadConnectionWithResponse call
-func ParseReadConnectionResponse(rsp *http.Response) (*ReadConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReadConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Connection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseUpdateConnectionResponse parses an HTTP response from a UpdateConnectionWithResponse call
-func ParseUpdateConnectionResponse(rsp *http.Response) (*UpdateConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &UpdateConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Connection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListConnectionToolsResponse parses an HTTP response from a ListConnectionToolsWithResponse call
-func ParseListConnectionToolsResponse(rsp *http.Response) (*ListConnectionToolsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListConnectionToolsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ConnectionToolListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListToolCallsResponse parses an HTTP response from a ListToolCallsWithResponse call
-func ParseListToolCallsResponse(rsp *http.Response) (*ListToolCallsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListToolCallsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ToolCallListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseCreateToolCallResponse parses an HTTP response from a CreateToolCallWithResponse call
-func ParseCreateToolCallResponse(rsp *http.Response) (*CreateToolCallResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &CreateToolCallResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest ToolCall
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReadToolCallResponse parses an HTTP response from a ReadToolCallWithResponse call
-func ParseReadToolCallResponse(rsp *http.Response) (*ReadToolCallResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReadToolCallResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ToolCall
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	}
 

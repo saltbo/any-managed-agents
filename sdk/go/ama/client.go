@@ -53,7 +53,6 @@ type Client struct {
 	Runners      RunnersService
 	Budgets      BudgetsService
 	Connectors   ConnectorsService
-	Connections  ConnectionsService
 	Audit        AuditService
 	Triggers     TriggersService
 	Sessions     SessionsService
@@ -87,7 +86,6 @@ func New(config ClientConfig) (*Client, error) {
 	client.Runners = RunnersService{client: core}
 	client.Budgets = BudgetsService{client: core}
 	client.Connectors = ConnectorsService{client: core}
-	client.Connections = ConnectionsService{client: core}
 	client.Audit = AuditService{client: core}
 	client.Triggers = TriggersService{client: core}
 	client.Sessions = SessionsService{client: core}
@@ -617,74 +615,6 @@ func (s ConnectorsService) List(ctx context.Context, params *ListConnectorsParam
 
 func (s ConnectorsService) Get(ctx context.Context, connectorID string) (*Connector, error) {
 	response, err := s.client.raw.ReadConnectorWithResponse(ctx, connectorID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
-}
-
-type ConnectionsService struct {
-	client *clientCore
-}
-
-func (s ConnectionsService) List(ctx context.Context, params *ListConnectionsParams) (*ConnectionListResponse, error) {
-	response, err := s.client.raw.ListConnectionsWithResponse(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401)
-}
-
-func (s ConnectionsService) Create(ctx context.Context, body CreateConnectionRequest) (*Connection, error) {
-	response, err := s.client.raw.CreateConnectionWithResponse(ctx, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
-}
-
-func (s ConnectionsService) Get(ctx context.Context, connectionID string) (*Connection, error) {
-	response, err := s.client.raw.ReadConnectionWithResponse(ctx, connectionID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
-}
-
-func (s ConnectionsService) Update(ctx context.Context, connectionID string, body UpdateConnectionRequest) (*Connection, error) {
-	response, err := s.client.raw.UpdateConnectionWithResponse(ctx, connectionID, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404, response.JSON409)
-}
-
-func (s ConnectionsService) ListTools(ctx context.Context, connectionID string) (*ConnectionToolListResponse, error) {
-	response, err := s.client.raw.ListConnectionToolsWithResponse(ctx, connectionID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404, response.JSON409, response.JSON502)
-}
-
-func (s ConnectionsService) ListToolCalls(ctx context.Context, connectionID string, toolName string, params *ListToolCallsParams) (*ToolCallListResponse, error) {
-	response, err := s.client.raw.ListToolCallsWithResponse(ctx, connectionID, toolName, params)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404)
-}
-
-func (s ConnectionsService) CallTool(ctx context.Context, connectionID string, toolName string, body CreateToolCallRequest) (*ToolCall, error) {
-	response, err := s.client.raw.CreateToolCallWithResponse(ctx, connectionID, toolName, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
-}
-
-func (s ConnectionsService) GetToolCall(ctx context.Context, connectionID string, toolName string, callID string) (*ToolCall, error) {
-	response, err := s.client.raw.ReadToolCallWithResponse(ctx, connectionID, toolName, callID)
 	if err != nil {
 		return nil, err
 	}

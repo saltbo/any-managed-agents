@@ -282,17 +282,6 @@ export function createAmaClient(config: AmaClientConfig) {
       get: (connectorId: string) => unwrap(ops.readConnector({ client, path: { connectorId } })),
     },
 
-    connections: {
-      list: (query?: types.ListConnectionsData['query']) => unwrap(ops.listConnections({ client, query })),
-      create: (body: types.CreateConnectionRequest) => unwrap(ops.createConnection({ client, body })),
-      get: (connectionId: string) => unwrap(ops.readConnection({ client, path: { connectionId } })),
-      update: (connectionId: string, body: types.UpdateConnectionRequest) => unwrap(ops.updateConnection({ client, path: { connectionId }, body })),
-      listTools: (connectionId: string) => unwrap(ops.listConnectionTools({ client, path: { connectionId } })),
-      listToolCalls: (connectionId: string, toolName: string, query?: types.ListToolCallsData['query']) => unwrap(ops.listToolCalls({ client, path: { connectionId, toolName }, query })),
-      callTool: (connectionId: string, toolName: string, body: types.CreateToolCallRequest) => unwrap(ops.createToolCall({ client, path: { connectionId, toolName }, body })),
-      getToolCall: (connectionId: string, toolName: string, callId: string) => unwrap(ops.readToolCall({ client, path: { connectionId, toolName, callId } })),
-    },
-
     audit: {
       listRecords: (query?: types.ListAuditRecordsData['query']) => unwrap(ops.listAuditRecords({ client, query })),
       getRecord: (recordId: string) => unwrap(ops.readAuditRecord({ client, path: { recordId } })),

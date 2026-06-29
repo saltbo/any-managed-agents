@@ -173,7 +173,6 @@ function defaultEnvironmentSnapshot(environmentId: string): SessionEnvironmentSn
     version: 1,
     packages: [{ name: 'tsx', version: 'latest' }],
     variables: {},
-    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},

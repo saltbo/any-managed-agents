@@ -23,7 +23,7 @@ import {
 } from './ports'
 
 // Validates the runtime config against sibling resources (provider/model,
-// connectors), governance tool policy, and secret-material rules. Throws
+// MCP catalog entries), governance tool policy, and secret-material rules. Throws
 // AgentValidationError on the first failure. `auth` is needed only to resolve
 // the effective tool policy, and only when tools are present.
 async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) {
@@ -77,10 +77,10 @@ async function validateProviderRef(deps: Deps, projectId: string, providerId: st
   return null
 }
 
-async function validateMcpConnectors(deps: Deps, projectId: string, connectorIds: string[]) {
+async function validateMcpConnectors(deps: Deps, _projectId: string, connectorIds: string[]) {
   for (const connectorId of connectorIds) {
-    if (!(await deps.agents.connectorConnected(projectId, connectorId))) {
-      return { mcpConnectors: `MCP connector is not connected for this project: ${connectorId}` }
+    if (!(await deps.agents.connectorAvailable(connectorId))) {
+      return { mcpConnectors: `MCP connector is not available in the platform catalog: ${connectorId}` }
     }
   }
   return null

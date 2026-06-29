@@ -1,5 +1,5 @@
 import type { SecretProvider, VaultScope, VersionState } from '@server/domain/vault'
-import { credentialRefPinsVersion, secretRefPinsVersion } from '@server/domain/vault'
+import { secretRefPinsVersion } from '@server/domain/vault'
 import type {
   CreateCredentialInput,
   CreateVaultInput,
@@ -17,7 +17,7 @@ import type {
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { environments, projects, sessions, vaultCredentials, vaultCredentialVersions, vaults } from '../../db/schema'
+import { sessions, vaultCredentials, vaultCredentialVersions, vaults } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 type VaultRow = typeof vaults.$inferSelect
@@ -398,23 +398,6 @@ export function createVaultRepo(db: Db): VaultRepo {
     },
 
     async versionHasActiveReferences(version: CredentialVersionRecord) {
-      const environmentFilters = [isNull(environments.archivedAt), eq(projects.organizationId, version.organizationId)]
-      if (version.projectId) {
-        environmentFilters.push(eq(environments.projectId, version.projectId))
-      }
-      const environmentReferences = await db
-        .select({ credentialRefs: environments.credentialRefs })
-        .from(environments)
-        .innerJoin(projects, eq(environments.projectId, projects.id))
-        .where(and(...environmentFilters))
-      if (
-        environmentReferences.some((row) =>
-          parseRefArray(row.credentialRefs).some((ref) => credentialRefPinsVersion(ref, version)),
-        )
-      ) {
-        return true
-      }
-
       const sessionFilters = [
         eq(sessions.organizationId, version.organizationId),
         version.projectId ? eq(sessions.projectId, version.projectId) : undefined,
@@ -436,10 +419,7 @@ export function createVaultRepo(db: Db): VaultRepo {
         if (envFromPins || volumePins) {
           return true
         }
-        const snapshot = row.environmentSnapshot
-          ? (JSON.parse(row.environmentSnapshot) as { credentialRefs?: unknown[] })
-          : null
-        return snapshot?.credentialRefs?.some((ref) => credentialRefPinsVersion(ref, version)) ?? false
+        return false
       })
     },
   }

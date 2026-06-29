@@ -1,6 +1,5 @@
 import type {
   EnvironmentConfig,
-  EnvironmentCredentialRef,
   EnvironmentHostingMode,
   EnvironmentPackage,
   EnvironmentVariable,
@@ -17,13 +16,8 @@ import type {
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { normalizeEnvironmentNetworkPolicy } from '../../contracts/environment-contracts'
-import {
-  connections,
-  environments,
-  environmentVersions,
-  vaultCredentials,
-  vaultCredentialVersions,
-} from '../../db/schema'
+import { connectors, environments, environmentVersions } from '../../db/schema'
+import { DEFAULT_CONNECTORS } from '../../domain/connector'
 
 type Db = ReturnType<typeof drizzle>
 type EnvironmentRow = typeof environments.$inferSelect
@@ -45,7 +39,6 @@ function configFromRow(row: EnvironmentRow | EnvironmentVersionRow): Environment
   return {
     packages: parseJson<EnvironmentPackage[]>(row.packages),
     variables: parseJson<Record<string, EnvironmentVariable>>(row.variables),
-    credentialRefs: parseJson<EnvironmentCredentialRef[]>(row.credentialRefs),
     hostingMode: row.hostingMode as EnvironmentHostingMode,
     networkPolicy: normalizeEnvironmentNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
     mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
@@ -60,7 +53,6 @@ function configColumns(config: EnvironmentConfig) {
   return {
     packages: stringify(config.packages),
     variables: stringify(config.variables),
-    credentialRefs: stringify(config.credentialRefs),
     hostingMode: config.hostingMode,
     networkPolicy: stringify(config.networkPolicy),
     mcpPolicy: stringify(config.mcpPolicy),
@@ -236,49 +228,16 @@ export function createEnvironmentRepo(db: Db): EnvironmentRepo {
         .where(and(eq(environments.id, environmentId), eq(environments.projectId, projectId)))
     },
 
-    async credentialActive(organizationId, projectId, credentialId) {
-      const credential = await db
-        .select({ state: vaultCredentials.state })
-        .from(vaultCredentials)
-        .where(
-          and(
-            eq(vaultCredentials.id, credentialId),
-            eq(vaultCredentials.organizationId, organizationId),
-            or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
-          ),
-        )
+    async connectorAvailable(connectorId) {
+      const connector = await db
+        .select({ availability: connectors.availability })
+        .from(connectors)
+        .where(eq(connectors.id, connectorId))
         .get()
-      return credential?.state === 'active'
-    },
-
-    async credentialVersionUsable(credentialId, versionId) {
-      const version = await db
-        .select({ id: vaultCredentialVersions.id })
-        .from(vaultCredentialVersions)
-        .where(
-          and(
-            eq(vaultCredentialVersions.id, versionId),
-            eq(vaultCredentialVersions.credentialId, credentialId),
-            or(eq(vaultCredentialVersions.state, 'active'), eq(vaultCredentialVersions.state, 'superseded')),
-          ),
-        )
-        .get()
-      return Boolean(version)
-    },
-
-    async connectorConnected(projectId, connectorId) {
-      const connection = await db
-        .select({ id: connections.id })
-        .from(connections)
-        .where(
-          and(
-            eq(connections.projectId, projectId),
-            eq(connections.connectorId, connectorId),
-            eq(connections.state, 'connected'),
-          ),
-        )
-        .get()
-      return Boolean(connection)
+      if (connector) {
+        return connector.availability === 'available'
+      }
+      return DEFAULT_CONNECTORS.some((item) => item.id === connectorId && item.availability === 'available')
     },
   }
 }

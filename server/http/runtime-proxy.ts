@@ -281,43 +281,6 @@ export async function handleRuntimeProxyRequest(c: Context<DepsEnv>): Promise<Re
       })
       return new Response(null, { status: 101, webSocket: client })
     }
-    case 'mcpToolCall': {
-      const { connectorId, toolName } = route
-      const decision = await deps.policy.evaluateMcpTool(resolvedAuth, {
-        connectorId,
-        toolName,
-        session: {
-          id: session.id,
-          agentSnapshot: session.agentSnapshot,
-          environmentSnapshot: session.environmentSnapshot,
-        },
-      })
-      if (!decision.allowed) {
-        await denyRuntimePolicy(deps, resolvedAuth, {
-          sessionId,
-          decision,
-          requestId: requestId(c),
-          action: 'runtime_mcp_tool.call',
-          resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
-          resourceId: decision.category === 'tool' ? toolName : connectorId,
-          payload: { operation: 'mcp_tool_call', connectorId, toolName },
-        })
-        return errorResponse(
-          c,
-          decision.category === 'approval' ? 409 : 403,
-          decision.category === 'approval' ? 'conflict' : 'policy_denied',
-          decision.message,
-          {
-            category: decision.category,
-            resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
-            resourceId: decision.category === 'tool' ? toolName : connectorId,
-            ruleId: decision.rule,
-          },
-        )
-      }
-      // An allowed MCP tool call falls through to the passthrough handler below.
-      break
-    }
     case 'rpc': {
       const body = await readRuntimeJsonBody(request)
       if (c.env.AMA_RUNTIME_MODE !== 'test' && runtimeRequestHasTestOnlyFields(body)) {

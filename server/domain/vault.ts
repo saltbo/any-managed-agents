@@ -25,6 +25,12 @@ export interface SecretIdentity {
   versionId: string
 }
 
+export interface SecretRefIdentity {
+  vaultId: string
+  credentialId?: string | undefined
+  versionId?: string | undefined
+}
+
 // The safe (secret-free) reference fields a credential version persists. The
 // actual secret value never appears here — it goes to the SecretStore gateway.
 export interface SecretReference {
@@ -47,6 +53,10 @@ export function credentialVersionSecretRef(identity: SecretIdentity) {
   return `ama://vaults/${uriPathSegment(identity.vaultId)}/credentials/${uriPathSegment(identity.credentialId)}/versions/${uriPathSegment(identity.versionId)}`
 }
 
+export function credentialScopedSecretRef(identity: { vaultId: string; credentialId: string }) {
+  return `ama://vaults/${uriPathSegment(identity.vaultId)}/credentials/${uriPathSegment(identity.credentialId)}`
+}
+
 export function amaSecretRef(vaultId: string) {
   return `ama://vaults/${uriPathSegment(vaultId)}`
 }
@@ -65,12 +75,42 @@ export function vaultIdFromRef(secretRef: string): string | null {
   return vaultId && rest.length === 0 ? decodeURIComponent(vaultId) : null
 }
 
-export function secretRefPinsVersion(secretRef: unknown, version: { id: string; credentialId: string; vaultId: string }) {
-  return typeof secretRef === 'string' && secretRef === credentialVersionSecretRef({
-    vaultId: version.vaultId,
-    credentialId: version.credentialId,
-    versionId: version.id,
-  })
+export function secretRefPinsVersion(
+  secretRef: unknown,
+  version: { id: string; credentialId: string; vaultId: string },
+) {
+  return (
+    typeof secretRef === 'string' &&
+    secretRef ===
+      credentialVersionSecretRef({
+        vaultId: version.vaultId,
+        credentialId: version.credentialId,
+        versionId: version.id,
+      })
+  )
+}
+
+export function secretRefIdentity(secretRef: string): SecretRefIdentity | null {
+  let parsed: URL
+  try {
+    parsed = new URL(secretRef)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'ama:' || parsed.hostname !== 'vaults') {
+    return null
+  }
+  const segments = parsed.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  if (segments.length === 1) {
+    return { vaultId: segments[0]! }
+  }
+  if (segments.length === 3 && segments[1] === 'credentials') {
+    return { vaultId: segments[0]!, credentialId: segments[2]! }
+  }
+  if (segments.length === 5 && segments[1] === 'credentials' && segments[3] === 'versions') {
+    return { vaultId: segments[0]!, credentialId: segments[2]!, versionId: segments[4]! }
+  }
+  return null
 }
 
 // Builds the safe reference for a credential version from the requested secret
@@ -100,16 +140,4 @@ export function stripStoredSecretMetadata(metadata: Record<string, unknown>): Re
     delete safe[key]
   }
   return safe
-}
-
-// Credential references are { credentialId, versionId? } objects everywhere in
-// v1 (docs/api-v1-design.md §1.4). A reference without versionId resolves to
-// the credential's active version, which can never be deleted, so only pinned
-// references block deleting a specific version.
-export function credentialRefPinsVersion(ref: unknown, version: { credentialId: string; id: string }) {
-  if (!ref || typeof ref !== 'object') {
-    return false
-  }
-  const record = ref as { credentialId?: unknown; versionId?: unknown }
-  return record.credentialId === version.credentialId && record.versionId === version.id
 }

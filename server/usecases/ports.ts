@@ -1,10 +1,4 @@
 import type { AgentConfig, AgentToolAttachment } from '@server/domain/agent'
-import type {
-  ConnectionApprovalMode,
-  ConnectionState,
-  ToolAvailability,
-  ToolCallState,
-} from '@server/domain/connection'
 import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool } from '@server/domain/connector'
 import type { EnvironmentConfig } from '@server/domain/environment'
 import type { MemoryStoreAccess } from '@server/domain/memory-store'
@@ -178,7 +172,7 @@ export interface AgentRepo {
 
   // Reference validation against sibling resources.
   providerEnabled(projectId: string, providerId: string): Promise<boolean>
-  connectorConnected(projectId: string, connectorId: string): Promise<boolean>
+  connectorAvailable(connectorId: string): Promise<boolean>
 }
 
 export interface AuditEntry {
@@ -205,8 +199,8 @@ export interface AuditPort {
 }
 
 // A policy decision crossing the port boundary. Mirrors the http-layer
-// PolicyDecision so the connections usecase can branch on it without importing
-// the policy module.
+// PolicyDecision so usecases can branch on it without importing the policy
+// module.
 export interface PolicyDecisionResult {
   allowed: boolean
   category: string
@@ -239,11 +233,9 @@ export interface ProviderPolicySessionDecisionView {
 }
 
 // Effective-policy boundary. Agents need the merged tool policy that gates which
-// tools an agent version may attach; connections need the merged MCP policy (to
-// gate connector creation) and full MCP tool-call evaluation. The
-// effective-policy resource reads the full merged policy and evaluates a
-// provider/model decision. The DB-mixed hierarchy resolution and provider
-// evaluation stay in server/policy.ts behind this port.
+// tools an agent version may attach. The effective-policy resource reads the full
+// merged policy and evaluates provider/model decisions. The DB-mixed hierarchy
+// resolution and provider evaluation stay in server/policy.ts behind this port.
 export interface PolicyPort {
   resolveToolPolicy(auth: AuthScope): Promise<Record<string, unknown>>
   resolveMcpPolicy(auth: AuthScope): Promise<Record<string, unknown>>
@@ -381,10 +373,7 @@ export interface EnvironmentRepo {
   update(projectId: string, environmentId: string, fields: UpdateEnvironmentFields, updatedAt: string): Promise<void>
   unarchive(projectId: string, environmentId: string, updatedAt: string): Promise<void>
 
-  // Reference validation against sibling resources.
-  credentialActive(organizationId: string, projectId: string, credentialId: string): Promise<boolean>
-  credentialVersionUsable(credentialId: string, versionId: string): Promise<boolean>
-  connectorConnected(projectId: string, connectorId: string): Promise<boolean>
+  connectorAvailable(connectorId: string): Promise<boolean>
 }
 
 // --- providers ---
@@ -790,230 +779,8 @@ export interface ConnectorRepo {
   find(connectorId: string): Promise<ConnectorRecord | null>
 }
 
-// --- connections ---
-
-// Thrown when a connection operation conflicts with current state (connector
-// unavailable, connection already exists, endpoint missing, credential
-// unavailable). The http layer maps it to 409. `details` carries optional
-// structured error fields.
-export class ConnectionConflictError extends Error {
-  readonly details: Record<string, unknown> | undefined
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message)
-    this.name = 'ConnectionConflictError'
-    this.details = details
-  }
-}
-
-// Thrown when a referenced connector or credential is required but missing. The
-// http layer maps it to 400.
-export class ConnectionValidationError extends Error {
-  readonly fields: Record<string, string>
-  constructor(message: string, fields: Record<string, string>) {
-    super(message)
-    this.name = 'ConnectionValidationError'
-    this.fields = fields
-  }
-}
-
-// Thrown when governance policy blocks creating the connection. The http layer
-// maps it to 403.
-export class ConnectionPolicyDeniedError extends Error {
-  readonly connectorId: string
-  constructor(connectorId: string, message = 'MCP connector is blocked by governance policy.') {
-    super(message)
-    this.name = 'ConnectionPolicyDeniedError'
-    this.connectorId = connectorId
-  }
-}
-
-export interface ConnectionRecord {
-  id: string
-  organizationId: string
-  projectId: string
-  connectorId: string
-  credentialId: string | null
-  credentialVersionId: string | null
-  endpointUrl: string | null
-  approvalMode: ConnectionApprovalMode
-  state: ConnectionState
-  lastError: Record<string, unknown> | null
-  metadata: Record<string, unknown>
-  connectedAt: string
-  disconnectedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ConnectionToolRecord {
-  id: string
-  connectionId: string
-  connectorId: string
-  name: string
-  description: string | null
-  inputSchema: Record<string, unknown>
-  approvalMode: ConnectionApprovalMode
-  policyMetadata: Record<string, unknown>
-  availability: ToolAvailability
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ToolCallRecord {
-  id: string
-  connectionId: string
-  connectorId: string
-  toolName: string
-  sessionId: string
-  state: ToolCallState
-  input: Record<string, unknown>
-  output: Record<string, unknown> | null
-  error: { type: string; message: string } | null
-  durationMs: number
-  createdAt: string
-}
-
-export interface ConnectionListQuery {
-  projectId: string
-  state?: ConnectionState
-  limit: number
-  cursor: { createdAt: string; id: string } | null
-}
-
-export interface ToolCallListQuery {
-  projectId: string
-  connectionId: string
-  toolName: string
-  limit: number
-  cursor: { createdAt: string; id: string } | null
-}
-
-export interface CreateConnectionInput {
-  organizationId: string
-  projectId: string
-  connectorId: string
-  credentialId: string | null
-  credentialVersionId: string | null
-  endpointUrl: string | null
-  approvalMode: ConnectionApprovalMode
-  metadata: Record<string, unknown>
-}
-
-export interface UpdateConnectionFields {
-  credentialId: string | null
-  credentialVersionId: string | null
-  endpointUrl: string | null
-  approvalMode: ConnectionApprovalMode
-  state: ConnectionState
-  disconnectedAt: string | null
-  metadata: Record<string, unknown>
-}
-
-export interface ResolvedCredential {
-  credentialId: string | null
-  credentialVersionId: string | null
-}
-
-export interface ToolCallExecution {
-  id: string
-  organizationId: string
-  projectId: string
-  connectionId: string
-  connectorId: string
-  toolName: string
-  sessionId: string
-  input: Record<string, unknown>
-  output: Record<string, unknown> | null
-  state: ToolCallState
-  error: { type: string; message: string } | null
-  durationMs: number
-  createdAt: string
-}
-
-// DB boundary for connections, their synced tools, and tool-call records. The
-// only implementation lives in adapters/repos.
-export interface ConnectionRepo {
-  list(query: ConnectionListQuery): Promise<ListPageResult<ConnectionRecord>>
-  find(projectId: string, connectionId: string): Promise<ConnectionRecord | null>
-  findByConnector(projectId: string, connectorId: string): Promise<ConnectionRecord | null>
-  insert(input: CreateConnectionInput, timestamp: string): Promise<ConnectionRecord>
-  update(connectionId: string, fields: UpdateConnectionFields, updatedAt: string): Promise<ConnectionRecord>
-
-  // Reference validation against sibling resources.
-  resolveCredential(
-    visibility: VaultVisibility,
-    ref: { credentialId: string; versionId?: string | undefined } | null,
-  ): Promise<ResolvedCredential>
-  findSession(
-    projectId: string,
-    sessionId: string,
-  ): Promise<{ id: string; agentSnapshot: string | null; environmentSnapshot: string | null } | null>
-
-  listTools(connectionId: string): Promise<ConnectionToolRecord[]>
-  findTool(connectionId: string, toolName: string): Promise<ConnectionToolRecord | null>
-  // Replaces all synced tool rows from the catalog tool metadata captured at
-  // connect time (connection.approvalMode overrides per-tool when not policy).
-  replaceCatalogTools(connection: ConnectionRecord, catalogTools: ConnectorCatalogTool[]): Promise<void>
-  // Replaces all synced tool rows from a live MCP server listing.
-  replaceServerTools(connection: ConnectionRecord, tools: McpServerToolDescriptor[]): Promise<void>
-
-  // Persists a tool-call record (input/output redacted at this boundary) and
-  // returns the persisted record so the response mirrors what was stored.
-  insertToolCall(execution: ToolCallExecution): Promise<ToolCallRecord>
-  listToolCalls(query: ToolCallListQuery): Promise<ListPageResult<ToolCallRecord>>
-  findToolCall(
-    projectId: string,
-    connectionId: string,
-    toolName: string,
-    callId: string,
-  ): Promise<ToolCallRecord | null>
-}
-
-export interface McpToolError {
-  type: string
-  message: string
-}
-
-export interface McpServerToolDescriptor {
-  name: string
-  description: string | null
-  inputSchema: Record<string, unknown>
-}
-
-export interface McpCallResult {
-  content: unknown[]
-  structuredContent: Record<string, unknown> | null
-  isError: boolean
-}
-
-// The connection target an MCP gateway call resolves: endpoint, the vault
-// scope + credential to authorize with, and the per-connection request timeout.
-export interface McpConnectionTarget {
-  endpointUrl: string
-  organizationId: string
-  projectId: string
-  credentialId: string | null
-  credentialVersionId: string | null
-  timeoutMs: number
-}
-
-// MCP client boundary (fetch). Lists/calls tools against a live MCP server,
-// resolving the connection credential to an Authorization header. Failures are
-// categorized into the stable McpToolError surface.
-export interface McpGateway {
-  readonly upstreamError: McpToolError
-  normalizeError(error: unknown): McpToolError
-  validateToolInput(schema: Record<string, unknown>, input: Record<string, unknown>): void
-  listTools(target: McpConnectionTarget): Promise<McpServerToolDescriptor[]>
-  callTool(
-    target: McpConnectionTarget,
-    values: { toolName: string; input: Record<string, unknown> },
-  ): Promise<McpCallResult>
-}
-
-// Session-event boundary. The connections tool-call flow appends canonical
-// session events (policy decisions, tool execution start/end) so MCP activity
-// stays inspectable on the session after completion.
+// Session-event boundary. Runtime flows append canonical session events so
+// activity stays inspectable on the session after completion.
 export interface SessionEventPort {
   append(values: {
     auth: AuthScope
@@ -1168,13 +935,6 @@ export interface PolicyProvider {
 
 // An MCP connection row the policy engine gates: connection state + credential
 // binding + tool availability the tool-call decision needs.
-export interface PolicyConnection {
-  id: string
-  state: string
-  credentialId: string | null
-  credentialVersionId: string | null
-}
-
 // Read-only DB boundary for the cross-cutting policy engine (server/policy.ts).
 // Aggregates every governance read the engine needs so the engine itself stays
 // drizzle-free: it composes these reads with the pure decision rules in
@@ -1197,17 +957,6 @@ export interface PolicyEvalRepo {
   // The project's enabled budgets.
   enabledBudgets(projectId: string): Promise<BudgetRule[]>
 
-  // The connection for a connector in the project; null when absent.
-  findConnection(projectId: string, connectorId: string): Promise<PolicyConnection | null>
-  // The synced tool row for a connector tool; null when absent.
-  findConnectionTool(
-    connectionId: string,
-    connectorId: string,
-    toolName: string,
-  ): Promise<{ availability: string } | null>
-  // Whether the connection's resolved credential version is active (resolving
-  // the credential's active version when the connection pins none).
-  connectionCredentialUsable(auth: AuthScope, connection: PolicyConnection): Promise<boolean>
 }
 
 // --- usage records + summary (read-only reporting) ---
@@ -1968,7 +1717,7 @@ export type CloudSessionStartMessage = {
   projectId: string
   runtime: string
   runtimeConfig: Record<string, unknown>
-  runtimeEnv: Record<string, string>
+  env: Record<string, string>
   envFrom: EnvFromEntry[]
   volumes: Volume[]
   volumeMounts: VolumeMount[]
@@ -2032,13 +1781,13 @@ export interface SandboxRuntimeStartInput {
   model: string | null
   agentSnapshot: Record<string, unknown>
   environmentSnapshot: Record<string, unknown> | null
-  mcpSnapshot?: Record<string, unknown>
+  mcpServers?: Record<string, unknown>
   volumes?: Volume[]
   volumeMounts?: VolumeMount[]
   workspaceManifest?: WorkspaceManifest
-  // Already materialized runtime environment: direct env merged with resolved
+  // Already materialized execution environment: direct env merged with resolved
   // secret refs before crossing into the runtime host.
-  runtimeEnv?: Record<string, string>
+  env?: Record<string, string>
 }
 
 export interface SandboxRuntimeStartResult {
@@ -2140,8 +1889,6 @@ export interface AmaTurnExecutor {
 import type {
   AgentRow,
   AgentVersionRow,
-  ConnectionRow,
-  ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
   SessionApprovalInsert,
@@ -2156,8 +1903,6 @@ import type { CanonicalAmaSessionEvent } from '@shared/session-events'
 export type {
   AgentRow,
   AgentVersionRow,
-  ConnectionRow,
-  ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
   SessionRow,
@@ -2240,9 +1985,13 @@ export interface SessionOrchestrationStore {
     model: string | null,
   ): Promise<string | null>
 
-  // ── MCP snapshot resolution ──
-  connectedConnections(projectId: string): Promise<ConnectionRow[]>
-  availableConnectionTools(connectionId: string): Promise<ConnectionToolRow[]>
+  // ── MCP manifest resolution ──
+  mcpCatalogEntries(connectorIds: string[]): Promise<ConnectorRecord[]>
+  mcpCredentialForConnector(
+    organizationId: string,
+    projectId: string,
+    connectorId: string,
+  ): Promise<{ credentialId: string; credentialVersionId: string; secretRef: string; referenceName: string } | null>
 
   // ── credential validation ──
   activeCredentialVersionExists(organizationId: string, projectId: string, versionId: string): Promise<boolean>

@@ -8,21 +8,27 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
 
 
 
 
 
 
-T = TypeVar("T", bound="CreateConnectionRequestMetadata")
+T = TypeVar("T", bound="NullableCredentialRefType0")
 
 
 
 @_attrs_define
-class CreateConnectionRequestMetadata:
+class NullableCredentialRefType0:
     """ 
+        Attributes:
+            credential_id (str):  Example: vaultcred_abc123.
+            version_id (str | Unset):  Example: vaultver_abc123.
      """
 
+    credential_id: str
+    version_id: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -30,9 +36,18 @@ class CreateConnectionRequestMetadata:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+        credential_id = self.credential_id
+
+        version_id = self.version_id
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
+        field_dict.update({
+            "credentialId": credential_id,
+        })
+        if version_id is not UNSET:
+            field_dict["versionId"] = version_id
 
         return field_dict
 
@@ -41,12 +56,18 @@ class CreateConnectionRequestMetadata:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        create_connection_request_metadata = cls(
+        credential_id = d.pop("credentialId")
+
+        version_id = d.pop("versionId", UNSET)
+
+        nullable_credential_ref_type_0 = cls(
+            credential_id=credential_id,
+            version_id=version_id,
         )
 
 
-        create_connection_request_metadata.additional_properties = d
-        return create_connection_request_metadata
+        nullable_credential_ref_type_0.additional_properties = d
+        return nullable_credential_ref_type_0
 
     @property
     def additional_keys(self) -> list[str]:

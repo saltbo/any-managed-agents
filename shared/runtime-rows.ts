@@ -134,7 +134,6 @@ export interface EnvironmentRow {
   description: string | null
   packages: string
   variables: string
-  credentialRefs: string
   hostingMode: string
   networkPolicy: string
   mcpPolicy: string
@@ -155,7 +154,6 @@ export interface EnvironmentVersionRow {
   version: number
   packages: string
   variables: string
-  credentialRefs: string
   hostingMode: string
   networkPolicy: string
   mcpPolicy: string
@@ -204,40 +202,6 @@ export interface WorkItemInsert {
   result?: string | null
   error?: string | null
   availableAt: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ConnectionRow {
-  id: string
-  organizationId: string
-  projectId: string
-  connectorId: string
-  credentialId: string | null
-  credentialVersionId: string | null
-  endpointUrl: string | null
-  approvalMode: string
-  state: string
-  lastError: string | null
-  metadata: string
-  connectedAt: string
-  disconnectedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ConnectionToolRow {
-  id: string
-  connectionId: string
-  organizationId: string
-  projectId: string
-  connectorId: string
-  name: string
-  description: string | null
-  inputSchema: string
-  approvalMode: string
-  policyMetadata: string
-  availability: string
   createdAt: string
   updatedAt: string
 }

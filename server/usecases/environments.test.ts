@@ -22,7 +22,6 @@ function config(overrides: Partial<EnvironmentConfig> = {}): EnvironmentConfig {
   return {
     packages: [],
     variables: {},
-    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'unrestricted' },
     mcpPolicy: {},
@@ -78,9 +77,7 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
     setCurrentVersion: async () => {},
     update: async () => {},
     unarchive: async () => {},
-    credentialActive: async () => true,
-    credentialVersionUsable: async () => true,
-    connectorConnected: async () => true,
+    connectorAvailable: async () => true,
     ...overrides.repo,
   }
   return {
@@ -91,10 +88,8 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
     vaults: undefined as unknown as Deps['vaults'],
     secretStore: undefined as unknown as Deps['secretStore'],
     connectors: undefined as unknown as Deps['connectors'],
-    connections: undefined as unknown as Deps['connections'],
     policies: undefined as unknown as Deps['policies'],
     budgets: undefined as unknown as Deps['budgets'],
-    mcp: undefined as unknown as Deps['mcp'],
     usageRecords: undefined as unknown as Deps['usageRecords'],
     auditRecords: undefined as unknown as Deps['auditRecords'],
     triggers: undefined as unknown as Deps['triggers'],
@@ -153,30 +148,8 @@ describe('[spec: environments/create] createEnvironment', () => {
     expect(setCurrent).toEqual(['envver_new'])
   })
 
-  it('rejects an inactive credential reference', async () => {
-    const deps = fakeDeps({ repo: { credentialActive: async () => false } })
-    await expect(
-      createEnvironment(deps, auth, {
-        name: 'x',
-        description: null,
-        config: config({ credentialRefs: [{ credentialId: 'cred_missing' }] }),
-      }),
-    ).rejects.toMatchObject({ fields: { 'credentialRefs[0]': expect.any(String) } })
-  })
-
-  it('rejects an unusable pinned credential version', async () => {
-    const deps = fakeDeps({ repo: { credentialVersionUsable: async () => false } })
-    await expect(
-      createEnvironment(deps, auth, {
-        name: 'x',
-        description: null,
-        config: config({ credentialRefs: [{ credentialId: 'cred_1', versionId: 'credver_bad' }] }),
-      }),
-    ).rejects.toMatchObject({ fields: { 'credentialRefs[0]': expect.any(String) } })
-  })
-
   it('rejects a disconnected mcp connector', async () => {
-    const deps = fakeDeps({ repo: { connectorConnected: async () => false } })
+    const deps = fakeDeps({ repo: { connectorAvailable: async () => false } })
     await expect(
       createEnvironment(deps, auth, {
         name: 'x',
@@ -300,16 +273,7 @@ describe('[spec: environments/create] createEnvironment — secret variables', (
     ).rejects.toBeInstanceOf(EnvironmentValidationError)
   })
 
-  it('accepts a pinned credential version when it is usable', async () => {
-    const environment = await createEnvironment(fakeDeps(), auth, {
-      name: 'Pinned',
-      description: null,
-      config: config({ credentialRefs: [{ credentialId: 'cred_1', versionId: 'credver_1' }] }),
-    })
-    expect(environment.credentialRefs).toHaveLength(1)
-  })
-
-  it('accepts environments with connected mcp connectors in the mcp policy', async () => {
+  it('accepts environments with catalog mcp connectors in the mcp policy', async () => {
     const environment = await createEnvironment(fakeDeps(), auth, {
       name: 'With MCP',
       description: null,

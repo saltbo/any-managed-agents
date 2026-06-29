@@ -286,7 +286,7 @@ function createWorkItem(runtime, gitConfig) {
       model: runtime.model,
       runtimeDriver: `${runtime.name}-self-hosted`,
       requiredRunnerCapability: runtime.name,
-      runtimeEnv: {},
+      env: {},
       workspaceManifest: {
         root: '/workspace',
         mounts: workspaceMounts,
@@ -521,7 +521,7 @@ function createResumeControlPlane(runtime) {
       model: runtime.model,
       runtimeDriver: `${runtime.name}-self-hosted`,
       requiredRunnerCapability: runtime.name,
-      runtimeEnv: {},
+      env: {},
       volumes: [],
       volumeMounts: [],
       agentSnapshot: { instructions: 'AMA resume smoke. Follow the user prompt exactly.' },

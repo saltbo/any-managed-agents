@@ -34,7 +34,6 @@ class SessionEnvironmentSnapshotType0:
             version (int):
             packages (list[SessionEnvironmentJsonObject]):
             variables (SessionEnvironmentJsonObject):
-            credential_refs (list[SessionEnvironmentJsonObject]):
             hosting_mode (EnvironmentHostingMode):  Example: cloud.
             network_policy (EnvironmentNetworkPolicy):  Example: {'mode': 'restricted', 'allowedHosts':
                 ['registry.npmjs.org']}.
@@ -52,7 +51,6 @@ class SessionEnvironmentSnapshotType0:
     version: int
     packages: list[SessionEnvironmentJsonObject]
     variables: SessionEnvironmentJsonObject
-    credential_refs: list[SessionEnvironmentJsonObject]
     hosting_mode: EnvironmentHostingMode
     network_policy: EnvironmentNetworkPolicy
     mcp_policy: SessionEnvironmentJsonObject
@@ -87,13 +85,6 @@ class SessionEnvironmentSnapshotType0:
 
         variables = self.variables.to_dict()
 
-        credential_refs = []
-        for credential_refs_item_data in self.credential_refs:
-            credential_refs_item = credential_refs_item_data.to_dict()
-            credential_refs.append(credential_refs_item)
-
-
-
         hosting_mode = self.hosting_mode.value
 
         network_policy = self.network_policy.to_dict()
@@ -120,7 +111,6 @@ class SessionEnvironmentSnapshotType0:
             "version": version,
             "packages": packages,
             "variables": variables,
-            "credentialRefs": credential_refs,
             "hostingMode": hosting_mode,
             "networkPolicy": network_policy,
             "mcpPolicy": mcp_policy,
@@ -161,16 +151,6 @@ class SessionEnvironmentSnapshotType0:
         variables = SessionEnvironmentJsonObject.from_dict(d.pop("variables"))
 
 
-
-
-        credential_refs = []
-        _credential_refs = d.pop("credentialRefs")
-        for credential_refs_item_data in (_credential_refs):
-            credential_refs_item = SessionEnvironmentJsonObject.from_dict(credential_refs_item_data)
-
-
-
-            credential_refs.append(credential_refs_item)
 
 
         hosting_mode = EnvironmentHostingMode(d.pop("hostingMode"))
@@ -220,7 +200,6 @@ class SessionEnvironmentSnapshotType0:
             version=version,
             packages=packages,
             variables=variables,
-            credential_refs=credential_refs,
             hosting_mode=hosting_mode,
             network_policy=network_policy,
             mcp_policy=mcp_policy,

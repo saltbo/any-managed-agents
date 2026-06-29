@@ -8,7 +8,6 @@ import { registerAuditRecordRoutes } from './http/audit-records'
 import { registerAuthRoutes } from './http/auth'
 import { registerBudgetRoutes } from './http/budgets'
 import { registerConfigzRoutes } from './http/configz'
-import { registerConnectionRoutes } from './http/connections'
 import { registerConnectorRoutes } from './http/connectors'
 import e2e from './http/e2e'
 import { registerEnvironmentRoutes } from './http/environments'
@@ -61,8 +60,8 @@ export function createApp() {
   // a protocol-adapter endpoint: its wire shape is dictated by the runtime
   // tunnel protocol and is therefore exempt from REST resource modeling
   // (docs/api-v1-design.md §1.8).
-  // agents, environments, providers, vaults, connectors, connections, the
-  // governance resources, and the usage/audit reporting resources are migrated
+  // agents, environments, providers, vaults, connectors, the governance
+  // resources, and the usage/audit reporting resources are migrated
   // to the clean-architecture http layer. Each registers its OpenAPI
   // routes (load-bearing internal order: static before parameter segments) onto
   // a sub-router mounted at the resource's original chain position, so the
@@ -78,7 +77,6 @@ export function createApp() {
   const workItems = registerWorkItemRoutes(createDepsApiRouter())
   const leases = registerLeaseRoutes(createDepsApiRouter())
   const connectors = registerConnectorRoutes(createDepsApiRouter())
-  const connections = registerConnectionRoutes(createDepsApiRouter())
   const budgets = registerBudgetRoutes(createDepsApiRouter())
   const usageRecords = registerUsageRecordRoutes(createDepsApiRouter())
   const usageSummary = registerUsageSummaryRoutes(createDepsApiRouter())
@@ -101,7 +99,6 @@ export function createApp() {
     .route('/api/v1/leases', leases)
     .route('/api/v1/budgets', budgets)
     .route('/api/v1/connectors', connectors)
-    .route('/api/v1/connections', connections)
     .route('/api/v1/usage-records', usageRecords)
     .route('/api/v1/usage-summary', usageSummary)
     .route('/api/v1/audit-records', auditRecords)

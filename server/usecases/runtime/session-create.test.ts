@@ -8,9 +8,9 @@ import type { AuthScope } from '../ports'
 //
 // The usecase is deps-first: the orchestration store, audit, policy, and queue
 // all arrive on `deps`. Provider/runtime resolution + provider-config read live
-// in the sibling provisioning usecase, the snapshot serializers in
-// domain/runtime/session-snapshot, and providerRuntimeEnv is a pure domain rule;
-// those module seams are stubbed so the test pins the reconcile flow directly.
+// in the sibling provisioning usecase and the snapshot serializers in
+// domain/runtime/session-snapshot; those module seams are stubbed so the test
+// pins the reconcile flow directly.
 const {
   enqueueCloudTurnMock,
   cloudTurnsRunInlineMock,
@@ -21,7 +21,6 @@ const {
   resolveSessionProviderIdMock,
   validateRuntimeProviderModelMock,
   resolveSessionProviderConfigMock,
-  providerRuntimeEnvMock,
   serializeAgentVersionMock,
   serializeEnvironmentVersionMock,
   insertSessionMock,
@@ -46,7 +45,6 @@ const {
   resolveSessionProviderIdMock: vi.fn(async () => 'anthropic'),
   validateRuntimeProviderModelMock: vi.fn(async () => true),
   resolveSessionProviderConfigMock: vi.fn(async () => ({ ok: true, config: null })),
-  providerRuntimeEnvMock: vi.fn(() => ({ env: {}, envFrom: [] })),
   serializeAgentVersionMock: vi.fn(() => ({ id: 'agentver_1', providerId: 'anthropic', model: '@cf/x' })),
   serializeEnvironmentVersionMock: vi.fn(() => ({ id: 'envver_1', hostingMode: 'cloud', runtimeConfig: {} })),
   insertSessionMock: vi.fn(async () => undefined),
@@ -61,17 +59,12 @@ const {
 }))
 
 // Provider/runtime resolution + provider-config read live in the deps-first
-// provisioning usecase; providerRuntimeEnv is a pure domain rule. Stub those seams.
+// provisioning usecase. Stub those seams.
 vi.mock('./provisioning', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./provisioning')>()),
   resolveSessionProviderId: resolveSessionProviderIdMock,
   validateRuntimeProviderModel: validateRuntimeProviderModelMock,
   resolveSessionProviderConfig: resolveSessionProviderConfigMock,
-}))
-
-vi.mock('@server/domain/runtime/provider', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@server/domain/runtime/provider')>()),
-  providerRuntimeEnv: providerRuntimeEnvMock,
 }))
 
 vi.mock('@server/domain/runtime/session-snapshot', async (importOriginal) => ({

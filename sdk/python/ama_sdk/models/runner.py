@@ -14,7 +14,7 @@ from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.runner_credential_ref import RunnerCredentialRef
+  from ..models.nullable_credential_ref_type_0 import NullableCredentialRefType0
   from ..models.runner_metadata import RunnerMetadata
   from ..models.runner_runtime_inventory import RunnerRuntimeInventory
   from ..models.runtime_usage import RuntimeUsage
@@ -36,7 +36,7 @@ class Runner:
             name (str):  Example: mac-mini-build-runner.
             capabilities (list[str]):  Example: ['node', 'git', 'sandbox.exec'].
             environment_id (None | str):  Example: env_abc123.
-            credential_ref (RunnerCredentialRef):
+            credential_ref (None | NullableCredentialRefType0):
             auth_mode (RunnerAuthMode):  Example: oidc.
             state (RunnerState):  Example: active.
             current_load (int):
@@ -55,7 +55,7 @@ class Runner:
     name: str
     capabilities: list[str]
     environment_id: None | str
-    credential_ref: RunnerCredentialRef
+    credential_ref: None | NullableCredentialRefType0
     auth_mode: RunnerAuthMode
     state: RunnerState
     current_load: int
@@ -74,7 +74,7 @@ class Runner:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.runner_credential_ref import RunnerCredentialRef
+        from ..models.nullable_credential_ref_type_0 import NullableCredentialRefType0
         from ..models.runner_metadata import RunnerMetadata
         from ..models.runner_runtime_inventory import RunnerRuntimeInventory
         from ..models.runtime_usage import RuntimeUsage
@@ -91,7 +91,11 @@ class Runner:
         environment_id: None | str
         environment_id = self.environment_id
 
-        credential_ref = self.credential_ref.to_dict()
+        credential_ref: dict[str, Any] | None
+        if isinstance(self.credential_ref, NullableCredentialRefType0):
+            credential_ref = self.credential_ref.to_dict()
+        else:
+            credential_ref = self.credential_ref
 
         auth_mode = self.auth_mode.value
 
@@ -162,7 +166,7 @@ class Runner:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.runner_credential_ref import RunnerCredentialRef
+        from ..models.nullable_credential_ref_type_0 import NullableCredentialRefType0
         from ..models.runner_metadata import RunnerMetadata
         from ..models.runner_runtime_inventory import RunnerRuntimeInventory
         from ..models.runtime_usage import RuntimeUsage
@@ -184,9 +188,22 @@ class Runner:
         environment_id = _parse_environment_id(d.pop("environmentId"))
 
 
-        credential_ref = RunnerCredentialRef.from_dict(d.pop("credentialRef"))
+        def _parse_credential_ref(data: object) -> None | NullableCredentialRefType0:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                componentsschemas_nullable_credential_ref_type_0 = NullableCredentialRefType0.from_dict(data)
 
 
+
+                return componentsschemas_nullable_credential_ref_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | NullableCredentialRefType0, data)
+
+        credential_ref = _parse_credential_ref(d.pop("credentialRef"))
 
 
         auth_mode = RunnerAuthMode(d.pop("authMode"))

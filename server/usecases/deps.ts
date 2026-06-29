@@ -7,12 +7,10 @@ import type {
   BudgetRepo,
   CloudRuntimeLifecycle,
   CloudTurnQueue,
-  ConnectionRepo,
   ConnectorRepo,
   EnvironmentRepo,
   FederatedTenantRepo,
   LeaseRepo,
-  McpGateway,
   MemoryStoreRepo,
   PolicyPort,
   PolicyRepo,
@@ -57,10 +55,8 @@ export interface Deps {
   vaults: VaultRepo
   secretStore: SecretStoreGateway
   connectors: ConnectorRepo
-  connections: ConnectionRepo
   policies: PolicyRepo
   budgets: BudgetRepo
-  mcp: McpGateway
   memoryStores?: MemoryStoreRepo
   sessionEvents: SessionEventPort
   audit: AuditPort

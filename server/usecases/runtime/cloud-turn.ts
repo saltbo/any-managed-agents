@@ -55,7 +55,7 @@ import type {
 import type { ToolApprovalGate } from './approval-gate'
 import { isRuntimePolicyDenied, isRuntimeTurnCancelled } from './engine/errors'
 import { appendRuntimeEvent, appendUserPromptEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
-import { mcpConnectorIds, resolveMcpSnapshot } from './provisioning'
+import { mcpConnectorIds, resolveMcpServers } from './provisioning'
 import { buildSessionTurnCallbacks, type SessionTurnCallbacks } from './turn-callbacks'
 
 // Per-invocation soft budget for new model turns (see executeCloudSessionTurn).
@@ -113,8 +113,8 @@ export async function startSessionRuntimeForRow(
     throw new Error(`Runtime ${runtimeName} does not support cloud session startup`)
   }
   try {
-    const mcpSnapshot = await resolveMcpSnapshot(deps, auth, sessionId, agentSnapshot, environmentSnapshot)
-    const runtimeEnvironmentSnapshot = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
+    const mcpServers = await resolveMcpServers(deps, auth, sessionId, agentSnapshot, environmentSnapshot)
+    const environmentSnapshotWithRuntimeConfig = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
     const resolvedEnv = await deps.runtimeSecrets.resolveEnv(
       { organizationId: auth.organization.id, projectId: auth.project.id },
       sessionEnvFrom,
@@ -124,7 +124,7 @@ export async function startSessionRuntimeForRow(
       sessionVolumes,
       sessionVolumeMounts,
     )
-    const runtimeEnv = { ...(sessionEnv ?? {}), ...resolvedEnv }
+    const env = { ...(sessionEnv ?? {}), ...resolvedEnv }
     const startedRuntime = await withTimeout(
       deps.cloudRuntime.startCloudSession({
         sessionId,
@@ -133,12 +133,12 @@ export async function startSessionRuntimeForRow(
         provider: agentSnapshot.providerId,
         model: agentSnapshot.model,
         agentSnapshot: runtimeAgentSnapshot,
-        environmentSnapshot: runtimeEnvironmentSnapshot,
-        mcpSnapshot,
+        environmentSnapshot: environmentSnapshotWithRuntimeConfig,
+        mcpServers,
         volumes: sessionVolumes,
         volumeMounts: sessionVolumeMounts,
         workspaceManifest,
-        runtimeEnv,
+        env,
       }),
       RUNTIME_START_TIMEOUT_MS,
       'Session runtime startup timed out',
@@ -158,7 +158,7 @@ export async function startSessionRuntimeForRow(
       runtimeDriver: runtimeDriverName(runtimeName, 'cloud'),
       runtimeBackend: driver.cloudBackend,
       runtimeProtocol: driver.cloudProtocol,
-      mcpConnectors: mcpConnectorIds(mcpSnapshot),
+      mcpConnectors: mcpConnectorIds(mcpServers),
       // "Storage follows the loop": the cloud ama loop owns this session's events,
       // so route its firehose to the Session DO (the event-store router reads
       // this stamp). Self-hosted CLI sessions never reach this path.
@@ -459,7 +459,7 @@ export async function consumeCloudTurnMessage(deps: CloudTurnDeps, message: Clou
       environmentSnapshot: parseJson<NormalizedEnvironmentSnapshot>(session.environmentSnapshot),
       runtime: message.runtime,
       runtimeConfig: message.runtimeConfig,
-      env: message.runtimeEnv,
+      env: message.env,
       envFrom: message.envFrom,
       volumes: message.volumes,
       volumeMounts: message.volumeMounts,

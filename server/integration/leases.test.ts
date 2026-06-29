@@ -179,12 +179,12 @@ describe('[CF] /api/v1/leases', () => {
       attempts: number
       leaseId: string
       runnerId: string
-      payload: { runtimeEnv?: Record<string, string> }
+      payload: { env?: Record<string, string> }
     }
     expect(leasedWork).toMatchObject({ state: 'leased', attempts: 1, leaseId, runnerId: runner.id })
     // The leasing runner receives the materialized payload with vault secret
-    // env resolved into runtimeEnv.
-    expect(leasedWork.payload.runtimeEnv).toMatchObject({
+    // env resolved into env.
+    expect(leasedWork.payload.env).toMatchObject({
       AK_API_URL: 'https://ak.example.test',
       AK_AGENT_KEY: 'raw-ak-agent-key',
     })

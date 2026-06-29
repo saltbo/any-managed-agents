@@ -22,16 +22,10 @@ export interface EnvironmentVariable {
   required?: boolean | undefined
 }
 
-export interface EnvironmentCredentialRef {
-  credentialId: string
-  versionId?: string | undefined
-}
-
 // The runtime-relevant configuration that an environment version snapshots.
 export interface EnvironmentConfig {
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
-  credentialRefs: EnvironmentCredentialRef[]
   hostingMode: EnvironmentHostingMode
   networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
@@ -46,7 +40,6 @@ export interface EnvironmentConfig {
 export const RUNTIME_CONFIG_FIELDS = [
   'packages',
   'variables',
-  'credentialRefs',
   'hostingMode',
   'networkPolicy',
   'mcpPolicy',

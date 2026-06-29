@@ -152,14 +152,6 @@ async function connectMcp(authorization: string, connectorId: string) {
     activeVersionId: string
     activeVersion: { id: string; secretRef: string }
   }
-  const connectRes = await jsonFetch('/api/v1/connections', authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      connectorId,
-      credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
-    }),
-  })
-  expect(connectRes.status).toBe(201)
   return credential
 }
 
@@ -316,7 +308,6 @@ describe('[CF] /api/v1/sessions', () => {
     expect(serialized).not.toContain('sandboxId')
     expect(serialized).not.toContain('runtimeEndpointPath')
     expect(serialized).not.toContain('organizationId')
-    expect(serialized).not.toContain('secretRefs')
     expect(serialized).not.toContain('piRuntimeId')
     expect(created.status.bindings.environment.versionId).toMatch(/^envver_/)
     expect(created.status.startedAt).toEqual(expect.any(String))
@@ -722,7 +713,7 @@ describe('[CF] /api/v1/sessions', () => {
     const storedPayload = JSON.parse(workRow!.payload) as {
       volumes: Array<Record<string, unknown>>
       volumeMounts: Array<Record<string, unknown>>
-      runtimeEnv: Record<string, string>
+      env: Record<string, string>
       envFrom: Array<{ type: 'secret'; name: string; secretRef: string }>
       provider: string
       agentSnapshot: { instructions: string }
@@ -756,7 +747,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(storedPayload.agentSnapshot.instructions).toContain(`.ama/memory-stores/${memoryStore.id}`)
     expect(storedPayload.agentSnapshot.instructions).not.toContain('Review for correctness first.')
     expect(storedPayload.provider).toBe('workers-ai')
-    expect(storedPayload.runtimeEnv).not.toHaveProperty('AK_AGENT_KEY')
+    expect(storedPayload.env).not.toHaveProperty('AK_AGENT_KEY')
     expect(storedPayload.envFrom).toEqual([
       { type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.activeVersion.secretRef },
     ])
@@ -766,11 +757,11 @@ describe('[CF] /api/v1/sessions', () => {
     expect(lease).toBeTruthy()
     const workItem = await readWorkItem(authorization, lease!.workItemId)
     const payload = workItem.payload as {
-      runtimeEnv: Record<string, string>
+      env: Record<string, string>
       envFrom: Array<Record<string, unknown>>
     }
     // Lease materialization resolves the vault value into the runner env.
-    expect(payload.runtimeEnv.AK_AGENT_KEY).toBe('raw-github-token')
+    expect(payload.env.AK_AGENT_KEY).toBe('raw-github-token')
   })
 
   it('normalizes Git repository volumes and rejects unsafe workspace inputs', async () => {

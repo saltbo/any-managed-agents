@@ -93,23 +93,23 @@ func TestRuntimeCommandEnvironmentRejectsUnserializableConfig(t *testing.T) {
 	}
 }
 
-func TestRuntimeCommandEnvironmentRejectsReservedRuntimeEnv(t *testing.T) {
+func TestRuntimeCommandEnvironmentRejectsReservedEnv(t *testing.T) {
 	if _, err := commandEnvironment(Request{
-		SessionID:  "session_1",
-		Runtime:    "codex",
-		RuntimeEnv: map[string]string{"AMA_SESSION_ID": "override"},
-		WorkDir:    t.TempDir(),
+		SessionID: "session_1",
+		Runtime:   "codex",
+		Env:       map[string]string{"AMA_SESSION_ID": "override"},
+		WorkDir:   t.TempDir(),
 	}); err == nil || !strings.Contains(err.Error(), "reserved") {
 		t.Fatalf("expected reserved env error, got %v", err)
 	}
 }
 
-func TestRuntimeCommandEnvironmentRejectsInvalidRuntimeEnvKey(t *testing.T) {
+func TestRuntimeCommandEnvironmentRejectsInvalidEnvKey(t *testing.T) {
 	if _, err := commandEnvironment(Request{
-		SessionID:  "session_1",
-		Runtime:    "codex",
-		RuntimeEnv: map[string]string{"BAD=KEY": "value"},
-		WorkDir:    t.TempDir(),
+		SessionID: "session_1",
+		Runtime:   "codex",
+		Env:       map[string]string{"BAD=KEY": "value"},
+		WorkDir:   t.TempDir(),
 	}); err == nil || !strings.Contains(err.Error(), "invalid") {
 		t.Fatalf("expected invalid env key error, got %v", err)
 	}

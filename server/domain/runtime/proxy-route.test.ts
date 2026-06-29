@@ -15,15 +15,10 @@ describe('parseRuntimeProxyRoute', () => {
     expect(parseRuntimeProxyRoute('/ws', 'GET')).toEqual({ kind: 'ws' })
   })
 
-  it('classifies an MCP tool call POST with decoded segments', () => {
+  it('does not classify MCP tool call paths as AMA proxy operations', () => {
     expect(parseRuntimeProxyRoute('/mcp/connector%20one/tools/tool%2Fname/calls', 'POST')).toEqual({
-      kind: 'mcpToolCall',
-      connectorId: 'connector one',
-      toolName: 'tool/name',
+      kind: 'passthrough',
     })
-  })
-
-  it('treats a non-POST MCP tool call path as passthrough', () => {
     expect(parseRuntimeProxyRoute('/mcp/c/tools/t/calls', 'GET')).toEqual({ kind: 'passthrough' })
   })
 

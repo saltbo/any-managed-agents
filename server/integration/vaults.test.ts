@@ -227,24 +227,12 @@ describe('[CF] /api/v1/vaults', () => {
       state: 'superseded',
     })
 
-    const environmentRes = await jsonFetch('/api/v1/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Runtime with pinned credential',
-        credentialRefs: [{ credentialId: credential.id, versionId: credential.activeVersion.id }],
-      }),
-    })
-    expect(environmentRes.status).toBe(201)
-
-    const deleteReferencedRes = await jsonFetch(
+    const deleteSupersededRes = await jsonFetch(
       `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions/${credential.activeVersion.id}`,
       authorization,
       { method: 'DELETE' },
     )
-    expect(deleteReferencedRes.status).toBe(409)
-    await expect(deleteReferencedRes.json()).resolves.toMatchObject({
-      error: { type: 'conflict', message: 'Credential version is referenced by active runtime metadata' },
-    })
+    expect(deleteSupersededRes.status).toBe(204)
 
     const secondVersionId = rotated.activeVersion.id
     const thirdRotateRes = await jsonFetch(

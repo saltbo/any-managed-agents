@@ -13,7 +13,6 @@ from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.credential_ref import CredentialRef
   from ..models.environment_mcp_policy import EnvironmentMcpPolicy
   from ..models.environment_metadata import EnvironmentMetadata
   from ..models.environment_network_policy import EnvironmentNetworkPolicy
@@ -41,8 +40,6 @@ class Environment:
             description (None | str):  Example: Default Node.js environment..
             packages (list[EnvironmentPackagesItem]):  Example: [{'name': 'tsx', 'version': 'latest'}].
             variables (EnvironmentVariables):  Example: {'NODE_ENV': {'description': 'Runtime mode'}}.
-            credential_refs (list[CredentialRef]):  Example: [{'credentialId': 'vaultcred_abc123', 'versionId':
-                'vaultver_abc123'}].
             hosting_mode (EnvironmentHostingMode):  Example: cloud.
             network_policy (EnvironmentNetworkPolicy):  Example: {'mode': 'restricted', 'allowedHosts':
                 ['registry.npmjs.org']}.
@@ -65,7 +62,6 @@ class Environment:
     description: None | str
     packages: list[EnvironmentPackagesItem]
     variables: EnvironmentVariables
-    credential_refs: list[CredentialRef]
     hosting_mode: EnvironmentHostingMode
     network_policy: EnvironmentNetworkPolicy
     mcp_policy: EnvironmentMcpPolicy
@@ -85,7 +81,6 @@ class Environment:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.credential_ref import CredentialRef
         from ..models.environment_mcp_policy import EnvironmentMcpPolicy
         from ..models.environment_metadata import EnvironmentMetadata
         from ..models.environment_network_policy import EnvironmentNetworkPolicy
@@ -111,13 +106,6 @@ class Environment:
 
 
         variables = self.variables.to_dict()
-
-        credential_refs = []
-        for credential_refs_item_data in self.credential_refs:
-            credential_refs_item = credential_refs_item_data.to_dict()
-            credential_refs.append(credential_refs_item)
-
-
 
         hosting_mode = self.hosting_mode.value
 
@@ -158,7 +146,6 @@ class Environment:
             "description": description,
             "packages": packages,
             "variables": variables,
-            "credentialRefs": credential_refs,
             "hostingMode": hosting_mode,
             "networkPolicy": network_policy,
             "mcpPolicy": mcp_policy,
@@ -179,7 +166,6 @@ class Environment:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.credential_ref import CredentialRef
         from ..models.environment_mcp_policy import EnvironmentMcpPolicy
         from ..models.environment_metadata import EnvironmentMetadata
         from ..models.environment_network_policy import EnvironmentNetworkPolicy
@@ -216,16 +202,6 @@ class Environment:
         variables = EnvironmentVariables.from_dict(d.pop("variables"))
 
 
-
-
-        credential_refs = []
-        _credential_refs = d.pop("credentialRefs")
-        for credential_refs_item_data in (_credential_refs):
-            credential_refs_item = CredentialRef.from_dict(credential_refs_item_data)
-
-
-
-            credential_refs.append(credential_refs_item)
 
 
         hosting_mode = EnvironmentHostingMode(d.pop("hostingMode"))
@@ -308,7 +284,6 @@ class Environment:
             description=description,
             packages=packages,
             variables=variables,
-            credential_refs=credential_refs,
             hosting_mode=hosting_mode,
             network_policy=network_policy,
             mcp_policy=mcp_policy,

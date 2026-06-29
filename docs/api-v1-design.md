@@ -36,10 +36,13 @@ v1 不兼容旧版（旧路径全部删除，无兼容层）。
 
 ### 1.4 凭据引用统一
 
-唯一机制：Vault 体系。引用形如 `credentialRef: { credentialId, versionId? }`。
+唯一机制：Vault 体系。控制面资源选择用
+`credentialRef: { credentialId, versionId? }`；运行时输入、envFrom、volume
+挂载用 URL 形态 `secretRef`，例如
+`ama://vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}` 或
+`ama://vaults/{vaultId}`。
 废除：`credentialSecretRef`（Provider/Runner 裸字符串）、`secretRefs`
-（Environment）、`vaultRefs`（Session）、`runtimeSecretEnv[].ref` 裸字符串
-（改为 `{ name, credentialRef }`）。
+（Environment）、`vaultRefs`（Session）、`runtimeSecretEnv[].ref` 裸字符串。
 
 ### 1.5 分页与列表
 
@@ -114,7 +117,8 @@ GET|PATCH        /api/v1/environments/{environmentId}
 GET              /api/v1/environments/{environmentId}/versions[/{version}]
 ```
 
-schema：`secretRefs` → credentialRef 列表；状态同 1.3。
+schema：不再保存环境级 secret 引用；运行时 secret 通过 Session/Trigger
+`envFrom` 或 `volumes` 挂载。状态同 1.3。
 
 ### Providers
 
@@ -172,17 +176,14 @@ GET|POST         /api/v1/vaults/{vaultId}/credentials/{credentialId}/versions   
 GET|DELETE       /api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}
 ```
 
-### Connectors / Connections（原 /mcp/*，拍平）
+### Connectors
 
 ```
-GET              /api/v1/connectors[/{connectorId}]       纯静态目录；剥离 policyStatus/
-                                                          connectionStatus；id 唯一标识
-GET|POST         /api/v1/connections                      POST → 仅 201
-GET|PATCH        /api/v1/connections/{connectionId}       断开 = PATCH {state:'disconnected'}
-GET              /api/v1/connections/{connectionId}/tools
-GET|POST         /api/v1/connections/{connectionId}/tools/{toolName}/calls    POST → 201
-GET              /api/v1/connections/{connectionId}/tools/{toolName}/calls/{callId}
+GET              /api/v1/connectors[/{connectorId}]       平台 MCP server 目录；id 唯一标识
 ```
+
+MCP 凭证走 Vault credential，session runtime manifest 只引用 connector id 和
+credential metadata。AMA 不暴露 connection 资源，也不代理 MCP tool call。
 
 ### 治理域（原 /governance/*，拍平；一份数据一个写入口）
 

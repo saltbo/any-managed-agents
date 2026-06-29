@@ -337,7 +337,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
 describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () => {
   const startSessionRuntimeMock = vi.fn<(env: unknown, input: unknown) => Promise<unknown>>()
   const stopSessionRuntimeMock = vi.fn<(env: unknown, sandboxId: unknown) => Promise<undefined>>(async () => undefined)
-  const resolveRuntimeEnvFromMock = vi.fn(async () => ({}))
+  const resolveEnvFromMock = vi.fn(async () => ({}))
 
   const startupDeps: CloudTurnDeps = {
     sessionOrchestration: store as never,
@@ -352,10 +352,6 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
       findBySlug: async () => ({ id: 'workers-ai', slug: 'workers-ai' }),
     } as never,
     audit: { record: (auth: unknown, entry: unknown) => recordAuditMock(auth, entry) } as never,
-    // resolveMcpSnapshot reads the agent connectors through deps; route it through
-    // the same store, but mcp resolution is stubbed below by overriding the methods
-    // the snapshot needs. Simpler: the usecase calls resolveMcpSnapshot(deps, ...),
-    // which reads store.connectedConnections — stub that to an empty list.
     policy: { evaluateMcpTool: async () => ({ allowed: true }) } as never,
     cloudRuntime: {
       startCloudSession: (input: unknown) => startSessionRuntimeMock(env, input),
@@ -364,7 +360,7 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     amaTurnExecutor: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
     cloudTurnQueue: cloudTurnQueue as never,
     runtimeSecrets: {
-      resolveEnv: () => resolveRuntimeEnvFromMock(),
+      resolveEnv: () => resolveEnvFromMock(),
       resolveWorkspaceManifest: async () => ({ root: '/workspace', mounts: [] }),
     } as never,
     createApprovalGate: () =>
@@ -405,16 +401,15 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     })
     stopSessionRuntimeMock.mockReset()
     stopSessionRuntimeMock.mockResolvedValue(undefined)
-    resolveRuntimeEnvFromMock.mockReset()
-    resolveRuntimeEnvFromMock.mockResolvedValue({})
+    resolveEnvFromMock.mockReset()
+    resolveEnvFromMock.mockResolvedValue({})
     recordAuditMock.mockReset()
     findSessionMock.mockReset()
     findSessionMock.mockResolvedValue(pendingRow())
     updateSessionWhenStateMock.mockReset()
     updateSessionWhenStateMock.mockReturnValue(true)
-    // resolveMcpSnapshot reads connected connections; an empty list yields an
-    // empty snapshot without touching the policy gate.
-    ;(store as { connectedConnections?: unknown }).connectedConnections = vi.fn(async () => [])
+    ;(store as { mcpCatalogEntries?: unknown }).mcpCatalogEntries = vi.fn(async () => [])
+    ;(store as { mcpCredentialForConnector?: unknown }).mcpCredentialForConnector = vi.fn(async () => null)
   })
 
   it('tears down the provisioned sandbox and skips audit/initial-prompt when the pending→idle CAS no-ops', async () => {

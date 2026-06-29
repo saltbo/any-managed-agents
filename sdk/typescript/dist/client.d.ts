@@ -90,16 +90,6 @@ export declare function createAmaClient(config: AmaClientConfig): {
         list: (query?: types.ListConnectorsData["query"]) => Promise<types.ConnectorListResponse>;
         get: (connectorId: string) => Promise<types.Connector>;
     };
-    connections: {
-        list: (query?: types.ListConnectionsData["query"]) => Promise<types.ConnectionListResponse>;
-        create: (body: types.CreateConnectionRequest) => Promise<types.Connection>;
-        get: (connectionId: string) => Promise<types.Connection>;
-        update: (connectionId: string, body: types.UpdateConnectionRequest) => Promise<types.Connection>;
-        listTools: (connectionId: string) => Promise<types.ConnectionToolListResponse>;
-        listToolCalls: (connectionId: string, toolName: string, query?: types.ListToolCallsData["query"]) => Promise<types.ToolCallListResponse>;
-        callTool: (connectionId: string, toolName: string, body: types.CreateToolCallRequest) => Promise<types.ToolCall>;
-        getToolCall: (connectionId: string, toolName: string, callId: string) => Promise<types.ToolCall>;
-    };
     audit: {
         listRecords: (query?: types.ListAuditRecordsData["query"]) => Promise<types.AuditRecordListResponse>;
         getRecord: (recordId: string) => Promise<types.AuditRecord>;

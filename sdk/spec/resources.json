@@ -63,16 +63,6 @@
           { "name": "list", "operationId": "listConnectors" },
           { "name": "get", "operationId": "readConnector" }
         ] },
-        { "name": "connections", "methods": [
-          { "name": "list", "operationId": "listConnections" },
-          { "name": "create", "operationId": "createConnection" },
-          { "name": "get", "operationId": "readConnection" },
-          { "name": "update", "operationId": "updateConnection" },
-          { "name": "listTools", "operationId": "listConnectionTools" },
-          { "name": "listToolCalls", "operationId": "listToolCalls" },
-          { "name": "callTool", "operationId": "createToolCall" },
-          { "name": "getToolCall", "operationId": "readToolCall" }
-        ] },
         { "name": "audit", "methods": [
           { "name": "listRecords", "operationId": "listAuditRecords" },
           { "name": "getRecord", "operationId": "readAuditRecord" }

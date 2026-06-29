@@ -63,7 +63,6 @@ export function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
     ...row,
     packages: JSON.parse(row.packages) as Record<string, unknown>[],
     variables: JSON.parse(row.variables) as Record<string, unknown>,
-    credentialRefs: JSON.parse(row.credentialRefs) as Record<string, unknown>[],
     hostingMode: row.hostingMode,
     networkPolicy: JSON.parse(row.networkPolicy) as Record<string, unknown>,
     mcpPolicy: JSON.parse(row.mcpPolicy) as Record<string, unknown>,

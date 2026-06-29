@@ -15,10 +15,10 @@ from typing import cast
 if TYPE_CHECKING:
   from ..models.runner_tool_call import RunnerToolCall
   from ..models.runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
+  from ..models.runner_work_payload_env import RunnerWorkPayloadEnv
   from ..models.runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
   from ..models.runner_work_payload_input import RunnerWorkPayloadInput
   from ..models.runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
-  from ..models.runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
   from ..models.runner_workspace_manifest import RunnerWorkspaceManifest
 
 
@@ -45,7 +45,7 @@ class RunnerWorkPayload:
             environment_snapshot (None | RunnerWorkPayloadEnvironmentSnapshotType0 | Unset):
             runtime_driver (str | Unset):  Example: codex-self-hosted.
             required_runner_capability (None | str | Unset):
-            runtime_env (RunnerWorkPayloadRuntimeEnv | Unset):
+            env (RunnerWorkPayloadEnv | Unset):
             workspace_manifest (RunnerWorkspaceManifest | Unset):
             initial_prompt (None | str | Unset):
             resume (bool | Unset):
@@ -69,7 +69,7 @@ class RunnerWorkPayload:
     environment_snapshot: None | RunnerWorkPayloadEnvironmentSnapshotType0 | Unset = UNSET
     runtime_driver: str | Unset = UNSET
     required_runner_capability: None | str | Unset = UNSET
-    runtime_env: RunnerWorkPayloadRuntimeEnv | Unset = UNSET
+    env: RunnerWorkPayloadEnv | Unset = UNSET
     workspace_manifest: RunnerWorkspaceManifest | Unset = UNSET
     initial_prompt: None | str | Unset = UNSET
     resume: bool | Unset = UNSET
@@ -87,10 +87,10 @@ class RunnerWorkPayload:
     def to_dict(self) -> dict[str, Any]:
         from ..models.runner_tool_call import RunnerToolCall
         from ..models.runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
+        from ..models.runner_work_payload_env import RunnerWorkPayloadEnv
         from ..models.runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
         from ..models.runner_work_payload_input import RunnerWorkPayloadInput
         from ..models.runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
-        from ..models.runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
         from ..models.runner_workspace_manifest import RunnerWorkspaceManifest
         protocol: str | Unset = UNSET
         if not isinstance(self.protocol, Unset):
@@ -133,9 +133,9 @@ class RunnerWorkPayload:
         else:
             required_runner_capability = self.required_runner_capability
 
-        runtime_env: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.runtime_env, Unset):
-            runtime_env = self.runtime_env.to_dict()
+        env: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.env, Unset):
+            env = self.env.to_dict()
 
         workspace_manifest: dict[str, Any] | Unset = UNSET
         if not isinstance(self.workspace_manifest, Unset):
@@ -198,8 +198,8 @@ class RunnerWorkPayload:
             field_dict["runtimeDriver"] = runtime_driver
         if required_runner_capability is not UNSET:
             field_dict["requiredRunnerCapability"] = required_runner_capability
-        if runtime_env is not UNSET:
-            field_dict["runtimeEnv"] = runtime_env
+        if env is not UNSET:
+            field_dict["env"] = env
         if workspace_manifest is not UNSET:
             field_dict["workspaceManifest"] = workspace_manifest
         if initial_prompt is not UNSET:
@@ -227,10 +227,10 @@ class RunnerWorkPayload:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.runner_tool_call import RunnerToolCall
         from ..models.runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
+        from ..models.runner_work_payload_env import RunnerWorkPayloadEnv
         from ..models.runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
         from ..models.runner_work_payload_input import RunnerWorkPayloadInput
         from ..models.runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
-        from ..models.runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
         from ..models.runner_workspace_manifest import RunnerWorkspaceManifest
         d = dict(src_dict)
         _protocol = d.pop("protocol", UNSET)
@@ -307,12 +307,12 @@ class RunnerWorkPayload:
         required_runner_capability = _parse_required_runner_capability(d.pop("requiredRunnerCapability", UNSET))
 
 
-        _runtime_env = d.pop("runtimeEnv", UNSET)
-        runtime_env: RunnerWorkPayloadRuntimeEnv | Unset
-        if isinstance(_runtime_env,  Unset):
-            runtime_env = UNSET
+        _env = d.pop("env", UNSET)
+        env: RunnerWorkPayloadEnv | Unset
+        if isinstance(_env,  Unset):
+            env = UNSET
         else:
-            runtime_env = RunnerWorkPayloadRuntimeEnv.from_dict(_runtime_env)
+            env = RunnerWorkPayloadEnv.from_dict(_env)
 
 
 
@@ -388,7 +388,7 @@ class RunnerWorkPayload:
             environment_snapshot=environment_snapshot,
             runtime_driver=runtime_driver,
             required_runner_capability=required_runner_capability,
-            runtime_env=runtime_env,
+            env=env,
             workspace_manifest=workspace_manifest,
             initial_prompt=initial_prompt,
             resume=resume,

@@ -298,23 +298,23 @@ describe('materializeWorkItemPayload', () => {
     expect(payload).toEqual({ type: 'session.start' })
   })
 
-  it('resolves envFrom into runtimeEnv for session starts', async () => {
+  it('resolves envFrom into env for session starts', async () => {
     const deps = fakeDeps({
       workItems: {
         rawPayload: async () => ({
           type: 'session.start',
-          runtimeEnv: { EXISTING: 'a' },
+          env: { EXISTING: 'a' },
           envFrom: [{ type: 'secret', name: 'TOKEN', secretRef: 'ama://vaults/v/credentials/c/versions/ver' }],
         }),
       },
       resolveEnv: async () => ({ TOKEN: 'secret' }),
     })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
-    expect(payload.runtimeEnv).toEqual({ EXISTING: 'a', TOKEN: 'secret' })
+    expect(payload.env).toEqual({ EXISTING: 'a', TOKEN: 'secret' })
     expect(payload).not.toHaveProperty('envFrom')
   })
 
-  it('resolves envFrom when no runtimeEnv exists yet in the payload', async () => {
+  it('resolves envFrom when no env exists yet in the payload', async () => {
     const deps = fakeDeps({
       workItems: {
         rawPayload: async () => ({
@@ -325,7 +325,7 @@ describe('materializeWorkItemPayload', () => {
       resolveEnv: async () => ({ API_KEY: 'mysecret' }),
     })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
-    expect(payload.runtimeEnv).toEqual({ API_KEY: 'mysecret' })
+    expect(payload.env).toEqual({ API_KEY: 'mysecret' })
     expect(payload).not.toHaveProperty('envFrom')
   })
 })

@@ -102,7 +102,7 @@ exist but whose breadcrumbs are still being fanned out.
 | environments | migrated | environments, environments-api, environments-ui, environment-detail, environments-mcp |
 | vaults     | migrated | vaults, vaults-api, vaults-ui, vault-detail, vault-secrets, encryption |
 | governance | migrated | governance-api, governance-policy |
-| mcp        | migrated | mcp-connections, mcp-client, mcp-client-integration, mcp-discovery, mcp-policy-enforcement, tools-mcp, engine-mcp, engine-mcp-e2e |
+| mcp        | migrated | mcp-discovery, mcp-credential-binding, engine-mcp |
 | runtime    | migrated | sessions-runtime, engine-cooperative-cancellation, engine-error-termination |
 | runners    | migrated | external-runtimes, self-hosted-runner-work, sandbox-execution |
 | usage      | migrated | usage-summary, usage-audit |

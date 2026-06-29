@@ -506,8 +506,8 @@ describe('session-runtime', () => {
         model: '@cf/moonshotai/kimi-k2.6',
         agentSnapshot: { instructions: 'Test runtime' },
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
-        mcpSnapshot: { connectors: ['github'] },
-        runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
+        mcpServers: { servers: [{ connectorId: 'github' }] },
+        env: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
         workspaceManifest: {
           root: '/workspace',
           mounts: [

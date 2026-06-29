@@ -14,12 +14,12 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="RunnerWorkPayloadRuntimeEnv")
+T = TypeVar("T", bound="RunnerWorkPayloadEnv")
 
 
 
 @_attrs_define
-class RunnerWorkPayloadRuntimeEnv:
+class RunnerWorkPayloadEnv:
     """ 
      """
 
@@ -41,12 +41,12 @@ class RunnerWorkPayloadRuntimeEnv:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        runner_work_payload_runtime_env = cls(
+        runner_work_payload_env = cls(
         )
 
 
-        runner_work_payload_runtime_env.additional_properties = d
-        return runner_work_payload_runtime_env
+        runner_work_payload_env.additional_properties = d
+        return runner_work_payload_env
 
     @property
     def additional_keys(self) -> list[str]:

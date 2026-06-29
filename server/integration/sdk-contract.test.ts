@@ -58,7 +58,6 @@ const STANDARD_ENVIRONMENT_FIELDS = new Set([
   'description',
   'packages',
   'variables',
-  'credentialRefs',
   'hostingMode',
   'networkPolicy',
   'mcpPolicy',

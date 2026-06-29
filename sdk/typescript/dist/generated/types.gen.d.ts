@@ -145,7 +145,7 @@ export type RunnerWorkPayload = {
     } | null;
     runtimeDriver?: string;
     requiredRunnerCapability?: string | null;
-    runtimeEnv?: {
+    env?: {
         [key: string]: string;
     };
     workspaceManifest?: RunnerWorkspaceManifest;
@@ -464,7 +464,6 @@ export type Environment = {
             required?: boolean;
         };
     };
-    credentialRefs: Array<CredentialRef>;
     hostingMode: EnvironmentHostingMode;
     networkPolicy: EnvironmentNetworkPolicy;
     mcpPolicy: EnvironmentMcpPolicy;
@@ -487,10 +486,6 @@ export type Environment = {
     version: number;
     createdAt: string;
     updatedAt: string;
-};
-export type CredentialRef = {
-    credentialId: string;
-    versionId?: string;
 };
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted';
 export type EnvironmentNetworkPolicy = {
@@ -520,7 +515,6 @@ export type CreateEnvironmentRequest = {
             required?: boolean;
         };
     };
-    credentialRefs?: Array<CredentialRef>;
     hostingMode?: EnvironmentHostingMode;
     networkPolicy?: EnvironmentNetworkPolicy;
     mcpPolicy?: EnvironmentMcpPolicy;
@@ -552,7 +546,6 @@ export type UpdateEnvironmentRequest = {
             required?: boolean;
         };
     };
-    credentialRefs?: Array<CredentialRef>;
     hostingMode?: EnvironmentHostingMode;
     networkPolicy?: EnvironmentNetworkPolicy;
     mcpPolicy?: EnvironmentMcpPolicy;
@@ -594,7 +587,6 @@ export type EnvironmentVersion = {
             required?: boolean;
         };
     };
-    credentialRefs: Array<CredentialRef>;
     hostingMode: EnvironmentHostingMode;
     networkPolicy: EnvironmentNetworkPolicy;
     mcpPolicy: EnvironmentMcpPolicy;
@@ -683,7 +675,7 @@ export type Runner = {
     name: string;
     capabilities: Array<string>;
     environmentId: string | null;
-    credentialRef: CredentialRef & unknown;
+    credentialRef: NullableCredentialRef;
     authMode: 'bearer' | 'mtls' | 'oidc' | 'federated';
     state: 'active' | 'draining' | 'disabled' | 'offline';
     currentLoad: number;
@@ -698,6 +690,10 @@ export type Runner = {
     createdAt: string;
     updatedAt: string;
 };
+export type NullableCredentialRef = {
+    credentialId: string;
+    versionId?: string;
+} | null;
 export type RuntimeUsage = {
     runtime: string;
     windows: Array<RuntimeUsageWindow>;
@@ -723,6 +719,10 @@ export type CreateRunnerRequest = {
     metadata?: {
         [key: string]: unknown;
     };
+};
+export type CredentialRef = {
+    credentialId: string;
+    versionId?: string;
 };
 export type RunnerListResponse = {
     data: Array<Runner>;
@@ -891,99 +891,6 @@ export type ConnectorTool = {
     };
     approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy';
     policyMetadata: {
-        [key: string]: unknown;
-    };
-};
-export type ConnectionListResponse = {
-    data: Array<Connection>;
-    pagination: ListPagination;
-};
-export type Connection = {
-    id: string;
-    projectId: string;
-    connectorId: string;
-    credentialRef: CredentialRef & unknown;
-    endpointUrl: string | null;
-    approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy';
-    state: 'connected' | 'disabled' | 'disconnected' | 'error';
-    lastError: {
-        [key: string]: unknown;
-    } | null;
-    metadata: {
-        [key: string]: unknown;
-    };
-    connectedAt: string;
-    disconnectedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
-};
-export type CreateConnectionRequest = {
-    connectorId: string;
-    endpointUrl?: string;
-    credentialRef?: CredentialRef;
-    approvalMode?: 'none' | 'per_call' | 'always_required' | 'project_policy';
-    metadata?: {
-        [key: string]: unknown;
-    };
-};
-export type UpdateConnectionRequest = {
-    endpointUrl?: string | null;
-    credentialRef?: CredentialRef & unknown;
-    approvalMode?: 'none' | 'per_call' | 'always_required' | 'project_policy';
-    state?: 'connected' | 'disabled' | 'disconnected';
-    metadata?: {
-        [key: string]: unknown;
-    };
-};
-export type ConnectionToolListResponse = {
-    data: Array<ConnectionTool>;
-    pagination: ListPagination;
-};
-export type ConnectionTool = {
-    id: string;
-    connectionId: string;
-    connectorId: string;
-    name: string;
-    description: string | null;
-    inputSchema: {
-        [key: string]: unknown;
-    };
-    approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy';
-    policyMetadata: {
-        [key: string]: unknown;
-    };
-    availability: 'available' | 'disabled' | 'error';
-    createdAt: string;
-    updatedAt: string;
-};
-export type ToolCallListResponse = {
-    data: Array<ToolCall>;
-    pagination: ListPagination;
-};
-export type ToolCall = {
-    id: string;
-    connectionId: string;
-    connectorId: string;
-    toolName: string;
-    sessionId: string;
-    state: 'success' | 'error';
-    input: {
-        [key: string]: unknown;
-    };
-    output: {
-        [key: string]: unknown;
-    } | null;
-    error: ToolCallError;
-    durationMs: number;
-    createdAt: string;
-};
-export type ToolCallError = {
-    type: string;
-    message: string;
-} | null;
-export type CreateToolCallRequest = {
-    sessionId: string;
-    input?: {
         [key: string]: unknown;
     };
 };
@@ -1305,7 +1212,6 @@ export type SessionEnvironmentSnapshot = {
     version: number;
     packages: Array<SessionEnvironmentJsonObject>;
     variables: SessionEnvironmentJsonObject;
-    credentialRefs: Array<SessionEnvironmentJsonObject>;
     hostingMode: EnvironmentHostingMode;
     networkPolicy: EnvironmentNetworkPolicy;
     mcpPolicy: SessionEnvironmentJsonObject;
@@ -3028,261 +2934,6 @@ export type ReadConnectorResponses = {
     200: Connector;
 };
 export type ReadConnectorResponse = ReadConnectorResponses[keyof ReadConnectorResponses];
-export type ListConnectionsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        state?: 'connected' | 'disabled' | 'disconnected' | 'error';
-        limit?: number;
-        cursor?: string;
-    };
-    url: '/api/v1/connections';
-};
-export type ListConnectionsErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-};
-export type ListConnectionsError = ListConnectionsErrors[keyof ListConnectionsErrors];
-export type ListConnectionsResponses = {
-    /**
-     * Connection list
-     */
-    200: ConnectionListResponse;
-};
-export type ListConnectionsResponse = ListConnectionsResponses[keyof ListConnectionsResponses];
-export type CreateConnectionData = {
-    body: CreateConnectionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/connections';
-};
-export type CreateConnectionErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Policy denied
-     */
-    403: ErrorResponse;
-    /**
-     * Connector not found
-     */
-    404: ErrorResponse;
-    /**
-     * Connection already exists or credential unavailable
-     */
-    409: ErrorResponse;
-};
-export type CreateConnectionError = CreateConnectionErrors[keyof CreateConnectionErrors];
-export type CreateConnectionResponses = {
-    /**
-     * Created connection
-     */
-    201: Connection;
-};
-export type CreateConnectionResponse = CreateConnectionResponses[keyof CreateConnectionResponses];
-export type ReadConnectionData = {
-    body?: never;
-    path: {
-        connectionId: string;
-    };
-    query?: never;
-    url: '/api/v1/connections/{connectionId}';
-};
-export type ReadConnectionErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Connection not found
-     */
-    404: ErrorResponse;
-};
-export type ReadConnectionError = ReadConnectionErrors[keyof ReadConnectionErrors];
-export type ReadConnectionResponses = {
-    /**
-     * Connection
-     */
-    200: Connection;
-};
-export type ReadConnectionResponse = ReadConnectionResponses[keyof ReadConnectionResponses];
-export type UpdateConnectionData = {
-    body: UpdateConnectionRequest;
-    path: {
-        connectionId: string;
-    };
-    query?: never;
-    url: '/api/v1/connections/{connectionId}';
-};
-export type UpdateConnectionErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Connection not found
-     */
-    404: ErrorResponse;
-    /**
-     * Credential unavailable
-     */
-    409: ErrorResponse;
-};
-export type UpdateConnectionError = UpdateConnectionErrors[keyof UpdateConnectionErrors];
-export type UpdateConnectionResponses = {
-    /**
-     * Connection
-     */
-    200: Connection;
-};
-export type UpdateConnectionResponse = UpdateConnectionResponses[keyof UpdateConnectionResponses];
-export type ListConnectionToolsData = {
-    body?: never;
-    path: {
-        connectionId: string;
-    };
-    query?: never;
-    url: '/api/v1/connections/{connectionId}/tools';
-};
-export type ListConnectionToolsErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Connection not found
-     */
-    404: ErrorResponse;
-    /**
-     * Connection unavailable
-     */
-    409: ErrorResponse;
-    /**
-     * MCP upstream error
-     */
-    502: ErrorResponse;
-};
-export type ListConnectionToolsError = ListConnectionToolsErrors[keyof ListConnectionToolsErrors];
-export type ListConnectionToolsResponses = {
-    /**
-     * Connection tools
-     */
-    200: ConnectionToolListResponse;
-};
-export type ListConnectionToolsResponse = ListConnectionToolsResponses[keyof ListConnectionToolsResponses];
-export type ListToolCallsData = {
-    body?: never;
-    path: {
-        connectionId: string;
-        toolName: string;
-    };
-    query?: {
-        limit?: number;
-        cursor?: string;
-    };
-    url: '/api/v1/connections/{connectionId}/tools/{toolName}/calls';
-};
-export type ListToolCallsErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Connection not found
-     */
-    404: ErrorResponse;
-};
-export type ListToolCallsError = ListToolCallsErrors[keyof ListToolCallsErrors];
-export type ListToolCallsResponses = {
-    /**
-     * Tool call list
-     */
-    200: ToolCallListResponse;
-};
-export type ListToolCallsResponse = ListToolCallsResponses[keyof ListToolCallsResponses];
-export type CreateToolCallData = {
-    body: CreateToolCallRequest;
-    path: {
-        connectionId: string;
-        toolName: string;
-    };
-    query?: never;
-    url: '/api/v1/connections/{connectionId}/tools/{toolName}/calls';
-};
-export type CreateToolCallErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Policy denied
-     */
-    403: ErrorResponse;
-    /**
-     * Connection, session, or tool not found
-     */
-    404: ErrorResponse;
-    /**
-     * Approval required or connection unavailable
-     */
-    409: ErrorResponse;
-};
-export type CreateToolCallError = CreateToolCallErrors[keyof CreateToolCallErrors];
-export type CreateToolCallResponses = {
-    /**
-     * Tool call executed and recorded (state reports success or error)
-     */
-    201: ToolCall;
-};
-export type CreateToolCallResponse = CreateToolCallResponses[keyof CreateToolCallResponses];
-export type ReadToolCallData = {
-    body?: never;
-    path: {
-        connectionId: string;
-        toolName: string;
-        callId: string;
-    };
-    query?: never;
-    url: '/api/v1/connections/{connectionId}/tools/{toolName}/calls/{callId}';
-};
-export type ReadToolCallErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Tool call not found
-     */
-    404: ErrorResponse;
-};
-export type ReadToolCallError = ReadToolCallErrors[keyof ReadToolCallErrors];
-export type ReadToolCallResponses = {
-    /**
-     * Tool call
-     */
-    200: ToolCall;
-};
-export type ReadToolCallResponse = ReadToolCallResponses[keyof ReadToolCallResponses];
 export type ListUsageRecordsData = {
     body?: never;
     path?: never;

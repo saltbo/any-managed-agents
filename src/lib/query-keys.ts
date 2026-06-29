@@ -55,10 +55,6 @@ export const queryKeys = {
     list: (filters: Record<string, string> = {}) => ['connectors', 'list', filters] as const,
     detail: (connectorId: string) => ['connectors', 'detail', connectorId] as const,
   },
-  connections: {
-    all: ['connections'] as const,
-    list: ['connections', 'list'] as const,
-  },
   usage: {
     summary: (filters: object = {}) => ['usage', 'summary', filters] as const,
   },

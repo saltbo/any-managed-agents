@@ -1,11 +1,9 @@
 import { Link } from 'react-router'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ConfirmAction, StatusBadge, TableEmpty, TablePagination, TableSurface } from '@/console/components'
-import { stringifyJson } from '@/console/format'
+import { StatusBadge, TableEmpty, TablePagination, TableSurface } from '@/console/components'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { Connection, Connector } from '@/lib/api'
+import type { Connector } from '@/lib/api'
 
 export function connectorDisabledReason(connector: Connector) {
   if (connector.availability === 'unavailable') {
@@ -17,22 +15,16 @@ export function connectorDisabledReason(connector: Connector) {
 export function McpView({
   connectors,
   connectorPagination,
-  connections,
-  connectionPagination,
-  onDisconnect,
 }: {
   connectors: Connector[]
   connectorPagination: ClientPagination<Connector>
-  connections: Connection[]
-  connectionPagination: ClientPagination<Connection>
-  onDisconnect: (id: string) => void
 }) {
   return (
     <div className="grid gap-4">
       <Card>
         <CardHeader>
           <CardTitle>MCP connectors</CardTitle>
-          <CardDescription>Catalog entries with capability, trust, governance, and connection state.</CardDescription>
+          <CardDescription>Platform MCP server catalog entries with capabilities, auth mode, and setup metadata.</CardDescription>
         </CardHeader>
         <CardContent>
           <TableSurface
@@ -98,63 +90,6 @@ export function McpView({
                     </TableRow>
                   )
                 })
-              )}
-            </TableBody>
-          </TableSurface>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Connections</CardTitle>
-          <CardDescription>Disconnect is destructive and requires confirmation.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <TableSurface
-            tableId="mcp-connections"
-            viewportRef={connectionPagination.viewportRef}
-            footer={<TablePagination pagination={connectionPagination} />}
-          >
-            <TableHeader>
-              <TableRow>
-                <TableHead>Connector</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Credential</TableHead>
-                <TableHead>Endpoint</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {connections.length === 0 ? (
-                <TableEmpty colSpan={5}>No project MCP connections exist.</TableEmpty>
-              ) : (
-                connections.map((connection) => (
-                  <TableRow key={connection.id}>
-                    <TableCell className="font-medium">{connection.connectorId}</TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        value={connection.state}
-                        detail={connection.lastError ? stringifyJson(connection.lastError) : null}
-                      />
-                    </TableCell>
-                    <TableCell>{connection.credentialRef ? 'Reference configured' : 'No credential'}</TableCell>
-                    <TableCell className="max-w-72 truncate">{connection.endpointUrl ?? 'Default'}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end">
-                        <ConfirmAction
-                          title="Disconnect MCP connector?"
-                          description={`Disconnect ${connection.connectorId}. Runtime tool calls through this connection will stop.`}
-                          confirmLabel="Disconnect"
-                          destructive
-                          onConfirm={() => onDisconnect(connection.id)}
-                        >
-                          <Button type="button" variant="outline">
-                            Disconnect
-                          </Button>
-                        </ConfirmAction>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
               )}
             </TableBody>
           </TableSurface>

@@ -45,19 +45,6 @@ from .budget_window import BudgetWindow
 from .catalog_refresh_result import CatalogRefreshResult
 from .catalog_refresh_result_category import CatalogRefreshResultCategory
 from .catalog_refresh_result_outcome import CatalogRefreshResultOutcome
-from .connection import Connection
-from .connection_approval_mode import ConnectionApprovalMode
-from .connection_credential_ref import ConnectionCredentialRef
-from .connection_last_error_type_0 import ConnectionLastErrorType0
-from .connection_list_response import ConnectionListResponse
-from .connection_metadata import ConnectionMetadata
-from .connection_state import ConnectionState
-from .connection_tool import ConnectionTool
-from .connection_tool_approval_mode import ConnectionToolApprovalMode
-from .connection_tool_availability import ConnectionToolAvailability
-from .connection_tool_input_schema import ConnectionToolInputSchema
-from .connection_tool_list_response import ConnectionToolListResponse
-from .connection_tool_policy_metadata import ConnectionToolPolicyMetadata
 from .connector import Connector
 from .connector_availability import ConnectorAvailability
 from .connector_category import ConnectorCategory
@@ -77,9 +64,6 @@ from .create_budget_request_limit_type import CreateBudgetRequestLimitType
 from .create_budget_request_metadata import CreateBudgetRequestMetadata
 from .create_budget_request_scope import CreateBudgetRequestScope
 from .create_budget_request_window import CreateBudgetRequestWindow
-from .create_connection_request import CreateConnectionRequest
-from .create_connection_request_approval_mode import CreateConnectionRequestApprovalMode
-from .create_connection_request_metadata import CreateConnectionRequestMetadata
 from .create_environment_request import CreateEnvironmentRequest
 from .create_environment_request_metadata import CreateEnvironmentRequestMetadata
 from .create_environment_request_package_manager_policy import CreateEnvironmentRequestPackageManagerPolicy
@@ -105,8 +89,6 @@ from .create_session_request import CreateSessionRequest
 from .create_session_request_env import CreateSessionRequestEnv
 from .create_session_request_metadata import CreateSessionRequestMetadata
 from .create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
-from .create_tool_call_request import CreateToolCallRequest
-from .create_tool_call_request_input import CreateToolCallRequestInput
 from .create_trigger_request import CreateTriggerRequest
 from .create_trigger_request_env import CreateTriggerRequestEnv
 from .create_trigger_request_metadata import CreateTriggerRequestMetadata
@@ -163,7 +145,6 @@ from .lease import Lease
 from .lease_list_response import LeaseListResponse
 from .lease_state import LeaseState
 from .list_agents_archived import ListAgentsArchived
-from .list_connections_state import ListConnectionsState
 from .list_connectors_availability import ListConnectorsAvailability
 from .list_environments_archived import ListEnvironmentsArchived
 from .list_leases_state import ListLeasesState
@@ -192,6 +173,7 @@ from .memory_store_metadata import MemoryStoreMetadata
 from .memory_volume import MemoryVolume
 from .memory_volume_access import MemoryVolumeAccess
 from .memory_volume_type import MemoryVolumeType
+from .nullable_credential_ref_type_0 import NullableCredentialRefType0
 from .project import Project
 from .project_list_response import ProjectListResponse
 from .provider import Provider
@@ -221,7 +203,6 @@ from .runner_auth_mode import RunnerAuthMode
 from .runner_channel_message import RunnerChannelMessage
 from .runner_channel_metadata import RunnerChannelMetadata
 from .runner_channel_metadata_upgrade import RunnerChannelMetadataUpgrade
-from .runner_credential_ref import RunnerCredentialRef
 from .runner_git_credential import RunnerGitCredential
 from .runner_heartbeat import RunnerHeartbeat
 from .runner_heartbeat_state import RunnerHeartbeatState
@@ -246,11 +227,11 @@ from .runner_volume_mount import RunnerVolumeMount
 from .runner_volume_type import RunnerVolumeType
 from .runner_work_payload import RunnerWorkPayload
 from .runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
+from .runner_work_payload_env import RunnerWorkPayloadEnv
 from .runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
 from .runner_work_payload_input import RunnerWorkPayloadInput
 from .runner_work_payload_protocol import RunnerWorkPayloadProtocol
 from .runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
-from .runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
 from .runner_workspace_file import RunnerWorkspaceFile
 from .runner_workspace_manifest import RunnerWorkspaceManifest
 from .runner_workspace_manifest_root import RunnerWorkspaceManifestRoot
@@ -327,12 +308,6 @@ from .session_status import SessionStatus
 from .session_status_phase import SessionStatusPhase
 from .session_steer_frame import SessionSteerFrame
 from .session_steer_frame_type import SessionSteerFrameType
-from .tool_call import ToolCall
-from .tool_call_error_type_0 import ToolCallErrorType0
-from .tool_call_input import ToolCallInput
-from .tool_call_list_response import ToolCallListResponse
-from .tool_call_output_type_0 import ToolCallOutputType0
-from .tool_call_state import ToolCallState
 from .trigger import Trigger
 from .trigger_env import TriggerEnv
 from .trigger_list_response import TriggerListResponse
@@ -349,11 +324,6 @@ from .update_agent_request_metadata import UpdateAgentRequestMetadata
 from .update_budget_request import UpdateBudgetRequest
 from .update_budget_request_metadata import UpdateBudgetRequestMetadata
 from .update_budget_request_window import UpdateBudgetRequestWindow
-from .update_connection_request import UpdateConnectionRequest
-from .update_connection_request_approval_mode import UpdateConnectionRequestApprovalMode
-from .update_connection_request_credential_ref import UpdateConnectionRequestCredentialRef
-from .update_connection_request_metadata import UpdateConnectionRequestMetadata
-from .update_connection_request_state import UpdateConnectionRequestState
 from .update_environment_request import UpdateEnvironmentRequest
 from .update_environment_request_metadata import UpdateEnvironmentRequestMetadata
 from .update_environment_request_package_manager_policy import UpdateEnvironmentRequestPackageManagerPolicy
@@ -467,19 +437,6 @@ __all__ = (
     "CatalogRefreshResult",
     "CatalogRefreshResultCategory",
     "CatalogRefreshResultOutcome",
-    "Connection",
-    "ConnectionApprovalMode",
-    "ConnectionCredentialRef",
-    "ConnectionLastErrorType0",
-    "ConnectionListResponse",
-    "ConnectionMetadata",
-    "ConnectionState",
-    "ConnectionTool",
-    "ConnectionToolApprovalMode",
-    "ConnectionToolAvailability",
-    "ConnectionToolInputSchema",
-    "ConnectionToolListResponse",
-    "ConnectionToolPolicyMetadata",
     "Connector",
     "ConnectorAvailability",
     "ConnectorCategory",
@@ -499,9 +456,6 @@ __all__ = (
     "CreateBudgetRequestMetadata",
     "CreateBudgetRequestScope",
     "CreateBudgetRequestWindow",
-    "CreateConnectionRequest",
-    "CreateConnectionRequestApprovalMode",
-    "CreateConnectionRequestMetadata",
     "CreateEnvironmentRequest",
     "CreateEnvironmentRequestMetadata",
     "CreateEnvironmentRequestPackageManagerPolicy",
@@ -527,8 +481,6 @@ __all__ = (
     "CreateSessionRequestEnv",
     "CreateSessionRequestMetadata",
     "CreateSessionRequestRuntimeConfig",
-    "CreateToolCallRequest",
-    "CreateToolCallRequestInput",
     "CreateTriggerRequest",
     "CreateTriggerRequestEnv",
     "CreateTriggerRequestMetadata",
@@ -585,7 +537,6 @@ __all__ = (
     "LeaseListResponse",
     "LeaseState",
     "ListAgentsArchived",
-    "ListConnectionsState",
     "ListConnectorsAvailability",
     "ListEnvironmentsArchived",
     "ListLeasesState",
@@ -614,6 +565,7 @@ __all__ = (
     "MemoryVolume",
     "MemoryVolumeAccess",
     "MemoryVolumeType",
+    "NullableCredentialRefType0",
     "Project",
     "ProjectListResponse",
     "Provider",
@@ -643,7 +595,6 @@ __all__ = (
     "RunnerChannelMessage",
     "RunnerChannelMetadata",
     "RunnerChannelMetadataUpgrade",
-    "RunnerCredentialRef",
     "RunnerGitCredential",
     "RunnerHeartbeat",
     "RunnerHeartbeatState",
@@ -668,11 +619,11 @@ __all__ = (
     "RunnerVolumeType",
     "RunnerWorkPayload",
     "RunnerWorkPayloadAgentSnapshot",
+    "RunnerWorkPayloadEnv",
     "RunnerWorkPayloadEnvironmentSnapshotType0",
     "RunnerWorkPayloadInput",
     "RunnerWorkPayloadProtocol",
     "RunnerWorkPayloadRuntimeConfig",
-    "RunnerWorkPayloadRuntimeEnv",
     "RunnerWorkspaceFile",
     "RunnerWorkspaceManifest",
     "RunnerWorkspaceManifestRoot",
@@ -749,12 +700,6 @@ __all__ = (
     "SessionStatusPhase",
     "SessionSteerFrame",
     "SessionSteerFrameType",
-    "ToolCall",
-    "ToolCallErrorType0",
-    "ToolCallInput",
-    "ToolCallListResponse",
-    "ToolCallOutputType0",
-    "ToolCallState",
     "Trigger",
     "TriggerEnv",
     "TriggerListResponse",
@@ -771,11 +716,6 @@ __all__ = (
     "UpdateBudgetRequest",
     "UpdateBudgetRequestMetadata",
     "UpdateBudgetRequestWindow",
-    "UpdateConnectionRequest",
-    "UpdateConnectionRequestApprovalMode",
-    "UpdateConnectionRequestCredentialRef",
-    "UpdateConnectionRequestMetadata",
-    "UpdateConnectionRequestState",
     "UpdateEnvironmentRequest",
     "UpdateEnvironmentRequestMetadata",
     "UpdateEnvironmentRequestPackageManagerPolicy",

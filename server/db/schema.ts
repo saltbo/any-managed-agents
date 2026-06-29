@@ -123,8 +123,8 @@ export const agents = sqliteTable(
     // JSON array of AgentToolAttachment value objects (name/approvalMode/policyMetadata).
     // Not a join table: validated + snapshotted atomically per version.
     tools: text('tools').notNull().default('[]'),
-    // JSON array of connector slugs. Resolved against connections at session start,
-    // not FK'd (slugs are stable connector ids).
+    // JSON array of connector slugs. Resolved against the platform MCP catalog
+    // at session start, not FK'd (slugs are stable connector ids).
     mcpConnectors: text('mcp_connectors').notNull().default('[]'),
     metadata: text('metadata').notNull().default('{}'),
     archivedAt: text('archived_at'),
@@ -244,10 +244,6 @@ export const environments = sqliteTable(
     description: text('description'),
     packages: text('packages').notNull().default('[]'),
     variables: text('variables').notNull().default('{}'),
-    // JSON array of { credentialId, versionId? } secret references. KEEP as JSON:
-    // the live row is the editable working copy snapshotted verbatim into an
-    // environment_version on each runtime-config change (atomic value object).
-    credentialRefs: text('credential_refs').notNull().default('[]'),
     // Mirrors EnvironmentHostingMode (server/domain/environment.ts).
     hostingMode: text('hosting_mode', { enum: ['cloud', 'self_hosted'] })
       .notNull()
@@ -286,8 +282,6 @@ export const environmentVersions = sqliteTable(
     version: integer('version').notNull(),
     packages: text('packages').notNull(),
     variables: text('variables').notNull(),
-    // Immutable snapshot of credential refs for this version (atomic value object).
-    credentialRefs: text('credential_refs').notNull().default('[]'),
     hostingMode: text('hosting_mode', { enum: ['cloud', 'self_hosted'] })
       .notNull()
       .default('cloud'),
@@ -544,10 +538,9 @@ export const sessionApprovals = sqliteTable(
     sessionId: text('session_id')
       .notNull()
       .references(() => sessions.id),
-    // Runtime/ACP tool-call correlation id minted by the agent loop, NOT a
-    // tool_calls.id FK. tool_calls records only MCP connection-tool executions;
-    // sandbox/builtin tool approvals never produce a tool_calls row. Intentionally
-    // non-FK (the upsert conflict target is (sessionId, toolCallId)).
+    // Runtime/ACP tool-call correlation id minted by the agent loop.
+    // Intentionally non-FK: sandbox/builtin tool approvals are correlated by
+    // (sessionId, toolCallId), not by a separate tool-call resource table.
     toolCallId: text('tool_call_id').notNull(),
     toolName: text('tool_name').notNull(),
     input: text('input').notNull().default('{}'),
@@ -956,10 +949,8 @@ export const auditRecords = sqliteTable(
 export const connectors = sqliteTable(
   'connectors',
   {
-    // The connector slug (e.g. "github") is the id. connectors is the catalog:
-    // seedCatalog() runs before any connection/tool insert and connectors are never
-    // deleted, so connections/connection_tools/tool_calls.connector_id safely FK
-    // this table (the FK is enforced by D1 at runtime — keep that invariant).
+    // The connector slug (e.g. "github") is the id. connectors is the platform
+    // MCP server catalog and is not project-scoped.
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     description: text('description').notNull(),
@@ -969,8 +960,7 @@ export const connectors = sqliteTable(
     supportedAuthModes: text('supported_auth_modes').notNull().default('[]'),
     setupRequirements: text('setup_requirements').notNull().default('[]'),
     // Immutable platform-catalog snapshot of the connector's advertised tool
-    // DEFINITIONS (value object, read whole). NOT a dup of connection_tools, which
-    // holds per-connection materialized tool instances with tenant policy/availability.
+    // definitions (value object, read whole).
     tools: text('tools').notNull().default('[]'),
     metadata: text('metadata').notNull().default('{}'),
     availability: text('availability').notNull().default('available'),
@@ -978,99 +968,4 @@ export const connectors = sqliteTable(
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [index('idx_connectors_category_trust').on(table.category, table.trustLevel)],
-)
-
-export const connections = sqliteTable(
-  'connections',
-  {
-    id: text('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
-    // FK to connectors.id (slug PK; seedCatalog runs before any connection write).
-    // Also denormalized onto connection_tools and tool_calls for tenant-scoped queries.
-    connectorId: text('connector_id')
-      .notNull()
-      .references(() => connectors.id),
-    credentialId: text('credential_id').references(() => vaultCredentials.id),
-    credentialVersionId: text('credential_version_id').references(() => vaultCredentialVersions.id),
-    endpointUrl: text('endpoint_url'),
-    approvalMode: text('approval_mode').notNull().default('project_policy'),
-    state: text('state').notNull().default('connected'),
-    lastError: text('last_error'),
-    metadata: text('metadata').notNull().default('{}'),
-    connectedAt: text('connected_at').notNull(),
-    disconnectedAt: text('disconnected_at'),
-    createdAt: text('created_at').notNull(),
-    updatedAt: text('updated_at').notNull(),
-  },
-  (table) => [
-    uniqueIndex('idx_connections_project_connector').on(table.projectId, table.connectorId),
-    index('idx_connections_project_state').on(table.projectId, table.state, table.createdAt, table.id),
-  ],
-)
-
-export const connectionTools = sqliteTable(
-  'connection_tools',
-  {
-    id: text('id').primaryKey(),
-    connectionId: text('connection_id')
-      .notNull()
-      .references(() => connections.id),
-    organizationId: text('organization_id').notNull(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
-    // FK to connectors.id (denormalized from the parent connection).
-    connectorId: text('connector_id')
-      .notNull()
-      .references(() => connectors.id),
-    name: text('name').notNull(),
-    description: text('description'),
-    inputSchema: text('input_schema').notNull().default('{}'),
-    approvalMode: text('approval_mode').notNull().default('project_policy'),
-    policyMetadata: text('policy_metadata').notNull().default('{}'),
-    availability: text('availability').notNull().default('available'),
-    createdAt: text('created_at').notNull(),
-    updatedAt: text('updated_at').notNull(),
-  },
-  (table) => [
-    uniqueIndex('idx_connection_tools_connection_name').on(table.connectionId, table.name),
-    index('idx_connection_tools_project_connector_name').on(table.projectId, table.connectorId, table.name),
-  ],
-)
-
-// Records MCP connection-tool executions only; runtime/sandbox tool calls are
-// tracked via session_events + session_approvals, not here.
-export const toolCalls = sqliteTable(
-  'tool_calls',
-  {
-    id: text('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
-    connectionId: text('connection_id')
-      .notNull()
-      .references(() => connections.id),
-    // FK to connectors.id (denormalized from the connection).
-    connectorId: text('connector_id')
-      .notNull()
-      .references(() => connectors.id),
-    toolName: text('tool_name').notNull(),
-    sessionId: text('session_id').references(() => sessions.id),
-    input: text('input').notNull().default('{}'),
-    output: text('output'),
-    // Mirrors TOOL_CALL_STATES (server/domain/connection.ts).
-    state: text('state', { enum: ['success', 'error'] }).notNull(),
-    error: text('error'),
-    durationMs: integer('duration_ms').notNull().default(0),
-    createdAt: text('created_at').notNull(),
-  },
-  (table) => [
-    index('idx_tool_calls_connection_tool_created').on(table.connectionId, table.toolName, table.createdAt, table.id),
-    index('idx_tool_calls_session_created').on(table.sessionId, table.createdAt, table.id),
-    check('ck_tool_calls_state', sql`${table.state} in ('success','error')`),
-  ],
 )

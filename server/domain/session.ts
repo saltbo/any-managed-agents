@@ -1,6 +1,5 @@
 import type { AmaSessionEventType } from '@shared/session-events'
 import type {
-  EnvironmentCredentialRef,
   EnvironmentHostingMode,
   EnvironmentNetworkPolicy,
   EnvironmentPackage,
@@ -130,7 +129,6 @@ export interface SessionEnvironmentSnapshot {
   version: number
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
-  credentialRefs: EnvironmentCredentialRef[]
   hostingMode: EnvironmentHostingMode
   networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
@@ -236,7 +234,7 @@ export function hasSecretMaterial(value: unknown): boolean {
 }
 
 function secretKey(key: string) {
-  if (key === 'secretRef' || key === 'credentialRef' || key === 'credentialRefs') {
+  if (key === 'secretRef' || key === 'credentialRef') {
     return false
   }
   return /secret|token|password|api[_-]?key/i.test(key)

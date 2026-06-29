@@ -23,7 +23,7 @@ export function VaultsPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Vaults"
-        description="Track safe credential-reference metadata for providers, MCP connections, and runtime use."
+        description="Track safe credential-reference metadata for providers, MCP connectors, and runtime use."
         actions={
           <Button type="button" onClick={() => setCreating(true)}>
             <Vault data-icon="inline-start" />

@@ -115,21 +115,12 @@ export function sandboxOperationFromRuntimePath(path: string, body: unknown) {
 
 export type RuntimeRoute =
   | { kind: 'ws' }
-  | { kind: 'mcpToolCall'; connectorId: string; toolName: string }
   | { kind: 'rpc' }
   | { kind: 'passthrough' }
 
 export function parseRuntimeProxyRoute(path: string, method: string): RuntimeRoute {
   if (path === '/ws') {
     return { kind: 'ws' }
-  }
-  const mcpMatch = path.match(/^\/mcp\/([^/]+)\/tools\/([^/]+)\/calls$/)
-  if (mcpMatch && method === 'POST') {
-    return {
-      kind: 'mcpToolCall',
-      connectorId: decodeURIComponent(mcpMatch[1] ?? ''),
-      toolName: decodeURIComponent(mcpMatch[2] ?? ''),
-    }
   }
   if (path === '/rpc' && method === 'POST') {
     return { kind: 'rpc' }

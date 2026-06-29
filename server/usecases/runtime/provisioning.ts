@@ -1,9 +1,7 @@
 // Create-session provisioning usecases: provider/model resolution, runtime
-// capability validation, and the MCP tool snapshot. Deps-first — they read
-// through deps.sessionOrchestration and gate MCP tools through deps.policy, so
-// they hold no db handle and construct no adapters. Logic is verbatim from the
-// former server/runtime/session-provisioning helpers; only how the store/policy
-// are acquired changed.
+// capability validation, and the MCP server manifest. Deps-first — they read
+// through deps.sessionOrchestration, hold no db handle, and construct no
+// adapters.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { runtimeDriver } from '@server/domain/runtime/driver'
@@ -13,11 +11,10 @@ import {
   type SerializedAgentVersion,
 } from '@server/domain/runtime/session-snapshot'
 import { runnerSupportsRuntimeProviderModel, runtimeCatalogSupportsProviderModel } from '@server/domain/runtime-catalog'
-import type { AuthScope, PolicyPort, ProviderRepo, SessionOrchestrationStore } from '../ports'
+import type { AuthScope, ProviderRepo, SessionOrchestrationStore } from '../ports'
 
 type ProvisioningDeps = {
   sessionOrchestration: SessionOrchestrationStore
-  policy: PolicyPort
 }
 
 export async function validateRuntimeProviderModel(
@@ -58,66 +55,61 @@ export async function validateRuntimeProviderModel(
 }
 
 export function mcpConnectorIds(snapshot: Record<string, unknown>) {
-  const connectors = Array.isArray(snapshot.connectors) ? (snapshot.connectors as unknown[]) : []
-  return connectors
-    .map((connector) =>
-      connector && typeof connector === 'object' && 'connectorId' in connector
-        ? (connector.connectorId as unknown)
-        : null,
+  const servers = Array.isArray(snapshot.servers) ? (snapshot.servers as unknown[]) : []
+  return servers
+    .map((server) =>
+      server && typeof server === 'object' && 'connectorId' in server ? (server.connectorId as unknown) : null,
     )
     .filter((connectorId): connectorId is string => typeof connectorId === 'string')
 }
 
-export async function resolveMcpSnapshot(
+function endpointUrl(metadata: Record<string, unknown>) {
+  const value = metadata.endpointUrl ?? metadata.defaultEndpointUrl
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+export async function resolveMcpServers(
   deps: ProvisioningDeps,
   auth: AuthScope,
-  sessionId: string,
+  _sessionId: string,
   agentSnapshot: SerializedAgentVersion,
-  environmentSnapshot: NormalizedEnvironmentSnapshot | null,
+  _environmentSnapshot: NormalizedEnvironmentSnapshot | null,
 ) {
-  const store = deps.sessionOrchestration
-  const connectedConnections = await store.connectedConnections(auth.project.id)
-  const agentConnectors = agentSnapshot.mcpConnectors
-  const scopedConnections =
-    agentConnectors.length === 0
-      ? connectedConnections
-      : connectedConnections.filter((connection) => agentConnectors.includes(connection.connectorId))
-
-  const snapshotConnections = []
-  const sessionContext = {
-    id: sessionId,
-    agentSnapshot: JSON.stringify(agentSnapshot),
-    environmentSnapshot: environmentSnapshot ? JSON.stringify(environmentSnapshot) : null,
+  const connectorIds = agentSnapshot.mcpConnectors
+  if (connectorIds.length === 0) {
+    return { servers: [] }
   }
-  for (const connection of scopedConnections) {
-    const tools = await store.availableConnectionTools(connection.id)
-    const allowedTools = []
-    for (const tool of tools) {
-      const decision = await deps.policy.evaluateMcpTool(auth, {
-        connectorId: connection.connectorId,
-        toolName: tool.name,
-        session: sessionContext,
-      })
-      if (decision.allowed) {
-        allowedTools.push({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: parseJson<Record<string, unknown>>(tool.inputSchema) ?? {},
-          approvalMode: tool.approvalMode,
-          policyMetadata: parseJson<Record<string, unknown>>(tool.policyMetadata) ?? {},
-        })
-      }
+  const catalog = await deps.sessionOrchestration.mcpCatalogEntries(connectorIds)
+  const servers = []
+  for (const connector of catalog) {
+    if (connector.availability !== 'available') {
+      continue
     }
-    if (allowedTools.length > 0) {
-      snapshotConnections.push({
-        connectionId: connection.id,
-        connectorId: connection.connectorId,
-        endpointUrl: connection.endpointUrl,
-        approvalMode: connection.approvalMode,
-        credentialRef: connection.credentialVersionId ?? connection.credentialId,
-        tools: allowedTools,
-      })
-    }
+    const credential = await deps.sessionOrchestration.mcpCredentialForConnector(
+      auth.organization.id,
+      auth.project.id,
+      connector.id,
+    )
+    servers.push({
+      connectorId: connector.id,
+      name: connector.name,
+      endpointUrl: endpointUrl(connector.metadata),
+      auth: credential
+        ? {
+            type: 'bearer',
+            credentialId: credential.credentialId,
+            credentialVersionId: credential.credentialVersionId,
+            secretRef: credential.secretRef,
+            referenceName: credential.referenceName,
+          }
+        : null,
+      tools: connector.tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        approvalMode: tool.approvalMode,
+      })),
+    })
   }
-  return { connectors: snapshotConnections }
+  return { servers }
 }

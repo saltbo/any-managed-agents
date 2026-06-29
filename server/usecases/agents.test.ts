@@ -92,7 +92,7 @@ function fakeDeps(
     insertMemory: async () => {},
     replaceMemory: async () => {},
     providerEnabled: async () => true,
-    connectorConnected: async () => true,
+    connectorAvailable: async () => true,
     ...overrides.repo,
   }
   return {
@@ -105,10 +105,8 @@ function fakeDeps(
     vaults: undefined as unknown as Deps['vaults'],
     secretStore: undefined as unknown as Deps['secretStore'],
     connectors: undefined as unknown as Deps['connectors'],
-    connections: undefined as unknown as Deps['connections'],
     policies: undefined as unknown as Deps['policies'],
     budgets: undefined as unknown as Deps['budgets'],
-    mcp: undefined as unknown as Deps['mcp'],
     usageRecords: undefined as unknown as Deps['usageRecords'],
     auditRecords: undefined as unknown as Deps['auditRecords'],
     triggers: undefined as unknown as Deps['triggers'],
@@ -186,7 +184,7 @@ describe('[spec: agents/create] createAgent', () => {
   })
 
   it('rejects a disconnected mcp connector', async () => {
-    const deps = fakeDeps({ repo: { connectorConnected: async () => false } })
+    const deps = fakeDeps({ repo: { connectorAvailable: async () => false } })
     await expect(
       createAgent(deps, auth, { name: 'x', description: null, config: config({ mcpConnectors: ['github'] }) }),
     ).rejects.toMatchObject({ fields: { mcpConnectors: expect.any(String) } })
@@ -305,7 +303,7 @@ describe('[spec: agents/create] createAgent', () => {
     expect(agent.model).toBe('gpt-4')
   })
 
-  it('passes validation when a non-empty mcpConnectors list contains only connected connectors', async () => {
+  it('passes validation when a non-empty mcpConnectors list contains only catalog connectors', async () => {
     const agent = await createAgent(fakeDeps(), auth, {
       name: 'x',
       description: null,

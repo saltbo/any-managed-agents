@@ -25,14 +25,6 @@ from .api.auth import delete_current_auth_session as delete_current_auth_session
 from .api.auth import read_auth_config as read_auth_config_api
 from .api.auth import read_current_auth_session as read_current_auth_session_api
 from .api.config import read_configz as read_configz_api
-from .api.connections import create_connection as create_connection_api
-from .api.connections import create_tool_call as create_tool_call_api
-from .api.connections import list_connection_tools as list_connection_tools_api
-from .api.connections import list_connections as list_connections_api
-from .api.connections import list_tool_calls as list_tool_calls_api
-from .api.connections import read_connection as read_connection_api
-from .api.connections import read_tool_call as read_tool_call_api
-from .api.connections import update_connection as update_connection_api
 from .api.connectors import list_connectors as list_connectors_api
 from .api.connectors import read_connector as read_connector_api
 from .api.environments import create_environment as create_environment_api
@@ -275,7 +267,6 @@ class AmaClient:
         self.runners = _RunnersResource(self._core)
         self.budgets = _BudgetsResource(self._core)
         self.connectors = _ConnectorsResource(self._core)
-        self.connections = _ConnectionsResource(self._core)
         self.audit = _AuditResource(self._core)
         self.triggers = _TriggersResource(self._core)
         self.sessions = _SessionsResource(self._core)
@@ -540,35 +531,6 @@ class _ConnectorsResource:
 
     def get(self, connector_id: str) -> Any:
         return _unwrap(read_connector_api.sync_detailed(connector_id=connector_id, client=self._client))
-
-class _ConnectionsResource:
-    def __init__(self, owner: _ClientCore) -> None:
-        self._owner = owner
-        self._client = owner.raw
-
-    def list(self, **query: Any) -> Any:
-        return _unwrap(list_connections_api.sync_detailed(client=self._client, **query))
-
-    def create(self, body: Any) -> Any:
-        return _unwrap(create_connection_api.sync_detailed(client=self._client, body=body))
-
-    def get(self, connection_id: str) -> Any:
-        return _unwrap(read_connection_api.sync_detailed(connection_id=connection_id, client=self._client))
-
-    def update(self, connection_id: str, body: Any) -> Any:
-        return _unwrap(update_connection_api.sync_detailed(connection_id=connection_id, client=self._client, body=body))
-
-    def list_tools(self, connection_id: str) -> Any:
-        return _unwrap(list_connection_tools_api.sync_detailed(connection_id=connection_id, client=self._client))
-
-    def list_tool_calls(self, connection_id: str, tool_name: str, **query: Any) -> Any:
-        return _unwrap(list_tool_calls_api.sync_detailed(connection_id=connection_id, tool_name=tool_name, client=self._client, **query))
-
-    def call_tool(self, connection_id: str, tool_name: str, body: Any) -> Any:
-        return _unwrap(create_tool_call_api.sync_detailed(connection_id=connection_id, tool_name=tool_name, client=self._client, body=body))
-
-    def get_tool_call(self, connection_id: str, tool_name: str, call_id: str) -> Any:
-        return _unwrap(read_tool_call_api.sync_detailed(connection_id=connection_id, tool_name=tool_name, call_id=call_id, client=self._client))
 
 class _AuditResource:
     def __init__(self, owner: _ClientCore) -> None:

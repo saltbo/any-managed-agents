@@ -37,7 +37,6 @@ const EXPECTED_RESTISH_OPERATIONS = {
   Providers: ['listProviders', 'listModels'],
   Vaults: ['listVaults', 'createVault'],
   Connectors: ['listConnectors', 'readConnector'],
-  Connections: ['listConnections', 'createConnection'],
   Usage: ['listUsageRecords', 'readUsageSummary'],
   Audit: ['listAuditRecords', 'readAuditRecord'],
 }
@@ -106,10 +105,10 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).not.toHaveProperty('/api/v1/governance/policy')
     expect(doc.paths).toHaveProperty('/api/v1/connectors')
     expect(doc.paths).toHaveProperty('/api/v1/connectors/{connectorId}')
-    expect(doc.paths).toHaveProperty('/api/v1/connections')
-    expect(doc.paths).toHaveProperty('/api/v1/connections/{connectionId}')
-    expect(doc.paths).toHaveProperty('/api/v1/connections/{connectionId}/tools')
-    expect(doc.paths).toHaveProperty('/api/v1/connections/{connectionId}/tools/{toolName}/calls')
+    expect(doc.paths).not.toHaveProperty('/api/v1/connections')
+    expect(doc.paths).not.toHaveProperty('/api/v1/connections/{connectionId}')
+    expect(doc.paths).not.toHaveProperty('/api/v1/connections/{connectionId}/tools')
+    expect(doc.paths).not.toHaveProperty('/api/v1/connections/{connectionId}/tools/{toolName}/calls')
     expect(doc.paths).not.toHaveProperty('/api/mcp/connectors')
     expect(doc.paths).toHaveProperty('/api/v1/usage-records')
     expect(doc.paths).toHaveProperty('/api/v1/usage-summary')
@@ -195,13 +194,6 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/providers/{providerId}']).toHaveProperty('get')
     expect(doc.paths['/api/v1/providers/{providerId}/models']).toHaveProperty('get')
     expect(doc.paths['/api/v1/connectors']).toHaveProperty('get')
-    expect(doc.paths['/api/v1/connections']).toHaveProperty('get')
-    expect(doc.paths['/api/v1/connections']).toHaveProperty('post')
-    expect(doc.paths['/api/v1/connections/{connectionId}']).toHaveProperty('get')
-    expect(doc.paths['/api/v1/connections/{connectionId}']).toHaveProperty('patch')
-    expect(doc.paths['/api/v1/connections/{connectionId}/tools']).toHaveProperty('get')
-    expect(doc.paths['/api/v1/connections/{connectionId}/tools/{toolName}/calls']).toHaveProperty('get')
-    expect(doc.paths['/api/v1/connections/{connectionId}/tools/{toolName}/calls']).toHaveProperty('post')
     expect(doc.paths['/api/v1/usage-summary']).toHaveProperty('get')
     expect(doc.paths['/api/v1/triggers']).toHaveProperty('get')
     expect(doc.paths['/api/v1/triggers']).toHaveProperty('post')
@@ -232,7 +224,6 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/vaults'].get.operationId).toBe('listVaults')
     expect(doc.paths['/api/v1/providers'].get.operationId).toBe('listProviders')
     expect(doc.paths['/api/v1/connectors'].get.operationId).toBe('listConnectors')
-    expect(doc.paths['/api/v1/connections'].post.operationId).toBe('createConnection')
     expect(doc.paths['/api/v1/usage-summary'].get.operationId).toBe('readUsageSummary')
     expect(doc.paths['/api/v1/audit-records'].get.operationId).toBe('listAuditRecords')
     expect(doc.paths['/api/v1/triggers'].get.operationId).toBe('listTriggers')
@@ -302,10 +293,10 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('Provider')
     expect(doc.components?.schemas).toHaveProperty('ProviderModel')
     expect(doc.components?.schemas).toHaveProperty('Connector')
-    expect(doc.components?.schemas).toHaveProperty('Connection')
-    expect(doc.components?.schemas).toHaveProperty('ConnectionTool')
-    expect(doc.components?.schemas).toHaveProperty('CreateConnectionRequest')
-    expect(doc.components?.schemas).toHaveProperty('CreateToolCallRequest')
+    expect(doc.components?.schemas).not.toHaveProperty('Connection')
+    expect(doc.components?.schemas).not.toHaveProperty('ConnectionTool')
+    expect(doc.components?.schemas).not.toHaveProperty('CreateConnectionRequest')
+    expect(doc.components?.schemas).not.toHaveProperty('CreateToolCallRequest')
     expect(doc.components?.schemas).not.toHaveProperty('Policy')
     expect(doc.components?.schemas).not.toHaveProperty('EffectivePolicy')
     expect(doc.components?.schemas).not.toHaveProperty('AccessRule')

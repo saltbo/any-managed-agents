@@ -620,7 +620,7 @@
             "type": "string",
             "nullable": true
           },
-          "runtimeEnv": {
+          "env": {
             "type": "object",
             "additionalProperties": {
               "type": "string"
@@ -2093,18 +2093,6 @@
               }
             }
           },
-          "credentialRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CredentialRef"
-            },
-            "example": [
-              {
-                "credentialId": "vaultcred_abc123",
-                "versionId": "vaultver_abc123"
-              }
-            ]
-          },
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
@@ -2200,7 +2188,6 @@
           "description",
           "packages",
           "variables",
-          "credentialRefs",
           "hostingMode",
           "networkPolicy",
           "mcpPolicy",
@@ -2213,24 +2200,6 @@
           "version",
           "createdAt",
           "updatedAt"
-        ]
-      },
-      "CredentialRef": {
-        "type": "object",
-        "properties": {
-          "credentialId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "vaultcred_abc123"
-          },
-          "versionId": {
-            "type": "string",
-            "minLength": 1,
-            "example": "vaultver_abc123"
-          }
-        },
-        "required": [
-          "credentialId"
         ]
       },
       "EnvironmentHostingMode": {
@@ -2401,19 +2370,6 @@
               }
             }
           },
-          "credentialRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CredentialRef"
-            },
-            "maxItems": 100,
-            "example": [
-              {
-                "credentialId": "vaultcred_abc123",
-                "versionId": "vaultver_abc123"
-              }
-            ]
-          },
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
@@ -2544,19 +2500,6 @@
                 "required": true
               }
             }
-          },
-          "credentialRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CredentialRef"
-            },
-            "maxItems": 100,
-            "example": [
-              {
-                "credentialId": "vaultcred_abc123",
-                "versionId": "vaultver_abc123"
-              }
-            ]
           },
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
@@ -2711,18 +2654,6 @@
               }
             }
           },
-          "credentialRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CredentialRef"
-            },
-            "example": [
-              {
-                "credentialId": "vaultcred_abc123",
-                "versionId": "vaultver_abc123"
-              }
-            ]
-          },
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
@@ -2798,7 +2729,6 @@
           "version",
           "packages",
           "variables",
-          "credentialRefs",
           "hostingMode",
           "networkPolicy",
           "mcpPolicy",
@@ -3135,14 +3065,7 @@
             "example": "env_abc123"
           },
           "credentialRef": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/CredentialRef"
-              },
-              {
-                "nullable": true
-              }
-            ]
+            "$ref": "#/components/schemas/NullableCredentialRef"
           },
           "authMode": {
             "type": "string",
@@ -3232,6 +3155,25 @@
           "archivedAt",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "NullableCredentialRef": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "credentialId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "vaultcred_abc123"
+          },
+          "versionId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "vaultver_abc123"
+          }
+        },
+        "required": [
+          "credentialId"
         ]
       },
       "RuntimeUsage": {
@@ -3373,6 +3315,24 @@
           "name"
         ],
         "additionalProperties": false
+      },
+      "CredentialRef": {
+        "type": "object",
+        "properties": {
+          "credentialId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "vaultcred_abc123"
+          },
+          "versionId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "vaultver_abc123"
+          }
+        },
+        "required": [
+          "credentialId"
+        ]
       },
       "RunnerListResponse": {
         "type": "object",
@@ -4169,400 +4129,6 @@
           "approvalMode",
           "policyMetadata"
         ]
-      },
-      "ConnectionListResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Connection"
-            }
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/ListPagination"
-          }
-        },
-        "required": [
-          "data",
-          "pagination"
-        ]
-      },
-      "Connection": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "connectorId": {
-            "type": "string"
-          },
-          "credentialRef": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/CredentialRef"
-              },
-              {
-                "nullable": true
-              }
-            ]
-          },
-          "endpointUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "approvalMode": {
-            "type": "string",
-            "enum": [
-              "none",
-              "per_call",
-              "always_required",
-              "project_policy"
-            ]
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "connected",
-              "disabled",
-              "disconnected",
-              "error"
-            ]
-          },
-          "lastError": {
-            "type": "object",
-            "nullable": true,
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "connectedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "disconnectedAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "projectId",
-          "connectorId",
-          "credentialRef",
-          "endpointUrl",
-          "approvalMode",
-          "state",
-          "lastError",
-          "metadata",
-          "connectedAt",
-          "disconnectedAt",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateConnectionRequest": {
-        "type": "object",
-        "properties": {
-          "connectorId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120
-          },
-          "endpointUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "credentialRef": {
-            "$ref": "#/components/schemas/CredentialRef"
-          },
-          "approvalMode": {
-            "type": "string",
-            "enum": [
-              "none",
-              "per_call",
-              "always_required",
-              "project_policy"
-            ]
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          }
-        },
-        "required": [
-          "connectorId"
-        ],
-        "additionalProperties": false
-      },
-      "UpdateConnectionRequest": {
-        "type": "object",
-        "properties": {
-          "endpointUrl": {
-            "type": "string",
-            "nullable": true,
-            "format": "uri"
-          },
-          "credentialRef": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/CredentialRef"
-              },
-              {
-                "nullable": true
-              }
-            ]
-          },
-          "approvalMode": {
-            "type": "string",
-            "enum": [
-              "none",
-              "per_call",
-              "always_required",
-              "project_policy"
-            ]
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "connected",
-              "disabled",
-              "disconnected"
-            ]
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "ConnectionToolListResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ConnectionTool"
-            }
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/ListPagination"
-          }
-        },
-        "required": [
-          "data",
-          "pagination"
-        ]
-      },
-      "ConnectionTool": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "connectionId": {
-            "type": "string"
-          },
-          "connectorId": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "approvalMode": {
-            "type": "string",
-            "enum": [
-              "none",
-              "per_call",
-              "always_required",
-              "project_policy"
-            ]
-          },
-          "policyMetadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "availability": {
-            "type": "string",
-            "enum": [
-              "available",
-              "disabled",
-              "error"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "connectionId",
-          "connectorId",
-          "name",
-          "description",
-          "inputSchema",
-          "approvalMode",
-          "policyMetadata",
-          "availability",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "ToolCallListResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ToolCall"
-            }
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/ListPagination"
-          }
-        },
-        "required": [
-          "data",
-          "pagination"
-        ]
-      },
-      "ToolCall": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "connectionId": {
-            "type": "string"
-          },
-          "connectorId": {
-            "type": "string"
-          },
-          "toolName": {
-            "type": "string"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "success",
-              "error"
-            ]
-          },
-          "input": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "output": {
-            "type": "object",
-            "nullable": true,
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "error": {
-            "$ref": "#/components/schemas/ToolCallError"
-          },
-          "durationMs": {
-            "type": "integer"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "connectionId",
-          "connectorId",
-          "toolName",
-          "sessionId",
-          "state",
-          "input",
-          "output",
-          "error",
-          "durationMs",
-          "createdAt"
-        ]
-      },
-      "ToolCallError": {
-        "type": "object",
-        "nullable": true,
-        "properties": {
-          "type": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "message"
-        ]
-      },
-      "CreateToolCallRequest": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "input": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          }
-        },
-        "required": [
-          "sessionId"
-        ],
-        "additionalProperties": false
       },
       "UsageRecordListResponse": {
         "type": "object",
@@ -6116,12 +5682,6 @@
           "variables": {
             "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
-          "credentialRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
-            }
-          },
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
@@ -6155,7 +5715,6 @@
           "version",
           "packages",
           "variables",
-          "credentialRefs",
           "hostingMode",
           "networkPolicy",
           "mcpPolicy",
@@ -10831,666 +10390,6 @@
           },
           "404": {
             "description": "Connector not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/connections": {
-      "get": {
-        "operationId": "listConnections",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "List connections",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "connected",
-                "disabled",
-                "disconnected",
-                "error"
-              ]
-            },
-            "required": false,
-            "name": "state",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100
-            },
-            "required": false,
-            "name": "limit",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 512
-            },
-            "required": false,
-            "name": "cursor",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Connection list",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectionListResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createConnection",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "Create a connector connection",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateConnectionRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created connection",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Connection"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Policy denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Connector not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Connection already exists or credential unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/connections/{connectionId}": {
-      "get": {
-        "operationId": "readConnection",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "Read connection",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "conn_abc123"
-            },
-            "required": true,
-            "name": "connectionId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Connection",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Connection"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Connection not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "operationId": "updateConnection",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "Update connection state, credential, or settings",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "conn_abc123"
-            },
-            "required": true,
-            "name": "connectionId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateConnectionRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Connection",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Connection"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Connection not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Credential unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/connections/{connectionId}/tools": {
-      "get": {
-        "operationId": "listConnectionTools",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "List connection tools",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "conn_abc123"
-            },
-            "required": true,
-            "name": "connectionId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Connection tools",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectionToolListResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Connection not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Connection unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "MCP upstream error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/connections/{connectionId}/tools/{toolName}/calls": {
-      "get": {
-        "operationId": "listToolCalls",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "List tool calls",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "conn_abc123"
-            },
-            "required": true,
-            "name": "connectionId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "example": "repo.read"
-            },
-            "required": true,
-            "name": "toolName",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100
-            },
-            "required": false,
-            "name": "limit",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 512
-            },
-            "required": false,
-            "name": "cursor",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tool call list",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ToolCallListResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Connection not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createToolCall",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "Execute a connection tool through the AMA policy boundary",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "conn_abc123"
-            },
-            "required": true,
-            "name": "connectionId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "example": "repo.read"
-            },
-            "required": true,
-            "name": "toolName",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateToolCallRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Tool call executed and recorded (state reports success or error)",
-            "headers": {
-              "Location": {
-                "schema": {
-                  "type": "string",
-                  "description": "URI of the created tool call resource"
-                },
-                "required": true,
-                "description": "URI of the created tool call resource"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ToolCall"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Policy denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Connection, session, or tool not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Approval required or connection unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/connections/{connectionId}/tools/{toolName}/calls/{callId}": {
-      "get": {
-        "operationId": "readToolCall",
-        "tags": [
-          "Connections"
-        ],
-        "summary": "Read tool call",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "conn_abc123"
-            },
-            "required": true,
-            "name": "connectionId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "example": "repo.read"
-            },
-            "required": true,
-            "name": "toolName",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "example": "call_abc123"
-            },
-            "required": true,
-            "name": "callId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tool call",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ToolCall"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tool call not found",
             "content": {
               "application/json": {
                 "schema": {

@@ -32,7 +32,7 @@ Feature: Web console
 
   @web-console/resource-lists @web
   Scenario: Render resource list rows with paginated, tooltip-backed status
-    Given providers and MCP connections include error and disabled status
+    Given providers and MCP connectors include error and disabled status
     When the user opens the provider and MCP lists
     Then each row renders on one line with pagination counts
     And error and disabled detail is exposed through tooltips instead of inline overflow

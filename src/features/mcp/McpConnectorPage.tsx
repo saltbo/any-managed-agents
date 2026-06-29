@@ -1,29 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, PageHeader, StatusBadge } from '@/console/components'
+import { buttonVariants } from '@/components/ui/button'
+import { DetailSection, EmptyState, Meta, MetaGrid, PageHeader, StatusBadge } from '@/console/components'
 import { ApiError, api, type Connector } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { connectorDisabledReason } from './McpView'
-import { useMcpActions } from './use-mcp-actions'
 
 export function McpConnectorPage() {
   const { connectorId } = useParams()
-  const actions = useMcpActions()
   const connectorQuery = useQuery({
     queryKey: queryKeys.connectors.detail(connectorId ?? ''),
     queryFn: () => api.readConnector(connectorId as string),
     enabled: Boolean(connectorId),
   })
-  const connectionsQuery = useQuery({
-    queryKey: queryKeys.connections.list,
-    queryFn: api.listConnections,
-  })
   const connector = connectorQuery.data ?? null
-  const connection =
-    connectionsQuery.data?.data.find(
-      (candidate) => candidate.connectorId === connectorId && candidate.state !== 'disconnected',
-    ) ?? null
 
   if (connectorQuery.error instanceof ApiError && connectorQuery.error.status === 404) {
     return (
@@ -47,7 +37,7 @@ export function McpConnectorPage() {
     )
   }
   if (connectorQuery.isPending || !connector) {
-    return <EmptyState title="Loading connector" body="Reading connector catalog entry and connection state." />
+    return <EmptyState title="Loading connector" body="Reading connector catalog entry." />
   }
 
   const disabledReason = connectorDisabledReason(connector)
@@ -58,29 +48,6 @@ export function McpConnectorPage() {
         title={connector.name}
         titleAccessory={<StatusBadge value={connector.availability} detail={disabledReason} />}
         description={connector.description}
-        actions={
-          connection ? (
-            <ConfirmAction
-              title="Disconnect MCP connector?"
-              description={`Disconnect ${connector.id}. Runtime tool calls through this connection will stop.`}
-              confirmLabel="Disconnect"
-              destructive
-              onConfirm={() => actions.disconnectMcpConnection(connection.id)}
-            >
-              <Button type="button" variant="outline">
-                Disconnect
-              </Button>
-            </ConfirmAction>
-          ) : (
-            <Button
-              type="button"
-              disabled={Boolean(disabledReason) || actions.connectMcpConnectorPending}
-              onClick={() => actions.connectMcpConnector({ connectorId: connector.id })}
-            >
-              Connect
-            </Button>
-          )
-        }
       />
       {disabledReason ? <p className="text-sm text-destructive">{disabledReason}</p> : null}
       <DetailSection title="Connector profile" description={connector.id}>

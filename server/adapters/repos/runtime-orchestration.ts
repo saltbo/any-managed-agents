@@ -1,12 +1,10 @@
 import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { runnerSupportsRuntimeProviderModel } from '@server/domain/runtime-catalog'
 import { vaultIdFromRef } from '@server/domain/vault'
-import type { SessionOrchestrationStore } from '@server/usecases/ports'
+import type { ConnectorRecord, SessionOrchestrationStore } from '@server/usecases/ports'
 import type {
   AgentRow,
   AgentVersionRow,
-  ConnectionRow,
-  ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
   SessionApprovalInsert,
@@ -23,8 +21,7 @@ import {
   agentMemories,
   agents,
   agentVersions,
-  connections,
-  connectionTools,
+  connectors,
   environments,
   environmentVersions,
   leases,
@@ -40,6 +37,7 @@ import {
   workItems,
 } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
+import { type ConnectorCatalogEntry, DEFAULT_CONNECTORS } from '../../domain/connector'
 import { amaMemoryRef, memoryStoreMountPath } from '../../domain/memory-store'
 
 type Db = ReturnType<typeof drizzle>
@@ -50,8 +48,6 @@ type Db = ReturnType<typeof drizzle>
 export type {
   AgentRow,
   AgentVersionRow,
-  ConnectionRow,
-  ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
   SessionRow,
@@ -66,6 +62,49 @@ type SessionUpdateColumns = Partial<typeof sessions.$inferInsert>
 type SessionStateColumn = (typeof sessions.$inferSelect)['state']
 type WorkItemInsertColumns = typeof workItems.$inferInsert
 type SessionApprovalInsertColumns = typeof sessionApprovals.$inferInsert
+type ConnectorRow = typeof connectors.$inferSelect
+const STATIC_CATALOG_TIMESTAMP = '1970-01-01T00:00:00.000Z'
+
+function connectorRecordFrom(row: ConnectorRow): ConnectorRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    category: row.category as ConnectorRecord['category'],
+    trustLevel: row.trustLevel as ConnectorRecord['trustLevel'],
+    capabilities: parseJson<string[]>(row.capabilities) ?? [],
+    supportedAuthModes: parseJson<ConnectorRecord['supportedAuthModes']>(row.supportedAuthModes) ?? [],
+    setupRequirements: parseJson<string[]>(row.setupRequirements) ?? [],
+    tools: parseJson<ConnectorRecord['tools']>(row.tools) ?? [],
+    metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
+    availability: row.availability as ConnectorRecord['availability'],
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function staticConnectorRecordFrom(connector: ConnectorCatalogEntry): ConnectorRecord {
+  return {
+    id: connector.id,
+    name: connector.name,
+    description: connector.description,
+    category: connector.category,
+    trustLevel: connector.trustLevel,
+    capabilities: [...connector.capabilities],
+    supportedAuthModes: [...connector.supportedAuthModes],
+    setupRequirements: [...connector.setupRequirements],
+    tools: [...connector.tools],
+    metadata: { ...connector.metadata },
+    availability: connector.availability,
+    createdAt: STATIC_CATALOG_TIMESTAMP,
+    updatedAt: STATIC_CATALOG_TIMESTAMP,
+  }
+}
+
+function connectorBindingMatches(value: string, connectorId: string) {
+  const binding = parseJson<Record<string, unknown>>(value) ?? {}
+  return binding.connectorId === connectorId
+}
 
 function sessionStateGuard(expected: string | string[]) {
   return Array.isArray(expected)
@@ -443,19 +482,63 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
       return chosen?.environmentId ?? null
     },
 
-    // ── MCP snapshot resolution ────────────────────────────────────────────
-    async connectedConnections(projectId: string): Promise<ConnectionRow[]> {
-      return db
-        .select()
-        .from(connections)
-        .where(and(eq(connections.projectId, projectId), eq(connections.state, 'connected')))
+    // ── MCP manifest resolution ────────────────────────────────────────────
+    async mcpCatalogEntries(connectorIds: string[]): Promise<ConnectorRecord[]> {
+      if (connectorIds.length === 0) {
+        return []
+      }
+      const rows = await db.select().from(connectors).where(inArray(connectors.id, connectorIds))
+      const byId = new Map(rows.map((row) => [row.id, connectorRecordFrom(row)]))
+      const defaultsById = new Map(
+        DEFAULT_CONNECTORS.map((connector) => [connector.id, staticConnectorRecordFrom(connector)]),
+      )
+      return connectorIds
+        .map((connectorId) => byId.get(connectorId) ?? defaultsById.get(connectorId))
+        .filter((row): row is ConnectorRecord => !!row)
     },
 
-    async availableConnectionTools(connectionId: string): Promise<ConnectionToolRow[]> {
-      return db
+    async mcpCredentialForConnector(organizationId: string, projectId: string, connectorId: string) {
+      const credentials = await db
         .select()
-        .from(connectionTools)
-        .where(and(eq(connectionTools.connectionId, connectionId), eq(connectionTools.availability, 'available')))
+        .from(vaultCredentials)
+        .where(
+          and(
+            eq(vaultCredentials.organizationId, organizationId),
+            or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
+            eq(vaultCredentials.state, 'active'),
+            isNotNull(vaultCredentials.activeVersionId),
+          ),
+        )
+        .orderBy(desc(vaultCredentials.updatedAt))
+      const credential = credentials.find((row) => connectorBindingMatches(row.connectorBinding, connectorId))
+      if (!credential?.activeVersionId) {
+        return null
+      }
+      const version = await db
+        .select({
+          id: vaultCredentialVersions.id,
+          secretRef: vaultCredentialVersions.secretRef,
+          referenceName: vaultCredentialVersions.referenceName,
+        })
+        .from(vaultCredentialVersions)
+        .where(
+          and(
+            eq(vaultCredentialVersions.id, credential.activeVersionId),
+            eq(vaultCredentialVersions.credentialId, credential.id),
+            eq(vaultCredentialVersions.organizationId, organizationId),
+            or(eq(vaultCredentialVersions.projectId, projectId), isNull(vaultCredentialVersions.projectId)),
+            eq(vaultCredentialVersions.state, 'active'),
+          ),
+        )
+        .get()
+      return version
+        ? {
+            credentialId: credential.id,
+            credentialVersionId: version.id,
+            secretRef: version.secretRef,
+            referenceName: version.referenceName,
+          }
+        : null
     },
 
     // ── credential reference validation ────────────────────────────────────

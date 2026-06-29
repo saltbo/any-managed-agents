@@ -101,7 +101,7 @@ export const RunnerWorkPayloadSchema = z
     environmentSnapshot: JsonObjectSchema.nullable().optional(),
     runtimeDriver: z.string().optional().openapi({ example: 'codex-self-hosted' }),
     requiredRunnerCapability: z.string().nullable().optional(),
-    runtimeEnv: StringMapSchema.optional(),
+    env: StringMapSchema.optional(),
     workspaceManifest: RunnerWorkspaceManifestSchema.optional(),
     initialPrompt: z.string().nullable().optional(),
     resume: z.boolean().optional(),

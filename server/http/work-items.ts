@@ -196,7 +196,7 @@ export function registerWorkItemRoutes(routes: WorkItemRoutes) {
         return errorResponse(c, 404, 'not_found', 'Work item not found')
       }
       // The runner that holds the active lease receives the raw payload with
-      // envFrom references materialized into runtimeEnv and workspaceManifest; everyone else gets the
+      // envFrom references materialized into env and workspaceManifest; everyone else gets the
       // redacted view the repo already returned.
       const leaseRunnerId =
         workItem.state === 'leased' ? await deps.workItems.activeLeaseRunnerId(auth.project.id, workItemId) : null

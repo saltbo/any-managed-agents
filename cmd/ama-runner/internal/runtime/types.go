@@ -12,7 +12,7 @@ type Request struct {
 	SessionID     string
 	Runtime       string
 	RuntimeConfig map[string]any
-	RuntimeEnv    map[string]string
+	Env           map[string]string
 	Provider      string
 	Model         string
 	AgentSnapshot map[string]any

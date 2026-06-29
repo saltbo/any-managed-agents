@@ -50,7 +50,6 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
     description: null,
     packages: [],
     variables: {},
-    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: [] },
     mcpPolicy: {},

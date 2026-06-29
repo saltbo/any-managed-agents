@@ -24,7 +24,6 @@ function environment(overrides: Partial<Environment> = {}): Environment {
     description: 'Node 22 toolchain',
     packages: [{ name: 'vite', version: '7' }],
     variables: { NODE_ENV: { description: 'environment' } },
-    credentialRefs: [{ credentialId: 'vaultcred_1' }],
     hostingMode: 'self_hosted',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},
@@ -291,7 +290,6 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
     expect(screen.getByText('Environment profile')).toBeTruthy()
     expect(screen.getByText('v2')).toBeTruthy()
     expect(screen.getByText('self_hosted')).toBeTruthy()
-    expect(screen.getByText('vaultcred_1')).toBeTruthy()
     expect(screen.getByText('Restricted: registry.npmjs.org')).toBeTruthy()
     expect(screen.getByText('Sessions using this environment')).toBeTruthy()
   })
@@ -317,8 +315,8 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
     expect(screen.getByText('No description')).toBeTruthy()
   })
 
-  it('shows "None" for packages, variables, credential refs when all are empty', () => {
-    const env = environment({ packages: [], variables: {}, credentialRefs: [] })
+  it('shows "None" for packages and variables when both are empty', () => {
+    const env = environment({ packages: [], variables: {} })
     render(
       <MemoryRouter>
         <EnvironmentDetailView environment={env} sessions={[]} onArchive={vi.fn()} />
@@ -326,7 +324,7 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
     )
 
     const nones = screen.getAllByText('None')
-    expect(nones.length).toBeGreaterThanOrEqual(3)
+    expect(nones.length).toBeGreaterThanOrEqual(2)
   })
 
   it('shows unrestricted network policy in detail view', () => {

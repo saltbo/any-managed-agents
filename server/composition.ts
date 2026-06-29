@@ -1,6 +1,5 @@
 import { createAuditPort } from './adapters/gateways/audit'
 import { createCloudTurnQueue } from './adapters/gateways/cloud-turn-queue'
-import { createMcpGateway } from './adapters/gateways/mcp'
 import { createPolicyPort } from './adapters/gateways/policy'
 import { createProviderCatalogGateway } from './adapters/gateways/provider-catalog'
 import { createRunnerChannel } from './adapters/gateways/runner-channel'
@@ -12,7 +11,6 @@ import { createSessionEventPort } from './adapters/gateways/session-events'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
 import { createBudgetRepo } from './adapters/repos/budgets'
-import { createConnectionRepo } from './adapters/repos/connections'
 import { createConnectorRepo } from './adapters/repos/connectors'
 import { createEnvironmentRepo } from './adapters/repos/environments'
 import { createFederatedTenantRepo } from './adapters/repos/federated-tenants'
@@ -68,10 +66,8 @@ export function createDeps(env: Env): Deps {
     vaults: createVaultRepo(db),
     secretStore: createSecretStoreGateway(env),
     connectors: createConnectorRepo(db),
-    connections: createConnectionRepo(db),
     policies: createPolicyRepo(db),
     budgets: createBudgetRepo(db),
-    mcp: createMcpGateway(env, db),
     memoryStores: createMemoryStoreRepo(db),
     sessionEvents: createSessionEventPort(sessionEventStore),
     audit,

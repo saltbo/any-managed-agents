@@ -398,7 +398,6 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       description: null,
       packages: [],
       variables: {},
-      credentialRefs: [],
       hostingMode: 'cloud' as const,
       networkPolicy: { mode: 'unrestricted' as const },
       mcpPolicy: {},
@@ -818,7 +817,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   // ---------------------------------------------------------------------------
   // Connectors & Connections API
   // ---------------------------------------------------------------------------
-  describe('connectors and connections API', () => {
+  describe('connectors API', () => {
     it('listConnectors calls /api/v1/connectors', async () => {
       const fetchMock = makeJsonFetch(listPage)
       vi.stubGlobal('fetch', fetchMock)
@@ -850,58 +849,6 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       expect(result.id).toBe('conn_1')
     })
 
-    it('createConnection posts JSON', async () => {
-      const connection = {
-        id: 'cx_1',
-        projectId: 'p1',
-        connectorId: 'conn_1',
-        credentialRef: null,
-        endpointUrl: null,
-        approvalMode: 'none' as const,
-        state: 'connected' as const,
-        lastError: null,
-        metadata: {},
-        connectedAt: '',
-        disconnectedAt: null,
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(connection)
-      vi.stubGlobal('fetch', fetchMock)
-      await api.createConnection({ connectorId: 'conn_1' })
-      const [, init] = fetchMock.mock.calls[0]!
-      expect(init?.method).toBe('POST')
-    })
-
-    it('listConnections calls /api/v1/connections', async () => {
-      const fetchMock = makeJsonFetch(listPage)
-      vi.stubGlobal('fetch', fetchMock)
-      await api.listConnections()
-      const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).toContain('/api/v1/connections')
-    })
-
-    it('disconnectConnection patches with state:disconnected', async () => {
-      const connection = {
-        id: 'cx_1',
-        projectId: 'p1',
-        connectorId: 'conn_1',
-        credentialRef: null,
-        endpointUrl: null,
-        approvalMode: 'none' as const,
-        state: 'disconnected' as const,
-        lastError: null,
-        metadata: {},
-        connectedAt: '',
-        disconnectedAt: '',
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(connection)
-      vi.stubGlobal('fetch', fetchMock)
-      const result = await api.disconnectConnection('cx_1')
-      expect(result.state).toBe('disconnected')
-    })
   })
 
   // ---------------------------------------------------------------------------

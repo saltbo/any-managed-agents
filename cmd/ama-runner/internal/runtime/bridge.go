@@ -272,19 +272,19 @@ func commandEnvironment(request Request) ([]string, error) {
 	if request.Model != "" {
 		env = append(env, "AMA_MODEL="+request.Model)
 	}
-	for key, value := range request.RuntimeEnv {
+	for key, value := range request.Env {
 		if key == "" || strings.Contains(key, "=") {
-			return nil, fmt.Errorf("runtime env key %q is invalid", key)
+			return nil, fmt.Errorf("env key %q is invalid", key)
 		}
-		if isReservedRuntimeEnvKey(key) {
-			return nil, fmt.Errorf("runtime env key %q is reserved", key)
+		if isReservedEnvKey(key) {
+			return nil, fmt.Errorf("env key %q is reserved", key)
 		}
 		env = append(env, key+"="+value)
 	}
 	return env, nil
 }
 
-func isReservedRuntimeEnvKey(key string) bool {
+func isReservedEnvKey(key string) bool {
 	return strings.HasPrefix(key, "AMA_")
 }
 

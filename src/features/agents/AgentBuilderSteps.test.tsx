@@ -79,7 +79,6 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
     description: null,
     packages: [{ name: 'tsx', version: 'latest' }],
     variables: {},
-    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},

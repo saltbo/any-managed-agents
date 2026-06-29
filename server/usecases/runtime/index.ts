@@ -17,7 +17,7 @@ export {
   startSessionRuntimeForRow,
 } from './cloud-turn'
 export { appendRuntimeEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
-export { mcpConnectorIds, resolveMcpSnapshot, validateRuntimeProviderModel } from './provisioning'
+export { mcpConnectorIds, resolveMcpServers, validateRuntimeProviderModel } from './provisioning'
 export {
   denyRuntimePolicy,
   evaluateRuntimeSandboxOperations,

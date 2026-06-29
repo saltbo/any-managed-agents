@@ -80,7 +80,6 @@ const EnvironmentVersionSnapshotSchema = z
     version: z.number().int(),
     packages: z.array(SessionEnvironmentJsonObjectSchema),
     variables: SessionEnvironmentJsonObjectSchema,
-    credentialRefs: z.array(SessionEnvironmentJsonObjectSchema),
     hostingMode: EnvironmentHostingModeSchema,
     networkPolicy: EnvironmentNetworkPolicySchema,
     mcpPolicy: SessionEnvironmentJsonObjectSchema,

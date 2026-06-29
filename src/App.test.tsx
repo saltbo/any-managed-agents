@@ -5,7 +5,6 @@ import type {
   Agent,
   AuditRecord,
   AuthContext,
-  Connection,
   Connector,
   Environment,
   Provider,
@@ -113,7 +112,6 @@ function environment(overrides: Partial<Environment> = {}): Environment {
     description: 'Runtime',
     packages: [{ name: 'tsx', version: 'latest' }],
     variables: { NODE_ENV: { description: 'mode', required: false } },
-    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},
@@ -138,7 +136,6 @@ function sessionEnvironmentSnapshot(overrides: Partial<SessionEnvironmentSnapsho
     version: 1,
     packages: [],
     variables: {},
-    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'unrestricted' },
     mcpPolicy: {},
@@ -296,25 +293,6 @@ function mcpConnector(overrides: Partial<Connector> = {}): Connector {
   }
 }
 
-function mcpConnection(overrides: Partial<Connection> = {}): Connection {
-  return {
-    id: 'mcpconn_1',
-    projectId: 'project_1',
-    connectorId: 'github',
-    credentialRef: { credentialId: 'vaultcred_1' },
-    endpointUrl: null,
-    approvalMode: 'project_policy',
-    state: 'connected',
-    lastError: null,
-    metadata: {},
-    connectedAt: now,
-    disconnectedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
-}
-
 function usageSummary(overrides: Partial<UsageSummary> = {}): UsageSummary {
   return {
     groupBy: 'provider',
@@ -376,7 +354,6 @@ function mockConsoleApi(seed?: {
     vaults: [vault()],
     credentials: [credential()],
     mcpConnectors: [mcpConnector()],
-    mcpConnections: [mcpConnection()],
     usageSummary: usageSummary(),
     auditRecords: [auditRecord()],
   }
@@ -491,9 +468,6 @@ function mockConsoleApi(seed?: {
     }
     if (url === '/api/v1/connectors' && method === 'GET') {
       return jsonResponse({ data: state.mcpConnectors })
-    }
-    if (url === '/api/v1/connections' && method === 'GET') {
-      return jsonResponse({ data: state.mcpConnections })
     }
     if (url.startsWith('/api/v1/usage-summary') && method === 'GET') {
       return jsonResponse(state.usageSummary)
@@ -1036,9 +1010,6 @@ describe('App', () => {
       if (url === '/api/v1/connectors') {
         return jsonResponse({ data: [] })
       }
-      if (url === '/api/v1/connections') {
-        return jsonResponse({ data: [] })
-      }
       if (url.startsWith('/api/v1/usage-summary')) {
         return jsonResponse(usageSummary())
       }
@@ -1095,7 +1066,6 @@ const environmentFixture = {
   description: 'Runtime',
   packages: [{ name: 'tsx', version: 'latest' }],
   variables: { NODE_ENV: { description: 'mode', required: false } },
-  credentialRefs: [],
   hostingMode: 'cloud',
   networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
   mcpPolicy: {},

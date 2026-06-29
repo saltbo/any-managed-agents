@@ -100,24 +100,6 @@ actions:
     remove: true
   - target: $.components.schemas['ConnectorTool']['properties']['policyMetadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['Connection']['properties']['lastError'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['Connection']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateConnectionRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateConnectionRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['ConnectionTool']['properties']['inputSchema'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['ConnectionTool']['properties']['policyMetadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['ToolCall']['properties']['input'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['ToolCall']['properties']['output'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateToolCallRequest']['properties']['input'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['UsageRecord']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['AuditRecord']['properties']['metadata'].additionalProperties.nullable

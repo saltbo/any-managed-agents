@@ -31,15 +31,7 @@ async function connectMcp(authorization: string) {
     }),
   })
   expect(credentialRes.status).toBe(201)
-  const credential = (await credentialRes.json()) as { id: string; activeVersionId: string }
-  const connectRes = await jsonFetch('/api/v1/connections', authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      connectorId: 'github',
-      credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
-    }),
-  })
-  expect(connectRes.status).toBe(201)
+  await credentialRes.json()
 }
 
 describe('[CF] /api/v1/agents', () => {
@@ -503,7 +495,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const invalidMcpRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Invalid MCP agent', mcpConnectors: ['linear'] }),
+      body: JSON.stringify({ name: 'Invalid MCP agent', mcpConnectors: ['missing-connector'] }),
     })
     expect(invalidMcpRes.status).toBe(400)
     await expect(invalidMcpRes.json()).resolves.toMatchObject({

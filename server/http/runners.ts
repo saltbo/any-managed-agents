@@ -12,6 +12,7 @@ import {
   formatListCursor,
   listQuerySchema,
   listResponseSchema,
+  NullableCredentialRefSchema,
   parseListCursor,
 } from '../openapi'
 import { type RunnerAuthRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
@@ -67,7 +68,7 @@ const RunnerSchema = z
     name: z.string().openapi({ example: 'mac-mini-build-runner' }),
     capabilities: z.array(CapabilitySchema).openapi({ example: ['node', 'git', 'sandbox.exec'] }),
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
-    credentialRef: CredentialRefSchema.nullable(),
+    credentialRef: NullableCredentialRefSchema,
     authMode: z.enum(RUNNER_AUTH_MODES).openapi({ example: 'oidc' }),
     state: z.enum(RUNNER_STATES).openapi({ example: 'active' }),
     currentLoad: z.number().int().openapi({ example: 0 }),

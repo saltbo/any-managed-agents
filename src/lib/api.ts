@@ -90,7 +90,6 @@ export interface Environment {
   description: string | null
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
-  credentialRefs: CredentialRef[]
   hostingMode: EnvironmentHostingMode
   networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
@@ -229,7 +228,6 @@ export interface EnvironmentVersion {
   version: number
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
-  credentialRefs: CredentialRef[]
   hostingMode: EnvironmentHostingMode
   networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
@@ -375,30 +373,6 @@ export interface ConnectorListOptions {
   capability?: string
 }
 
-export interface CreateConnectionInput {
-  connectorId: string
-  endpointUrl?: string
-  credentialRef?: CredentialRef
-  approvalMode?: ConnectorTool['approvalMode']
-  metadata?: Record<string, unknown>
-}
-
-export interface Connection {
-  id: string
-  projectId: string
-  connectorId: string
-  credentialRef: CredentialRef | null
-  endpointUrl: string | null
-  approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy'
-  state: 'connected' | 'disabled' | 'disconnected' | 'error'
-  lastError: Record<string, unknown> | null
-  metadata: Record<string, unknown>
-  connectedAt: string
-  disconnectedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
 export interface Budget {
   id: string
   scope: 'project' | 'provider' | 'model'
@@ -528,7 +502,6 @@ export interface EnvironmentInput {
   description?: string
   packages?: EnvironmentPackage[]
   variables?: Record<string, EnvironmentVariable>
-  credentialRefs?: CredentialRef[]
   hostingMode?: EnvironmentHostingMode
   networkPolicy?: EnvironmentNetworkPolicy
   mcpPolicy?: Record<string, unknown>
@@ -916,16 +889,6 @@ export const api = {
     rpcRequest<ListResponse<Connector>>(v1.connectors.$get(queryArg<typeof v1.connectors.$get>(options))),
   readConnector: (connectorId: string) =>
     rpcRequest<Connector>(v1.connectors[':connectorId'].$get({ param: { connectorId } })),
-  createConnection: (input: CreateConnectionInput) =>
-    rpcRequest<Connection>(v1.connections.$post(jsonArg<typeof v1.connections.$post>(input))),
-  listConnections: () => rpcRequest<ListResponse<Connection>>(v1.connections.$get({ query: {} })),
-  disconnectConnection: (id: string) =>
-    rpcRequest<Connection>(
-      v1.connections[':connectionId'].$patch({
-        param: { connectionId: id },
-        json: { state: 'disconnected' },
-      }),
-    ),
   listBudgets: () => rpcRequest<ListResponse<Budget>>(v1.budgets.$get(queryArg<typeof v1.budgets.$get>({}))),
   readUsageSummary: (options: UsageSummaryOptions = {}) =>
     rpcRequest<UsageSummary>(v1['usage-summary'].$get(queryArg<(typeof v1)['usage-summary']['$get']>(options))),

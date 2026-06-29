@@ -13,26 +13,6 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-async function createCredential(authorization: string) {
-  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
-    method: 'POST',
-    body: JSON.stringify({ name: 'Workspace credentials' }),
-  })
-  expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      name: 'NPM token',
-      type: 'api_key',
-      connectorBinding: {},
-      secret: { secretValue: 'raw-npm-token' },
-    }),
-  })
-  expect(credentialRes.status).toBe(201)
-  return (await credentialRes.json()) as { id: string; activeVersionId: string }
-}
-
 async function connectMcp(authorization: string) {
   const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
@@ -50,15 +30,7 @@ async function connectMcp(authorization: string) {
     }),
   })
   expect(credentialRes.status).toBe(201)
-  const mcpCredential = (await credentialRes.json()) as { id: string; activeVersionId: string }
-  const connectRes = await jsonFetch('/api/v1/connections', authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      connectorId: 'github',
-      credentialRef: { credentialId: mcpCredential.id, versionId: mcpCredential.activeVersionId },
-    }),
-  })
-  expect(connectRes.status).toBe(201)
+  await credentialRes.json()
 }
 
 describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
@@ -102,10 +74,10 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     })
   })
 
-  it('rejects removed legacy fields (secretRefs, status)', async () => {
+  it('rejects removed legacy fields (credentials, status)', async () => {
     const authorization = await signIn()
     for (const body of [
-      { name: 'Legacy secrets', secretRefs: [{ name: 'NPM_TOKEN', ref: 'vaultver_abc' }] },
+      { name: 'Legacy credentials', credentials: [{ name: 'NPM_TOKEN', ref: 'vaultver_abc' }] },
       { name: 'Legacy status', status: 'active' },
     ]) {
       const res = await jsonFetch('/api/v1/environments', authorization, {
@@ -121,7 +93,6 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
 
   it('creates, reads, updates, versions, and archives environments', async () => {
     const authorization = await signIn()
-    const credential = await createCredential(authorization)
 
     const createRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
@@ -130,7 +101,6 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
         description: 'Default Node.js environment.',
         packages: [{ name: 'tsx', version: 'latest' }],
         variables: { NODE_ENV: { description: 'Runtime mode' } },
-        credentialRefs: [{ credentialId: credential.id, versionId: credential.activeVersionId }],
         networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
         resourceLimits: { memoryMb: 512 },
         runtimeConfig: { image: 'node:24' },
@@ -143,15 +113,13 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       currentVersionId: string
       version: number
       archivedAt: string | null
-      credentialRefs: Array<{ credentialId: string; versionId?: string }>
       status?: unknown
-      secretRefs?: unknown
+      credentials?: unknown
     }
     expect(created.version).toBe(1)
     expect(created.archivedAt).toBeNull()
     expect(created.status).toBeUndefined()
-    expect(created.secretRefs).toBeUndefined()
-    expect(created.credentialRefs).toEqual([{ credentialId: credential.id, versionId: credential.activeVersionId }])
+    expect(created.credentials).toBeUndefined()
 
     const readRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
@@ -200,7 +168,6 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       environmentId: created.id,
       version: 1,
       packages: [{ name: 'tsx', version: 'latest' }],
-      credentialRefs: [{ credentialId: credential.id, versionId: credential.activeVersionId }],
     })
 
     const missingVersionRes = await jsonFetch(`/api/v1/environments/${created.id}/versions/99`, authorization)
@@ -336,68 +303,6 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     })
   })
 
-  it('validates credential references against the vault', async () => {
-    const authorization = await signIn()
-    const credential = await createCredential(authorization)
-
-    const missingCredentialRes = await jsonFetch('/api/v1/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Missing credential workspace',
-        credentialRefs: [{ credentialId: 'cred_missing' }],
-      }),
-    })
-    expect(missingCredentialRes.status).toBe(400)
-    await expect(missingCredentialRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { 'credentialRefs[0]': expect.any(String) } } },
-    })
-
-    const missingVersionRes = await jsonFetch('/api/v1/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Missing version workspace',
-        credentialRefs: [{ credentialId: credential.id, versionId: 'credver_missing' }],
-      }),
-    })
-    expect(missingVersionRes.status).toBe(400)
-    await expect(missingVersionRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { 'credentialRefs[0]': expect.any(String) } } },
-    })
-
-    // A bare credential reference (no pinned version) is valid.
-    const unpinnedRes = await jsonFetch('/api/v1/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Unpinned credential workspace',
-        credentialRefs: [{ credentialId: credential.id }],
-      }),
-    })
-    expect(unpinnedRes.status).toBe(201)
-    await expect(unpinnedRes.json()).resolves.toMatchObject({
-      credentialRefs: [{ credentialId: credential.id }],
-    })
-
-    // Cross-tenant credentials are invisible.
-    const otherAuthorization = await signIn({
-      ...defaultClaims(),
-      sub: 'user_456',
-      email: 'other@example.com',
-      org_id: 'org_flare_456',
-      org_name: 'Other Org',
-    })
-    const crossTenantRes = await jsonFetch('/api/v1/environments', otherAuthorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Cross tenant workspace',
-        credentialRefs: [{ credentialId: credential.id }],
-      }),
-    })
-    expect(crossTenantRes.status).toBe(400)
-    await expect(crossTenantRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { 'credentialRefs[0]': expect.any(String) } } },
-    })
-  })
-
   it('validates network policy, mcp policy, and secret-free configuration objects [spec: environments/api-validation]', async () => {
     const authorization = await signIn()
 
@@ -414,7 +319,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Unknown connector workspace',
-        mcpPolicy: { allowedConnectors: ['linear'] },
+        mcpPolicy: { allowedConnectors: ['missing-connector'] },
       }),
     })
     expect(unknownConnectorRes.status).toBe(400)
