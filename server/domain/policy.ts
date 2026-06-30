@@ -6,8 +6,6 @@
 // effective-policy resolution) stays in server/policy.ts, which reuses
 // mergePolicyObjects from here.
 
-import { agentToolNameForMcp, mcpConnectorToolWildcard } from '@ama/runtime-contracts/agent-tools'
-
 export type FieldErrors = Record<string, string>
 
 export type PolicyScopeLevel = 'organization' | 'team' | 'project'
@@ -33,6 +31,21 @@ function stringRecord(value: unknown) {
 
 function includesWildcard(values: string[], candidate: string) {
   return values.includes('*') || values.includes(candidate)
+}
+
+function agentToolNameForMcp(connectorId: string, toolName: string) {
+  return `mcp__${toolNamePart(connectorId)}__${toolNamePart(toolName)}`
+}
+
+function mcpConnectorToolWildcard(connectorId: string) {
+  return `mcp__${toolNamePart(connectorId)}__*`
+}
+
+function toolNamePart(value: string) {
+  return value
+    .trim()
+    .replaceAll(/[^A-Za-z0-9_-]+/g, '_')
+    .replaceAll(/^_+|_+$/g, '')
 }
 
 export function parsePolicyJson<T>(value: string | null | undefined, fallback: T) {
