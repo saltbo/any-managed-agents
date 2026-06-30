@@ -55,7 +55,7 @@ export function VaultsView({
             <TableCell>
               <StatusBadge value={vault.spec.scope} />
             </TableCell>
-            <TableCell className="max-w-48 truncate">{vault.metadata.pid ?? 'Organization'}</TableCell>
+            <TableCell className="max-w-48 truncate">{vault.metadata.projectId ?? 'Organization'}</TableCell>
             <TableCell>{formatDate(vault.metadata.createdAt)}</TableCell>
             <TableCell>{formatDate(vault.metadata.updatedAt)}</TableCell>
             <TableCell>

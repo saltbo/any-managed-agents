@@ -2,7 +2,6 @@ package workspace
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,17 +16,8 @@ func agentCapabilitiesSection(agentSnapshot map[string]any) string {
 	if skills := agentStringArray(agentSnapshot["skills"]); len(skills) > 0 {
 		parts = append(parts, "Skills: "+strings.Join(skills, ", "))
 	}
-	if tags := agentStringArray(agentSnapshot["capabilityTags"]); len(tags) > 0 {
-		parts = append(parts, "Capability tags: "+strings.Join(tags, ", "))
-	}
 	if subagents := agentSubagentSummaries(agentSnapshot["subagents"]); len(subagents) > 0 {
 		parts = append(parts, "Available subagents: "+strings.Join(subagents, ", "))
-	}
-	if policy, ok := agentSnapshot["handoffPolicy"].(map[string]any); ok && len(policy) > 0 {
-		encoded, err := json.Marshal(policy)
-		if err == nil {
-			parts = append(parts, "Handoff policy: "+string(encoded))
-		}
 	}
 	if len(parts) == 0 {
 		return ""
@@ -58,18 +48,14 @@ func agentSubagentSummaries(value any) []string {
 		if !ok {
 			return "", false
 		}
-		username, _ := subagent["username"].(string)
 		name, _ := subagent["name"].(string)
-		role, _ := subagent["role"].(string)
-		label := strings.TrimSpace(username)
-		if label == "" {
-			label = strings.TrimSpace(name)
-		}
+		description, _ := subagent["description"].(string)
+		label := strings.TrimSpace(name)
 		if label == "" {
 			return "", false
 		}
-		if role != "" {
-			label += " (" + role + ")"
+		if strings.TrimSpace(description) != "" {
+			label += " (" + strings.TrimSpace(description) + ")"
 		}
 		return "@" + label, true
 	})

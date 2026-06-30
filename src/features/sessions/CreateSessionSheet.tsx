@@ -55,12 +55,14 @@ export function CreateSessionSheet({
     mutationFn: () => {
       const resources = sessionResourcesInput(form, memoryStores)
       return api.createSession({
-        agentId: form.agentId,
-        environmentId: form.environmentId,
-        runtime: form.runtime,
+        spec: {
+          agentId: form.agentId,
+          environmentId: form.environmentId,
+          runtime: form.runtime,
+          volumes: resources.volumes,
+          volumeMounts: resources.volumeMounts,
+        },
         prompt: form.prompt.trim(),
-        volumes: resources.volumes,
-        volumeMounts: resources.volumeMounts,
       })
     },
     onSuccess: (session: Session) => {

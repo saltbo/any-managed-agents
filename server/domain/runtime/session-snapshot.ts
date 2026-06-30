@@ -1,5 +1,5 @@
 import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
-import type { AgentHandoff } from '../agent'
+import type { AgentSubagent } from '../agent'
 import {
   defaultEnvironmentPackages,
   type EnvironmentNetworking,
@@ -25,43 +25,18 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
-function normalizeHandoff(value: unknown, capabilityTags: string[]): AgentHandoff {
-  const handoff = objectValue(value)
-  const accepts = objectValue(handoff.accepts)
-  const capabilities = stringArray(accepts.capabilities)
-  return {
-    enabled: handoff.enabled === true,
-    accepts: {
-      roles: stringArray(accepts.roles),
-      capabilities: capabilities.length > 0 ? capabilities : capabilityTags,
-    },
-    targets: Array.isArray(handoff.targets)
-      ? handoff.targets
-          .filter((target): target is Record<string, unknown> => Boolean(target) && typeof target === 'object')
-          .map((target) => ({
-            ...(typeof target.role === 'string' && target.role ? { role: target.role } : {}),
-            ...(typeof target.capability === 'string' && target.capability ? { capability: target.capability } : {}),
-          }))
-          .filter((target) => target.role !== undefined || target.capability !== undefined)
-      : [],
-  }
-}
-
 export function createAgentSnapshot(row: AgentVersionRow, providerId: string) {
-  const capabilityTags = JSON.parse(row.capabilityTags) as string[]
   return {
     id: row.id,
     agentId: row.agentId,
     projectId: row.projectId,
     version: row.version,
-    systemPrompt: row.instructions,
+    systemPrompt: row.systemPrompt,
     provider: providerId,
     model: row.model,
     skills: JSON.parse(row.skills) as string[],
-    subagents: JSON.parse(row.subagents) as Record<string, unknown>[],
-    role: row.role,
-    handoff: normalizeHandoff(JSON.parse(row.handoffPolicy) as Record<string, unknown>, capabilityTags),
-    tools: JSON.parse(row.tools) as Record<string, unknown>[],
+    subagents: JSON.parse(row.subagents) as AgentSubagent[],
+    allowedTools: JSON.parse(row.allowedTools) as string[],
     mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
     createdAt: row.createdAt,
   }

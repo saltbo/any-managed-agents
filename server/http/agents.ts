@@ -1,6 +1,12 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
-import { defaultAgentHandoff, normalizeToolAttachments } from '@server/domain/agent'
+import {
+  ResourceCreateMetadataSchema,
+  ResourceMetadataSchema,
+  ResourcePhaseSchema,
+  ResourceUpdateMetadataSchema,
+  serializeResource,
+} from '@server/contracts/resource-contracts'
+import { type Agent, type AgentSpec, type AgentVersion, defaultAllowedTools } from '@server/domain/agent'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -11,79 +17,78 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
-import {
-  createAgent,
-  readAgentMemory,
-  replaceAgentMemory,
-  resolveHandoffCandidates,
-  type UpdateAgentPatch,
-  updateAgent,
-} from '../usecases/agents'
+import { createAgent, type UpdateAgentPatch, updateAgent } from '../usecases/agents'
 import { AgentArchivedError, AgentValidationError } from '../usecases/ports'
 import { requestId } from './request-context'
 
 type AgentRoutes = OpenAPIHono<DepsEnv>
 
-const JsonObjectSchema = z.record(z.string(), z.unknown())
-// Known fields documented; catchall keeps these policy/config blobs extensible
-// (the domain reads specific keys and ignores the rest).
-const HandoffTargetSchema = z
-  .object({ role: z.string().optional(), capability: z.string().optional() })
-  .strict()
-  .openapi('AgentHandoffTarget')
-const AgentHandoffSchema = z
+const SubagentSchema = z
   .object({
-    enabled: z.boolean(),
-    accepts: z
-      .object({
-        roles: z.array(z.string().min(1).max(80)),
-        capabilities: z.array(z.string().min(1).max(80)),
-      })
-      .strict(),
-    targets: z.array(HandoffTargetSchema),
+    name: z.string().min(1).max(80).openapi({ example: 'reviewer' }),
+    description: z.string().openapi({ example: 'Reviews proposed changes for correctness and risk.' }),
+    systemPrompt: z.string().openapi({ example: 'Review the proposed changes and report risks.' }),
+    model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
+    allowedTools: z.array(z.string()).openapi({ example: ['read', 'grep'] }),
+    skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
+    mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
   })
   .strict()
-  .openapi('AgentHandoff')
-const SubagentSchema = z
-  .object({ username: z.string().optional(), role: z.string().optional() })
-  .catchall(z.unknown())
   .openapi('AgentSubagent')
 
-const TOOL_APPROVAL_MODES = ['none', 'per_call', 'always_required', 'project_policy'] as const
-
-const AgentToolAttachmentSchema = z
+const SubagentInputSchema = z
   .object({
-    name: z.string().openapi({ example: 'repo.read' }),
-    description: z.string().nullable().openapi({ example: 'Read repository metadata and files.' }),
-    inputSchema: JsonObjectSchema.openapi({ example: { type: 'object', properties: { repo: { type: 'string' } } } }),
-    approvalMode: z.enum(TOOL_APPROVAL_MODES).openapi({ example: 'project_policy' }),
-    policyMetadata: JsonObjectSchema.openapi({ example: { sensitivity: 'low' } }),
-  })
-  .openapi('AgentToolAttachment')
-
-const AgentToolAttachmentInputSchema = z
-  .object({
-    name: z.string().min(1).max(120).openapi({ example: 'repo.read' }),
-    description: z.string().max(1000).nullable().optional().openapi({ example: 'Read repository metadata and files.' }),
-    inputSchema: JsonObjectSchema.optional().openapi({
-      example: { type: 'object', properties: { repo: { type: 'string' } } },
+    name: z.string().min(1).max(80).openapi({ example: 'reviewer' }),
+    description: z.string().trim().min(1).max(1000).openapi({
+      example: 'Reviews proposed changes for correctness and risk.',
     }),
-    approvalMode: z.enum(TOOL_APPROVAL_MODES).optional().openapi({ example: 'project_policy' }),
-    policyMetadata: JsonObjectSchema.optional().openapi({ example: { sensitivity: 'low' } }),
+    systemPrompt: z.string().trim().min(1).max(8000).openapi({
+      example: 'Review the proposed changes and report risks.',
+    }),
+    model: z.string().min(1).nullable().optional().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
+    allowedTools: z
+      .array(z.string().min(1).max(120))
+      .max(100)
+      .optional()
+      .openapi({ example: ['read', 'grep'] }),
+    skills: z
+      .array(z.string().min(1).max(256))
+      .max(100)
+      .optional()
+      .openapi({ example: ['ama@code-review'] }),
+    mcpConnectors: z
+      .array(z.string().min(1).max(120))
+      .max(50)
+      .optional()
+      .openapi({ example: ['github'] }),
   })
   .strict()
-  .openapi('AgentToolAttachmentInput')
+  .openapi('AgentSubagentInput')
+
+const AllowedToolsSchema = z.array(z.string().min(1).max(120)).openapi({
+  example: ['read', 'bash', 'edit'],
+})
 
 const AgentSpecSchema = z
   .object({
-    systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
-    provider: z.string().nullable().openapi({ example: 'provider_abc123' }),
+    systemPrompt: z.string().openapi({ example: 'Answer with citations.' }),
+    provider: z.string().nullable().openapi({ example: 'workers-ai' }),
     model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
-    subagents: z.array(SubagentSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
-    role: z.string().nullable().openapi({ example: 'maintainer' }),
-    handoff: AgentHandoffSchema,
-    tools: z.array(AgentToolAttachmentSchema),
+    subagents: z.array(SubagentSchema).openapi({
+      example: [
+        {
+          name: 'reviewer',
+          description: 'Reviews proposed changes for correctness and risk.',
+          systemPrompt: 'Review the proposed changes and report risks.',
+          model: null,
+          allowedTools: ['read', 'grep'],
+          skills: ['ama@code-review'],
+          mcpConnectors: ['github'],
+        },
+      ],
+    }),
+    allowedTools: AllowedToolsSchema,
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
   })
   .openapi('AgentSpec')
@@ -119,41 +124,56 @@ const AgentVersionSchema = z
 
 const AgentPayloadSchema = z
   .object({
-    name: z.string().min(1).max(120).openapi({ example: 'Research assistant' }),
-    description: z.string().max(1000).nullable().optional().openapi({ example: 'Answers with citations.' }),
-    systemPrompt: z.string().max(8000).nullable().optional().openapi({ example: 'Answer with citations.' }),
-    provider: z.string().min(1).nullable().optional().openapi({ example: 'provider_abc123' }),
-    model: z.string().min(1).nullable().optional().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
-    skills: z
-      .array(z.string().min(1).max(256))
-      .max(100)
-      .optional()
-      .openapi({ example: ['ama@code-review'] }),
-    subagents: z
-      .array(SubagentSchema)
-      .max(50)
-      .optional()
-      .openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
-    role: z.string().trim().min(1).max(80).nullable().optional().openapi({ example: 'maintainer' }),
-    handoff: AgentHandoffSchema.optional(),
-    tools: z.array(AgentToolAttachmentInputSchema).max(100).optional(),
-    mcpConnectors: z
-      .array(z.string().min(1).max(120))
-      .max(50)
-      .optional()
-      .openapi({ example: ['github'] }),
+    metadata: ResourceCreateMetadataSchema.openapi({ example: { name: 'Research assistant' } }),
+    spec: z
+      .object({
+        systemPrompt: z.string().trim().min(1).max(8000).openapi({ example: 'Answer with citations.' }),
+        provider: z.string().min(1).nullable().optional().openapi({ example: 'workers-ai' }),
+        model: z.string().min(1).nullable().optional().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
+        skills: z
+          .array(z.string().min(1).max(256))
+          .max(100)
+          .optional()
+          .openapi({ example: ['ama@code-review'] }),
+        subagents: z
+          .array(SubagentInputSchema)
+          .max(50)
+          .optional()
+          .openapi({
+            example: [
+              {
+                name: 'reviewer',
+                description: 'Reviews proposed changes for correctness and risk.',
+                systemPrompt: 'Review the proposed changes and report risks.',
+                allowedTools: ['read', 'grep'],
+              },
+            ],
+          }),
+        allowedTools: AllowedToolsSchema.max(100).optional(),
+        mcpConnectors: z
+          .array(z.string().min(1).max(120))
+          .max(50)
+          .optional()
+          .openapi({ example: ['github'] }),
+      })
+      .strict(),
   })
   .strict()
 
 const CreateAgentSchema = AgentPayloadSchema.openapi('CreateAgentRequest')
-const UpdateAgentSchema = AgentPayloadSchema.partial()
-  .extend({
+const UpdateAgentSchema = z
+  .object({
+    metadata: ResourceUpdateMetadataSchema.optional(),
+    spec: AgentPayloadSchema.shape.spec.partial().optional(),
     archived: z.boolean().optional().openapi({
       description: 'Lifecycle transition: true archives the agent, false unarchives it.',
       example: false,
     }),
   })
   .strict()
+  .refine((body) => body.metadata !== undefined || body.spec !== undefined || body.archived !== undefined, {
+    message: 'Provide metadata, spec, or archived.',
+  })
   .openapi('UpdateAgentRequest')
 
 const AgentParamsSchema = z.object({
@@ -177,44 +197,6 @@ const AgentVersionParamsSchema = AgentParamsSchema.extend({
 const ListQuerySchema = listQuerySchema()
 const AgentListResponseSchema = listResponseSchema('AgentListResponse', AgentSchema)
 const AgentVersionListResponseSchema = listResponseSchema('AgentVersionListResponse', AgentVersionSchema)
-const HandoffCandidateQuerySchema = z.object({
-  role: z.string().trim().min(1).max(80).optional().openapi({ example: 'worker' }),
-  capability: z.string().trim().min(1).max(80).optional().openapi({ example: 'implementation' }),
-})
-const AgentHandoffCandidateSchema = z
-  .object({
-    id: z.string().openapi({ example: 'agent_def456' }),
-    name: z.string().openapi({ example: 'Implementation worker' }),
-    role: z.string().nullable().openapi({ example: 'worker' }),
-    capabilities: z.array(z.string()).openapi({ example: ['implementation'] }),
-  })
-  .openapi('AgentHandoffCandidate')
-const AgentHandoffCandidateListResponseSchema = listResponseSchema(
-  'AgentHandoffCandidateListResponse',
-  AgentHandoffCandidateSchema,
-)
-const AgentMemorySchema = z
-  .object({
-    metadata: ResourceMetadataSchema,
-    spec: z
-      .object({
-        agentId: z.string().openapi({ example: 'agent_abc123' }),
-        content: z.string().openapi({ example: 'Previous heartbeat checked open PRs and deferred billing export.' }),
-        metadata: JsonObjectSchema.openapi({ example: { format: 'markdown' } }),
-      })
-      .openapi('AgentMemorySpec'),
-    status: z.object({ phase: ResourcePhaseSchema }).openapi('AgentMemoryStatus'),
-  })
-  .openapi('AgentMemory')
-const ReplaceAgentMemorySchema = z
-  .object({
-    content: z.string().max(128_000).openapi({
-      example: 'Checked stale tasks. Follow up on repo resource migration next heartbeat.',
-    }),
-    metadata: JsonObjectSchema.optional().openapi({ example: { format: 'markdown' } }),
-  })
-  .strict()
-  .openapi('ReplaceAgentMemoryRequest')
 
 function domainValidation(message: string, fields: Record<string, string>) {
   return { error: { type: 'validation_error', message, details: { fields } } } as const
@@ -321,64 +303,6 @@ const readAgentVersionRoute = createRoute({
   },
 })
 
-const listAgentHandoffCandidatesRoute = createRoute({
-  method: 'get',
-  path: '/{agentId}/handoff-candidates',
-  operationId: 'listAgentHandoffCandidates',
-  tags: ['Agents'],
-  summary: 'List handoff candidate agents',
-  description:
-    'Resolves live agents in the same project that match the requested role or capability, or the agent handoff policy targets. AMA only resolves candidates; the requesting product decides how a handoff affects its own workflow records.',
-  ...AuthenticatedOperation,
-  request: { params: AgentParamsSchema, query: HandoffCandidateQuerySchema },
-  responses: {
-    200: {
-      description: 'Handoff candidates',
-      content: { 'application/json': { schema: AgentHandoffCandidateListResponseSchema } },
-    },
-    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-  },
-})
-
-const readAgentMemoryRoute = createRoute({
-  method: 'get',
-  path: '/{agentId}/memory',
-  operationId: 'readAgentMemory',
-  tags: ['Agents'],
-  summary: 'Read agent memory',
-  ...AuthenticatedOperation,
-  request: { params: AgentParamsSchema },
-  responses: {
-    200: { description: 'Agent memory', content: { 'application/json': { schema: AgentMemorySchema } } },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    409: { description: 'Agent memory disabled', content: { 'application/json': { schema: ErrorResponseSchema } } },
-  },
-})
-
-const replaceAgentMemoryRoute = createRoute({
-  method: 'put',
-  path: '/{agentId}/memory',
-  operationId: 'replaceAgentMemory',
-  tags: ['Agents'],
-  summary: 'Replace agent memory',
-  description: 'Idempotent whole replacement of the agent memory singleton.',
-  ...AuthenticatedOperation,
-  request: {
-    params: AgentParamsSchema,
-    body: { required: true, content: { 'application/json': { schema: ReplaceAgentMemorySchema } } },
-  },
-  responses: {
-    200: { description: 'Replaced agent memory', content: { 'application/json': { schema: AgentMemorySchema } } },
-    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    409: { description: 'Agent memory disabled', content: { 'application/json': { schema: ErrorResponseSchema } } },
-  },
-})
-
 // Registration order is load-bearing: requireAuth is the per-route auth wall and
 // static segments register before parameter segments. The assembler in app.ts
 // calls this at the agents resource's original mount position.
@@ -413,7 +337,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         {
-          data: page.rows,
+          data: page.rows.map(serializeAgent),
           pagination: { limit, nextCursor, hasMore: page.hasMore },
         },
         200,
@@ -428,11 +352,11 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       }
       try {
         const agent = await createAgent(deps, auth, {
-          name: body.name,
-          description: body.description ?? null,
-          config: configFromPayload(body),
+          name: body.metadata.name,
+          description: body.metadata.description ?? null,
+          spec: specFromPayload(body),
         })
-        return c.json(agent, 201)
+        return c.json(serializeAgent(agent), 201)
       } catch (error) {
         return validationOr(c, error)
       }
@@ -448,7 +372,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!agent) {
         return notFound(c)
       }
-      return c.json(agent, 200)
+      return c.json(serializeAgent(agent), 200)
     })
     .openapi(updateAgentRoute, async (c) => {
       const { agentId } = c.req.valid('param')
@@ -487,7 +411,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
             after: { archivedAt: null },
           })
         }
-        return c.json(result.agent, 200)
+        return c.json(serializeAgent(result.agent), 200)
       } catch (error) {
         if (error instanceof AgentArchivedError) {
           return c.json({ error: { type: 'conflict', message: error.message } }, 409)
@@ -509,7 +433,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       const versions = await deps.agents.listVersions(auth.project.id, agentId)
       return c.json(
         {
-          data: versions,
+          data: versions.map(serializeAgentVersion),
           pagination: { limit: versions.length, nextCursor: null, hasMore: false },
         },
         200,
@@ -530,105 +454,61 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!row) {
         return c.json({ error: { type: 'not_found', message: 'Agent version not found' } }, 404)
       }
-      return c.json(row, 200)
-    })
-    .openapi(listAgentHandoffCandidatesRoute, async (c) => {
-      const { agentId } = c.req.valid('param')
-      const { role, capability } = c.req.valid('query')
-      const deps = c.get('deps')
-      const auth = await requireAuth(c)
-      if (auth instanceof Response) {
-        return auth
-      }
-      const agent = await deps.agents.find(auth.project.id, agentId)
-      if (!agent) {
-        return notFound(c)
-      }
-      try {
-        const candidates = await resolveHandoffCandidates(deps, auth.project.id, agent, {
-          ...(role !== undefined ? { role } : {}),
-          ...(capability !== undefined ? { capability } : {}),
-        })
-        return c.json(
-          { data: candidates, pagination: { limit: candidates.length, nextCursor: null, hasMore: false } },
-          200,
-        )
-      } catch (error) {
-        return validationOr(c, error)
-      }
-    })
-    .openapi(readAgentMemoryRoute, async (c) => {
-      const { agentId } = c.req.valid('param')
-      const deps = c.get('deps')
-      const auth = await requireAuth(c)
-      if (auth instanceof Response) {
-        return auth
-      }
-      const agent = await deps.agents.find(auth.project.id, agentId)
-      if (!agent) {
-        return notFound(c)
-      }
-      const memory = await readAgentMemory(deps, auth.project.id, agent)
-      return c.json(memory, 200)
-    })
-    .openapi(replaceAgentMemoryRoute, async (c) => {
-      const { agentId } = c.req.valid('param')
-      const body = c.req.valid('json')
-      const deps = c.get('deps')
-      const auth = await requireAuth(c)
-      if (auth instanceof Response) {
-        return auth
-      }
-      const agent = await deps.agents.find(auth.project.id, agentId)
-      if (!agent) {
-        return notFound(c)
-      }
-      try {
-        const memory = await replaceAgentMemory(deps, auth.project.id, agent, {
-          content: body.content,
-          metadata: body.metadata ?? {},
-        })
-        return c.json(memory, 200)
-      } catch (error) {
-        return validationOr(c, error)
-      }
+      return c.json(serializeAgentVersion(row), 200)
     })
 }
 
 // --- helpers ---
 
 // Builds the usecase patch from the validated PATCH body: only present fields
-// are forwarded (so an absent field is distinct from an explicit null), and
-// tool inputs are normalized to the attachment contract.
+// are forwarded, so an absent field is distinct from an explicit null.
 function patchFromBody(body: z.infer<typeof UpdateAgentSchema>): UpdateAgentPatch {
+  const spec = body.spec
   return {
-    ...(body.name !== undefined ? { name: body.name } : {}),
-    ...(body.description !== undefined ? { description: body.description } : {}),
-    ...(body.systemPrompt !== undefined ? { systemPrompt: body.systemPrompt } : {}),
-    ...(body.provider !== undefined ? { provider: body.provider } : {}),
-    ...(body.model !== undefined ? { model: body.model } : {}),
-    ...(body.skills !== undefined ? { skills: body.skills } : {}),
-    ...(body.subagents !== undefined ? { subagents: body.subagents } : {}),
-    ...(body.role !== undefined ? { role: body.role } : {}),
-    ...(body.handoff !== undefined ? { handoff: body.handoff } : {}),
-    ...(body.tools !== undefined ? { tools: normalizeToolAttachments(body.tools) } : {}),
-    ...(body.mcpConnectors !== undefined ? { mcpConnectors: body.mcpConnectors } : {}),
+    ...(body.metadata?.name !== undefined ? { name: body.metadata.name } : {}),
+    ...(body.metadata?.description !== undefined ? { description: body.metadata.description } : {}),
+    ...(spec?.systemPrompt !== undefined ? { systemPrompt: spec.systemPrompt } : {}),
+    ...(spec?.provider !== undefined ? { provider: spec.provider } : {}),
+    ...(spec?.model !== undefined ? { model: spec.model } : {}),
+    ...(spec?.skills !== undefined ? { skills: spec.skills } : {}),
+    ...(spec?.subagents !== undefined ? { subagents: normalizeSubagents(spec.subagents) } : {}),
+    ...(spec?.allowedTools !== undefined ? { allowedTools: spec.allowedTools } : {}),
+    ...(spec?.mcpConnectors !== undefined ? { mcpConnectors: spec.mcpConnectors } : {}),
     ...(body.archived !== undefined ? { archived: body.archived } : {}),
   }
 }
 
-function configFromPayload(body: z.infer<typeof AgentPayloadSchema>) {
+function specFromPayload(body: z.infer<typeof AgentPayloadSchema>): AgentSpec {
+  const spec = body.spec
   return {
-    systemPrompt: body.systemPrompt ?? null,
-    provider: body.provider ?? null,
-    model: body.model ?? null,
-    skills: body.skills ?? [],
-    subagents: body.subagents ?? [],
-    role: body.role ?? null,
-    handoff: body.handoff ?? defaultAgentHandoff(),
-    tools: normalizeToolAttachments(body.tools ?? []),
-    mcpConnectors: body.mcpConnectors ?? [],
+    systemPrompt: spec.systemPrompt,
+    provider: spec.provider ?? null,
+    model: spec.model ?? null,
+    skills: spec.skills ?? [],
+    subagents: normalizeSubagents(spec.subagents ?? []),
+    allowedTools: spec.allowedTools ?? defaultAllowedTools(),
+    mcpConnectors: spec.mcpConnectors ?? [],
   }
+}
+
+function normalizeSubagents(subagents: z.infer<typeof SubagentInputSchema>[]): AgentSpec['subagents'] {
+  return subagents.map((subagent) => ({
+    name: subagent.name,
+    description: subagent.description,
+    systemPrompt: subagent.systemPrompt,
+    model: subagent.model ?? null,
+    allowedTools: subagent.allowedTools ?? defaultAllowedTools(),
+    skills: subagent.skills ?? [],
+    mcpConnectors: subagent.mcpConnectors ?? [],
+  }))
+}
+
+function serializeAgent(agent: Agent) {
+  return serializeResource(agent)
+}
+
+function serializeAgentVersion(version: AgentVersion) {
+  return serializeResource(version)
 }
 
 function notFound(c: Parameters<Parameters<AgentRoutes['openapi']>[1]>[0]) {

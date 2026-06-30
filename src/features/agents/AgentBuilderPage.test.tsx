@@ -22,7 +22,7 @@ import { AgentBuilderPage } from './AgentBuilderPage'
 const now = '2026-05-23T00:00:00.000Z'
 
 function buildAgent(overrides: AgentOverrides = {}): Agent {
-  return resourceAgent({ skills: [], tools: [], createdAt: now, updatedAt: now, ...overrides })
+  return resourceAgent({ skills: [], allowedTools: [], createdAt: now, updatedAt: now, ...overrides })
 }
 
 function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {

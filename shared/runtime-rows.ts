@@ -89,18 +89,13 @@ export interface AgentRow {
   projectId: string
   name: string
   description: string | null
-  instructions: string | null
+  systemPrompt: string
   providerId: string | null
   model: string | null
   skills: string
   subagents: string
-  role: string | null
-  capabilityTags: string
-  handoffPolicy: string
-  memoryPolicy: string
-  tools: string
+  allowedTools: string
   mcpConnectors: string
-  metadata: string
   archivedAt: string | null
   currentVersionId: string | null
   createdAt: string
@@ -112,18 +107,13 @@ export interface AgentVersionRow {
   agentId: string
   projectId: string
   version: number
-  instructions: string | null
+  systemPrompt: string
   providerId: string | null
   model: string | null
   skills: string
   subagents: string
-  role: string | null
-  capabilityTags: string
-  handoffPolicy: string
-  memoryPolicy: string
-  tools: string
+  allowedTools: string
   mcpConnectors: string
-  metadata: string
   createdAt: string
 }
 

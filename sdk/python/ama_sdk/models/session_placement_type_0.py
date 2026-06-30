@@ -27,17 +27,11 @@ class SessionPlacementType0:
             hosting_mode (EnvironmentHostingMode):
             provider (str):  Example: workers-ai.
             model (None | str):  Example: @cf/moonshotai/kimi-k2.6.
-            driver (None | str):  Example: ama-cloud.
-            backend (None | str):  Example: ama-cloud.
-            protocol (None | str):  Example: ama-runtime-rpc.
      """
 
     hosting_mode: EnvironmentHostingMode
     provider: str
     model: None | str
-    driver: None | str
-    backend: None | str
-    protocol: None | str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -52,15 +46,6 @@ class SessionPlacementType0:
         model: None | str
         model = self.model
 
-        driver: None | str
-        driver = self.driver
-
-        backend: None | str
-        backend = self.backend
-
-        protocol: None | str
-        protocol = self.protocol
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -68,9 +53,6 @@ class SessionPlacementType0:
             "hostingMode": hosting_mode,
             "provider": provider,
             "model": model,
-            "driver": driver,
-            "backend": backend,
-            "protocol": protocol,
         })
 
         return field_dict
@@ -95,37 +77,10 @@ class SessionPlacementType0:
         model = _parse_model(d.pop("model"))
 
 
-        def _parse_driver(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        driver = _parse_driver(d.pop("driver"))
-
-
-        def _parse_backend(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        backend = _parse_backend(d.pop("backend"))
-
-
-        def _parse_protocol(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        protocol = _parse_protocol(d.pop("protocol"))
-
-
         session_placement_type_0 = cls(
             hosting_mode=hosting_mode,
             provider=provider,
             model=model,
-            driver=driver,
-            backend=backend,
-            protocol=protocol,
         )
 
 

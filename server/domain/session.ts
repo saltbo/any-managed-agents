@@ -1,5 +1,5 @@
 import type { AmaSessionEventType } from '@shared/session-events'
-import type { AgentHandoff } from './agent'
+import type { AgentSubagent } from './agent'
 import type {
   EnvironmentNetworking,
   EnvironmentPackages,
@@ -109,14 +109,12 @@ export interface SessionAgentSnapshot {
   agentId: string
   projectId: string
   version: number
-  systemPrompt: string | null
+  systemPrompt: string
   provider: string
   model: string | null
   skills: string[]
-  subagents: Record<string, unknown>[]
-  role: string | null
-  handoff: AgentHandoff
-  tools: Record<string, unknown>[]
+  subagents: AgentSubagent[]
+  allowedTools: string[]
   mcpConnectors: string[]
   createdAt: string
 }
@@ -316,15 +314,4 @@ function stringRecord(value: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(objectRecord(value)).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   )
-}
-
-// Composes the session prompt with the agent's persisted memory block when
-// memory is enabled and present. Pure given the resolved memory content.
-export function composePrompt(memoryContent: string | null, prompt: string): string {
-  const content = memoryContent?.trim()
-  if (!content) {
-    return prompt
-  }
-  const memoryBlock = ['Agent memory for this agent:', content].join('\n')
-  return `${memoryBlock}\n\nCurrent task:\n${prompt}`
 }

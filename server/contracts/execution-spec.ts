@@ -1,6 +1,7 @@
 import { z } from '@hono/zod-openapi'
 import { normalizeGitRepositoryUrl } from '../domain/git-repository'
 import { MEMORY_STORE_ACCESS } from '../domain/memory-store'
+import { RuntimeSchema } from './environment-contracts'
 
 // Shared execution-spec building blocks that Session and Trigger both use
 // (docs/api-v1-design.md §1.7). Volumes are the single mountable resource model:
@@ -82,6 +83,45 @@ export const VolumeMountSchema = z
   })
   .strict()
   .openapi('VolumeMount')
+
+export const EnvFromEntrySchema = z
+  .object({
+    type: z.literal('secret').openapi({ example: 'secret' }),
+    name: z.string().min(1).max(120).openapi({ example: 'API_TOKEN' }),
+    secretRef: SecretRefSchema.openapi({
+      example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
+    }),
+    key: z.string().min(1).max(253).optional().openapi({ example: 'token' }),
+  })
+  .strict()
+  .openapi('EnvFromEntry')
+
+export const ExecutionEnvSchema = z
+  .record(z.string().min(1).max(120), z.string().max(16_000))
+  .openapi('ExecutionEnv', { example: { AK_API_URL: 'https://ak.example.com' } })
+
+export const ExecutionSpecSchema = z
+  .object({
+    agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
+    environmentId: z.string().min(1).nullable().openapi({ example: 'env_abc123' }),
+    runtime: RuntimeSchema.openapi({ example: 'codex' }),
+    env: ExecutionEnvSchema,
+    envFrom: z.array(EnvFromEntrySchema).max(50),
+    volumes: z.array(VolumeSchema).max(50),
+    volumeMounts: z.array(VolumeMountSchema).max(50),
+  })
+  .strict()
+  .openapi('ExecutionSpec')
+
+export const ExecutionSpecInputSchema = ExecutionSpecSchema.extend({
+  environmentId: z.string().min(1).nullable().optional().openapi({ example: 'env_abc123' }),
+  env: ExecutionEnvSchema.optional(),
+  envFrom: z.array(EnvFromEntrySchema).max(50).optional(),
+  volumes: z.array(VolumeSchema).max(50).optional(),
+  volumeMounts: z.array(VolumeMountSchema).max(50).optional(),
+})
+  .strict()
+  .openapi('ExecutionSpecInput')
 
 export type Volume = z.infer<typeof VolumeSchema>
 export type VolumeMount = z.infer<typeof VolumeMountSchema>

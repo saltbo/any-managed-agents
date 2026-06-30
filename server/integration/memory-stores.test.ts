@@ -22,17 +22,20 @@ describe('[CF] /api/v1/memory-stores', () => {
     const authorization = await signIn()
     const createRes = await jsonFetch('/api/v1/memory-stores', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Team memory', description: 'Review conventions' }),
+      body: JSON.stringify({
+        metadata: { name: 'Team memory', description: 'Review conventions' },
+        spec: {},
+      }),
     })
     expect(createRes.status).toBe(201)
     const store = (await createRes.json()) as {
       metadata: { uid: string; name: string; description: string | null; archivedAt: string | null }
-      spec: { metadata: Record<string, unknown> }
+      spec: Record<string, never>
       status: { phase: string }
     }
     expect(store).toMatchObject({
       metadata: { name: 'Team memory', description: 'Review conventions', archivedAt: null },
-      spec: { metadata: {} },
+      spec: {},
       status: { phase: 'active' },
     })
 

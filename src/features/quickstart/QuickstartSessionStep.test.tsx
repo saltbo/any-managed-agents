@@ -34,10 +34,7 @@ function listEnvelope<T>(data: T[]) {
 function buildAgent(overrides: AgentOverrides = {}): Agent {
   return resourceAgent({
     skills: [],
-    tools: [
-      { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-    ],
+    allowedTools: ['read', 'write'],
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -63,9 +60,7 @@ const defaultAgentSnapshot: import('@/lib/amarpc').SessionAgentSnapshot = {
   model: '@cf/moonshotai/kimi-k2.6',
   skills: [],
   subagents: [],
-  role: null,
-  handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-  tools: [],
+  allowedTools: ['read', 'bash'],
   mcpConnectors: [],
   createdAt: '2026-05-23T00:00:00.000Z',
 }
@@ -194,7 +189,7 @@ describe('QuickstartSessionStep — no agent, no environment', () => {
 
 describe('QuickstartSessionStep — agent without sandbox execution', () => {
   const agentNoSandbox = buildAgent({
-    tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+    allowedTools: ['read'],
   })
 
   it('shows Add sandbox execution button when agent lacks bash', () => {
@@ -231,7 +226,7 @@ describe('QuickstartSessionStep — agent without sandbox execution', () => {
 
   it('calls updateAgent when Add sandbox execution is clicked', async () => {
     const updatedAgent = buildAgent({
-      tools: [{ name: 'bash', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+      allowedTools: ['bash'],
     })
     let patchCalled = false
     server.use(
@@ -257,7 +252,7 @@ describe('QuickstartSessionStep — agent without sandbox execution', () => {
 
 describe('QuickstartSessionStep — agent with sandbox execution enabled', () => {
   const agentWithSandbox = buildAgent({
-    tools: [{ name: 'bash', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+    allowedTools: ['bash'],
   })
 
   it('shows Sandbox execution enabled and disables the button', () => {
@@ -278,7 +273,7 @@ describe('QuickstartSessionStep — agent with sandbox execution enabled', () =>
 
 describe('QuickstartSessionStep — agent with wildcard tools (*)', () => {
   const agentWildcard = buildAgent({
-    tools: [{ name: '*', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+    allowedTools: ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', 'fetch', 'web_search'],
   })
 
   it('shows Sandbox execution enabled via wildcard', () => {
@@ -294,12 +289,12 @@ describe('QuickstartSessionStep — agent with wildcard tools (*)', () => {
   })
 })
 
-// ─── Agent with no tools — sandbox enabled when tools is empty ───
+// ─── Agent without bash — sandbox not enabled ───
 
-describe('QuickstartSessionStep — agent with empty tools list', () => {
-  const agentNoTools = buildAgent({ tools: [] })
+describe('QuickstartSessionStep — agent without sandbox execution', () => {
+  const agentNoTools = buildAgent({ allowedTools: ['read'] })
 
-  it('shows Sandbox execution enabled when tools list is empty', () => {
+  it('shows Sandbox execution disabled when bash is not allowed', () => {
     server.use(http.post('*/api/v1/sessions', () => new HttpResponse(null, { status: 404 })))
     renderStep({
       agent: agentNoTools,
@@ -853,7 +848,7 @@ describe('QuickstartSessionStep — session preview with mixed transcript', () =
 describe('QuickstartSessionStep — enableSandbox error handling', () => {
   it('button re-enables when updateAgent rejects', async () => {
     const agentNoSandbox = buildAgent({
-      tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+      allowedTools: ['read'],
     })
     server.use(
       http.post('*/api/v1/sessions', () => new HttpResponse(null, { status: 404 })),

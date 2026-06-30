@@ -7,7 +7,7 @@ import { queryKeys } from '@/lib/query-keys'
 export function useTriggerActions() {
   const queryClient = useQueryClient()
   const pauseTrigger = useMutation({
-    mutationFn: (id: string) => api.updateTrigger(id, { suspend: true }),
+    mutationFn: (id: string) => api.updateTrigger(id, { spec: { suspend: true } }),
     onSuccess: () => {
       toast.success('Trigger paused')
       void queryClient.invalidateQueries({ queryKey: queryKeys.triggers.all })
@@ -15,7 +15,7 @@ export function useTriggerActions() {
     onError: (error) => toast.error(errorMessage(error)),
   })
   const resumeTrigger = useMutation({
-    mutationFn: (id: string) => api.updateTrigger(id, { suspend: false }),
+    mutationFn: (id: string) => api.updateTrigger(id, { spec: { suspend: false } }),
     onSuccess: () => {
       toast.success('Trigger resumed')
       void queryClient.invalidateQueries({ queryKey: queryKeys.triggers.all })

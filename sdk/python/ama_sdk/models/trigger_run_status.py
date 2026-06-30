@@ -26,6 +26,8 @@ class TriggerRunStatus:
     """ 
         Attributes:
             phase (TriggerRunStatusPhase):  Example: dispatched.
+            idempotency_key (str):  Example: trigger_abc123:2026-05-26T12:00:00.000Z.
+            correlation_id (str):  Example: schedule:trigger_abc123:2026-05-26T12:00:00.000Z.
             heartbeat_at (datetime.datetime | None):  Example: 2026-05-26T12:01:00.000Z.
             triggered_at (datetime.datetime):  Example: 2026-05-26T12:01:00.000Z.
             session_id (None | str):  Example: session_abc123.
@@ -33,6 +35,8 @@ class TriggerRunStatus:
      """
 
     phase: TriggerRunStatusPhase
+    idempotency_key: str
+    correlation_id: str
     heartbeat_at: datetime.datetime | None
     triggered_at: datetime.datetime
     session_id: None | str
@@ -45,6 +49,10 @@ class TriggerRunStatus:
 
     def to_dict(self) -> dict[str, Any]:
         phase = self.phase.value
+
+        idempotency_key = self.idempotency_key
+
+        correlation_id = self.correlation_id
 
         heartbeat_at: None | str
         if isinstance(self.heartbeat_at, datetime.datetime):
@@ -65,6 +73,8 @@ class TriggerRunStatus:
         field_dict.update(self.additional_properties)
         field_dict.update({
             "phase": phase,
+            "idempotencyKey": idempotency_key,
+            "correlationId": correlation_id,
             "heartbeatAt": heartbeat_at,
             "triggeredAt": triggered_at,
             "sessionId": session_id,
@@ -82,6 +92,10 @@ class TriggerRunStatus:
 
 
 
+
+        idempotency_key = d.pop("idempotencyKey")
+
+        correlation_id = d.pop("correlationId")
 
         def _parse_heartbeat_at(data: object) -> datetime.datetime | None:
             if data is None:
@@ -124,6 +138,8 @@ class TriggerRunStatus:
 
         trigger_run_status = cls(
             phase=phase,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
             heartbeat_at=heartbeat_at,
             triggered_at=triggered_at,
             session_id=session_id,

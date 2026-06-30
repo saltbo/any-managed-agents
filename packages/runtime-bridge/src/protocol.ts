@@ -104,12 +104,9 @@ export function agentSystemPrompt(request: RuntimeProviderRequest): string | und
   const snapshot = request.agentSnapshot
   if (!snapshot || typeof snapshot !== 'object') return undefined
   const sections: string[] = []
-  for (const key of ['systemPrompt', 'instructions']) {
-    const value = snapshot[key]
-    if (typeof value === 'string' && value.trim()) {
-      sections.push(value.trim())
-      break
-    }
+  const systemPrompt = snapshot.systemPrompt
+  if (typeof systemPrompt === 'string' && systemPrompt.trim()) {
+    sections.push(systemPrompt.trim())
   }
   const capabilitySection = agentCapabilitiesSection(snapshot)
   if (capabilitySection) sections.push(capabilitySection)
@@ -120,12 +117,8 @@ function agentCapabilitiesSection(snapshot: Record<string, unknown>): string | u
   const parts: string[] = []
   const skills = stringArray(snapshot.skills)
   if (skills.length > 0) parts.push(`Skills: ${skills.join(', ')}`)
-  const tags = stringArray(snapshot.capabilityTags)
-  if (tags.length > 0) parts.push(`Capability tags: ${tags.join(', ')}`)
   const subagents = subagentSummaries(snapshot.subagents)
   if (subagents.length > 0) parts.push(`Available subagents: ${subagents.join(', ')}`)
-  const handoffPolicy = objectValue(snapshot.handoffPolicy)
-  if (Object.keys(handoffPolicy).length > 0) parts.push(`Handoff policy: ${JSON.stringify(handoffPolicy)}`)
   return parts.length > 0 ? `## Agent Capabilities\n\n${parts.join('\n')}` : undefined
 }
 
@@ -143,10 +136,8 @@ function subagentSummaries(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((item) => {
     const subagent = objectValue(item)
-    const username = typeof subagent.username === 'string' ? subagent.username.trim() : ''
     const name = typeof subagent.name === 'string' ? subagent.name.trim() : ''
-    const role = typeof subagent.role === 'string' ? subagent.role.trim() : ''
-    const label = username || name
-    return label ? [`@${label}${role ? ` (${role})` : ''}`] : []
+    const description = typeof subagent.description === 'string' ? subagent.description.trim() : ''
+    return name ? [`@${name}${description ? ` (${description})` : ''}`] : []
   })
 }

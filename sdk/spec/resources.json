@@ -25,9 +25,6 @@
           { "name": "create", "operationId": "createAgent" },
           { "name": "get", "operationId": "readAgent" },
           { "name": "update", "operationId": "updateAgent" },
-          { "name": "listHandoffCandidates", "operationId": "listAgentHandoffCandidates" },
-          { "name": "getMemory", "operationId": "readAgentMemory" },
-          { "name": "replaceMemory", "operationId": "replaceAgentMemory" },
           { "name": "listVersions", "operationId": "listAgentVersions" },
           { "name": "getVersion", "operationId": "readAgentVersion" }
         ] },

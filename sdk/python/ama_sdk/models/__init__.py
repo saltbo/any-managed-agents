@@ -1,27 +1,11 @@
 """ Contains all the data models used in inputs/outputs """
 
 from .agent import Agent
-from .agent_handoff import AgentHandoff
-from .agent_handoff_accepts import AgentHandoffAccepts
-from .agent_handoff_candidate import AgentHandoffCandidate
-from .agent_handoff_candidate_list_response import AgentHandoffCandidateListResponse
-from .agent_handoff_target import AgentHandoffTarget
 from .agent_list_response import AgentListResponse
-from .agent_memory import AgentMemory
-from .agent_memory_spec import AgentMemorySpec
-from .agent_memory_spec_metadata import AgentMemorySpecMetadata
-from .agent_memory_status import AgentMemoryStatus
 from .agent_spec import AgentSpec
 from .agent_status import AgentStatus
 from .agent_subagent import AgentSubagent
-from .agent_tool_attachment import AgentToolAttachment
-from .agent_tool_attachment_approval_mode import AgentToolAttachmentApprovalMode
-from .agent_tool_attachment_input import AgentToolAttachmentInput
-from .agent_tool_attachment_input_approval_mode import AgentToolAttachmentInputApprovalMode
-from .agent_tool_attachment_input_input_schema import AgentToolAttachmentInputInputSchema
-from .agent_tool_attachment_input_policy_metadata import AgentToolAttachmentInputPolicyMetadata
-from .agent_tool_attachment_input_schema import AgentToolAttachmentInputSchema
-from .agent_tool_attachment_policy_metadata import AgentToolAttachmentPolicyMetadata
+from .agent_subagent_input import AgentSubagentInput
 from .agent_version import AgentVersion
 from .agent_version_list_response import AgentVersionListResponse
 from .agent_version_status import AgentVersionStatus
@@ -60,6 +44,7 @@ from .connector_tool_input_schema import ConnectorToolInputSchema
 from .connector_tool_policy_metadata import ConnectorToolPolicyMetadata
 from .connector_trust_level import ConnectorTrustLevel
 from .create_agent_request import CreateAgentRequest
+from .create_agent_request_spec import CreateAgentRequestSpec
 from .create_auth_session_request import CreateAuthSessionRequest
 from .create_budget_request import CreateBudgetRequest
 from .create_budget_request_limit_type import CreateBudgetRequestLimitType
@@ -67,14 +52,17 @@ from .create_budget_request_metadata import CreateBudgetRequestMetadata
 from .create_budget_request_scope import CreateBudgetRequestScope
 from .create_budget_request_window import CreateBudgetRequestWindow
 from .create_environment_request import CreateEnvironmentRequest
-from .create_environment_request_variables import CreateEnvironmentRequestVariables
-from .create_environment_request_variables_additional_property import CreateEnvironmentRequestVariablesAdditionalProperty
+from .create_environment_request_metadata import CreateEnvironmentRequestMetadata
+from .create_environment_request_spec import CreateEnvironmentRequestSpec
+from .create_environment_request_spec_variables import CreateEnvironmentRequestSpecVariables
+from .create_environment_request_spec_variables_additional_property import CreateEnvironmentRequestSpecVariablesAdditionalProperty
 from .create_http_trigger_run_request import CreateHttpTriggerRunRequest
 from .create_lease_request import CreateLeaseRequest
 from .create_memory_store_memory_request import CreateMemoryStoreMemoryRequest
 from .create_memory_store_memory_request_metadata import CreateMemoryStoreMemoryRequestMetadata
 from .create_memory_store_request import CreateMemoryStoreRequest
 from .create_memory_store_request_metadata import CreateMemoryStoreRequestMetadata
+from .create_memory_store_request_spec import CreateMemoryStoreRequestSpec
 from .create_project_request import CreateProjectRequest
 from .create_runner_request import CreateRunnerRequest
 from .create_runner_request_auth_mode import CreateRunnerRequestAuthMode
@@ -83,22 +71,19 @@ from .create_session_events_request import CreateSessionEventsRequest
 from .create_session_message_request import CreateSessionMessageRequest
 from .create_session_message_request_type import CreateSessionMessageRequestType
 from .create_session_request import CreateSessionRequest
-from .create_session_request_env import CreateSessionRequestEnv
-from .create_session_request_metadata import CreateSessionRequestMetadata
-from .create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
 from .create_trigger_request import CreateTriggerRequest
-from .create_trigger_request_source_type_0 import CreateTriggerRequestSourceType0
-from .create_trigger_request_source_type_0_schedule import CreateTriggerRequestSourceType0Schedule
-from .create_trigger_request_source_type_0_schedule_type import CreateTriggerRequestSourceType0ScheduleType
-from .create_trigger_request_source_type_0_type import CreateTriggerRequestSourceType0Type
-from .create_trigger_request_source_type_1 import CreateTriggerRequestSourceType1
-from .create_trigger_request_source_type_1_type import CreateTriggerRequestSourceType1Type
-from .create_trigger_request_template import CreateTriggerRequestTemplate
-from .create_trigger_request_template_metadata import CreateTriggerRequestTemplateMetadata
-from .create_trigger_request_template_metadata_annotations import CreateTriggerRequestTemplateMetadataAnnotations
-from .create_trigger_request_template_metadata_labels import CreateTriggerRequestTemplateMetadataLabels
-from .create_trigger_request_template_spec import CreateTriggerRequestTemplateSpec
-from .create_trigger_request_template_spec_env import CreateTriggerRequestTemplateSpecEnv
+from .create_trigger_request_spec import CreateTriggerRequestSpec
+from .create_trigger_request_spec_source_type_0 import CreateTriggerRequestSpecSourceType0
+from .create_trigger_request_spec_source_type_0_schedule import CreateTriggerRequestSpecSourceType0Schedule
+from .create_trigger_request_spec_source_type_0_schedule_type import CreateTriggerRequestSpecSourceType0ScheduleType
+from .create_trigger_request_spec_source_type_0_type import CreateTriggerRequestSpecSourceType0Type
+from .create_trigger_request_spec_source_type_1 import CreateTriggerRequestSpecSourceType1
+from .create_trigger_request_spec_source_type_1_type import CreateTriggerRequestSpecSourceType1Type
+from .create_trigger_request_spec_template import CreateTriggerRequestSpecTemplate
+from .create_trigger_request_spec_template_metadata import CreateTriggerRequestSpecTemplateMetadata
+from .create_trigger_request_spec_template_metadata_annotations import CreateTriggerRequestSpecTemplateMetadataAnnotations
+from .create_trigger_request_spec_template_metadata_labels import CreateTriggerRequestSpecTemplateMetadataLabels
+from .create_trigger_request_spec_template_spec import CreateTriggerRequestSpecTemplateSpec
 from .create_vault_credential_request import CreateVaultCredentialRequest
 from .create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
 from .create_vault_credential_request_secret import CreateVaultCredentialRequestSecret
@@ -110,7 +95,8 @@ from .create_vault_credential_version_request_metadata import CreateVaultCredent
 from .create_vault_credential_version_request_string_data import CreateVaultCredentialVersionRequestStringData
 from .create_vault_request import CreateVaultRequest
 from .create_vault_request_metadata import CreateVaultRequestMetadata
-from .create_vault_request_scope import CreateVaultRequestScope
+from .create_vault_request_spec import CreateVaultRequestSpec
+from .create_vault_request_spec_scope import CreateVaultRequestSpecScope
 from .env_from_entry import EnvFromEntry
 from .env_from_entry_type import EnvFromEntryType
 from .environment import Environment
@@ -132,6 +118,8 @@ from .environment_version_status import EnvironmentVersionStatus
 from .error_response import ErrorResponse
 from .error_response_error import ErrorResponseError
 from .error_response_error_details import ErrorResponseErrorDetails
+from .execution_env import ExecutionEnv
+from .execution_spec_input import ExecutionSpecInput
 from .git_repository_volume import GitRepositoryVolume
 from .git_repository_volume_type import GitRepositoryVolumeType
 from .health_response import HealthResponse
@@ -168,7 +156,6 @@ from .memory_store_memory_spec import MemoryStoreMemorySpec
 from .memory_store_memory_spec_metadata import MemoryStoreMemorySpecMetadata
 from .memory_store_memory_status import MemoryStoreMemoryStatus
 from .memory_store_spec import MemoryStoreSpec
-from .memory_store_spec_metadata import MemoryStoreSpecMetadata
 from .memory_store_status import MemoryStoreStatus
 from .memory_volume import MemoryVolume
 from .memory_volume_access import MemoryVolumeAccess
@@ -195,12 +182,12 @@ from .put_runner_heartbeat_request import PutRunnerHeartbeatRequest
 from .put_runner_heartbeat_request_metadata import PutRunnerHeartbeatRequestMetadata
 from .put_runner_heartbeat_request_state import PutRunnerHeartbeatRequestState
 from .read_usage_summary_group_by import ReadUsageSummaryGroupBy
-from .replace_agent_memory_request import ReplaceAgentMemoryRequest
-from .replace_agent_memory_request_metadata import ReplaceAgentMemoryRequestMetadata
+from .resource_create_metadata import ResourceCreateMetadata
 from .resource_metadata import ResourceMetadata
 from .resource_metadata_annotations import ResourceMetadataAnnotations
 from .resource_metadata_labels import ResourceMetadataLabels
 from .resource_phase import ResourcePhase
+from .resource_update_metadata import ResourceUpdateMetadata
 from .runner import Runner
 from .runner_auth_mode import RunnerAuthMode
 from .runner_channel_message import RunnerChannelMessage
@@ -249,11 +236,6 @@ from .session import Session
 from .session_abort_frame import SessionAbortFrame
 from .session_abort_frame_type import SessionAbortFrameType
 from .session_agent_snapshot import SessionAgentSnapshot
-from .session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
-from .session_agent_snapshot_handoff_accepts import SessionAgentSnapshotHandoffAccepts
-from .session_agent_snapshot_handoff_targets_item import SessionAgentSnapshotHandoffTargetsItem
-from .session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
-from .session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
 from .session_approval import SessionApproval
 from .session_approval_decision_request import SessionApprovalDecisionRequest
 from .session_approval_decision_request_decision import SessionApprovalDecisionRequestDecision
@@ -277,6 +259,9 @@ from .session_condition_status import SessionConditionStatus
 from .session_condition_type import SessionConditionType
 from .session_connection import SessionConnection
 from .session_connection_state import SessionConnectionState
+from .session_create_metadata import SessionCreateMetadata
+from .session_create_metadata_annotations import SessionCreateMetadataAnnotations
+from .session_create_metadata_labels import SessionCreateMetadataLabels
 from .session_environment_json_object import SessionEnvironmentJsonObject
 from .session_environment_snapshot_type_0 import SessionEnvironmentSnapshotType0
 from .session_event import SessionEvent
@@ -306,12 +291,16 @@ from .session_prompt_frame_type import SessionPromptFrameType
 from .session_runner_unavailable import SessionRunnerUnavailable
 from .session_runner_unavailable_type import SessionRunnerUnavailableType
 from .session_spec import SessionSpec
-from .session_spec_env import SessionSpecEnv
 from .session_status import SessionStatus
 from .session_status_phase import SessionStatusPhase
 from .session_steer_frame import SessionSteerFrame
 from .session_steer_frame_type import SessionSteerFrameType
+from .session_subagent import SessionSubagent
+from .session_update_metadata import SessionUpdateMetadata
+from .session_update_metadata_annotations import SessionUpdateMetadataAnnotations
+from .session_update_metadata_labels import SessionUpdateMetadataLabels
 from .trigger import Trigger
+from .trigger_create_metadata import TriggerCreateMetadata
 from .trigger_list_response import TriggerListResponse
 from .trigger_run import TriggerRun
 from .trigger_run_list_response import TriggerRunListResponse
@@ -332,14 +321,16 @@ from .trigger_template_metadata import TriggerTemplateMetadata
 from .trigger_template_metadata_annotations import TriggerTemplateMetadataAnnotations
 from .trigger_template_metadata_labels import TriggerTemplateMetadataLabels
 from .trigger_template_spec import TriggerTemplateSpec
-from .trigger_template_spec_env import TriggerTemplateSpecEnv
+from .trigger_update_metadata import TriggerUpdateMetadata
 from .update_agent_request import UpdateAgentRequest
+from .update_agent_request_spec import UpdateAgentRequestSpec
 from .update_budget_request import UpdateBudgetRequest
 from .update_budget_request_metadata import UpdateBudgetRequestMetadata
 from .update_budget_request_window import UpdateBudgetRequestWindow
 from .update_environment_request import UpdateEnvironmentRequest
-from .update_environment_request_variables import UpdateEnvironmentRequestVariables
-from .update_environment_request_variables_additional_property import UpdateEnvironmentRequestVariablesAdditionalProperty
+from .update_environment_request_spec import UpdateEnvironmentRequestSpec
+from .update_environment_request_spec_variables import UpdateEnvironmentRequestSpecVariables
+from .update_environment_request_spec_variables_additional_property import UpdateEnvironmentRequestSpecVariablesAdditionalProperty
 from .update_lease_request import UpdateLeaseRequest
 from .update_lease_request_error import UpdateLeaseRequestError
 from .update_lease_request_result import UpdateLeaseRequestResult
@@ -347,32 +338,31 @@ from .update_lease_request_state import UpdateLeaseRequestState
 from .update_memory_store_memory_request import UpdateMemoryStoreMemoryRequest
 from .update_memory_store_memory_request_metadata import UpdateMemoryStoreMemoryRequestMetadata
 from .update_memory_store_request import UpdateMemoryStoreRequest
-from .update_memory_store_request_metadata import UpdateMemoryStoreRequestMetadata
+from .update_memory_store_request_spec import UpdateMemoryStoreRequestSpec
 from .update_runner_request import UpdateRunnerRequest
 from .update_runner_request_metadata import UpdateRunnerRequestMetadata
 from .update_runner_request_state import UpdateRunnerRequestState
 from .update_session_request import UpdateSessionRequest
-from .update_session_request_metadata import UpdateSessionRequestMetadata
 from .update_session_request_state import UpdateSessionRequestState
 from .update_trigger_request import UpdateTriggerRequest
-from .update_trigger_request_source_type_0 import UpdateTriggerRequestSourceType0
-from .update_trigger_request_source_type_0_schedule import UpdateTriggerRequestSourceType0Schedule
-from .update_trigger_request_source_type_0_schedule_type import UpdateTriggerRequestSourceType0ScheduleType
-from .update_trigger_request_source_type_0_type import UpdateTriggerRequestSourceType0Type
-from .update_trigger_request_source_type_1 import UpdateTriggerRequestSourceType1
-from .update_trigger_request_source_type_1_type import UpdateTriggerRequestSourceType1Type
-from .update_trigger_request_template import UpdateTriggerRequestTemplate
-from .update_trigger_request_template_metadata import UpdateTriggerRequestTemplateMetadata
-from .update_trigger_request_template_metadata_annotations import UpdateTriggerRequestTemplateMetadataAnnotations
-from .update_trigger_request_template_metadata_labels import UpdateTriggerRequestTemplateMetadataLabels
-from .update_trigger_request_template_spec import UpdateTriggerRequestTemplateSpec
-from .update_trigger_request_template_spec_env import UpdateTriggerRequestTemplateSpecEnv
+from .update_trigger_request_spec import UpdateTriggerRequestSpec
+from .update_trigger_request_spec_source_type_0 import UpdateTriggerRequestSpecSourceType0
+from .update_trigger_request_spec_source_type_0_schedule import UpdateTriggerRequestSpecSourceType0Schedule
+from .update_trigger_request_spec_source_type_0_schedule_type import UpdateTriggerRequestSpecSourceType0ScheduleType
+from .update_trigger_request_spec_source_type_0_type import UpdateTriggerRequestSpecSourceType0Type
+from .update_trigger_request_spec_source_type_1 import UpdateTriggerRequestSpecSourceType1
+from .update_trigger_request_spec_source_type_1_type import UpdateTriggerRequestSpecSourceType1Type
+from .update_trigger_request_spec_template import UpdateTriggerRequestSpecTemplate
+from .update_trigger_request_spec_template_metadata import UpdateTriggerRequestSpecTemplateMetadata
+from .update_trigger_request_spec_template_metadata_annotations import UpdateTriggerRequestSpecTemplateMetadataAnnotations
+from .update_trigger_request_spec_template_metadata_labels import UpdateTriggerRequestSpecTemplateMetadataLabels
+from .update_trigger_request_spec_template_spec import UpdateTriggerRequestSpecTemplateSpec
 from .update_vault_credential_request import UpdateVaultCredentialRequest
 from .update_vault_credential_request_metadata import UpdateVaultCredentialRequestMetadata
 from .update_vault_credential_request_state import UpdateVaultCredentialRequestState
 from .update_vault_request import UpdateVaultRequest
-from .update_vault_request_metadata import UpdateVaultRequestMetadata
-from .update_vault_request_scope import UpdateVaultRequestScope
+from .update_vault_request_spec import UpdateVaultRequestSpec
+from .update_vault_request_spec_scope import UpdateVaultRequestSpecScope
 from .usage_record import UsageRecord
 from .usage_record_list_response import UsageRecordListResponse
 from .usage_record_metadata import UsageRecordMetadata
@@ -401,7 +391,6 @@ from .vault_credential_version_type_0 import VaultCredentialVersionType0
 from .vault_json_object import VaultJsonObject
 from .vault_list_response import VaultListResponse
 from .vault_spec import VaultSpec
-from .vault_spec_metadata import VaultSpecMetadata
 from .vault_spec_scope import VaultSpecScope
 from .vault_status import VaultStatus
 from .volume_mount import VolumeMount
@@ -414,27 +403,11 @@ from .work_item_state import WorkItemState
 
 __all__ = (
     "Agent",
-    "AgentHandoff",
-    "AgentHandoffAccepts",
-    "AgentHandoffCandidate",
-    "AgentHandoffCandidateListResponse",
-    "AgentHandoffTarget",
     "AgentListResponse",
-    "AgentMemory",
-    "AgentMemorySpec",
-    "AgentMemorySpecMetadata",
-    "AgentMemoryStatus",
     "AgentSpec",
     "AgentStatus",
     "AgentSubagent",
-    "AgentToolAttachment",
-    "AgentToolAttachmentApprovalMode",
-    "AgentToolAttachmentInput",
-    "AgentToolAttachmentInputApprovalMode",
-    "AgentToolAttachmentInputInputSchema",
-    "AgentToolAttachmentInputPolicyMetadata",
-    "AgentToolAttachmentInputSchema",
-    "AgentToolAttachmentPolicyMetadata",
+    "AgentSubagentInput",
     "AgentVersion",
     "AgentVersionListResponse",
     "AgentVersionStatus",
@@ -473,6 +446,7 @@ __all__ = (
     "ConnectorToolPolicyMetadata",
     "ConnectorTrustLevel",
     "CreateAgentRequest",
+    "CreateAgentRequestSpec",
     "CreateAuthSessionRequest",
     "CreateBudgetRequest",
     "CreateBudgetRequestLimitType",
@@ -480,14 +454,17 @@ __all__ = (
     "CreateBudgetRequestScope",
     "CreateBudgetRequestWindow",
     "CreateEnvironmentRequest",
-    "CreateEnvironmentRequestVariables",
-    "CreateEnvironmentRequestVariablesAdditionalProperty",
+    "CreateEnvironmentRequestMetadata",
+    "CreateEnvironmentRequestSpec",
+    "CreateEnvironmentRequestSpecVariables",
+    "CreateEnvironmentRequestSpecVariablesAdditionalProperty",
     "CreateHttpTriggerRunRequest",
     "CreateLeaseRequest",
     "CreateMemoryStoreMemoryRequest",
     "CreateMemoryStoreMemoryRequestMetadata",
     "CreateMemoryStoreRequest",
     "CreateMemoryStoreRequestMetadata",
+    "CreateMemoryStoreRequestSpec",
     "CreateProjectRequest",
     "CreateRunnerRequest",
     "CreateRunnerRequestAuthMode",
@@ -496,22 +473,19 @@ __all__ = (
     "CreateSessionMessageRequest",
     "CreateSessionMessageRequestType",
     "CreateSessionRequest",
-    "CreateSessionRequestEnv",
-    "CreateSessionRequestMetadata",
-    "CreateSessionRequestRuntimeConfig",
     "CreateTriggerRequest",
-    "CreateTriggerRequestSourceType0",
-    "CreateTriggerRequestSourceType0Schedule",
-    "CreateTriggerRequestSourceType0ScheduleType",
-    "CreateTriggerRequestSourceType0Type",
-    "CreateTriggerRequestSourceType1",
-    "CreateTriggerRequestSourceType1Type",
-    "CreateTriggerRequestTemplate",
-    "CreateTriggerRequestTemplateMetadata",
-    "CreateTriggerRequestTemplateMetadataAnnotations",
-    "CreateTriggerRequestTemplateMetadataLabels",
-    "CreateTriggerRequestTemplateSpec",
-    "CreateTriggerRequestTemplateSpecEnv",
+    "CreateTriggerRequestSpec",
+    "CreateTriggerRequestSpecSourceType0",
+    "CreateTriggerRequestSpecSourceType0Schedule",
+    "CreateTriggerRequestSpecSourceType0ScheduleType",
+    "CreateTriggerRequestSpecSourceType0Type",
+    "CreateTriggerRequestSpecSourceType1",
+    "CreateTriggerRequestSpecSourceType1Type",
+    "CreateTriggerRequestSpecTemplate",
+    "CreateTriggerRequestSpecTemplateMetadata",
+    "CreateTriggerRequestSpecTemplateMetadataAnnotations",
+    "CreateTriggerRequestSpecTemplateMetadataLabels",
+    "CreateTriggerRequestSpecTemplateSpec",
     "CreateVaultCredentialRequest",
     "CreateVaultCredentialRequestMetadata",
     "CreateVaultCredentialRequestSecret",
@@ -523,7 +497,8 @@ __all__ = (
     "CreateVaultCredentialVersionRequestStringData",
     "CreateVaultRequest",
     "CreateVaultRequestMetadata",
-    "CreateVaultRequestScope",
+    "CreateVaultRequestSpec",
+    "CreateVaultRequestSpecScope",
     "EnvFromEntry",
     "EnvFromEntryType",
     "Environment",
@@ -545,6 +520,8 @@ __all__ = (
     "ErrorResponse",
     "ErrorResponseError",
     "ErrorResponseErrorDetails",
+    "ExecutionEnv",
+    "ExecutionSpecInput",
     "GitRepositoryVolume",
     "GitRepositoryVolumeType",
     "HealthResponse",
@@ -581,7 +558,6 @@ __all__ = (
     "MemoryStoreMemorySpecMetadata",
     "MemoryStoreMemoryStatus",
     "MemoryStoreSpec",
-    "MemoryStoreSpecMetadata",
     "MemoryStoreStatus",
     "MemoryVolume",
     "MemoryVolumeAccess",
@@ -608,12 +584,12 @@ __all__ = (
     "PutRunnerHeartbeatRequestMetadata",
     "PutRunnerHeartbeatRequestState",
     "ReadUsageSummaryGroupBy",
-    "ReplaceAgentMemoryRequest",
-    "ReplaceAgentMemoryRequestMetadata",
+    "ResourceCreateMetadata",
     "ResourceMetadata",
     "ResourceMetadataAnnotations",
     "ResourceMetadataLabels",
     "ResourcePhase",
+    "ResourceUpdateMetadata",
     "Runner",
     "RunnerAuthMode",
     "RunnerChannelMessage",
@@ -662,11 +638,6 @@ __all__ = (
     "SessionAbortFrame",
     "SessionAbortFrameType",
     "SessionAgentSnapshot",
-    "SessionAgentSnapshotHandoff",
-    "SessionAgentSnapshotHandoffAccepts",
-    "SessionAgentSnapshotHandoffTargetsItem",
-    "SessionAgentSnapshotSubagentsItem",
-    "SessionAgentSnapshotToolsItem",
     "SessionApproval",
     "SessionApprovalDecisionRequest",
     "SessionApprovalDecisionRequestDecision",
@@ -690,6 +661,9 @@ __all__ = (
     "SessionConditionType",
     "SessionConnection",
     "SessionConnectionState",
+    "SessionCreateMetadata",
+    "SessionCreateMetadataAnnotations",
+    "SessionCreateMetadataLabels",
     "SessionEnvironmentJsonObject",
     "SessionEnvironmentSnapshotType0",
     "SessionEvent",
@@ -719,12 +693,16 @@ __all__ = (
     "SessionRunnerUnavailable",
     "SessionRunnerUnavailableType",
     "SessionSpec",
-    "SessionSpecEnv",
     "SessionStatus",
     "SessionStatusPhase",
     "SessionSteerFrame",
     "SessionSteerFrameType",
+    "SessionSubagent",
+    "SessionUpdateMetadata",
+    "SessionUpdateMetadataAnnotations",
+    "SessionUpdateMetadataLabels",
     "Trigger",
+    "TriggerCreateMetadata",
     "TriggerListResponse",
     "TriggerRun",
     "TriggerRunListResponse",
@@ -745,14 +723,16 @@ __all__ = (
     "TriggerTemplateMetadataAnnotations",
     "TriggerTemplateMetadataLabels",
     "TriggerTemplateSpec",
-    "TriggerTemplateSpecEnv",
+    "TriggerUpdateMetadata",
     "UpdateAgentRequest",
+    "UpdateAgentRequestSpec",
     "UpdateBudgetRequest",
     "UpdateBudgetRequestMetadata",
     "UpdateBudgetRequestWindow",
     "UpdateEnvironmentRequest",
-    "UpdateEnvironmentRequestVariables",
-    "UpdateEnvironmentRequestVariablesAdditionalProperty",
+    "UpdateEnvironmentRequestSpec",
+    "UpdateEnvironmentRequestSpecVariables",
+    "UpdateEnvironmentRequestSpecVariablesAdditionalProperty",
     "UpdateLeaseRequest",
     "UpdateLeaseRequestError",
     "UpdateLeaseRequestResult",
@@ -760,32 +740,31 @@ __all__ = (
     "UpdateMemoryStoreMemoryRequest",
     "UpdateMemoryStoreMemoryRequestMetadata",
     "UpdateMemoryStoreRequest",
-    "UpdateMemoryStoreRequestMetadata",
+    "UpdateMemoryStoreRequestSpec",
     "UpdateRunnerRequest",
     "UpdateRunnerRequestMetadata",
     "UpdateRunnerRequestState",
     "UpdateSessionRequest",
-    "UpdateSessionRequestMetadata",
     "UpdateSessionRequestState",
     "UpdateTriggerRequest",
-    "UpdateTriggerRequestSourceType0",
-    "UpdateTriggerRequestSourceType0Schedule",
-    "UpdateTriggerRequestSourceType0ScheduleType",
-    "UpdateTriggerRequestSourceType0Type",
-    "UpdateTriggerRequestSourceType1",
-    "UpdateTriggerRequestSourceType1Type",
-    "UpdateTriggerRequestTemplate",
-    "UpdateTriggerRequestTemplateMetadata",
-    "UpdateTriggerRequestTemplateMetadataAnnotations",
-    "UpdateTriggerRequestTemplateMetadataLabels",
-    "UpdateTriggerRequestTemplateSpec",
-    "UpdateTriggerRequestTemplateSpecEnv",
+    "UpdateTriggerRequestSpec",
+    "UpdateTriggerRequestSpecSourceType0",
+    "UpdateTriggerRequestSpecSourceType0Schedule",
+    "UpdateTriggerRequestSpecSourceType0ScheduleType",
+    "UpdateTriggerRequestSpecSourceType0Type",
+    "UpdateTriggerRequestSpecSourceType1",
+    "UpdateTriggerRequestSpecSourceType1Type",
+    "UpdateTriggerRequestSpecTemplate",
+    "UpdateTriggerRequestSpecTemplateMetadata",
+    "UpdateTriggerRequestSpecTemplateMetadataAnnotations",
+    "UpdateTriggerRequestSpecTemplateMetadataLabels",
+    "UpdateTriggerRequestSpecTemplateSpec",
     "UpdateVaultCredentialRequest",
     "UpdateVaultCredentialRequestMetadata",
     "UpdateVaultCredentialRequestState",
     "UpdateVaultRequest",
-    "UpdateVaultRequestMetadata",
-    "UpdateVaultRequestScope",
+    "UpdateVaultRequestSpec",
+    "UpdateVaultRequestSpecScope",
     "UsageRecord",
     "UsageRecordListResponse",
     "UsageRecordMetadata",
@@ -814,7 +793,6 @@ __all__ = (
     "VaultJsonObject",
     "VaultListResponse",
     "VaultSpec",
-    "VaultSpecMetadata",
     "VaultSpecScope",
     "VaultStatus",
     "VolumeMount",

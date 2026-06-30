@@ -482,13 +482,11 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	prompt := "build the feature"
 	lease := codexSessionStartLease(prompt)
 	lease.workItem.Payload["agentSnapshot"] = ama.JSON{
-		"instructions":   "Follow the AK worker protocol.",
-		"skills":         []any{},
-		"subagents":      []any{ama.JSON{"username": "reviewer", "role": "reviewer"}},
-		"handoffPolicy":  ama.JSON{"enabled": true, "targets": []any{ama.JSON{"role": "reviewer"}}},
-		"allowedTools":   []any{"sandbox.exec"},
-		"mcpConnectors":  []any{},
-		"capabilityTags": []any{"implementation"},
+		"systemPrompt":  "Follow the AMA runtime protocol.",
+		"skills":        []any{},
+		"subagents":     []any{ama.JSON{"name": "reviewer", "description": "Reviews pull requests", "systemPrompt": "Review strictly."}},
+		"allowedTools":  []any{"sandbox.exec"},
+		"mcpConnectors": []any{},
 	}
 	// Codex is a CLI relay runtime: events flow over the per-runner hub channel,
 	// not a per-lease channel. Seed the hub channel with runner.channel.accepted
@@ -542,7 +540,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	if runtimeAdapter.request.RuntimeConfig["model"] != "gpt-5.3-codex" {
 		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
 	}
-	if runtimeAdapter.request.AgentSnapshot["instructions"] != "Follow the AK worker protocol." {
+	if runtimeAdapter.request.AgentSnapshot["systemPrompt"] != "Follow the AMA runtime protocol." {
 		t.Fatalf("expected agent snapshot to reach adapter, got %#v", runtimeAdapter.request.AgentSnapshot)
 	}
 	if _, err := os.Stat(runtimeAdapter.request.WorkDir); err != nil {

@@ -88,23 +88,25 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
   const createTrigger = useMutation({
     mutationFn: () =>
       api.createTrigger({
-        name: form.name,
-        source:
-          form.type === 'scheduled'
-            ? { type: 'schedule', schedule: { type: 'interval', intervalSeconds: intervalSeconds(form) } }
-            : { type: 'http' },
-        suspend: form.suspend,
-        template: {
-          metadata: { labels: {}, annotations: {} },
-          spec: {
-            agentId: form.agentId,
-            environmentId: form.environmentId,
-            runtime: form.runtime,
-            promptTemplate: form.promptTemplate,
-            env: {},
-            envFrom: [],
-            volumes: [],
-            volumeMounts: [],
+        metadata: { name: form.name },
+        spec: {
+          source:
+            form.type === 'scheduled'
+              ? { type: 'schedule', schedule: { type: 'interval', intervalSeconds: intervalSeconds(form) } }
+              : { type: 'http' },
+          suspend: form.suspend,
+          template: {
+            metadata: { labels: {}, annotations: {} },
+            spec: {
+              agentId: form.agentId,
+              environmentId: form.environmentId,
+              runtime: form.runtime,
+              promptTemplate: form.promptTemplate,
+              env: {},
+              envFrom: [],
+              volumes: [],
+              volumeMounts: [],
+            },
           },
         },
       }),

@@ -27,7 +27,7 @@ describe('[CF] /api/v1/vaults', () => {
     const res = await SELF.fetch('https://example.com/api/v1/vaults', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Provider credentials' }),
+      body: JSON.stringify({ metadata: { name: 'Provider credentials' }, spec: {} }),
     })
 
     expect(res.status).toBe(401)
@@ -44,22 +44,20 @@ describe('[CF] /api/v1/vaults', () => {
     const createRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Provider credentials',
-        description: 'Runtime credential metadata',
-        scope: 'project',
-        metadata: { owner: 'platform' },
+        metadata: { name: 'Provider credentials', description: 'Runtime credential metadata' },
+        spec: { scope: 'project' },
       }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
       metadata: { uid: string; name: string; archivedAt: string | null }
-      spec: { scope: string; metadata: unknown }
+      spec: { scope: string }
       status: { phase: string }
     }
     const createdId = created.metadata.uid
     expect(created).toMatchObject({
       metadata: { archivedAt: null },
-      spec: { scope: 'project', metadata: { owner: 'platform' } },
+      spec: { scope: 'project' },
       status: { phase: 'active' },
     })
     expect(created).not.toHaveProperty('organizationId')
@@ -70,7 +68,7 @@ describe('[CF] /api/v1/vaults', () => {
 
     const updateRes = await jsonFetch(`/api/v1/vaults/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ name: 'Updated credentials' }),
+      body: JSON.stringify({ metadata: { name: 'Updated credentials' } }),
     })
     expect(updateRes.status).toBe(200)
     await expect(updateRes.json()).resolves.toMatchObject({ metadata: { uid: createdId, name: 'Updated credentials' } })
@@ -131,7 +129,7 @@ describe('[CF] /api/v1/vaults', () => {
     const authorization = await signIn()
     const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Provider credentials' }),
+      body: JSON.stringify({ metadata: { name: 'Provider credentials' }, spec: {} }),
     })
     const vault = (await vaultRes.json()) as { metadata: { uid: string } }
     const vaultId = vault.metadata.uid
@@ -176,7 +174,7 @@ describe('[CF] /api/v1/vaults', () => {
 
     const scopeChangeRes = await jsonFetch(`/api/v1/vaults/${vaultId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ scope: 'organization' }),
+      body: JSON.stringify({ spec: { scope: 'organization' } }),
     })
     expect(scopeChangeRes.status).toBe(409)
     await expect(scopeChangeRes.json()).resolves.toMatchObject({
@@ -372,7 +370,7 @@ describe('[CF] /api/v1/vaults', () => {
     const authorization = await signIn()
     const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: `Typed credentials ${crypto.randomUUID()}` }),
+      body: JSON.stringify({ metadata: { name: `Typed credentials ${crypto.randomUUID()}` }, spec: {} }),
     })
     expect(vaultRes.status).toBe(201)
     const vault = (await vaultRes.json()) as { metadata: { uid: string } }
@@ -476,13 +474,13 @@ describe('[CF] /api/v1/vaults', () => {
     const authorization = await signIn()
     const projectVaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Project vault', scope: 'project' }),
+      body: JSON.stringify({ metadata: { name: 'Project vault' }, spec: { scope: 'project' } }),
     })
     const projectVault = (await projectVaultRes.json()) as { metadata: { uid: string } }
     const projectVaultId = projectVault.metadata.uid
     const orgVaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Organization vault', scope: 'organization' }),
+      body: JSON.stringify({ metadata: { name: 'Organization vault' }, spec: { scope: 'organization' } }),
     })
     const orgVault = (await orgVaultRes.json()) as { metadata: { uid: string } }
     const orgVaultId = orgVault.metadata.uid

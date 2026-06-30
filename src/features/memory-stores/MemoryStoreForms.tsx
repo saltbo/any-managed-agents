@@ -22,7 +22,14 @@ export function CreateMemoryStoreSheet({
   const [name, setName] = useState('Project memory')
   const [description, setDescription] = useState('')
   const createStore = useMutation({
-    mutationFn: () => api.createMemoryStore({ name, ...(description ? { description } : {}) }),
+    mutationFn: () =>
+      api.createMemoryStore({
+        metadata: {
+          name,
+          ...(description ? { description } : {}),
+        },
+        spec: {},
+      }),
     onSuccess: () => {
       onOpenChange(false)
       setName('Project memory')

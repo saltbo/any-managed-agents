@@ -91,7 +91,6 @@ const store = {
   findEnvironment: findEnvironmentMock,
   findEnvironmentVersion: findEnvironmentVersionMock,
   resolveEnvironmentForRuntime: resolveEnvironmentForRuntimeMock,
-  agentMemoryContent: async () => null,
   insertSession: insertSessionMock,
   updateSessionWhenState: updateSessionWhenStateMock,
 }
@@ -156,7 +155,6 @@ describe('createSessionForAgent — launch dispatch failure (H5 FIX 2)', () => {
       id: 'agent_1',
       currentVersionId: 'agentver_1',
       archivedAt: null,
-      memoryPolicy: null,
     })
     findAgentVersionMock.mockResolvedValue({ id: 'agentver_1', model: '@cf/x', providerId: 'anthropic' })
     findEnvironmentMock.mockResolvedValue({ id: 'env_1', currentVersionId: 'envver_1' })
@@ -260,7 +258,6 @@ describe('createSessionForAgent — environment resolution', () => {
       id: 'agent_1',
       currentVersionId: 'agentver_1',
       archivedAt: null,
-      memoryPolicy: null,
     })
     findAgentVersionMock.mockResolvedValue({ id: 'agentver_1', model: '@cf/x', providerId: 'anthropic' })
     findEnvironmentMock.mockReset()

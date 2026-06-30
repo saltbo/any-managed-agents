@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, AgentMemory, AgentToolAttachment, AgentVersion } from '@server/domain/agent'
+import type { Agent, AgentSpec, AgentVersion } from '@server/domain/agent'
 import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool } from '@server/domain/connector'
 import type { Environment, EnvironmentConfig, EnvironmentVersion } from '@server/domain/environment'
 import type { Memory, MemoryStore, MemoryStoreAccess } from '@server/domain/memory-store'
@@ -75,13 +75,6 @@ export interface AuthScope {
 // http AuthIdentity satisfy it structurally, so neither needs a cast.
 export type OrgScope = Pick<AuthScope, 'organization'>
 
-export interface AgentHandoffCandidate {
-  id: string
-  name: string
-  role: string | null
-  capabilities: string[]
-}
-
 export interface AgentListQuery {
   projectId: string
   archived: boolean
@@ -101,13 +94,13 @@ export interface CreateAgentInput {
   projectId: string
   name: string
   description: string | null
-  config: AgentConfig
+  spec: AgentSpec
 }
 
 export interface UpdateAgentFields {
   name: string
   description: string | null
-  config: AgentConfig
+  spec: AgentSpec
   archivedAt: string | null
   currentVersionId: string | null
 }
@@ -118,11 +111,11 @@ export interface UpdateAgentFields {
 export interface AgentRepo {
   list(query: AgentListQuery): Promise<AgentListPage>
   find(projectId: string, agentId: string): Promise<Agent | null>
-  // Live (non-archived) agents in the project, newest first — handoff resolution.
+  // Live (non-archived) agents in the project, newest first.
   liveAgents(projectId: string): Promise<Agent[]>
 
   latestVersionNumber(agentId: string): Promise<number | null>
-  insertVersion(agent: Agent, config: AgentConfig, createdAt: string): Promise<AgentVersion>
+  insertVersion(agent: Agent, spec: AgentSpec, createdAt: string): Promise<AgentVersion>
   listVersions(projectId: string, agentId: string): Promise<AgentVersion[]>
   findVersion(projectId: string, agentId: string, version: number): Promise<AgentVersion | null>
 
@@ -130,16 +123,6 @@ export interface AgentRepo {
   setCurrentVersion(agentId: string, versionId: string): Promise<void>
   update(projectId: string, agentId: string, fields: UpdateAgentFields, updatedAt: string): Promise<void>
   unarchive(projectId: string, agentId: string, updatedAt: string): Promise<void>
-
-  findMemory(projectId: string, agentId: string): Promise<AgentMemory | null>
-  insertMemory(record: AgentMemory): Promise<void>
-  replaceMemory(
-    projectId: string,
-    agentId: string,
-    content: string,
-    metadata: Record<string, unknown>,
-    updatedAt: string,
-  ): Promise<void>
 
   // Reference validation against sibling resources.
   providerEnabled(projectId: string, providerId: string): Promise<boolean>
@@ -491,13 +474,11 @@ export interface CreateMemoryStoreInput {
   projectId: string
   name: string
   description: string | null
-  metadata: Record<string, unknown>
 }
 
 export interface UpdateMemoryStoreFields {
   name: string
   description: string | null
-  metadata: Record<string, unknown>
   archivedAt: string | null
 }
 
@@ -544,7 +525,6 @@ export interface CreateVaultInput {
   name: string
   description: string | null
   scope: VaultScope
-  metadata: Record<string, unknown>
 }
 
 export interface UpdateVaultFields {
@@ -552,7 +532,6 @@ export interface UpdateVaultFields {
   description: string | null
   scope: VaultScope
   projectId: string | null
-  metadata: Record<string, unknown>
   archivedAt: string | null
 }
 
@@ -1776,7 +1755,6 @@ export interface SessionOrchestrationStore {
   // ── snapshot reads ──
   findAgent(projectId: string, agentId: string): Promise<AgentRow | null>
   findAgentVersion(agentId: string, versionId: string): Promise<AgentVersionRow | null>
-  agentMemoryContent(projectId: string, agentId: string): Promise<string | null>
   findActiveMemoryStoreResource(
     projectId: string,
     storeId: string,
@@ -2083,4 +2061,4 @@ export interface SessionCreateOptions {
   prompt: string
 }
 
-export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }
+export type { ConnectorCatalogTool, SecretMaterial }

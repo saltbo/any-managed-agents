@@ -281,34 +281,6 @@ export function SandboxStep({ draft, errors, setField }: StepProps) {
   )
 }
 
-export function RolesStep({ draft, errors, setField }: StepProps) {
-  return (
-    <div className="grid gap-4">
-      <TextField
-        label="Role"
-        description="Optional durable responsibility, such as maintainer or worker. Products define their own role names."
-        value={draft.role}
-        onChange={(value) => setField('role', value)}
-        error={errors.role}
-      />
-      <TextAreaField
-        label="Capability tags"
-        description="One stable capability identifier per line, such as implementation or code-review."
-        value={draft.capabilityTags}
-        onChange={(value) => setField('capabilityTags', value)}
-        error={errors.capabilityTags}
-      />
-      <TextAreaField
-        label="Handoff targets"
-        description="One target per line as role=<role> or capability=<capability>. AMA resolves matching agents inside this project; the requesting product decides what a handoff means for its own workflow."
-        value={draft.handoffTargets}
-        onChange={(value) => setField('handoffTargets', value)}
-        error={errors.handoffTargets}
-      />
-    </div>
-  )
-}
-
 export function TestEnvironmentField({
   environments,
   environmentId,

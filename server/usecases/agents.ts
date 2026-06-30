@@ -1,25 +1,20 @@
 import {
   type Agent,
-  type AgentConfig,
-  type AgentMemory,
-  type AgentToolAttachment,
-  type HandoffTarget,
-  hasSecretMaterial,
-  matchesHandoffTarget,
-  validateConfigSecrets,
-  validateHandoff,
+  type AgentSpec,
+  type AgentSubagent,
+  validateAllowedTools,
   validateSkills,
-  validateToolAttachments,
+  validateSubagents,
 } from '@server/domain/agent'
-import { resourceMetadata } from '@server/domain/resource'
 import type { Deps } from './deps'
-import { AgentArchivedError, type AgentHandoffCandidate, AgentValidationError, type AuthScope } from './ports'
+import { AgentArchivedError, AgentValidationError, type AuthScope } from './ports'
 
-// Validates the runtime config against sibling resources (provider/model,
-// MCP catalog entries), governance tool policy, and secret-material rules. Throws
-// AgentValidationError on the first failure. `auth` is needed only to resolve
-// the effective tool policy, and only when tools are present.
-async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) {
+// Validates the agent spec against sibling resources and secret-material rules.
+// Throws AgentValidationError on the first failure.
+async function validateConfig(deps: Deps, auth: AuthScope, config: AgentSpec) {
+  if (!config.systemPrompt.trim()) {
+    throw new AgentValidationError('Invalid agent configuration', { systemPrompt: 'System prompt is required.' })
+  }
   const providerError = await validateProviderRef(deps, auth.project.id, config.provider)
   if (providerError) {
     throw new AgentValidationError('Invalid agent configuration', providerError)
@@ -28,17 +23,11 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) 
   if (skillsError) {
     throw new AgentValidationError('Invalid agent configuration', skillsError)
   }
-  if (hasSecretMaterial(config.subagents)) {
-    throw new AgentValidationError('Invalid agent configuration', {
-      subagents: 'Secret material must be stored in a vault.',
-    })
+  const subagentsError = validateSubagents(config.subagents)
+  if (subagentsError) {
+    throw new AgentValidationError('Invalid agent configuration', subagentsError)
   }
-  const handoffError = validateHandoff(config.handoff)
-  if (handoffError) {
-    throw new AgentValidationError('Invalid agent configuration', handoffError)
-  }
-  const toolPolicy = config.tools.length > 0 ? await deps.policy.resolveToolPolicy(auth) : {}
-  const toolsError = validateToolAttachments(config.tools, toolPolicy)
+  const toolsError = validateAllowedTools(config.allowedTools)
   if (toolsError) {
     throw new AgentValidationError('Invalid agent configuration', toolsError)
   }
@@ -46,9 +35,9 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) 
   if (connectorError) {
     throw new AgentValidationError('Invalid agent configuration', connectorError)
   }
-  const secretError = validateConfigSecrets(config)
-  if (secretError) {
-    throw new AgentValidationError('Invalid agent configuration', secretError)
+  const subagentConnectorError = await validateSubagentMcpConnectors(deps, auth.project.id, config.subagents)
+  if (subagentConnectorError) {
+    throw new AgentValidationError('Invalid agent configuration', subagentConnectorError)
   }
 }
 
@@ -79,18 +68,28 @@ async function validateMcpConnectors(deps: Deps, _projectId: string, connectorId
   return null
 }
 
+async function validateSubagentMcpConnectors(deps: Deps, projectId: string, subagents: AgentSpec['subagents']) {
+  for (const subagent of subagents) {
+    const connectorError = await validateMcpConnectors(deps, projectId, subagent.mcpConnectors)
+    if (connectorError) {
+      return { subagents: `Sub-agent MCP connector is not available: ${subagent.name}` }
+    }
+  }
+  return null
+}
+
 export async function createAgent(
   deps: Deps,
   auth: AuthScope,
-  input: { name: string; description: string | null; config: AgentConfig },
+  input: { name: string; description: string | null; spec: AgentSpec },
 ): Promise<Agent> {
-  await validateConfig(deps, auth, input.config)
+  await validateConfig(deps, auth, input.spec)
   const createdAt = new Date().toISOString()
   const agent = await deps.agents.insert(
-    { projectId: auth.project.id, name: input.name, description: input.description, config: input.config },
+    { projectId: auth.project.id, name: input.name, description: input.description, spec: input.spec },
     createdAt,
   )
-  const version = await deps.agents.insertVersion(agent, input.config, createdAt)
+  const version = await deps.agents.insertVersion(agent, input.spec, createdAt)
   await deps.agents.setCurrentVersion(agent.metadata.uid, version.metadata.uid)
   return {
     ...agent,
@@ -106,23 +105,19 @@ const RUNTIME_CONFIG_FIELDS = [
   'model',
   'skills',
   'subagents',
-  'role',
-  'handoff',
-  'tools',
+  'allowedTools',
   'mcpConnectors',
 ] as const
 
 export interface UpdateAgentPatch {
   name?: string
   description?: string | null
-  systemPrompt?: string | null
+  systemPrompt?: string
   provider?: string | null
   model?: string | null
   skills?: string[]
-  subagents?: Record<string, unknown>[]
-  role?: string | null
-  handoff?: AgentConfig['handoff']
-  tools?: AgentToolAttachment[]
+  subagents?: AgentSubagent[]
+  allowedTools?: string[]
   mcpConnectors?: string[]
   archived?: boolean
 }
@@ -165,15 +160,13 @@ export async function updateAgent(
     return { agent, archived: false }
   }
 
-  const next: AgentConfig = {
+  const next: AgentSpec = {
     systemPrompt: fields.systemPrompt !== undefined ? fields.systemPrompt : agent.spec.systemPrompt,
     provider: fields.provider !== undefined ? fields.provider : agent.spec.provider,
     model: fields.model !== undefined ? fields.model : agent.spec.model,
     skills: fields.skills ?? agent.spec.skills,
     subagents: fields.subagents ?? agent.spec.subagents,
-    role: fields.role !== undefined ? fields.role : agent.spec.role,
-    handoff: fields.handoff ?? agent.spec.handoff,
-    tools: fields.tools ?? agent.spec.tools,
+    allowedTools: fields.allowedTools ?? agent.spec.allowedTools,
     mcpConnectors: fields.mcpConnectors ?? agent.spec.mcpConnectors,
   }
   await validateConfig(deps, auth, next)
@@ -191,7 +184,7 @@ export async function updateAgent(
   await deps.agents.update(
     auth.project.id,
     agent.metadata.uid,
-    { name, description, config: next, archivedAt, currentVersionId },
+    { name, description, spec: next, archivedAt, currentVersionId },
     updatedAt,
   )
 
@@ -207,85 +200,4 @@ export async function updateAgent(
     },
   }
   return { agent: updated, archived: archived === true }
-}
-
-export async function resolveHandoffCandidates(
-  deps: Deps,
-  projectId: string,
-  agent: Agent,
-  requested: HandoffTarget,
-): Promise<AgentHandoffCandidate[]> {
-  const targets =
-    requested.role !== undefined || requested.capability !== undefined ? [requested] : agent.spec.handoff.targets
-  if (targets.length === 0) {
-    throw new AgentValidationError('No handoff target requested', {
-      target: 'Request a role or capability, or configure handoff policy targets on the agent.',
-    })
-  }
-  const rows = await deps.agents.liveAgents(projectId)
-  return rows
-    .filter((row) => row.metadata.uid !== agent.metadata.uid && matchesHandoffTarget(targets, row.spec))
-    .map((row) => ({
-      id: row.metadata.uid,
-      name: row.metadata.name,
-      role: row.spec.role,
-      capabilities: row.spec.handoff.accepts.capabilities,
-    }))
-}
-
-// Reads agent memory, lazily materializing an empty singleton on first read.
-export async function readAgentMemory(deps: Deps, projectId: string, agent: Agent): Promise<AgentMemory> {
-  const existing = await deps.agents.findMemory(projectId, agent.metadata.uid)
-  if (existing) {
-    return existing
-  }
-  const timestamp = new Date().toISOString()
-  const created: AgentMemory = {
-    metadata: resourceMetadata({
-      uid: agent.metadata.uid,
-      pid: projectId,
-      name: 'memory',
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }),
-    spec: { agentId: agent.metadata.uid, content: '', metadata: {} },
-    status: { phase: 'active' },
-  }
-  await deps.agents.insertMemory(created)
-  return created
-}
-
-export async function replaceAgentMemory(
-  deps: Deps,
-  projectId: string,
-  agent: Agent,
-  input: { content: string; metadata: Record<string, unknown> },
-): Promise<AgentMemory> {
-  if (hasSecretMaterial(input.metadata)) {
-    throw new AgentValidationError('Invalid agent memory', { metadata: 'Secret material must be stored in a vault.' })
-  }
-  const existing = await deps.agents.findMemory(projectId, agent.metadata.uid)
-  const timestamp = new Date().toISOString()
-  if (!existing) {
-    const created: AgentMemory = {
-      metadata: resourceMetadata({
-        uid: agent.metadata.uid,
-        pid: projectId,
-        name: 'memory',
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }),
-      spec: { agentId: agent.metadata.uid, content: input.content, metadata: input.metadata },
-      status: { phase: 'active' },
-    }
-    await deps.agents.insertMemory(created)
-    return created
-  }
-  // PUT replaces the whole singleton: content and metadata are overwritten.
-  await deps.agents.replaceMemory(projectId, agent.metadata.uid, input.content, input.metadata, timestamp)
-  return {
-    ...existing,
-    metadata: { ...existing.metadata, updatedAt: timestamp },
-    spec: { ...existing.spec, content: input.content, metadata: input.metadata },
-  }
 }

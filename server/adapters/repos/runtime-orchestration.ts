@@ -18,7 +18,6 @@ import type { CanonicalAmaSessionEvent } from '@shared/session-events'
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, notLike, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import {
-  agentMemories,
   agents,
   agentVersions,
   connectors,
@@ -331,15 +330,6 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
           .where(and(eq(agentVersions.id, versionId), eq(agentVersions.agentId, agentId)))
           .get()) ?? null
       )
-    },
-
-    async agentMemoryContent(projectId: string, agentId: string): Promise<string | null> {
-      const memory = await db
-        .select({ content: agentMemories.content })
-        .from(agentMemories)
-        .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, projectId)))
-        .get()
-      return memory?.content ?? null
     },
 
     async findActiveMemoryStoreResource(projectId, storeId, access) {

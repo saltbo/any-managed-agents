@@ -17,14 +17,19 @@ export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpen
   const createAgent = useMutation({
     mutationFn: () =>
       api.createAgent({
-        name: form.name,
-        description: form.description,
-        systemPrompt: form.systemPrompt,
-        ...providerPatch(form.provider),
-        model: /* v8 ignore start */ form.model || /* v8 ignore stop */ null,
-        skills: parseTools(form.skills),
-        tools: parseTools(form.allowedTools).map((name) => ({ name })),
-        mcpConnectors: parseTools(form.mcpConnectors),
+        metadata: {
+          name: form.name,
+          ...(form.description ? { description: form.description } : {}),
+        },
+        spec: {
+          systemPrompt: form.systemPrompt,
+          ...providerPatch(form.provider),
+          model: /* v8 ignore start */ form.model || /* v8 ignore stop */ null,
+          skills: parseTools(form.skills),
+          allowedTools: parseTools(form.allowedTools),
+          subagents: [],
+          mcpConnectors: parseTools(form.mcpConnectors),
+        },
       }),
     onSuccess: () => {
       onOpenChange(false)

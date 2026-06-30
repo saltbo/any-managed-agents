@@ -32,7 +32,7 @@ export const memoryStoresApi = {
   readMemoryStore: (id: string) =>
     rpcRequest<MemoryStore>(v1['memory-stores'][':storeId'].$get({ param: { storeId: id } })),
   createMemoryStore: (input: MemoryStoreInput) => rpcRequest<MemoryStore>(v1['memory-stores'].$post({ json: input })),
-  updateMemoryStore: (id: string, input: Partial<MemoryStoreInput> & { archived?: boolean }) =>
+  updateMemoryStore: (id: string, input: MemoryStorePatch) =>
     rpcRequest<MemoryStore>(
       v1['memory-stores'][':storeId'].$patch({
         param: { storeId: id },

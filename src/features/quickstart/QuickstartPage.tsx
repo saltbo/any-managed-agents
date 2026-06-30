@@ -125,20 +125,27 @@ export function QuickstartPage() {
   const runDefaultWorkersAi = useMutation({
     mutationFn: async () => {
       const agent = await api.createAgent({
-        name: 'Workers AI starter agent',
-        description: 'Zero-credential starter agent on the platform default Workers AI model.',
-        systemPrompt: 'You are the Workers AI starter agent. Respond helpfully and stay inside the session workspace.',
-        ...providerPatch(DEFAULT_BUILDER_PROVIDER),
-        model: DEFAULT_BUILDER_MODEL,
+        metadata: {
+          name: 'Workers AI starter agent',
+          description: 'Zero-credential starter agent on the platform default Workers AI model.',
+        },
+        spec: {
+          systemPrompt:
+            'You are the Workers AI starter agent. Respond helpfully and stay inside the session workspace.',
+          ...providerPatch(DEFAULT_BUILDER_PROVIDER),
+          model: DEFAULT_BUILDER_MODEL,
+        },
       })
       const environment = await api.createEnvironment(
         quickstartEnvironmentInput({ ...defaultQuickstartEnvironmentForm, name: 'Workers AI starter environment' }),
       )
       const session = await api.createSession({
-        agentId: agent.metadata.uid,
-        environmentId: environment.metadata.uid,
-        runtime: 'ama',
-        name: 'Workers AI starter session',
+        metadata: { name: 'Workers AI starter session' },
+        spec: {
+          agentId: agent.metadata.uid,
+          environmentId: environment.metadata.uid,
+          runtime: 'ama',
+        },
         prompt: SAFE_EXAMPLE_PROMPT,
       })
       return session

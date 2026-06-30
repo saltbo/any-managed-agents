@@ -11,7 +11,7 @@ import {
   StatusBadge,
   TableSurface,
 } from '@/console/components'
-import { archivedLabel, formatDate, isArchived, stringifyJson } from '@/console/format'
+import { archivedLabel, formatDate, isArchived } from '@/console/format'
 import type { AuditRecord, Vault, VaultCredential } from '@/lib/amarpc'
 
 export function VaultDetailView({
@@ -55,7 +55,6 @@ export function VaultDetailView({
       >
         <MetaGrid>
           <Meta label="Vault id" value={vault.metadata.uid} />
-          <Meta label="Metadata" value={stringifyJson(vault.spec.metadata)} />
           <Meta label="Created" value={formatDate(vault.metadata.createdAt)} />
           <Meta label="Archived" value={formatDate(vault.metadata.archivedAt)} />
         </MetaGrid>

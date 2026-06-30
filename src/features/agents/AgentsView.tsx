@@ -59,9 +59,7 @@ export function AgentsView({
             </TableCell>
             <TableCell className="max-w-64 truncate">{`${agent.spec.provider ?? 'None'} / ${agent.spec.model ?? 'None'}`}</TableCell>
             <TableCell className="max-w-48 truncate">{agent.spec.skills.join(', ') || 'None'}</TableCell>
-            <TableCell className="max-w-48 truncate">
-              {agent.spec.tools.map((tool) => tool.name).join(', ') || 'None'}
-            </TableCell>
+            <TableCell className="max-w-48 truncate">{agent.spec.allowedTools.join(', ') || 'None'}</TableCell>
             <TableCell>{formatDate(agent.metadata.updatedAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">

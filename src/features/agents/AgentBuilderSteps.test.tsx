@@ -10,15 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Connector, Environment, ProviderModel } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import { type EnvironmentOverrides, environment as resourceEnvironment } from '@/test/resource-fixtures'
-import {
-  BuilderStepper,
-  CoreStep,
-  RolesStep,
-  SandboxStep,
-  StartStep,
-  TestEnvironmentField,
-  ToolsStep,
-} from './AgentBuilderSteps'
+import { BuilderStepper, CoreStep, SandboxStep, StartStep, TestEnvironmentField, ToolsStep } from './AgentBuilderSteps'
 import { emptyBuilderDraft } from './agent-builder-model'
 
 const now = '2026-05-23T00:00:00.000Z'
@@ -659,67 +651,6 @@ describe('SandboxStep', () => {
     )
     fireEvent.change(screen.getByLabelText('Carried skills'), { target: { value: 'ama@coding-agent' } })
     expect(setField).toHaveBeenCalledWith('skills', 'ama@coding-agent')
-  })
-})
-
-// ─── RolesStep ─────────────────────────────────────────────────────────────
-
-describe('RolesStep', () => {
-  it('renders role, capability tags, and handoff targets', () => {
-    render(
-      <MemoryRouter>
-        <RolesStep draft={emptyBuilderDraft} errors={{}} setField={vi.fn()} />
-      </MemoryRouter>,
-    )
-    expect(screen.getByLabelText('Role')).toBeInTheDocument()
-    expect(screen.getByLabelText('Capability tags')).toBeInTheDocument()
-    expect(screen.getByLabelText('Handoff targets')).toBeInTheDocument()
-  })
-
-  it('renders handoff targets error when set', () => {
-    render(
-      <MemoryRouter>
-        <RolesStep
-          draft={emptyBuilderDraft}
-          errors={{ handoffTargets: 'Invalid handoff target format' }}
-          setField={vi.fn()}
-        />
-      </MemoryRouter>,
-    )
-    expect(screen.getByText('Invalid handoff target format')).toBeInTheDocument()
-  })
-
-  it('calls setField when role is typed', () => {
-    const setField = vi.fn()
-    render(
-      <MemoryRouter>
-        <RolesStep draft={emptyBuilderDraft} errors={{}} setField={setField} />
-      </MemoryRouter>,
-    )
-    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'maintainer' } })
-    expect(setField).toHaveBeenCalledWith('role', 'maintainer')
-  })
-
-  it('calls setField when capability tags are typed', () => {
-    const setField = vi.fn()
-    render(
-      <MemoryRouter>
-        <RolesStep draft={emptyBuilderDraft} errors={{}} setField={setField} />
-      </MemoryRouter>,
-    )
-    fireEvent.change(screen.getByLabelText('Capability tags'), { target: { value: 'triage' } })
-    expect(setField).toHaveBeenCalledWith('capabilityTags', 'triage')
-  })
-
-  it('calls setField when handoff targets are typed', () => {
-    const setField = vi.fn()
-    render(
-      <MemoryRouter>
-        <RolesStep draft={emptyBuilderDraft} errors={{}} setField={setField} />
-      </MemoryRouter>,
-    )
-    fireEvent.change(screen.getByLabelText('Handoff targets'), { target: { value: 'role=worker' } })
-    expect(setField).toHaveBeenCalledWith('handoffTargets', 'role=worker')
   })
 })
 

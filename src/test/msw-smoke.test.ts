@@ -9,15 +9,19 @@ describe('web suite foundation (real api client + MSW)', () => {
   it('lists and creates agents through the real client against MSW', async () => {
     const agents = createCollection([agent({ id: 'agent_1', name: 'Seeded' })])
     server.use(
-      ...resourceHandlers('agents', agents, (body, index) =>
-        agent({ id: `agent_${index + 2}`, name: String(body.name) }),
-      ),
+      ...resourceHandlers('agents', agents, (body, index) => {
+        const input = body as { metadata: { name: string } }
+        return agent({ id: `agent_${index + 2}`, name: input.metadata.name })
+      }),
     )
 
     const page = await api.listAgents({})
     expect(page.data.map((a) => a.metadata.name)).toContain('Seeded')
 
-    const created = await api.createAgent({ name: 'Created via MSW' })
+    const created = await api.createAgent({
+      metadata: { name: 'Created via MSW' },
+      spec: { systemPrompt: 'Do the work.' },
+    })
     expect(created.metadata.uid).toBeTruthy()
 
     const after = await api.listAgents({})

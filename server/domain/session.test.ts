@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  composePrompt,
   hasEmbeddedCredentialUrl,
   hasSecretMaterial,
   hostingModeFromSandbox,
@@ -97,26 +96,6 @@ describe('sessionEventVisibility', () => {
     expect(sessionEventVisibility('debug')).toBe('debug')
     expect(sessionEventVisibility('audit')).toBe('audit')
     expect(() => sessionEventVisibility('public')).toThrow('Invalid session event visibility')
-  })
-})
-
-describe('[spec: sessions/initial-prompt-compose] composePrompt', () => {
-  it('returns the prompt unchanged when there is no memory', () => {
-    expect(composePrompt(null, 'do the task')).toBe('do the task')
-    expect(composePrompt('   ', 'do the task')).toBe('do the task')
-  })
-
-  it('prepends a memory block when memory is present', () => {
-    const composed = composePrompt('remembered context', 'do the task')
-    expect(composed).toContain('Agent memory for this agent:')
-    expect(composed).toContain('remembered context')
-    expect(composed).toContain('Current task:\ndo the task')
-  })
-
-  it('keeps the required prompt when memory is present', () => {
-    expect(composePrompt('remembered', 'do it')).toBe(
-      'Agent memory for this agent:\nremembered\n\nCurrent task:\ndo it',
-    )
   })
 })
 

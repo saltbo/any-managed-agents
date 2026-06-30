@@ -4,9 +4,9 @@ import type { MemoryStore, SessionInput } from '@/lib/amarpc'
 export function sessionResourcesInput(
   form: SessionFormState,
   memoryStores: Array<Pick<MemoryStore, 'metadata'>>,
-): Pick<SessionInput, 'volumes' | 'volumeMounts'> {
-  const volumes: NonNullable<SessionInput['volumes']> = []
-  const volumeMounts: NonNullable<SessionInput['volumeMounts']> = []
+): Pick<SessionInput['spec'], 'volumes' | 'volumeMounts'> {
+  const volumes: NonNullable<SessionInput['spec']['volumes']> = []
+  const volumeMounts: NonNullable<SessionInput['spec']['volumeMounts']> = []
   for (const vaultId of form.credentialVaultIds) {
     const name = safeVolumeName('vault', vaultId)
     volumes.push({ name, type: 'secret', secretRef: `ama://vaults/${encodeURIComponent(vaultId)}` })

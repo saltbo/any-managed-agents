@@ -6,7 +6,7 @@ import { sessionResourcesInput } from './session-resource-input'
 const memoryStore: Pick<MemoryStore, 'metadata'> = {
   metadata: {
     uid: 'mem_store:alpha',
-    pid: 'mem_store:alpha',
+    projectId: 'project_1',
     name: 'Team memory',
     description: 'Shared operating context',
     labels: {},

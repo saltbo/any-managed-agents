@@ -12,9 +12,7 @@ from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
-  from ..models.session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
-  from ..models.session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
+  from ..models.session_subagent import SessionSubagent
 
 
 
@@ -32,14 +30,12 @@ class SessionAgentSnapshot:
             agent_id (str):
             project_id (str):
             version (int):
-            system_prompt (None | str):
+            system_prompt (str):
             provider (str):  Example: workers-ai.
             model (None | str):
             skills (list[str]):
-            subagents (list[SessionAgentSnapshotSubagentsItem]):
-            role (None | str):
-            handoff (SessionAgentSnapshotHandoff):
-            tools (list[SessionAgentSnapshotToolsItem]):
+            subagents (list[SessionSubagent]):
+            allowed_tools (list[str]):
             mcp_connectors (list[str]):
             created_at (datetime.datetime):
      """
@@ -48,14 +44,12 @@ class SessionAgentSnapshot:
     agent_id: str
     project_id: str
     version: int
-    system_prompt: None | str
+    system_prompt: str
     provider: str
     model: None | str
     skills: list[str]
-    subagents: list[SessionAgentSnapshotSubagentsItem]
-    role: None | str
-    handoff: SessionAgentSnapshotHandoff
-    tools: list[SessionAgentSnapshotToolsItem]
+    subagents: list[SessionSubagent]
+    allowed_tools: list[str]
     mcp_connectors: list[str]
     created_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -65,9 +59,7 @@ class SessionAgentSnapshot:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
-        from ..models.session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
-        from ..models.session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
+        from ..models.session_subagent import SessionSubagent
         id = self.id
 
         agent_id = self.agent_id
@@ -76,7 +68,6 @@ class SessionAgentSnapshot:
 
         version = self.version
 
-        system_prompt: None | str
         system_prompt = self.system_prompt
 
         provider = self.provider
@@ -95,15 +86,7 @@ class SessionAgentSnapshot:
 
 
 
-        role: None | str
-        role = self.role
-
-        handoff = self.handoff.to_dict()
-
-        tools = []
-        for tools_item_data in self.tools:
-            tools_item = tools_item_data.to_dict()
-            tools.append(tools_item)
+        allowed_tools = self.allowed_tools
 
 
 
@@ -126,9 +109,7 @@ class SessionAgentSnapshot:
             "model": model,
             "skills": skills,
             "subagents": subagents,
-            "role": role,
-            "handoff": handoff,
-            "tools": tools,
+            "allowedTools": allowed_tools,
             "mcpConnectors": mcp_connectors,
             "createdAt": created_at,
         })
@@ -139,9 +120,7 @@ class SessionAgentSnapshot:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.session_agent_snapshot_handoff import SessionAgentSnapshotHandoff
-        from ..models.session_agent_snapshot_subagents_item import SessionAgentSnapshotSubagentsItem
-        from ..models.session_agent_snapshot_tools_item import SessionAgentSnapshotToolsItem
+        from ..models.session_subagent import SessionSubagent
         d = dict(src_dict)
         id = d.pop("id")
 
@@ -151,13 +130,7 @@ class SessionAgentSnapshot:
 
         version = d.pop("version")
 
-        def _parse_system_prompt(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        system_prompt = _parse_system_prompt(d.pop("systemPrompt"))
-
+        system_prompt = d.pop("systemPrompt")
 
         provider = d.pop("provider")
 
@@ -175,34 +148,14 @@ class SessionAgentSnapshot:
         subagents = []
         _subagents = d.pop("subagents")
         for subagents_item_data in (_subagents):
-            subagents_item = SessionAgentSnapshotSubagentsItem.from_dict(subagents_item_data)
+            subagents_item = SessionSubagent.from_dict(subagents_item_data)
 
 
 
             subagents.append(subagents_item)
 
 
-        def _parse_role(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        role = _parse_role(d.pop("role"))
-
-
-        handoff = SessionAgentSnapshotHandoff.from_dict(d.pop("handoff"))
-
-
-
-
-        tools = []
-        _tools = d.pop("tools")
-        for tools_item_data in (_tools):
-            tools_item = SessionAgentSnapshotToolsItem.from_dict(tools_item_data)
-
-
-
-            tools.append(tools_item)
+        allowed_tools = cast(list[str], d.pop("allowedTools"))
 
 
         mcp_connectors = cast(list[str], d.pop("mcpConnectors"))
@@ -223,9 +176,7 @@ class SessionAgentSnapshot:
             model=model,
             skills=skills,
             subagents=subagents,
-            role=role,
-            handoff=handoff,
-            tools=tools,
+            allowed_tools=allowed_tools,
             mcp_connectors=mcp_connectors,
             created_at=created_at,
         )

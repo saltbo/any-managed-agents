@@ -1,7 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
-import { seedPolicy } from './policy-seed'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -14,23 +13,14 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-async function connectMcp(authorization: string) {
-  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
-    method: 'POST',
-    body: JSON.stringify({ name: 'Agent MCP credentials' }),
-  })
-  expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { metadata: { uid: string } }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.metadata.uid}/credentials`, authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      name: 'GitHub token',
-      type: 'opaque',
-      secret: { stringData: { value: 'raw-github-token' } },
-    }),
-  })
-  expect(credentialRes.status).toBe(201)
-  await credentialRes.json()
+function agentBody(name: string, spec: Record<string, unknown> = {}, metadata: Record<string, unknown> = {}) {
+  return {
+    metadata: { name, ...metadata },
+    spec: {
+      systemPrompt: `${name} system prompt.`,
+      ...spec,
+    },
+  }
 }
 
 describe('[CF] /api/v1/agents', () => {
@@ -62,10 +52,7 @@ describe('[CF] /api/v1/agents', () => {
     const createRes = await SELF.fetch('https://example.com/api/v1/agents', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: 'Research assistant',
-        systemPrompt: 'Answer with citations.',
-      }),
+      body: JSON.stringify(agentBody('Research assistant', { systemPrompt: 'Answer with citations.' })),
     })
 
     expect(createRes.status).toBe(401)
@@ -77,13 +64,15 @@ describe('[CF] /api/v1/agents', () => {
     })
   })
 
-  it('rejects removed legacy fields (instructions, allowedTools, providerId, status)', async () => {
+  it('rejects removed legacy fields (instructions, providerId, status, role, handoff, tools)', async () => {
     const authorization = await signIn()
     for (const body of [
       { name: 'Legacy prompt', instructions: 'Answer with citations.' },
-      { name: 'Legacy tools', allowedTools: ['web_search'] },
       { name: 'Legacy provider', providerId: 'workers-ai' },
       { name: 'Legacy status', status: 'active' },
+      { name: 'Legacy role', role: 'maintainer' },
+      { name: 'Legacy handoff', handoff: { enabled: true } },
+      { name: 'Legacy tools', tools: [{ name: 'read' }] },
     ]) {
       const res = await jsonFetch('/api/v1/agents', authorization, {
         method: 'POST',
@@ -98,43 +87,45 @@ describe('[CF] /api/v1/agents', () => {
 
   it('creates, reads, updates, versions, and archives project-scoped agents [spec: agents/api-crud] [spec: agents/api-archive]', async () => {
     const authorization = await signIn()
-    await connectMcp(authorization)
 
     const createRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Research assistant',
-        systemPrompt: 'Answer with citations.',
-        skills: ['ama@research'],
-        role: 'maintainer',
-        handoff: {
-          enabled: true,
-          accepts: { roles: ['maintainer'], capabilities: ['issue-triage', 'code-review'] },
-          targets: [{ role: 'reviewer' }],
-        },
-        mcpConnectors: ['github'],
-      }),
+      body: JSON.stringify(
+        agentBody('Research assistant', {
+          systemPrompt: 'Answer with citations.',
+          skills: ['ama@research'],
+          allowedTools: ['read', 'fetch'],
+          subagents: [
+            {
+              name: 'reviewer',
+              description: 'Reviews proposed changes for correctness and risk.',
+              systemPrompt: 'Review the proposed changes and report risks.',
+              allowedTools: ['read', 'grep'],
+            },
+          ],
+          mcpConnectors: ['github'],
+        }),
+      ),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
       metadata: { uid: string; archivedAt: string | null; description: string | null }
       spec: {
         provider: string | null
-        systemPrompt: string | null
+        systemPrompt: string
         skills: string[]
-        role: string | null
-        handoff: Record<string, unknown>
+        allowedTools: string[]
+        subagents: unknown[]
         mcpConnectors: string[]
       }
       status: { currentVersionId: string; version: number; phase: string }
-      allowedTools?: unknown
     }
     const createdId = created.metadata.uid
     expect(created.status.version).toBe(1)
     expect(created.spec.provider).toBeNull()
     expect(created.metadata.archivedAt).toBeNull()
     expect(created.status.phase).toBe('active')
-    expect(created.allowedTools).toBeUndefined()
+    expect(created.spec.allowedTools).toEqual(['read', 'fetch'])
 
     const readRes = await jsonFetch(`/api/v1/agents/${createdId}`, authorization)
     expect(readRes.status).toBe(200)
@@ -144,12 +135,18 @@ describe('[CF] /api/v1/agents', () => {
         provider: null,
         systemPrompt: 'Answer with citations.',
         skills: ['ama@research'],
-        role: 'maintainer',
-        handoff: {
-          enabled: true,
-          accepts: { roles: ['maintainer'], capabilities: ['issue-triage', 'code-review'] },
-          targets: [{ role: 'reviewer' }],
-        },
+        allowedTools: ['read', 'fetch'],
+        subagents: [
+          {
+            name: 'reviewer',
+            description: 'Reviews proposed changes for correctness and risk.',
+            systemPrompt: 'Review the proposed changes and report risks.',
+            model: null,
+            allowedTools: ['read', 'grep'],
+            skills: [],
+            mcpConnectors: [],
+          },
+        ],
         mcpConnectors: ['github'],
       },
       status: { version: 1 },
@@ -157,70 +154,51 @@ describe('[CF] /api/v1/agents', () => {
 
     const updateRes = await jsonFetch(`/api/v1/agents/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ description: 'Updated description', skills: ['ama@research', 'ama@review'] }),
+      body: JSON.stringify({
+        metadata: { description: 'Updated description' },
+        spec: { skills: ['ama@research', 'ama@review'] },
+      }),
     })
     expect(updateRes.status).toBe(200)
     const updated = (await updateRes.json()) as {
       metadata: { description: string | null }
-      spec: { skills: string[]; role: string | null }
+      spec: { skills: string[] }
       status: { version: number; currentVersionId: string }
     }
     expect(updated.status.version).toBe(2)
     expect(updated.status.currentVersionId).not.toBe(created.status.currentVersionId)
     expect(updated).toMatchObject({
       metadata: { description: 'Updated description' },
-      spec: { skills: ['ama@research', 'ama@review'], role: 'maintainer' },
+      spec: { skills: ['ama@research', 'ama@review'] },
     })
 
-    const clearPromptRes = await jsonFetch(`/api/v1/agents/${createdId}`, authorization, {
+    const updatePromptRes = await jsonFetch(`/api/v1/agents/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ description: null, systemPrompt: null }),
+      body: JSON.stringify({ metadata: { description: null }, spec: { systemPrompt: 'Updated system prompt.' } }),
     })
-    expect(clearPromptRes.status).toBe(200)
-    await expect(clearPromptRes.json()).resolves.toMatchObject({
+    expect(updatePromptRes.status).toBe(200)
+    await expect(updatePromptRes.json()).resolves.toMatchObject({
       metadata: { description: null },
-      spec: { systemPrompt: null },
+      spec: { systemPrompt: 'Updated system prompt.' },
       status: { version: 3 },
-    })
-
-    const updateRoleRes = await jsonFetch(`/api/v1/agents/${createdId}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        role: 'lead',
-        handoff: {
-          enabled: true,
-          accepts: { roles: ['lead'], capabilities: ['planning'] },
-          targets: [{ capability: 'implementation' }],
-        },
-      }),
-    })
-    expect(updateRoleRes.status).toBe(200)
-    await expect(updateRoleRes.json()).resolves.toMatchObject({
-      spec: {
-        role: 'lead',
-        handoff: {
-          enabled: true,
-          accepts: { roles: ['lead'], capabilities: ['planning'] },
-          targets: [{ capability: 'implementation' }],
-        },
-      },
-      status: { version: 4 },
     })
 
     const versionsRes = await jsonFetch(`/api/v1/agents/${createdId}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
       data: Array<{
-        spec: { systemPrompt: string | null; role: string | null; provider: string | null }
+        spec: { systemPrompt: string; provider: string | null; allowedTools: string[] }
         status: { version: number }
       }>
       pagination: Record<string, unknown>
     }
-    expect(versions.data.map((version) => version.status.version)).toEqual([4, 3, 2, 1])
+    expect(versions.data.map((version) => version.status.version)).toEqual([3, 2, 1])
     expect(versions.data.find((version) => version.status.version === 1)?.spec.systemPrompt).toBe(
       'Answer with citations.',
     )
-    expect(versions.data.find((version) => version.status.version === 3)?.spec.systemPrompt).toBeNull()
+    expect(versions.data.find((version) => version.status.version === 3)?.spec.systemPrompt).toBe(
+      'Updated system prompt.',
+    )
     expect(versions.pagination).not.toHaveProperty('firstId')
     expect(versions.pagination).not.toHaveProperty('lastId')
 
@@ -228,7 +206,7 @@ describe('[CF] /api/v1/agents', () => {
     expect(versionItemRes.status).toBe(200)
     await expect(versionItemRes.json()).resolves.toMatchObject({
       status: { agentId: createdId, version: 1 },
-      spec: { systemPrompt: 'Answer with citations.', role: 'maintainer' },
+      spec: { systemPrompt: 'Answer with citations.', allowedTools: ['read', 'fetch'] },
     })
 
     const missingVersionRes = await jsonFetch(`/api/v1/agents/${createdId}/versions/99`, authorization)
@@ -283,7 +261,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const archivedUpdateRes = await jsonFetch(`/api/v1/agents/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ description: 'Cannot update archived agents' }),
+      body: JSON.stringify({ metadata: { description: 'Cannot update archived agents' } }),
     })
     expect(archivedUpdateRes.status).toBe(409)
 
@@ -303,7 +281,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const unarchivedUpdateRes = await jsonFetch(`/api/v1/agents/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ description: 'Updatable again' }),
+      body: JSON.stringify({ metadata: { description: 'Updatable again' } }),
     })
     expect(unarchivedUpdateRes.status).toBe(200)
   })
@@ -312,13 +290,13 @@ describe('[CF] /api/v1/agents', () => {
     const authorization = await signIn()
     const createAlphaRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Alpha research' }),
+      body: JSON.stringify(agentBody('Alpha research')),
     })
     const alpha = (await createAlphaRes.json()) as { metadata: { uid: string; createdAt: string } }
     const alphaId = alpha.metadata.uid
     const createBetaRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Beta support' }),
+      body: JSON.stringify(agentBody('Beta support')),
     })
     const beta = (await createBetaRes.json()) as { metadata: { uid: string; createdAt: string } }
     const betaId = beta.metadata.uid
@@ -363,7 +341,7 @@ describe('[CF] /api/v1/agents', () => {
 
     await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Gamma triage' }),
+      body: JSON.stringify(agentBody('Gamma triage')),
     })
     const firstPageRes = await jsonFetch('/api/v1/agents?limit=1', authorization)
     const firstPage = (await firstPageRes.json()) as {
@@ -396,7 +374,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const missingProviderRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Missing provider agent', provider: 'provider_missing' }),
+      body: JSON.stringify(agentBody('Missing provider agent', { provider: 'provider_missing' })),
     })
     expect(missingProviderRes.status).toBe(400)
     await expect(missingProviderRes.json()).resolves.toMatchObject({
@@ -406,7 +384,7 @@ describe('[CF] /api/v1/agents', () => {
     // Null provider defers provider resolution to session start.
     const deferredRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Deferred provider agent', provider: null }),
+      body: JSON.stringify(agentBody('Deferred provider agent', { provider: null })),
     })
     expect(deferredRes.status).toBe(201)
     await expect(deferredRes.json()).resolves.toMatchObject({ spec: { provider: null } })
@@ -417,7 +395,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const boundRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Bound provider agent', provider: providerId, model: modelId }),
+      body: JSON.stringify(agentBody('Bound provider agent', { provider: providerId, model: modelId })),
     })
     expect(boundRes.status).toBe(201)
     await expect(boundRes.json()).resolves.toMatchObject({ spec: { provider: providerId, model: modelId } })
@@ -426,77 +404,11 @@ describe('[CF] /api/v1/agents', () => {
     // against the global catalog is deferred to session start.
     const unknownModelRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Unknown model agent', provider: providerId, model: 'unknown-model' }),
+      body: JSON.stringify(agentBody('Unknown model agent', { provider: providerId, model: 'unknown-model' })),
     })
     expect(unknownModelRes.status).toBe(201)
     await expect(unknownModelRes.json()).resolves.toMatchObject({
       spec: { provider: providerId, model: 'unknown-model' },
-    })
-  })
-
-  it('stores and replaces agent memory via PUT', async () => {
-    const authorization = await signIn()
-    const enabledRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Maintainer agent' }),
-    })
-    const enabled = (await enabledRes.json()) as { metadata: { uid: string } }
-    const enabledId = enabled.metadata.uid
-    const emptyMemoryRes = await jsonFetch(`/api/v1/agents/${enabledId}/memory`, authorization)
-    expect(emptyMemoryRes.status).toBe(200)
-    await expect(emptyMemoryRes.json()).resolves.toMatchObject({
-      spec: { agentId: enabledId, content: '', metadata: {} },
-    })
-
-    // PATCH is gone: the memory singleton is replaced with PUT.
-    const patchMemoryRes = await jsonFetch(`/api/v1/agents/${enabledId}/memory`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ content: 'patched' }),
-    })
-    expect(patchMemoryRes.status).toBe(404)
-
-    const replaceMemoryRes = await jsonFetch(`/api/v1/agents/${enabledId}/memory`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({
-        content: 'Checked stale tasks. Follow up on repo resources next heartbeat.',
-        metadata: { format: 'markdown', cursor: 'task-42' },
-      }),
-    })
-    expect(replaceMemoryRes.status).toBe(200)
-    await expect(replaceMemoryRes.json()).resolves.toMatchObject({
-      spec: {
-        agentId: enabledId,
-        content: 'Checked stale tasks. Follow up on repo resources next heartbeat.',
-        metadata: { format: 'markdown', cursor: 'task-42' },
-      },
-    })
-
-    // PUT replaces the whole document: previous metadata keys do not survive.
-    const replaceAgainRes = await jsonFetch(`/api/v1/agents/${enabledId}/memory`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ content: 'Fresh notebook.', metadata: { lastHeartbeat: '2026-06-12' } }),
-    })
-    expect(replaceAgainRes.status).toBe(200)
-    const replaced = (await replaceAgainRes.json()) as { spec: { content: string; metadata: Record<string, unknown> } }
-    expect(replaced.spec.content).toBe('Fresh notebook.')
-    expect(replaced.spec.metadata).toEqual({ lastHeartbeat: '2026-06-12' })
-
-    const clearMetadataRes = await jsonFetch(`/api/v1/agents/${enabledId}/memory`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ content: 'Notebook without metadata.' }),
-    })
-    expect(clearMetadataRes.status).toBe(200)
-    await expect(clearMetadataRes.json()).resolves.toMatchObject({
-      spec: { content: 'Notebook without metadata.', metadata: {} },
-    })
-
-    const secretMemoryRes = await jsonFetch(`/api/v1/agents/${enabledId}/memory`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ content: 'x', metadata: { secretValue: 'raw-secret' } }),
-    })
-    expect(secretMemoryRes.status).toBe(400)
-    await expect(secretMemoryRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { metadata: expect.any(String) } } },
     })
   })
 
@@ -505,7 +417,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const invalidSkillRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Invalid skill', skills: ['missing-style'] }),
+      body: JSON.stringify(agentBody('Invalid skill', { skills: ['missing-style'] })),
     })
     expect(invalidSkillRes.status).toBe(400)
     await expect(invalidSkillRes.json()).resolves.toMatchObject({
@@ -514,7 +426,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const invalidMcpRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Invalid MCP agent', mcpConnectors: ['missing-connector'] }),
+      body: JSON.stringify(agentBody('Invalid MCP agent', { mcpConnectors: ['missing-connector'] })),
     })
     expect(invalidMcpRes.status).toBe(400)
     await expect(invalidMcpRes.json()).resolves.toMatchObject({
@@ -523,52 +435,51 @@ describe('[CF] /api/v1/agents', () => {
 
     const rawSecretMetadataRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Raw secret agent', subagents: [{ secretValue: 'raw-secret' }] }),
+      body: JSON.stringify(
+        agentBody('Raw secret agent', {
+          subagents: [
+            {
+              name: 'secret-reviewer',
+              description: 'Reviews secret-looking prompts.',
+              systemPrompt: 'raw-secret',
+              allowedTools: ['read'],
+            },
+          ],
+        }),
+      ),
     })
     expect(rawSecretMetadataRes.status).toBe(400)
     await expect(rawSecretMetadataRes.json()).resolves.toMatchObject({
       error: { details: { fields: { subagents: expect.any(String) } } },
     })
 
-    const rawTokenMetadataRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Raw token agent',
-        handoff: { enabled: true, accepts: { roles: [], capabilities: ['raw-secret'] }, targets: [] },
-      }),
-    })
-    expect(rawTokenMetadataRes.status).toBe(400)
-
     const rawSecretSkillRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Raw secret skill agent', skills: ['ama@raw-secret-token'] }),
+      body: JSON.stringify(agentBody('Raw secret skill agent', { skills: ['ama@raw-secret-token'] })),
     })
     expect(rawSecretSkillRes.status).toBe(400)
     await expect(rawSecretSkillRes.json()).resolves.toMatchObject({
       error: { details: { fields: { skills: expect.any(String) } } },
     })
 
-    const invalidCapabilityRes = await jsonFetch('/api/v1/agents', authorization, {
+    const invalidToolRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Invalid capability',
-        handoff: { enabled: true, accepts: { roles: [], capabilities: ['has space'] }, targets: [] },
-      }),
+      body: JSON.stringify(agentBody('Invalid tool agent', { allowedTools: ['repo.delete'] })),
     })
-    expect(invalidCapabilityRes.status).toBe(400)
-    await expect(invalidCapabilityRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { handoff: expect.any(String) } } },
+    expect(invalidToolRes.status).toBe(400)
+    await expect(invalidToolRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { allowedTools: expect.any(String) } } },
     })
 
     const validAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Valid agent' }),
+      body: JSON.stringify(agentBody('Valid agent')),
     })
     expect(validAgentRes.status).toBe(201)
 
     const createRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Tenant agent' }),
+      body: JSON.stringify(agentBody('Tenant agent')),
     })
     const agent = (await createRes.json()) as { metadata: { uid: string } }
     const agentId = agent.metadata.uid
@@ -584,195 +495,58 @@ describe('[CF] /api/v1/agents', () => {
     expect(crossProjectRead.status).toBe(404)
   })
 
-  it('stores the tool attachment contract on agent versions and rejects policy-blocked tools', async () => {
+  it('stores allowed tool names on agent versions and rejects unsupported names', async () => {
     const authorization = await signIn()
-    await seedPolicy({
-      authorization,
-      scope: { level: 'project' },
-      toolPolicy: { blockedTools: ['repo.delete'] },
-    })
-
-    const governanceBlockedRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Governance blocked tools', tools: [{ name: 'repo.delete' }] }),
-    })
-    expect(governanceBlockedRes.status).toBe(400)
-    await expect(governanceBlockedRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { tools: 'Tool is blocked by policy: repo.delete' } } },
-    })
-
-    const platformBlockedRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Platform blocked tools', tools: [{ name: 'secrets.read' }] }),
-    })
-    expect(platformBlockedRes.status).toBe(400)
 
     const duplicateRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Duplicate tools', tools: [{ name: 'web_search' }, { name: 'web_search' }] }),
+      body: JSON.stringify(agentBody('Duplicate tools', { allowedTools: ['web_search', 'web_search'] })),
     })
     expect(duplicateRes.status).toBe(400)
+    await expect(duplicateRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { allowedTools: expect.stringContaining('more than once') } } },
+    })
+
+    const unsupportedRes = await jsonFetch('/api/v1/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify(agentBody('Unsupported tools', { allowedTools: ['repo.delete'] })),
+    })
+    expect(unsupportedRes.status).toBe(400)
+    await expect(unsupportedRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { allowedTools: expect.stringContaining('not supported') } } },
+    })
 
     const createRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Tooled agent',
-        tools: [
-          {
-            name: 'web_search',
-            description: 'Search the public web.',
-            inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
-            approvalMode: 'per_call',
-            policyMetadata: { sensitivity: 'low' },
-          },
-          { name: 'repo.read' },
-        ],
-      }),
+      body: JSON.stringify(agentBody('Tooled agent', { allowedTools: ['read', 'web_search'] })),
     })
     expect(createRes.status).toBe(201)
-    const agent = (await createRes.json()) as { metadata: { uid: string }; spec: { tools: unknown[] } }
+    const agent = (await createRes.json()) as { metadata: { uid: string }; spec: { allowedTools: string[] } }
     const agentId = agent.metadata.uid
-    expect(agent.spec.tools).toHaveLength(2)
+    expect(agent.spec.allowedTools).toEqual(['read', 'web_search'])
 
     const versionsRes = await jsonFetch(`/api/v1/agents/${agentId}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
-    const versions = (await versionsRes.json()) as { data: Array<{ spec: { tools: unknown[] } }> }
-    expect(versions.data[0]?.spec.tools).toEqual([
-      {
-        name: 'web_search',
-        description: 'Search the public web.',
-        inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
-        approvalMode: 'per_call',
-        policyMetadata: { sensitivity: 'low' },
-      },
-      {
-        name: 'repo.read',
-        description: null,
-        inputSchema: {},
-        approvalMode: 'project_policy',
-        policyMetadata: {},
-      },
-    ])
+    const versions = (await versionsRes.json()) as { data: Array<{ spec: { allowedTools: string[] } }> }
+    expect(versions.data[0]?.spec.allowedTools).toEqual(['read', 'web_search'])
 
-    // Updating tools writes a new immutable version with the same contract.
+    // Updating allowedTools writes a new immutable version.
     const updateRes = await jsonFetch(`/api/v1/agents/${agentId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ tools: [{ name: 'repo.read', approvalMode: 'always_required' }] }),
+      body: JSON.stringify({ spec: { allowedTools: ['bash'] } }),
     })
     expect(updateRes.status).toBe(200)
     const updatedVersionsRes = await jsonFetch(`/api/v1/agents/${agentId}/versions`, authorization)
     const updatedVersions = (await updatedVersionsRes.json()) as {
-      data: Array<{ spec: { tools: Array<{ name: string }> } }>
+      data: Array<{ spec: { allowedTools: string[] } }>
     }
     expect(updatedVersions.data).toHaveLength(2)
-    expect(updatedVersions.data[0]?.spec.tools).toEqual([
-      {
-        name: 'repo.read',
-        description: null,
-        inputSchema: {},
-        approvalMode: 'always_required',
-        policyMetadata: {},
-      },
-    ])
+    expect(updatedVersions.data[0]?.spec.allowedTools).toEqual(['bash'])
 
     const updateBlockedRes = await jsonFetch(`/api/v1/agents/${agentId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ tools: [{ name: 'repo.delete' }] }),
+      body: JSON.stringify({ spec: { allowedTools: ['repo.delete'] } }),
     })
     expect(updateBlockedRes.status).toBe(400)
-  })
-
-  it('resolves handoff candidates by role or capability inside the same project', async () => {
-    const authorization = await signIn()
-
-    const maintainerRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Maintainer agent',
-        role: 'maintainer',
-        handoff: {
-          enabled: true,
-          accepts: { roles: ['maintainer'], capabilities: [] },
-          targets: [{ role: 'worker' }, { capability: 'implementation' }],
-        },
-      }),
-    })
-    expect(maintainerRes.status).toBe(201)
-    const maintainer = (await maintainerRes.json()) as { metadata: { uid: string } }
-    const maintainerId = maintainer.metadata.uid
-
-    const workerRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Worker agent',
-        role: 'worker',
-        handoff: { enabled: true, accepts: { roles: ['worker'], capabilities: ['implementation'] }, targets: [] },
-      }),
-    })
-    expect(workerRes.status).toBe(201)
-    const worker = (await workerRes.json()) as { metadata: { uid: string } }
-    const workerId = worker.metadata.uid
-
-    const reviewerRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Reviewer agent', role: 'reviewer' }),
-    })
-    expect(reviewerRes.status).toBe(201)
-    const reviewer = (await reviewerRes.json()) as { metadata: { uid: string } }
-    const reviewerId = reviewer.metadata.uid
-
-    const otherAuthorization = await signIn({ ...defaultClaims(), sub: 'user_other_project' })
-    const foreignWorkerRes = await jsonFetch('/api/v1/agents', otherAuthorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Foreign worker agent', role: 'worker' }),
-    })
-    expect(foreignWorkerRes.status).toBe(201)
-
-    const policyResolvedRes = await jsonFetch(`/api/v1/agents/${maintainerId}/handoff-candidates`, authorization)
-    expect(policyResolvedRes.status).toBe(200)
-    const policyResolved = (await policyResolvedRes.json()) as { data: Array<{ id: string }> }
-    expect(policyResolved.data.map((candidate) => candidate.id)).toEqual([workerId])
-
-    const queryResolvedRes = await jsonFetch(
-      `/api/v1/agents/${reviewerId}/handoff-candidates?capability=implementation`,
-      authorization,
-    )
-    expect(queryResolvedRes.status).toBe(200)
-    const queryResolved = (await queryResolvedRes.json()) as {
-      data: Array<{ id: string; role: string | null; capabilities: string[] }>
-    }
-    expect(queryResolved.data).toEqual([
-      { id: workerId, name: 'Worker agent', role: 'worker', capabilities: ['implementation'] },
-    ])
-
-    // Archived agents drop out of candidate resolution.
-    await jsonFetch(`/api/v1/agents/${workerId}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ archived: true }),
-    })
-    const archivedResolvedRes = await jsonFetch(`/api/v1/agents/${maintainerId}/handoff-candidates`, authorization)
-    expect(archivedResolvedRes.status).toBe(200)
-    const archivedResolved = (await archivedResolvedRes.json()) as { data: Array<{ id: string }> }
-    expect(archivedResolved.data).toEqual([])
-  })
-
-  it('rejects handoff resolution without a requested target or policy targets', async () => {
-    const authorization = await signIn()
-    const agentRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'No-target agent' }),
-    })
-    expect(agentRes.status).toBe(201)
-    const agent = (await agentRes.json()) as { metadata: { uid: string } }
-    const agentId = agent.metadata.uid
-
-    const res = await jsonFetch(`/api/v1/agents/${agentId}/handoff-candidates`, authorization)
-    expect(res.status).toBe(400)
-    await expect(res.json()).resolves.toMatchObject({
-      error: { type: 'validation_error', details: { fields: { target: expect.any(String) } } },
-    })
-
-    const missingRes = await jsonFetch('/api/v1/agents/agent_missing/handoff-candidates?role=worker', authorization)
-    expect(missingRes.status).toBe(404)
   })
 })

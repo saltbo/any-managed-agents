@@ -121,7 +121,7 @@ describe('session-runtime', () => {
         sandboxId: 'sandbox_123',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
-        agentSnapshot: { instructions: 'Test runtime' },
+        agentSnapshot: { systemPrompt: 'Test runtime' },
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
       }),
     ).resolves.toMatchObject({
@@ -217,7 +217,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'bash' }] },
+      agentSnapshot: { systemPrompt: 'Inspect before answering.', allowedTools: ['bash'] },
       prompt: 'Inspect repository status',
       onEvent: async (event) => {
         events.push(event)
@@ -257,7 +257,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'bash' }] },
+      agentSnapshot: { systemPrompt: 'Remember prior turns.', allowedTools: ['bash'] },
       prompt: 'Alpha durable prompt',
       onEvent: async (event) => {
         firstTurnEvents.push(event)
@@ -270,7 +270,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'bash' }] },
+      agentSnapshot: { systemPrompt: 'Remember prior turns.', allowedTools: ['bash'] },
       prompt: 'What was my previous prompt?',
       messages: runtimeMessagesFromEvents(firstTurnEvents.map((event) => ({ payload: event }))),
       onEvent: async (event) => {
@@ -296,7 +296,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'bash' }] },
+      agentSnapshot: { systemPrompt: 'Inspect before answering.', allowedTools: ['bash'] },
       prompt: 'Inspect repository status',
       shouldPause: () => true,
       onEvent: async (event) => {
@@ -316,7 +316,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'bash' }] },
+      agentSnapshot: { systemPrompt: 'Inspect before answering.', allowedTools: ['bash'] },
       continuation: true,
       messages: runtimeMessagesFromEvents(firstEvents.map((event) => ({ payload: event }))),
       onEvent: async (event) => {
@@ -395,7 +395,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Continue from history.', tools: [] },
+      agentSnapshot: { systemPrompt: 'Continue from history.', allowedTools: [] },
       messages: runtimeMessagesFromEvents([
         { type: 'message_end', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
       ]),
@@ -424,7 +424,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Stop cleanly.', tools: [{ name: 'bash' }] },
+      agentSnapshot: { systemPrompt: 'Stop cleanly.', allowedTools: ['bash'] },
       prompt: 'Alpha durable prompt',
       ensureActive: async () => {
         if (!active) {
@@ -453,7 +453,7 @@ describe('session-runtime', () => {
         sandboxId: 'sandbox_123',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
-        agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'read' }] },
+        agentSnapshot: { systemPrompt: 'Inspect before answering.', allowedTools: ['read'] },
         prompt: 'Inspect repository status',
         onEvent: async (event) => {
           events.push(event)
@@ -486,7 +486,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', tools: [] },
+      agentSnapshot: { systemPrompt: 'Inspect before answering.' },
       prompt: 'Inspect repository status',
       onEvent: async () => {},
     })
@@ -501,7 +501,7 @@ describe('session-runtime', () => {
         sandboxId: 'sandbox_123',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
-        agentSnapshot: { instructions: 'Test runtime' },
+        agentSnapshot: { systemPrompt: 'Test runtime' },
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
         mcpServers: { servers: [{ connectorId: 'github' }] },
         env: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },

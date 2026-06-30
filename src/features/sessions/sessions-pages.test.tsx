@@ -407,9 +407,7 @@ describe('SessionsView', () => {
         model: null,
         skills: [],
         subagents: [],
-        role: null,
-        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-        tools: [],
+        allowedTools: ['read', 'bash'],
         mcpConnectors: [],
 
         createdAt: now,
@@ -432,7 +430,7 @@ describe('SessionsView', () => {
     expect(noneCells.length).toBeGreaterThan(0)
   })
 
-  it('falls back to agentId when instructions is null', () => {
+  it('falls back to agentId when agent name is unavailable', () => {
     const session = buildSession({
       agentId: 'agent_fallback_id',
       agentSnapshot: {
@@ -440,14 +438,12 @@ describe('SessionsView', () => {
         agentId: 'agent_fallback_id',
         projectId: 'project_1',
         version: 1,
-        systemPrompt: null,
+        systemPrompt: 'Do the work.',
         provider: 'workers-ai',
         model: '@cf/meta/llama',
         skills: [],
         subagents: [],
-        role: null,
-        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-        tools: [],
+        allowedTools: ['read', 'bash'],
         mcpConnectors: [],
 
         createdAt: now,
@@ -465,7 +461,7 @@ describe('SessionsView', () => {
       </MemoryRouter>,
     )
 
-    // When instructions is null, falls back to agentId
+    // When the agent name is unavailable, falls back to agentId.
     expect(screen.getByText(/agent_fallback_id · agent_fallback_id/)).toBeTruthy()
   })
 
@@ -515,7 +511,7 @@ describe('SessionDetailView', () => {
     return session
   }
 
-  it('falls back to agentId when agentName is absent and instructions is null', () => {
+  it('falls back to agentId when agentName is absent', () => {
     const session = buildSession({
       agentId: 'agent_no_name',
       agentSnapshot: {
@@ -523,14 +519,12 @@ describe('SessionDetailView', () => {
         agentId: 'agent_no_name',
         projectId: 'project_1',
         version: 1,
-        systemPrompt: null,
+        systemPrompt: 'Do the work.',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         skills: [],
         subagents: [],
-        role: null,
-        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-        tools: [],
+        allowedTools: ['read', 'bash'],
         mcpConnectors: [],
 
         createdAt: now,
@@ -843,9 +837,7 @@ describe('SessionDetailView', () => {
         model: null,
         skills: [],
         subagents: [],
-        role: null,
-        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-        tools: [],
+        allowedTools: ['read', 'bash'],
         mcpConnectors: [],
 
         createdAt: now,
@@ -874,9 +866,7 @@ describe('SessionDetailView', () => {
         model: '@cf/moonshotai/kimi-k2.6',
         skills: [],
         subagents: [],
-        role: null,
-        handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-        tools: [{ name: 123 }],
+        allowedTools: ['read'],
         mcpConnectors: [],
 
         createdAt: now,

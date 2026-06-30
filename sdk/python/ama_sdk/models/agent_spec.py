@@ -11,9 +11,7 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.agent_handoff import AgentHandoff
   from ..models.agent_subagent import AgentSubagent
-  from ..models.agent_tool_attachment import AgentToolAttachment
 
 
 
@@ -27,25 +25,23 @@ T = TypeVar("T", bound="AgentSpec")
 class AgentSpec:
     """ 
         Attributes:
-            system_prompt (None | str):  Example: Answer with citations..
-            provider (None | str):  Example: provider_abc123.
+            system_prompt (str):  Example: Answer with citations..
+            provider (None | str):  Example: workers-ai.
             model (None | str):  Example: @cf/moonshotai/kimi-k2.6.
             skills (list[str]):  Example: ['ama@code-review'].
-            subagents (list[AgentSubagent]):  Example: [{'username': 'reviewer', 'role': 'reviewer'}].
-            role (None | str):  Example: maintainer.
-            handoff (AgentHandoff):
-            tools (list[AgentToolAttachment]):
+            subagents (list[AgentSubagent]):  Example: [{'name': 'reviewer', 'description': 'Reviews proposed changes for
+                correctness and risk.', 'systemPrompt': 'Review the proposed changes and report risks.', 'model': None,
+                'allowedTools': ['read', 'grep'], 'skills': ['ama@code-review'], 'mcpConnectors': ['github']}].
+            allowed_tools (list[str]):  Example: ['read', 'bash', 'edit'].
             mcp_connectors (list[str]):  Example: ['github'].
      """
 
-    system_prompt: None | str
+    system_prompt: str
     provider: None | str
     model: None | str
     skills: list[str]
     subagents: list[AgentSubagent]
-    role: None | str
-    handoff: AgentHandoff
-    tools: list[AgentToolAttachment]
+    allowed_tools: list[str]
     mcp_connectors: list[str]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -54,10 +50,7 @@ class AgentSpec:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.agent_handoff import AgentHandoff
         from ..models.agent_subagent import AgentSubagent
-        from ..models.agent_tool_attachment import AgentToolAttachment
-        system_prompt: None | str
         system_prompt = self.system_prompt
 
         provider: None | str
@@ -77,15 +70,7 @@ class AgentSpec:
 
 
 
-        role: None | str
-        role = self.role
-
-        handoff = self.handoff.to_dict()
-
-        tools = []
-        for tools_item_data in self.tools:
-            tools_item = tools_item_data.to_dict()
-            tools.append(tools_item)
+        allowed_tools = self.allowed_tools
 
 
 
@@ -102,9 +87,7 @@ class AgentSpec:
             "model": model,
             "skills": skills,
             "subagents": subagents,
-            "role": role,
-            "handoff": handoff,
-            "tools": tools,
+            "allowedTools": allowed_tools,
             "mcpConnectors": mcp_connectors,
         })
 
@@ -114,17 +97,9 @@ class AgentSpec:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.agent_handoff import AgentHandoff
         from ..models.agent_subagent import AgentSubagent
-        from ..models.agent_tool_attachment import AgentToolAttachment
         d = dict(src_dict)
-        def _parse_system_prompt(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        system_prompt = _parse_system_prompt(d.pop("systemPrompt"))
-
+        system_prompt = d.pop("systemPrompt")
 
         def _parse_provider(data: object) -> None | str:
             if data is None:
@@ -155,27 +130,7 @@ class AgentSpec:
             subagents.append(subagents_item)
 
 
-        def _parse_role(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        role = _parse_role(d.pop("role"))
-
-
-        handoff = AgentHandoff.from_dict(d.pop("handoff"))
-
-
-
-
-        tools = []
-        _tools = d.pop("tools")
-        for tools_item_data in (_tools):
-            tools_item = AgentToolAttachment.from_dict(tools_item_data)
-
-
-
-            tools.append(tools_item)
+        allowed_tools = cast(list[str], d.pop("allowedTools"))
 
 
         mcp_connectors = cast(list[str], d.pop("mcpConnectors"))
@@ -187,9 +142,7 @@ class AgentSpec:
             model=model,
             skills=skills,
             subagents=subagents,
-            role=role,
-            handoff=handoff,
-            tools=tools,
+            allowed_tools=allowed_tools,
             mcp_connectors=mcp_connectors,
         )
 

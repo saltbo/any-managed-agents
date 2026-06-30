@@ -55,7 +55,7 @@ const now = '2026-05-23T00:00:00.000Z'
 
 export function buildTestSession(overrides: TestSessionOverrides = {}): Session {
   const uid = overrides.id ?? overrides.metadata?.uid ?? 'session_1'
-  const pid = overrides.projectId ?? overrides.metadata?.pid ?? 'project_1'
+  const projectId = overrides.projectId ?? overrides.metadata?.projectId ?? 'project_1'
   const agentId = overrides.agentId ?? overrides.spec?.agentId ?? 'agent_1'
   const environmentId =
     overrides.environmentId !== undefined ? overrides.environmentId : (overrides.spec?.environmentId ?? 'env_1')
@@ -101,16 +101,14 @@ export function buildTestSession(overrides: TestSessionOverrides = {}): Session 
     hostingMode: overrides.status?.placement?.hostingMode ?? 'cloud',
     provider: overrides.status?.placement?.provider ?? 'workers-ai',
     model: overrides.status?.placement?.model ?? '@cf/moonshotai/kimi-k2.6',
-    driver: overrides.status?.placement?.driver ?? 'ama-cloud',
-    backend: overrides.status?.placement?.backend ?? 'ama-cloud',
-    protocol: overrides.status?.placement?.protocol ?? 'ama-runtime-rpc',
   }
   const volumes = overrides.spec?.volumes ?? []
   const session: Session = {
     metadata: {
       uid,
-      pid,
+      projectId,
       name: name ?? uid,
+      description: null,
       labels: {},
       annotations: {},
       createdBy: 'user_1',
@@ -154,9 +152,7 @@ function defaultAgentSnapshot(agentId: string): SessionAgentSnapshot {
     model: '@cf/moonshotai/kimi-k2.6',
     skills: ['ama@coding-agent'],
     subagents: [],
-    role: null,
-    handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-    tools: [{ name: 'read' }, { name: 'write' }],
+    allowedTools: ['read', 'write'],
     mcpConnectors: [],
     createdAt: now,
   }

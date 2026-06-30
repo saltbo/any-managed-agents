@@ -54,8 +54,11 @@ function setupMemoryStoreHandlers(stores: MemoryStore[] = [], memories: MemorySt
     ...resourceHandlers('memory-stores', storeCollection, (body, index) =>
       store({
         id: `memstore_new_${index}`,
-        name: String(body.name ?? 'New store'),
-        description: typeof body.description === 'string' ? body.description : null,
+        name: String((body.metadata as { name?: unknown } | undefined)?.name ?? 'New store'),
+        description:
+          typeof (body.metadata as { description?: unknown } | undefined)?.description === 'string'
+            ? String((body.metadata as { description?: unknown }).description)
+            : null,
       }),
     ),
     http.get('*/api/v1/memory-stores/:storeId/memories', () =>

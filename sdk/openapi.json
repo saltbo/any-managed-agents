@@ -1213,7 +1213,7 @@
             "type": "string",
             "example": "resource_abc123"
           },
-          "pid": {
+          "projectId": {
             "type": "string",
             "nullable": true,
             "example": "project_abc123"
@@ -1259,7 +1259,7 @@
         },
         "required": [
           "uid",
-          "pid",
+          "projectId",
           "name",
           "description",
           "labels",
@@ -1275,13 +1275,12 @@
         "properties": {
           "systemPrompt": {
             "type": "string",
-            "nullable": true,
             "example": "Answer with citations."
           },
           "provider": {
             "type": "string",
             "nullable": true,
-            "example": "provider_abc123"
+            "example": "workers-ai"
           },
           "model": {
             "type": "string",
@@ -1304,24 +1303,35 @@
             },
             "example": [
               {
-                "username": "reviewer",
-                "role": "reviewer"
+                "name": "reviewer",
+                "description": "Reviews proposed changes for correctness and risk.",
+                "systemPrompt": "Review the proposed changes and report risks.",
+                "model": null,
+                "allowedTools": [
+                  "read",
+                  "grep"
+                ],
+                "skills": [
+                  "ama@code-review"
+                ],
+                "mcpConnectors": [
+                  "github"
+                ]
               }
             ]
           },
-          "role": {
-            "type": "string",
-            "nullable": true,
-            "example": "maintainer"
-          },
-          "handoff": {
-            "$ref": "#/components/schemas/AgentHandoff"
-          },
-          "tools": {
+          "allowedTools": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AgentToolAttachment"
-            }
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "example": [
+              "read",
+              "bash",
+              "edit"
+            ]
           },
           "mcpConnectors": {
             "type": "array",
@@ -1339,137 +1349,71 @@
           "model",
           "skills",
           "subagents",
-          "role",
-          "handoff",
-          "tools",
+          "allowedTools",
           "mcpConnectors"
         ]
       },
       "AgentSubagent": {
         "type": "object",
         "properties": {
-          "username": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": {
-          "nullable": true
-        }
-      },
-      "AgentHandoff": {
-        "type": "object",
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "accepts": {
-            "type": "object",
-            "properties": {
-              "roles": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 80
-                }
-              },
-              "capabilities": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 80
-                }
-              }
-            },
-            "required": [
-              "roles",
-              "capabilities"
-            ],
-            "additionalProperties": false
-          },
-          "targets": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentHandoffTarget"
-            }
-          }
-        },
-        "required": [
-          "enabled",
-          "accepts",
-          "targets"
-        ],
-        "additionalProperties": false
-      },
-      "AgentHandoffTarget": {
-        "type": "object",
-        "properties": {
-          "role": {
-            "type": "string"
-          },
-          "capability": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AgentToolAttachment": {
-        "type": "object",
-        "properties": {
           "name": {
             "type": "string",
-            "example": "repo.read"
+            "minLength": 1,
+            "maxLength": 80,
+            "example": "reviewer"
           },
           "description": {
             "type": "string",
-            "nullable": true,
-            "example": "Read repository metadata and files."
+            "example": "Reviews proposed changes for correctness and risk."
           },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "type": "object",
-              "properties": {
-                "repo": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "approvalMode": {
+          "systemPrompt": {
             "type": "string",
-            "enum": [
-              "none",
-              "per_call",
-              "always_required",
-              "project_policy"
-            ],
-            "example": "project_policy"
+            "example": "Review the proposed changes and report risks."
           },
-          "policyMetadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
+          "model": {
+            "type": "string",
+            "nullable": true,
+            "example": "@cf/moonshotai/kimi-k2.6"
+          },
+          "allowedTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
             },
-            "example": {
-              "sensitivity": "low"
-            }
+            "example": [
+              "read",
+              "grep"
+            ]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "ama@code-review"
+            ]
+          },
+          "mcpConnectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "github"
+            ]
           }
         },
         "required": [
           "name",
           "description",
-          "inputSchema",
-          "approvalMode",
-          "policyMetadata"
-        ]
+          "systemPrompt",
+          "model",
+          "allowedTools",
+          "skills",
+          "mcpConnectors"
+        ],
+        "additionalProperties": false
       },
       "AgentStatus": {
         "type": "object",
@@ -1503,35 +1447,162 @@
       "CreateAgentRequest": {
         "type": "object",
         "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceCreateMetadata"
+          },
+          "spec": {
+            "type": "object",
+            "properties": {
+              "systemPrompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000,
+                "example": "Answer with citations."
+              },
+              "provider": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "example": "workers-ai"
+              },
+              "model": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "example": "@cf/moonshotai/kimi-k2.6"
+              },
+              "skills": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "maxItems": 100,
+                "example": [
+                  "ama@code-review"
+                ]
+              },
+              "subagents": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AgentSubagentInput"
+                },
+                "maxItems": 50,
+                "example": [
+                  {
+                    "name": "reviewer",
+                    "description": "Reviews proposed changes for correctness and risk.",
+                    "systemPrompt": "Review the proposed changes and report risks.",
+                    "allowedTools": [
+                      "read",
+                      "grep"
+                    ]
+                  }
+                ]
+              },
+              "allowedTools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "maxItems": 100,
+                "example": [
+                  "read",
+                  "bash",
+                  "edit"
+                ]
+              },
+              "mcpConnectors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "maxItems": 50,
+                "example": [
+                  "github"
+                ]
+              }
+            },
+            "required": [
+              "systemPrompt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "metadata",
+          "spec"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceCreateMetadata": {
+        "type": "object",
+        "properties": {
           "name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 120,
-            "example": "Research assistant"
+            "maxLength": 160,
+            "example": "Default resource"
           },
           "description": {
             "type": "string",
             "nullable": true,
             "maxLength": 1000,
-            "example": "Answers with citations."
+            "example": "Default project resource."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "name": "Research assistant"
+        }
+      },
+      "AgentSubagentInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "example": "reviewer"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "example": "Reviews proposed changes for correctness and risk."
           },
           "systemPrompt": {
             "type": "string",
-            "nullable": true,
-            "maxLength": 8000,
-            "example": "Answer with citations."
-          },
-          "provider": {
-            "type": "string",
-            "nullable": true,
             "minLength": 1,
-            "example": "provider_abc123"
+            "maxLength": 8000,
+            "example": "Review the proposed changes and report risks."
           },
           "model": {
             "type": "string",
             "nullable": true,
             "minLength": 1,
             "example": "@cf/moonshotai/kimi-k2.6"
+          },
+          "allowedTools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "maxItems": 100,
+            "example": [
+              "read",
+              "grep"
+            ]
           },
           "skills": {
             "type": "array",
@@ -1544,36 +1615,6 @@
             "example": [
               "ama@code-review"
             ]
-          },
-          "subagents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentSubagent"
-            },
-            "maxItems": 50,
-            "example": [
-              {
-                "username": "reviewer",
-                "role": "reviewer"
-              }
-            ]
-          },
-          "role": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 80,
-            "example": "maintainer"
-          },
-          "handoff": {
-            "$ref": "#/components/schemas/AgentHandoff"
-          },
-          "tools": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentToolAttachmentInput"
-            },
-            "maxItems": 100
           },
           "mcpConnectors": {
             "type": "array",
@@ -1589,155 +1630,120 @@
           }
         },
         "required": [
-          "name"
-        ],
-        "additionalProperties": false
-      },
-      "AgentToolAttachmentInput": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "repo.read"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 1000,
-            "example": "Read repository metadata and files."
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "type": "object",
-              "properties": {
-                "repo": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "approvalMode": {
-            "type": "string",
-            "enum": [
-              "none",
-              "per_call",
-              "always_required",
-              "project_policy"
-            ],
-            "example": "project_policy"
-          },
-          "policyMetadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "sensitivity": "low"
-            }
-          }
-        },
-        "required": [
-          "name"
+          "name",
+          "description",
+          "systemPrompt"
         ],
         "additionalProperties": false
       },
       "UpdateAgentRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Research assistant"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceUpdateMetadata"
           },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 1000,
-            "example": "Answers with citations."
-          },
-          "systemPrompt": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 8000,
-            "example": "Answer with citations."
-          },
-          "provider": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "example": "provider_abc123"
-          },
-          "model": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "example": "@cf/moonshotai/kimi-k2.6"
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 256
-            },
-            "maxItems": 100,
-            "example": [
-              "ama@code-review"
-            ]
-          },
-          "subagents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentSubagent"
-            },
-            "maxItems": 50,
-            "example": [
-              {
-                "username": "reviewer",
-                "role": "reviewer"
+          "spec": {
+            "type": "object",
+            "properties": {
+              "systemPrompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000,
+                "example": "Answer with citations."
+              },
+              "provider": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "example": "workers-ai"
+              },
+              "model": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "example": "@cf/moonshotai/kimi-k2.6"
+              },
+              "skills": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "maxItems": 100,
+                "example": [
+                  "ama@code-review"
+                ]
+              },
+              "subagents": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AgentSubagentInput"
+                },
+                "maxItems": 50,
+                "example": [
+                  {
+                    "name": "reviewer",
+                    "description": "Reviews proposed changes for correctness and risk.",
+                    "systemPrompt": "Review the proposed changes and report risks.",
+                    "allowedTools": [
+                      "read",
+                      "grep"
+                    ]
+                  }
+                ]
+              },
+              "allowedTools": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "maxItems": 100,
+                "example": [
+                  "read",
+                  "bash",
+                  "edit"
+                ]
+              },
+              "mcpConnectors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "maxItems": 50,
+                "example": [
+                  "github"
+                ]
               }
-            ]
-          },
-          "role": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 80,
-            "example": "maintainer"
-          },
-          "handoff": {
-            "$ref": "#/components/schemas/AgentHandoff"
-          },
-          "tools": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentToolAttachmentInput"
             },
-            "maxItems": 100
-          },
-          "mcpConnectors": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 120
-            },
-            "maxItems": 50,
-            "example": [
-              "github"
-            ]
+            "additionalProperties": false
           },
           "archived": {
             "type": "boolean",
             "description": "Lifecycle transition: true archives the agent, false unarchives it.",
             "example": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResourceUpdateMetadata": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "example": "Default resource"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000,
+            "example": "Default project resource."
           }
         },
         "additionalProperties": false
@@ -1795,137 +1801,6 @@
           "agentId",
           "version"
         ]
-      },
-      "AgentHandoffCandidateListResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentHandoffCandidate"
-            }
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/ListPagination"
-          }
-        },
-        "required": [
-          "data",
-          "pagination"
-        ]
-      },
-      "AgentHandoffCandidate": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "agent_def456"
-          },
-          "name": {
-            "type": "string",
-            "example": "Implementation worker"
-          },
-          "role": {
-            "type": "string",
-            "nullable": true,
-            "example": "worker"
-          },
-          "capabilities": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "example": [
-              "implementation"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "role",
-          "capabilities"
-        ]
-      },
-      "AgentMemory": {
-        "type": "object",
-        "properties": {
-          "metadata": {
-            "$ref": "#/components/schemas/ResourceMetadata"
-          },
-          "spec": {
-            "$ref": "#/components/schemas/AgentMemorySpec"
-          },
-          "status": {
-            "$ref": "#/components/schemas/AgentMemoryStatus"
-          }
-        },
-        "required": [
-          "metadata",
-          "spec",
-          "status"
-        ]
-      },
-      "AgentMemorySpec": {
-        "type": "object",
-        "properties": {
-          "agentId": {
-            "type": "string",
-            "example": "agent_abc123"
-          },
-          "content": {
-            "type": "string",
-            "example": "Previous heartbeat checked open PRs and deferred billing export."
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "format": "markdown"
-            }
-          }
-        },
-        "required": [
-          "agentId",
-          "content",
-          "metadata"
-        ]
-      },
-      "AgentMemoryStatus": {
-        "type": "object",
-        "properties": {
-          "phase": {
-            "$ref": "#/components/schemas/ResourcePhase"
-          }
-        },
-        "required": [
-          "phase"
-        ]
-      },
-      "ReplaceAgentMemoryRequest": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string",
-            "maxLength": 128000,
-            "example": "Checked stale tasks. Follow up on repo resource migration next heartbeat."
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "format": "markdown"
-            }
-          }
-        },
-        "required": [
-          "content"
-        ],
-        "additionalProperties": false
       },
       "EnvironmentListResponse": {
         "type": "object",
@@ -1991,7 +1866,8 @@
                 "required": {
                   "type": "boolean"
                 }
-              }
+              },
+              "additionalProperties": false
             },
             "example": {
               "NODE_ENV": {
@@ -2167,102 +2043,108 @@
       "CreateEnvironmentRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Node workspace"
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCreateMetadata"
+              },
+              {
+                "example": {
+                  "name": "Node workspace"
+                }
+              }
+            ]
           },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 1000,
-            "example": "Default Node.js environment."
-          },
-          "scope": {
-            "$ref": "#/components/schemas/EnvironmentScope"
-          },
-          "type": {
-            "$ref": "#/components/schemas/EnvironmentType"
-          },
-          "networking": {
-            "$ref": "#/components/schemas/EnvironmentNetworking"
-          },
-          "packages": {
-            "$ref": "#/components/schemas/EnvironmentPackages"
-          },
-          "variables": {
+          "spec": {
             "type": "object",
-            "additionalProperties": {
-              "type": "object",
-              "properties": {
-                "description": {
-                  "type": "string",
-                  "maxLength": 500
+            "properties": {
+              "scope": {
+                "$ref": "#/components/schemas/EnvironmentScope"
+              },
+              "type": {
+                "$ref": "#/components/schemas/EnvironmentType"
+              },
+              "networking": {
+                "$ref": "#/components/schemas/EnvironmentNetworking"
+              },
+              "packages": {
+                "$ref": "#/components/schemas/EnvironmentPackages"
+              },
+              "variables": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "required": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
                 },
-                "required": {
-                  "type": "boolean"
+                "example": {
+                  "NODE_ENV": {
+                    "required": true
+                  }
                 }
               }
             },
-            "example": {
-              "NODE_ENV": {
-                "required": true
-              }
-            }
+            "additionalProperties": false
           }
         },
         "required": [
-          "name"
+          "metadata",
+          "spec"
         ],
         "additionalProperties": false
       },
       "UpdateEnvironmentRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Node workspace"
+          "metadata": {
+            "$ref": "#/components/schemas/ResourceUpdateMetadata"
           },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 1000,
-            "example": "Default Node.js environment."
-          },
-          "scope": {
-            "$ref": "#/components/schemas/EnvironmentScope"
-          },
-          "type": {
-            "$ref": "#/components/schemas/EnvironmentType"
-          },
-          "networking": {
-            "$ref": "#/components/schemas/EnvironmentNetworking"
-          },
-          "packages": {
-            "$ref": "#/components/schemas/EnvironmentPackages"
-          },
-          "variables": {
+          "spec": {
             "type": "object",
-            "additionalProperties": {
-              "type": "object",
-              "properties": {
-                "description": {
-                  "type": "string",
-                  "maxLength": 500
+            "properties": {
+              "scope": {
+                "$ref": "#/components/schemas/EnvironmentScope"
+              },
+              "type": {
+                "$ref": "#/components/schemas/EnvironmentType"
+              },
+              "networking": {
+                "$ref": "#/components/schemas/EnvironmentNetworking"
+              },
+              "packages": {
+                "$ref": "#/components/schemas/EnvironmentPackages"
+              },
+              "variables": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "required": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
                 },
-                "required": {
-                  "type": "boolean"
+                "example": {
+                  "NODE_ENV": {
+                    "required": true
+                  }
                 }
               }
             },
-            "example": {
-              "NODE_ENV": {
-                "required": true
-              }
-            }
+            "additionalProperties": false
           },
           "archived": {
             "type": "boolean",
@@ -4162,79 +4044,58 @@
         "properties": {
           "agentId": {
             "type": "string",
+            "minLength": 1,
             "example": "agent_abc123"
           },
           "environmentId": {
             "type": "string",
             "nullable": true,
+            "minLength": 1,
             "example": "env_abc123"
           },
           "runtime": {
             "$ref": "#/components/schemas/Runtime"
           },
-          "promptTemplate": {
-            "type": "string",
-            "example": "Research current Canadian banking bonus offers."
-          },
           "env": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "example": {
-              "AK_API_URL": "https://ak.example.com"
-            }
+            "$ref": "#/components/schemas/ExecutionEnv"
           },
           "envFrom": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EnvFromEntry"
             },
-            "example": [
-              {
-                "type": "secret",
-                "name": "AK_AGENT_KEY",
-                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
-              }
-            ]
+            "maxItems": 50
           },
           "volumes": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Volume"
             },
-            "example": [
-              {
-                "name": "project-secrets",
-                "type": "secret",
-                "secretRef": "ama://vaults/vault_abc123"
-              }
-            ]
+            "maxItems": 50
           },
           "volumeMounts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/VolumeMount"
             },
-            "example": [
-              {
-                "name": "project-secrets",
-                "mountPath": "/workspace/.ama/secrets/project",
-                "readOnly": true
-              }
-            ]
+            "maxItems": 50
+          },
+          "promptTemplate": {
+            "type": "string",
+            "example": "Research current Canadian banking bonus offers."
           }
         },
         "required": [
           "agentId",
           "environmentId",
           "runtime",
-          "promptTemplate",
           "env",
           "envFrom",
           "volumes",
-          "volumeMounts"
-        ]
+          "volumeMounts",
+          "promptTemplate"
+        ],
+        "additionalProperties": false
       },
       "Runtime": {
         "type": "string",
@@ -4245,6 +4106,16 @@
           "copilot"
         ],
         "example": "codex"
+      },
+      "ExecutionEnv": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string",
+          "maxLength": 16000
+        },
+        "example": {
+          "AK_API_URL": "https://ak.example.com"
+        }
       },
       "EnvFromEntry": {
         "type": "object",
@@ -4475,182 +4346,195 @@
       "CreateTriggerRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 160,
-            "example": "Daily research heartbeat"
+          "metadata": {
+            "$ref": "#/components/schemas/TriggerCreateMetadata"
           },
-          "source": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "schedule"
-                    ]
-                  },
-                  "schedule": {
+          "spec": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "oneOf": [
+                  {
                     "type": "object",
                     "properties": {
                       "type": {
                         "type": "string",
                         "enum": [
-                          "interval"
+                          "schedule"
+                        ]
+                      },
+                      "schedule": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "interval"
+                            ],
+                            "example": "interval"
+                          },
+                          "intervalSeconds": {
+                            "type": "integer",
+                            "minimum": 60,
+                            "maximum": 31536000,
+                            "example": 86400
+                          },
+                          "windowSeconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 86400,
+                            "example": 0
+                          }
+                        },
+                        "required": [
+                          "intervalSeconds"
                         ],
-                        "example": "interval"
-                      },
-                      "intervalSeconds": {
-                        "type": "integer",
-                        "minimum": 60,
-                        "maximum": 31536000,
-                        "example": 86400
-                      },
-                      "windowSeconds": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 86400,
-                        "example": 0
+                        "additionalProperties": false
                       }
                     },
                     "required": [
-                      "intervalSeconds"
+                      "type",
+                      "schedule"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "http"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "suspend": {
+                "type": "boolean",
+                "example": false
+              },
+              "template": {
+                "type": "object",
+                "properties": {
+                  "metadata": {
+                    "type": "object",
+                    "properties": {
+                      "labels": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "example": {
+                          "app": "agent-kanban"
+                        }
+                      },
+                      "annotations": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "example": {
+                          "owner": "growth"
+                        }
+                      }
+                    }
+                  },
+                  "spec": {
+                    "type": "object",
+                    "properties": {
+                      "agentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "example": "agent_abc123"
+                      },
+                      "environmentId": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "example": "env_abc123"
+                      },
+                      "runtime": {
+                        "$ref": "#/components/schemas/Runtime"
+                      },
+                      "env": {
+                        "$ref": "#/components/schemas/ExecutionEnv"
+                      },
+                      "envFrom": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/EnvFromEntry"
+                        },
+                        "maxItems": 50
+                      },
+                      "volumes": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Volume"
+                        },
+                        "maxItems": 50
+                      },
+                      "volumeMounts": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/VolumeMount"
+                        },
+                        "maxItems": 50
+                      },
+                      "promptTemplate": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16000,
+                        "example": "Research current Canadian banking bonus offers."
+                      }
+                    },
+                    "required": [
+                      "agentId",
+                      "runtime",
+                      "promptTemplate"
                     ],
                     "additionalProperties": false
                   }
                 },
                 "required": [
-                  "type",
-                  "schedule"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "http"
-                    ]
-                  }
-                },
-                "required": [
-                  "type"
-                ]
-              }
-            ]
-          },
-          "suspend": {
-            "type": "boolean",
-            "example": false
-          },
-          "template": {
-            "type": "object",
-            "properties": {
-              "metadata": {
-                "type": "object",
-                "properties": {
-                  "labels": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "example": {
-                      "app": "agent-kanban"
-                    }
-                  },
-                  "annotations": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "example": {
-                      "owner": "growth"
-                    }
-                  }
-                }
-              },
-              "spec": {
-                "type": "object",
-                "properties": {
-                  "agentId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "example": "agent_abc123"
-                  },
-                  "environmentId": {
-                    "type": "string",
-                    "nullable": true,
-                    "minLength": 1,
-                    "example": "env_abc123"
-                  },
-                  "runtime": {
-                    "$ref": "#/components/schemas/Runtime"
-                  },
-                  "promptTemplate": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 16000,
-                    "example": "Research current Canadian banking bonus offers."
-                  },
-                  "env": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "example": {
-                      "AK_API_URL": "https://ak.example.com"
-                    }
-                  },
-                  "envFrom": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/EnvFromEntry"
-                    },
-                    "maxItems": 50
-                  },
-                  "volumes": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Volume"
-                    },
-                    "maxItems": 50
-                  },
-                  "volumeMounts": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/VolumeMount"
-                    },
-                    "maxItems": 50
-                  }
-                },
-                "required": [
-                  "agentId",
-                  "runtime",
-                  "promptTemplate"
+                  "spec"
                 ],
                 "additionalProperties": false
               }
             },
             "required": [
-              "spec"
+              "source",
+              "template"
             ],
             "additionalProperties": false
-          },
-          "nextDueAt": {
-            "type": "string",
-            "format": "date-time",
-            "example": "2026-05-26T12:00:00.000Z"
           }
         },
         "required": [
-          "name",
-          "source",
-          "template"
+          "metadata",
+          "spec"
         ],
         "additionalProperties": false
+      },
+      "TriggerCreateMetadata": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "example": "Default resource"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "name": "Daily research heartbeat"
+        }
       },
       "TriggerListResponse": {
         "type": "object",
@@ -4673,151 +4557,152 @@
       "UpdateTriggerRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 160,
-            "example": "Daily research heartbeat"
+          "metadata": {
+            "$ref": "#/components/schemas/TriggerUpdateMetadata"
           },
-          "source": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "schedule"
-                    ]
-                  },
-                  "schedule": {
+          "spec": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "oneOf": [
+                  {
                     "type": "object",
                     "properties": {
                       "type": {
                         "type": "string",
                         "enum": [
-                          "interval"
+                          "schedule"
+                        ]
+                      },
+                      "schedule": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "interval"
+                            ],
+                            "example": "interval"
+                          },
+                          "intervalSeconds": {
+                            "type": "integer",
+                            "minimum": 60,
+                            "maximum": 31536000,
+                            "example": 86400
+                          },
+                          "windowSeconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 86400,
+                            "example": 0
+                          }
+                        },
+                        "required": [
+                          "intervalSeconds"
                         ],
-                        "example": "interval"
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "schedule"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "http"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "suspend": {
+                "type": "boolean",
+                "example": true
+              },
+              "template": {
+                "type": "object",
+                "properties": {
+                  "metadata": {
+                    "type": "object",
+                    "properties": {
+                      "labels": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "example": {
+                          "app": "agent-kanban"
+                        }
                       },
-                      "intervalSeconds": {
-                        "type": "integer",
-                        "minimum": 60,
-                        "maximum": 31536000,
-                        "example": 86400
+                      "annotations": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "example": {
+                          "owner": "growth"
+                        }
+                      }
+                    }
+                  },
+                  "spec": {
+                    "type": "object",
+                    "properties": {
+                      "agentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "example": "agent_abc123"
                       },
-                      "windowSeconds": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 86400,
-                        "example": 0
+                      "environmentId": {
+                        "type": "string",
+                        "nullable": true,
+                        "minLength": 1,
+                        "example": "env_abc123"
+                      },
+                      "runtime": {
+                        "$ref": "#/components/schemas/Runtime"
+                      },
+                      "env": {
+                        "$ref": "#/components/schemas/ExecutionEnv"
+                      },
+                      "envFrom": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/EnvFromEntry"
+                        },
+                        "maxItems": 50
+                      },
+                      "volumes": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Volume"
+                        },
+                        "maxItems": 50
+                      },
+                      "volumeMounts": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/VolumeMount"
+                        },
+                        "maxItems": 50
+                      },
+                      "promptTemplate": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16000,
+                        "example": "Research current Canadian banking bonus offers."
                       }
                     },
                     "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "type"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "http"
-                    ]
-                  }
-                },
-                "required": [
-                  "type"
-                ]
-              }
-            ]
-          },
-          "suspend": {
-            "type": "boolean",
-            "example": true
-          },
-          "template": {
-            "type": "object",
-            "properties": {
-              "metadata": {
-                "type": "object",
-                "properties": {
-                  "labels": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "example": {
-                      "app": "agent-kanban"
-                    }
-                  },
-                  "annotations": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "example": {
-                      "owner": "growth"
-                    }
-                  }
-                }
-              },
-              "spec": {
-                "type": "object",
-                "properties": {
-                  "agentId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "example": "agent_abc123"
-                  },
-                  "environmentId": {
-                    "type": "string",
-                    "nullable": true,
-                    "minLength": 1,
-                    "example": "env_abc123"
-                  },
-                  "runtime": {
-                    "$ref": "#/components/schemas/Runtime"
-                  },
-                  "promptTemplate": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 16000,
-                    "example": "Research current Canadian banking bonus offers."
-                  },
-                  "env": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "example": {
-                      "AK_API_URL": "https://ak.example.com"
-                    }
-                  },
-                  "envFrom": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/EnvFromEntry"
-                    },
-                    "maxItems": 50
-                  },
-                  "volumes": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Volume"
-                    },
-                    "maxItems": 50
-                  },
-                  "volumeMounts": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/VolumeMount"
-                    },
-                    "maxItems": 50
                   }
                 },
                 "additionalProperties": false
@@ -4828,11 +4713,18 @@
           "archived": {
             "type": "boolean",
             "example": true
-          },
-          "nextDueAt": {
+          }
+        },
+        "additionalProperties": false
+      },
+      "TriggerUpdateMetadata": {
+        "type": "object",
+        "properties": {
+          "name": {
             "type": "string",
-            "format": "date-time",
-            "example": "2026-05-27T12:00:00.000Z"
+            "minLength": 1,
+            "maxLength": 160,
+            "example": "Default resource"
           }
         },
         "additionalProperties": false
@@ -4887,14 +4779,6 @@
             "format": "date-time",
             "example": "2026-05-26T12:00:00.000Z"
           },
-          "idempotencyKey": {
-            "type": "string",
-            "example": "trigger_abc123:2026-05-26T12:00:00.000Z"
-          },
-          "correlationId": {
-            "type": "string",
-            "example": "schedule:trigger_abc123:2026-05-26T12:00:00.000Z"
-          },
           "metadata": {
             "type": "object",
             "additionalProperties": {
@@ -4908,8 +4792,6 @@
         "required": [
           "triggerId",
           "scheduledFor",
-          "idempotencyKey",
-          "correlationId",
           "metadata"
         ]
       },
@@ -4924,6 +4806,14 @@
               "failed"
             ],
             "example": "dispatched"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "example": "trigger_abc123:2026-05-26T12:00:00.000Z"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "schedule:trigger_abc123:2026-05-26T12:00:00.000Z"
           },
           "heartbeatAt": {
             "type": "string",
@@ -4949,6 +4839,8 @@
         },
         "required": [
           "phase",
+          "idempotencyKey",
+          "correlationId",
           "heartbeatAt",
           "triggeredAt",
           "sessionId",
@@ -4991,15 +4883,21 @@
         "properties": {
           "uid": {
             "type": "string",
-            "example": "session_abc123"
+            "example": "resource_abc123"
           },
-          "pid": {
+          "projectId": {
             "type": "string",
+            "nullable": true,
             "example": "project_abc123"
           },
           "name": {
             "type": "string",
-            "example": "Implement billing export"
+            "example": "Default resource"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "Default project resource."
           },
           "labels": {
             "type": "object",
@@ -5033,8 +4931,9 @@
         },
         "required": [
           "uid",
-          "pid",
+          "projectId",
           "name",
+          "description",
           "labels",
           "annotations",
           "createdBy",
@@ -5048,63 +4947,41 @@
         "properties": {
           "agentId": {
             "type": "string",
+            "minLength": 1,
             "example": "agent_abc123"
           },
           "environmentId": {
             "type": "string",
             "nullable": true,
+            "minLength": 1,
             "example": "env_abc123"
           },
           "runtime": {
             "$ref": "#/components/schemas/Runtime"
           },
           "env": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "example": {
-              "AK_API_URL": "https://ak.example.com"
-            }
+            "$ref": "#/components/schemas/ExecutionEnv"
           },
           "envFrom": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EnvFromEntry"
             },
-            "example": [
-              {
-                "type": "secret",
-                "name": "AK_AGENT_KEY",
-                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
-              }
-            ]
+            "maxItems": 50
           },
           "volumes": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Volume"
             },
-            "example": [
-              {
-                "name": "source",
-                "type": "git_repository",
-                "url": "https://github.com/saltbo/any-managed-agents.git"
-              }
-            ]
+            "maxItems": 50
           },
           "volumeMounts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/VolumeMount"
             },
-            "example": [
-              {
-                "name": "source",
-                "mountPath": "/workspace/repos/saltbo/any-managed-agents",
-                "readOnly": true
-              }
-            ]
+            "maxItems": 50
           }
         },
         "required": [
@@ -5115,7 +4992,8 @@
           "envFrom",
           "volumes",
           "volumeMounts"
-        ]
+        ],
+        "additionalProperties": false
       },
       "SessionStatus": {
         "type": "object",
@@ -5277,8 +5155,7 @@
             "type": "integer"
           },
           "systemPrompt": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "provider": {
             "type": "string",
@@ -5297,71 +5174,13 @@
           "subagents": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/SessionSubagent"
             }
           },
-          "role": {
-            "type": "string",
-            "nullable": true
-          },
-          "handoff": {
-            "type": "object",
-            "properties": {
-              "enabled": {
-                "type": "boolean"
-              },
-              "accepts": {
-                "type": "object",
-                "properties": {
-                  "roles": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "capabilities": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "required": [
-                  "roles",
-                  "capabilities"
-                ]
-              },
-              "targets": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "role": {
-                      "type": "string"
-                    },
-                    "capability": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            },
-            "required": [
-              "enabled",
-              "accepts",
-              "targets"
-            ]
-          },
-          "tools": {
+          "allowedTools": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "type": "string"
             }
           },
           "mcpConnectors": {
@@ -5385,12 +5204,56 @@
           "model",
           "skills",
           "subagents",
-          "role",
-          "handoff",
-          "tools",
+          "allowedTools",
           "mcpConnectors",
           "createdAt"
         ]
+      },
+      "SessionSubagent": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowedTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mcpConnectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "systemPrompt",
+          "model",
+          "allowedTools",
+          "skills",
+          "mcpConnectors"
+        ],
+        "additionalProperties": false
       },
       "SessionEnvironmentSnapshot": {
         "type": "object",
@@ -5462,30 +5325,12 @@
             "type": "string",
             "nullable": true,
             "example": "@cf/moonshotai/kimi-k2.6"
-          },
-          "driver": {
-            "type": "string",
-            "nullable": true,
-            "example": "ama-cloud"
-          },
-          "backend": {
-            "type": "string",
-            "nullable": true,
-            "example": "ama-cloud"
-          },
-          "protocol": {
-            "type": "string",
-            "nullable": true,
-            "example": "ama-runtime-rpc"
           }
         },
         "required": [
           "hostingMode",
           "provider",
-          "model",
-          "driver",
-          "backend",
-          "protocol"
+          "model"
         ]
       },
       "EnvironmentHostingMode": {
@@ -5498,6 +5343,58 @@
       "CreateSessionRequest": {
         "type": "object",
         "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/SessionCreateMetadata"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ExecutionSpecInput"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000,
+            "example": "Research Canadian banking bonus offers and summarize current opportunities."
+          }
+        },
+        "required": [
+          "spec",
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "SessionCreateMetadata": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "example": "Implement billing export"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "app": "agent-kanban"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "ticket": "AMA-123"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExecutionSpecInput": {
+        "type": "object",
+        "properties": {
           "agentId": {
             "type": "string",
             "minLength": 1,
@@ -5505,59 +5402,22 @@
           },
           "environmentId": {
             "type": "string",
+            "nullable": true,
             "minLength": 1,
             "example": "env_abc123"
           },
           "runtime": {
             "$ref": "#/components/schemas/Runtime"
           },
-          "runtimeConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "sandboxMode": "workspace-write"
-            }
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 160,
-            "example": "Implement billing export"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "ticket": "AMA-123"
-            }
-          },
           "env": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "example": {
-              "AK_API_URL": "https://ak.example.com",
-              "AK_AGENT_ID": "agent_abc123"
-            }
+            "$ref": "#/components/schemas/ExecutionEnv"
           },
           "envFrom": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EnvFromEntry"
             },
-            "maxItems": 50,
-            "example": [
-              {
-                "type": "secret",
-                "name": "AK_AGENT_KEY",
-                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
-              }
-            ]
+            "maxItems": 50
           },
           "volumes": {
             "type": "array",
@@ -5572,18 +5432,11 @@
               "$ref": "#/components/schemas/VolumeMount"
             },
             "maxItems": 50
-          },
-          "prompt": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 16000,
-            "example": "Research Canadian banking bonus offers and summarize current opportunities."
           }
         },
         "required": [
           "agentId",
-          "runtime",
-          "prompt"
+          "runtime"
         ],
         "additionalProperties": false
       },
@@ -5608,21 +5461,8 @@
       "UpdateSessionRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "nullable": true,
-            "minLength": 1,
-            "maxLength": 160,
-            "example": "Implement billing export"
-          },
           "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "ticket": "AMA-123"
-            }
+            "$ref": "#/components/schemas/SessionUpdateMetadata"
           },
           "state": {
             "type": "string",
@@ -5634,6 +5474,36 @@
           "archived": {
             "type": "boolean",
             "example": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionUpdateMetadata": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "example": "Implement billing export"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "app": "agent-kanban"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "ticket": "AMA-123"
+            }
           }
         },
         "additionalProperties": false
@@ -6037,20 +5907,8 @@
       },
       "MemoryStoreSpec": {
         "type": "object",
-        "properties": {
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
-          }
-        },
-        "required": [
-          "metadata"
-        ]
+        "properties": {},
+        "additionalProperties": false
       },
       "MemoryStoreStatus": {
         "type": "object",
@@ -6066,59 +5924,47 @@
       "CreateMemoryStoreRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Team conventions"
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "example": "Shared repository and review preferences."
-          },
           "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCreateMetadata"
+              },
+              {
+                "example": {
+                  "name": "Team conventions",
+                  "description": "Shared repository and review preferences."
+                }
+              }
+            ]
+          },
+          "spec": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
+            "properties": {},
+            "additionalProperties": false
           }
         },
         "required": [
-          "name"
-        ]
+          "metadata"
+        ],
+        "additionalProperties": false
       },
       "UpdateMemoryStoreRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Team conventions"
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "example": "Shared repository and review preferences."
-          },
           "metadata": {
+            "$ref": "#/components/schemas/ResourceUpdateMetadata"
+          },
+          "spec": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
+            "properties": {},
+            "additionalProperties": false
           },
           "archived": {
             "type": "boolean",
             "example": true
           }
-        }
+        },
+        "additionalProperties": false
       },
       "MemoryStoreMemoryListResponse": {
         "type": "object",
@@ -6299,21 +6145,11 @@
               "organization"
             ],
             "example": "project"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "owner": "platform"
-            }
           }
         },
         "required": [
           "organizationId",
-          "scope",
-          "metadata"
+          "scope"
         ]
       },
       "VaultStatus": {
@@ -6330,75 +6166,66 @@
       "CreateVaultRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Provider credentials"
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "example": "Credentials used by runtime sessions."
-          },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "project",
-              "organization"
-            ],
-            "example": "project"
-          },
           "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCreateMetadata"
+              },
+              {
+                "example": {
+                  "name": "Provider credentials",
+                  "description": "Credentials used by runtime sessions."
+                }
+              }
+            ]
+          },
+          "spec": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
+            "properties": {
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "project",
+                  "organization"
+                ],
+                "example": "project"
+              }
             },
-            "example": {
-              "owner": "platform"
-            }
+            "additionalProperties": false
           }
         },
         "required": [
-          "name"
-        ]
+          "metadata",
+          "spec"
+        ],
+        "additionalProperties": false
       },
       "UpdateVaultRequest": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Provider credentials"
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 1000,
-            "example": "Credentials used by runtime sessions."
-          },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "project",
-              "organization"
-            ],
-            "example": "project"
-          },
           "metadata": {
+            "$ref": "#/components/schemas/ResourceUpdateMetadata"
+          },
+          "spec": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
+            "properties": {
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "project",
+                  "organization"
+                ],
+                "example": "project"
+              }
             },
-            "example": {
-              "owner": "platform"
-            }
+            "additionalProperties": false
           },
           "archived": {
             "type": "boolean",
             "example": true
           }
-        }
+        },
+        "additionalProperties": false
       },
       "VaultCredentialListResponse": {
         "type": "object",
@@ -7605,249 +7432,6 @@
           },
           "404": {
             "description": "Agent or version not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/agents/{agentId}/handoff-candidates": {
-      "get": {
-        "operationId": "listAgentHandoffCandidates",
-        "tags": [
-          "Agents"
-        ],
-        "summary": "List handoff candidate agents",
-        "description": "Resolves live agents in the same project that match the requested role or capability, or the agent handoff policy targets. AMA only resolves candidates; the requesting product decides how a handoff affects its own workflow records.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "agent_abc123"
-            },
-            "required": true,
-            "name": "agentId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 80,
-              "example": "worker"
-            },
-            "required": false,
-            "name": "role",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 80,
-              "example": "implementation"
-            },
-            "required": false,
-            "name": "capability",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Handoff candidates",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentHandoffCandidateListResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Agent not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/agents/{agentId}/memory": {
-      "get": {
-        "operationId": "readAgentMemory",
-        "tags": [
-          "Agents"
-        ],
-        "summary": "Read agent memory",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "agent_abc123"
-            },
-            "required": true,
-            "name": "agentId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Agent memory",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentMemory"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Agent not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Agent memory disabled",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "replaceAgentMemory",
-        "tags": [
-          "Agents"
-        ],
-        "summary": "Replace agent memory",
-        "description": "Idempotent whole replacement of the agent memory singleton.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "agent_abc123"
-            },
-            "required": true,
-            "name": "agentId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReplaceAgentMemoryRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Replaced agent memory",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentMemory"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Agent not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Agent memory disabled",
             "content": {
               "application/json": {
                 "schema": {

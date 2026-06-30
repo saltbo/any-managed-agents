@@ -36,7 +36,7 @@ import {
 import { newId, now, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
 import { environmentHostingMode } from '@server/domain/runtime-session'
-import { composePrompt, hasSecretMaterial, sessionUserMetadata } from '@server/domain/session'
+import { hasSecretMaterial, sessionUserMetadata } from '@server/domain/session'
 import { normalizeWorkspaceSpec, workspaceSpec } from '@server/domain/workspace'
 import { safeRuntimeError } from '@server/runtime-error'
 import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
@@ -242,9 +242,8 @@ async function currentAgentVersion(store: SessionOrchestrationStore, agent: Agen
   return store.findAgentVersion(agent.id, agent.currentVersionId)
 }
 
-async function sessionPrompt(store: SessionOrchestrationStore, projectId: string, agent: AgentRow, prompt: string) {
-  const content = await store.agentMemoryContent(projectId, agent.id)
-  return composePrompt(content, prompt)
+function sessionPrompt(prompt: string) {
+  return prompt
 }
 
 function sessionTitleFromPrompt(prompt: string) {
@@ -472,7 +471,7 @@ export async function createSessionForAgent(
     }
   }
   const providerId = agentVersion.providerId
-  const prompt = await sessionPrompt(store, auth.project.id, agent, userPrompt)
+  const prompt = sessionPrompt(userPrompt)
   const { decision: policyDecision, override: policyOverride } = await policy.evaluateProviderForSession(auth, {
     providerId,
     modelId: agentVersion.model,

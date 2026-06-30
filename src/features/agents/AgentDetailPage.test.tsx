@@ -16,7 +16,7 @@ const now = '2026-05-23T00:00:00.000Z'
 
 function buildAgent(overrides: AgentOverrides = {}): Agent {
   return resourceAgent({
-    tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+    allowedTools: ['read'],
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -174,7 +174,7 @@ describe('[spec: agents/console-detail] AgentDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/Does useful things/)).toBeInTheDocument())
   })
 
-  it('handles null instructions, providerId, model in agentToForm', async () => {
+  it('handles nullable systemPrompt, provider, and model in agentToForm', async () => {
     const agent = buildAgent({
       systemPrompt: null as unknown as string,
       provider: null as unknown as string,

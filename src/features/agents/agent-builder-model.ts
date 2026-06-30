@@ -4,7 +4,7 @@ import { type Agent, type AgentInput, ApiError } from '@/lib/amarpc'
 
 const DEFAULT_ALLOWED_TOOLS = AMA_SANDBOX_TOOL_NAMES.join('\n')
 
-export const BUILDER_STEPS = ['start', 'core', 'tools', 'sandbox', 'roles', 'test', 'done'] as const
+export const BUILDER_STEPS = ['start', 'core', 'tools', 'sandbox', 'test', 'done'] as const
 export type BuilderStep = (typeof BUILDER_STEPS)[number]
 
 export const BUILDER_STEP_TITLES: Record<BuilderStep, string> = {
@@ -12,7 +12,6 @@ export const BUILDER_STEP_TITLES: Record<BuilderStep, string> = {
   core: 'Core settings',
   tools: 'Tools and approvals',
   sandbox: 'Sandbox access',
-  roles: 'Roles and memory',
   test: 'Test and publish',
   done: 'API examples',
 }
@@ -27,9 +26,6 @@ export interface AgentBuilderDraft {
   mcpConnectors: string[]
   sandboxEnabled: boolean
   skills: string
-  role: string
-  capabilityTags: string
-  handoffTargets: string
 }
 
 export const DEFAULT_BUILDER_PROVIDER = 'workers-ai'
@@ -45,9 +41,6 @@ export const emptyBuilderDraft: AgentBuilderDraft = {
   mcpConnectors: [],
   sandboxEnabled: false,
   skills: '',
-  role: '',
-  capabilityTags: '',
-  handoffTargets: '',
 }
 
 export interface AgentTemplate {
@@ -88,17 +81,14 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'triage',
     name: 'Operations triage',
-    summary: 'Reviews incoming work and hands it to the right specialist agent.',
+    summary: 'Reviews incoming work and summarizes the next action.',
     draft: {
       ...emptyBuilderDraft,
       name: 'Operations triage',
-      description: 'Classifies incoming work and delegates by role or capability.',
+      description: 'Classifies incoming work and summarizes the next action.',
       systemPrompt:
-        'You are a triage agent. Classify incoming work, summarize the decision, and hand off to a matching agent.',
+        'You are a triage agent. Classify incoming work, summarize the decision, and report the next action.',
       allowedTools: 'read',
-      role: 'maintainer',
-      capabilityTags: 'triage',
-      handoffTargets: 'role=worker',
     },
   },
 ]
@@ -117,8 +107,6 @@ export function draftFromGoal(goal: string): AgentBuilderDraft {
 
 export type BuilderFieldErrors = Partial<Record<keyof AgentBuilderDraft, string>>
 
-const HANDOFF_TARGET_PATTERN = /^(role|capability)=[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/
-
 export function coreStepErrors(draft: AgentBuilderDraft): BuilderFieldErrors {
   const errors: BuilderFieldErrors = {}
   if (!draft.name.trim()) errors.name = 'Name is required.'
@@ -129,47 +117,30 @@ export function coreStepErrors(draft: AgentBuilderDraft): BuilderFieldErrors {
   return errors
 }
 
-export function rolesStepErrors(draft: AgentBuilderDraft): BuilderFieldErrors {
-  const invalid = parseTools(draft.handoffTargets).find((line) => !HANDOFF_TARGET_PATTERN.test(line))
-  return invalid === undefined
-    ? {}
-    : { handoffTargets: `Handoff targets use role=<role> or capability=<capability> per line: ${invalid}` }
-}
-
 export function builderClientErrors(draft: AgentBuilderDraft): BuilderFieldErrors {
-  return { ...coreStepErrors(draft), ...rolesStepErrors(draft) }
+  return coreStepErrors(draft)
 }
 
 export function stepErrors(step: BuilderStep, draft: AgentBuilderDraft): BuilderFieldErrors {
   if (step === 'core') return coreStepErrors(draft)
-  if (step === 'roles') return rolesStepErrors(draft)
   return {}
 }
 
-export function parseHandoffTargets(value: string) {
-  return parseTools(value).map((line) => {
-    const [kind, target] = line.split('=')
-    return kind === 'role' ? { role: target } : { capability: target }
-  })
-}
-
 export function toAgentInput(draft: AgentBuilderDraft): AgentInput {
-  const targets = parseHandoffTargets(draft.handoffTargets)
   const description = draft.description.trim()
   return {
-    name: draft.name.trim(),
-    ...(description ? { description } : {}),
-    systemPrompt: draft.systemPrompt.trim(),
-    ...providerPatch(draft.provider),
-    model: draft.model.trim(),
-    skills: draft.sandboxEnabled ? parseTools(draft.skills) : [],
-    tools: parseTools(draft.allowedTools).map((name) => ({ name })),
-    mcpConnectors: draft.mcpConnectors,
-    role: draft.role.trim() || null,
-    handoff: {
-      enabled: targets.length > 0 || Boolean(draft.role.trim()) || Boolean(draft.capabilityTags.trim()),
-      accepts: { roles: draft.role.trim() ? [draft.role.trim()] : [], capabilities: parseTools(draft.capabilityTags) },
-      targets,
+    metadata: {
+      name: draft.name.trim(),
+      ...(description ? { description } : {}),
+    },
+    spec: {
+      systemPrompt: draft.systemPrompt.trim(),
+      ...providerPatch(draft.provider),
+      model: draft.model.trim(),
+      skills: draft.sandboxEnabled ? parseTools(draft.skills) : [],
+      allowedTools: parseTools(draft.allowedTools),
+      mcpConnectors: draft.mcpConnectors,
+      subagents: [],
     },
   }
 }
@@ -180,11 +151,9 @@ const SERVER_FIELD_MAP: Record<string, { field: keyof AgentBuilderDraft; step: B
   systemPrompt: { field: 'systemPrompt', step: 'core' },
   provider: { field: 'provider', step: 'core' },
   model: { field: 'model', step: 'core' },
-  tools: { field: 'allowedTools', step: 'tools' },
+  allowedTools: { field: 'allowedTools', step: 'tools' },
   mcpConnectors: { field: 'mcpConnectors', step: 'tools' },
   skills: { field: 'skills', step: 'sandbox' },
-  role: { field: 'role', step: 'roles' },
-  handoff: { field: 'handoffTargets', step: 'roles' },
 }
 
 export function apiErrorToBuilder(error: unknown): { errors: BuilderFieldErrors; step: BuilderStep | null } {
@@ -210,16 +179,19 @@ export function apiErrorToBuilder(error: unknown): { errors: BuilderFieldErrors;
 
 export function agentApiExamples(origin: string, agent: Agent) {
   const body = JSON.stringify({
-    name: agent.metadata.name,
-    ...(agent.metadata.description ? { description: agent.metadata.description } : {}),
-    ...(agent.spec.systemPrompt ? { systemPrompt: agent.spec.systemPrompt } : {}),
-    provider: agent.spec.provider,
-    model: agent.spec.model,
-    skills: agent.spec.skills,
-    tools: agent.spec.tools.map((tool) => ({ name: tool.name })),
-    mcpConnectors: agent.spec.mcpConnectors,
-    ...(agent.spec.role ? { role: agent.spec.role } : {}),
-    handoff: agent.spec.handoff,
+    metadata: {
+      name: agent.metadata.name,
+      ...(agent.metadata.description ? { description: agent.metadata.description } : {}),
+    },
+    spec: {
+      ...(agent.spec.systemPrompt ? { systemPrompt: agent.spec.systemPrompt } : {}),
+      provider: agent.spec.provider,
+      model: agent.spec.model,
+      skills: agent.spec.skills,
+      allowedTools: agent.spec.allowedTools,
+      mcpConnectors: agent.spec.mcpConnectors,
+      subagents: agent.spec.subagents,
+    },
   })
   const curl = [
     `curl -X POST "${origin}/api/v1/agents" \\`,

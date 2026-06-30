@@ -9,9 +9,7 @@ export interface MemoryStore {
   status: MemoryStoreStatus
 }
 
-export interface MemoryStoreSpec {
-  metadata: Record<string, unknown>
-}
+export type MemoryStoreSpec = Record<string, never>
 
 export interface MemoryStoreStatus {
   phase: ResourcePhase

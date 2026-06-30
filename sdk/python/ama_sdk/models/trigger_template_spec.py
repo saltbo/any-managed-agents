@@ -13,10 +13,10 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.env_from_entry import EnvFromEntry
+  from ..models.execution_env import ExecutionEnv
   from ..models.git_repository_volume import GitRepositoryVolume
   from ..models.memory_volume import MemoryVolume
   from ..models.secret_volume import SecretVolume
-  from ..models.trigger_template_spec_env import TriggerTemplateSpecEnv
   from ..models.volume_mount import VolumeMount
 
 
@@ -34,25 +34,21 @@ class TriggerTemplateSpec:
             agent_id (str):  Example: agent_abc123.
             environment_id (None | str):  Example: env_abc123.
             runtime (Runtime):  Example: codex.
+            env (ExecutionEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
+            env_from (list[EnvFromEntry]):
+            volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume]):
+            volume_mounts (list[VolumeMount]):
             prompt_template (str):  Example: Research current Canadian banking bonus offers..
-            env (TriggerTemplateSpecEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
-            env_from (list[EnvFromEntry]):  Example: [{'type': 'secret', 'name': 'AK_AGENT_KEY', 'secretRef':
-                'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
-            volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume]):  Example: [{'name': 'project-secrets',
-                'type': 'secret', 'secretRef': 'ama://vaults/vault_abc123'}].
-            volume_mounts (list[VolumeMount]):  Example: [{'name': 'project-secrets', 'mountPath':
-                '/workspace/.ama/secrets/project', 'readOnly': True}].
      """
 
     agent_id: str
     environment_id: None | str
     runtime: Runtime
-    prompt_template: str
-    env: TriggerTemplateSpecEnv
+    env: ExecutionEnv
     env_from: list[EnvFromEntry]
     volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume]
     volume_mounts: list[VolumeMount]
-    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+    prompt_template: str
 
 
 
@@ -60,10 +56,10 @@ class TriggerTemplateSpec:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.env_from_entry import EnvFromEntry
+        from ..models.execution_env import ExecutionEnv
         from ..models.git_repository_volume import GitRepositoryVolume
         from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
-        from ..models.trigger_template_spec_env import TriggerTemplateSpecEnv
         from ..models.volume_mount import VolumeMount
         agent_id = self.agent_id
 
@@ -71,8 +67,6 @@ class TriggerTemplateSpec:
         environment_id = self.environment_id
 
         runtime = self.runtime.value
-
-        prompt_template = self.prompt_template
 
         env = self.env.to_dict()
 
@@ -104,18 +98,20 @@ class TriggerTemplateSpec:
 
 
 
+        prompt_template = self.prompt_template
+
 
         field_dict: dict[str, Any] = {}
-        field_dict.update(self.additional_properties)
+
         field_dict.update({
             "agentId": agent_id,
             "environmentId": environment_id,
             "runtime": runtime,
-            "promptTemplate": prompt_template,
             "env": env,
             "envFrom": env_from,
             "volumes": volumes,
             "volumeMounts": volume_mounts,
+            "promptTemplate": prompt_template,
         })
 
         return field_dict
@@ -125,10 +121,10 @@ class TriggerTemplateSpec:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.env_from_entry import EnvFromEntry
+        from ..models.execution_env import ExecutionEnv
         from ..models.git_repository_volume import GitRepositoryVolume
         from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
-        from ..models.trigger_template_spec_env import TriggerTemplateSpecEnv
         from ..models.volume_mount import VolumeMount
         d = dict(src_dict)
         agent_id = d.pop("agentId")
@@ -146,9 +142,7 @@ class TriggerTemplateSpec:
 
 
 
-        prompt_template = d.pop("promptTemplate")
-
-        env = TriggerTemplateSpecEnv.from_dict(d.pop("env"))
+        env = ExecutionEnv.from_dict(d.pop("env"))
 
 
 
@@ -210,33 +204,18 @@ class TriggerTemplateSpec:
             volume_mounts.append(volume_mounts_item)
 
 
+        prompt_template = d.pop("promptTemplate")
+
         trigger_template_spec = cls(
             agent_id=agent_id,
             environment_id=environment_id,
             runtime=runtime,
-            prompt_template=prompt_template,
             env=env,
             env_from=env_from,
             volumes=volumes,
             volume_mounts=volume_mounts,
+            prompt_template=prompt_template,
         )
 
-
-        trigger_template_spec.additional_properties = d
         return trigger_template_spec
 
-    @property
-    def additional_keys(self) -> list[str]:
-        return list(self.additional_properties.keys())
-
-    def __getitem__(self, key: str) -> Any:
-        return self.additional_properties[key]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.additional_properties[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self.additional_properties[key]
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.additional_properties

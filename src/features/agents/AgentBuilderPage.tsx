@@ -13,15 +13,7 @@ import { initialSessionRuntimeState, sessionRuntimeReducer } from '@/features/se
 import { type Agent, api } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
-import {
-  BuilderStepper,
-  CoreStep,
-  RolesStep,
-  SandboxStep,
-  StartStep,
-  TestEnvironmentField,
-  ToolsStep,
-} from './AgentBuilderSteps'
+import { BuilderStepper, CoreStep, SandboxStep, StartStep, TestEnvironmentField, ToolsStep } from './AgentBuilderSteps'
 import {
   type AgentBuilderDraft,
   agentApiExamples,
@@ -43,7 +35,6 @@ const STEP_DESCRIPTIONS: Record<BuilderStep, string> = {
   core: 'Name the agent and set the system prompt, provider, and model it runs with.',
   tools: 'Decide which runtime tools and MCP connectors the agent may use.',
   sandbox: 'Decide whether sessions may execute inside Cloudflare Sandbox and which skills they carry.',
-  roles: 'Optionally describe the agent role, capabilities, handoff targets, and memory policy.',
   test: 'Run the draft in an isolated session, then publish the versioned agent definition.',
   done: 'Call the same control-plane API from your own automation.',
 }
@@ -125,13 +116,15 @@ export function AgentBuilderPage() {
 
   const startTest = useMutation({
     mutationFn: async () => {
-      const input = { ...toAgentInput(draft), metadata: { builderDraft: true } }
+      const input = toAgentInput(draft)
       const agent = draftAgent ? await api.updateAgent(draftAgent.metadata.uid, input) : await api.createAgent(input)
       const session = await api.createSession({
-        agentId: agent.metadata.uid,
-        environmentId,
-        runtime: 'ama',
-        name: `${agent.metadata.name} draft test`,
+        metadata: { name: `${agent.metadata.name} draft test` },
+        spec: {
+          agentId: agent.metadata.uid,
+          environmentId,
+          runtime: 'ama',
+        },
         prompt: testPrompt.trim(),
       })
       return { agent, session }
@@ -231,7 +224,6 @@ export function AgentBuilderPage() {
             />
           ) : null}
           {step === 'sandbox' ? <SandboxStep draft={draft} errors={fieldErrors} setField={setField} /> : null}
-          {step === 'roles' ? <RolesStep draft={draft} errors={fieldErrors} setField={setField} /> : null}
           {step === 'test' ? (
             <div className="grid gap-4">
               <TestEnvironmentField

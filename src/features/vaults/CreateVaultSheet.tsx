@@ -16,9 +16,11 @@ export function CreateVaultSheet({ open, onOpenChange }: { open: boolean; onOpen
   const createVault = useMutation({
     mutationFn: () =>
       api.createVault({
-        name: form.name,
-        description: form.description,
-        scope: form.scope,
+        metadata: {
+          name: form.name,
+          ...(form.description ? { description: form.description } : {}),
+        },
+        spec: { scope: form.scope },
       }),
     onSuccess: () => {
       onOpenChange(false)

@@ -385,30 +385,6 @@ func (s AgentsService) Update(ctx context.Context, agentID string, body UpdateAg
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404, response.JSON409)
 }
 
-func (s AgentsService) ListHandoffCandidates(ctx context.Context, agentID string, params *ListAgentHandoffCandidatesParams) (*AgentHandoffCandidateListResponse, error) {
-	response, err := s.client.raw.ListAgentHandoffCandidatesWithResponse(ctx, agentID, params)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404)
-}
-
-func (s AgentsService) GetMemory(ctx context.Context, agentID string) (*AgentMemory, error) {
-	response, err := s.client.raw.ReadAgentMemoryWithResponse(ctx, agentID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404, response.JSON409)
-}
-
-func (s AgentsService) ReplaceMemory(ctx context.Context, agentID string, body ReplaceAgentMemoryRequest) (*AgentMemory, error) {
-	response, err := s.client.raw.ReplaceAgentMemoryWithResponse(ctx, agentID, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404, response.JSON409)
-}
-
 func (s AgentsService) ListVersions(ctx context.Context, agentID string) (*AgentVersionListResponse, error) {
 	response, err := s.client.raw.ListAgentVersionsWithResponse(ctx, agentID)
 	if err != nil {

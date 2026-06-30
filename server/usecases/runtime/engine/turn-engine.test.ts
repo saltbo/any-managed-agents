@@ -96,7 +96,7 @@ describe('AMA runtime turn-engine', () => {
       model,
       providerLabel: 'test',
       modelLabel: 'test-model',
-      agentSnapshot: { instructions: 'noop', tools: [] },
+      agentSnapshot: { systemPrompt: 'noop', allowedTools: [] },
       prompt: 'do nothing',
       sink,
       policy,

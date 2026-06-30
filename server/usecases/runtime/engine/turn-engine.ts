@@ -3,7 +3,7 @@
 // reaches the model and the sandbox only through the ModelClient / ToolExecutor
 // ports. The loop runs in the cloud control plane; self-hosted AMA sessions use
 // the same cloud loop with a runner-backed sandbox executor.
-import type { AmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
+import { AMA_SANDBOX_TOOL_NAMES, type AmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
 import {
   Agent,
   type AgentEvent,
@@ -145,9 +145,9 @@ function stringifyToolOutput(result: Record<string, unknown>) {
 }
 
 function runtimeSystemPrompt(snapshot: Record<string, unknown>) {
-  const instructions = typeof snapshot.systemPrompt === 'string' ? snapshot.systemPrompt.trim() : ''
+  const systemPrompt = typeof snapshot.systemPrompt === 'string' ? snapshot.systemPrompt.trim() : ''
   return (
-    instructions || 'You are an AMA cloud-owned coding agent. Use tools when workspace inspection or edits are needed.'
+    systemPrompt || 'You are an AMA cloud-owned coding agent. Use tools when workspace inspection or edits are needed.'
   )
 }
 
@@ -214,22 +214,10 @@ function runtimeTools(
       },
     }) satisfies AgentTool
 
-  // Agent tool attachments are the only tool source. An empty list means "no
-  // restriction": agents without explicit tool attachments get the full sandbox
-  // toolset, matching environment policy defaults elsewhere (defaultEffect allow).
-  const toolNames = Array.isArray(values.agentSnapshot.tools)
-    ? values.agentSnapshot.tools
-        .map((tool) =>
-          typeof tool === 'string'
-            ? tool
-            : tool && typeof tool === 'object' && typeof (tool as { name?: unknown }).name === 'string'
-              ? (tool as { name: string }).name
-              : null,
-        )
-        .filter((name): name is string => name !== null)
-    : []
-  const allowsTool = (toolName: string) =>
-    toolNames.length === 0 || toolNames.includes('*') || toolNames.includes(toolName)
+  const allowedTools = Array.isArray(values.agentSnapshot.allowedTools)
+    ? values.agentSnapshot.allowedTools.filter((tool): tool is string => typeof tool === 'string')
+    : [...AMA_SANDBOX_TOOL_NAMES]
+  const allowsTool = (toolName: string) => allowedTools.includes(toolName)
 
   return [
     tool(

@@ -39,14 +39,19 @@ export function AgentDetailPage() {
   const updateAgent = useMutation({
     mutationFn: (input: AgentFormState) =>
       api.updateAgent(agentId as string, {
-        name: input.name,
-        description: input.description,
-        systemPrompt: input.systemPrompt,
-        ...providerPatch(input.provider),
-        model: input.model || null,
-        skills: parseTools(input.skills),
-        tools: parseTools(input.allowedTools).map((name) => ({ name })),
-        mcpConnectors: parseTools(input.mcpConnectors),
+        metadata: {
+          name: input.name,
+          ...(input.description ? { description: input.description } : { description: null }),
+        },
+        spec: {
+          systemPrompt: input.systemPrompt,
+          ...providerPatch(input.provider),
+          model: input.model || null,
+          skills: parseTools(input.skills),
+          allowedTools: parseTools(input.allowedTools),
+          mcpConnectors: parseTools(input.mcpConnectors),
+          subagents: agent?.spec.subagents ?? [],
+        },
       }),
     onSuccess: () => {
       setEditing(false)
@@ -133,11 +138,11 @@ function agentToForm(agent: Agent): AgentFormState {
   return {
     name: agent.metadata.name,
     description: agent.metadata.description ?? '',
-    systemPrompt: agent.spec.systemPrompt ?? '',
+    systemPrompt: agent.spec.systemPrompt,
     provider: agent.spec.provider ?? '',
     model: agent.spec.model ?? '',
     skills: agent.spec.skills.join('\n'),
-    allowedTools: agent.spec.tools.map((tool) => tool.name).join('\n'),
+    allowedTools: agent.spec.allowedTools.join('\n'),
     mcpConnectors: agent.spec.mcpConnectors.join('\n'),
   }
 }

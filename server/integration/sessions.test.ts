@@ -87,36 +87,23 @@ async function createEnvironment(authorization: string, data: Record<string, unk
 }
 
 async function createAgent(authorization: string, data: Record<string, unknown> = {}) {
-  const { instructions, providerId, memoryPolicy: _memoryPolicy, handoffPolicy, capabilityTags, ...rest } = data
-  const handoff =
-    handoffPolicy && typeof handoffPolicy === 'object'
-      ? {
-          enabled: true,
-          accepts: { roles: [], capabilities: Array.isArray(capabilityTags) ? capabilityTags : [] },
-          targets: ((handoffPolicy as { targets?: unknown }).targets as unknown[] | undefined) ?? [],
-        }
-      : capabilityTags
-        ? {
-            enabled: true,
-            accepts: { roles: [], capabilities: Array.isArray(capabilityTags) ? capabilityTags : [] },
-            targets: [],
-          }
-        : undefined
+  const { systemPrompt, provider, skills, mcpConnectors, ...rest } = data
   const res = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      name: 'Cloud session agent',
-      systemPrompt: typeof instructions === 'string' ? instructions : 'Work through AMA runtime.',
-      skills: ['ama@cloud-session'],
-      mcpConnectors: ['github'],
-      // Agents must pin a provider before a session can be created. The cloud
-      // runtime ('ama') routes through the Workers AI binding, which only
-      // recognizes the 'workers-ai' provider and supplies a default model when
-      // none is pinned. The seeded global provider row backs the agent provider
-      // FK and the cloud catalog check.
-      provider: typeof providerId === 'string' ? providerId : 'workers-ai',
-      ...(handoff ? { handoff } : {}),
-      ...rest,
+      metadata: { name: 'Cloud session agent' },
+      spec: {
+        systemPrompt: typeof systemPrompt === 'string' ? systemPrompt : 'Work through AMA runtime.',
+        skills: Array.isArray(skills) ? skills : ['ama@cloud-session'],
+        mcpConnectors: Array.isArray(mcpConnectors) ? mcpConnectors : ['github'],
+        // Agents must pin a provider before a session can be created. The cloud
+        // runtime ('ama') routes through the Workers AI binding, which only
+        // recognizes the 'workers-ai' provider and supplies a default model when
+        // none is pinned. The seeded global provider row backs the agent provider
+        // FK and the cloud catalog check.
+        provider: typeof provider === 'string' ? provider : 'workers-ai',
+        ...rest,
+      },
     }),
   })
   expect(res.status).toBe(201)
@@ -715,7 +702,7 @@ describe('[CF] /api/v1/sessions', () => {
     const runner = await registerRunner(authorization, environment.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
     const agent = await createAgent(authorization, {
       name: 'Self-hosted session agent',
-      instructions: 'Wait for a self-hosted runner.',
+      systemPrompt: 'Wait for a self-hosted runner.',
       skills: [],
       mcpConnectors: [],
     })
@@ -979,7 +966,7 @@ describe('[CF] /api/v1/sessions', () => {
     const runner = await registerRunner(authorization, environment.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
     const agent = await createAgent(authorization, {
       name: 'Credential-backed workspace agent',
-      instructions: 'Use prepared workspace mounts.',
+      systemPrompt: 'Use prepared workspace mounts.',
       skills: [],
       mcpConnectors: [],
     })
@@ -1474,7 +1461,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
     const agent = await createAgent(authorization, {
       name: 'Self-hosted no sandbox agent',
-      instructions: 'Wait for runner attachment.',
+      systemPrompt: 'Wait for runner attachment.',
       skills: [],
       mcpConnectors: [],
     })
@@ -1663,41 +1650,6 @@ describe('[CF] /api/v1/sessions', () => {
         }),
       ]),
     )
-  })
-
-  it('includes enabled agent memory in session initial prompts [spec: sessions/initial-prompt]', async () => {
-    const authorization = await signIn()
-    await connectMcp(authorization, 'github')
-    const environment = await createEnvironment(authorization)
-    const agent = await createAgent(authorization, { memoryPolicy: { enabled: true } })
-
-    const memoryRes = await jsonFetch(`/api/v1/agents/${agent.id}/memory`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({
-        content: 'Previously decided to inspect stale proposals before creating new work.',
-      }),
-    })
-    expect(memoryRes.status).toBe(200)
-
-    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        agentId: agent.id,
-        environmentId: environment.id,
-        runtime: 'ama',
-        prompt: 'Run the maintainer heartbeat.',
-      }),
-    })
-    expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string }
-
-    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, authorization)
-    expect(eventsRes.status).toBe(200)
-    const events = await eventsRes.json()
-    const serialized = JSON.stringify(events)
-    expect(serialized).toContain('Agent memory for this agent')
-    expect(serialized).toContain('Previously decided to inspect stale proposals')
-    expect(serialized).toContain('Run the maintainer heartbeat')
   })
 
   it('validates prompt input and redacts runtime failure reasons', async () => {
@@ -2047,7 +1999,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
     await jsonFetch(`/api/v1/agents/${agent.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ systemPrompt: 'Updated instructions.' }),
+      body: JSON.stringify({ spec: { systemPrompt: 'Updated system prompt.' } }),
     })
 
     const rereadRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}`, authorization)
@@ -2080,7 +2032,7 @@ describe('[CF] /api/v1/sessions', () => {
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
     const environment = await createEnvironment(authorization, { mcpPolicy: {} })
-    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
 
     // Cloud validation checks the GLOBAL catalog (provider_models) via findModel.
     // Drop the model row out of band (the agent pinned it at save time) so the
@@ -2154,7 +2106,7 @@ describe('[CF] /api/v1/sessions', () => {
       hostingMode: 'self_hosted',
       mcpPolicy: {},
     })
-    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
 
     const wrongCapability = runtimeProviderModelCapability('codex', providerId, 'gpt-5.3-codex-mini')
     const wrongRunner = await registerRunner(authorization, environment.id, [wrongCapability])
@@ -2195,7 +2147,7 @@ describe('[CF] /api/v1/sessions', () => {
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
     const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
-    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
@@ -2254,7 +2206,7 @@ describe('[CF] /api/v1/sessions', () => {
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
     const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
-    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
 
     // The vendor is disabled out of band (global catalog) after the agent saved.
     await env.DB.prepare('UPDATE providers SET enabled = 0 WHERE id = ?').bind(providerId).run()
@@ -2286,7 +2238,7 @@ describe('[CF] /api/v1/sessions', () => {
     const providerId = `external-${crypto.randomUUID().slice(0, 8)}`
     await seedPlatformProvider({ providerId, slug: `${providerId}-slug`, displayName: 'External gateway' })
     const environment = await createEnvironment(authorization, { mcpPolicy: {} })
-    const agent = await createAgent(authorization, { providerId, model: null, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { provider: providerId, model: null, mcpConnectors: [] })
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
@@ -2318,7 +2270,7 @@ describe('[CF] /api/v1/sessions', () => {
       hostingMode: 'self_hosted',
       mcpPolicy: {},
     })
-    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',

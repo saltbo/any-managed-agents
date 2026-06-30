@@ -13,10 +13,10 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.env_from_entry import EnvFromEntry
+  from ..models.execution_env import ExecutionEnv
   from ..models.git_repository_volume import GitRepositoryVolume
   from ..models.memory_volume import MemoryVolume
   from ..models.secret_volume import SecretVolume
-  from ..models.session_spec_env import SessionSpecEnv
   from ..models.volume_mount import VolumeMount
 
 
@@ -34,23 +34,19 @@ class SessionSpec:
             agent_id (str):  Example: agent_abc123.
             environment_id (None | str):  Example: env_abc123.
             runtime (Runtime):  Example: codex.
-            env (SessionSpecEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
-            env_from (list[EnvFromEntry]):  Example: [{'type': 'secret', 'name': 'AK_AGENT_KEY', 'secretRef':
-                'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
-            volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume]):  Example: [{'name': 'source', 'type':
-                'git_repository', 'url': 'https://github.com/saltbo/any-managed-agents.git'}].
-            volume_mounts (list[VolumeMount]):  Example: [{'name': 'source', 'mountPath': '/workspace/repos/saltbo/any-
-                managed-agents', 'readOnly': True}].
+            env (ExecutionEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
+            env_from (list[EnvFromEntry]):
+            volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume]):
+            volume_mounts (list[VolumeMount]):
      """
 
     agent_id: str
     environment_id: None | str
     runtime: Runtime
-    env: SessionSpecEnv
+    env: ExecutionEnv
     env_from: list[EnvFromEntry]
     volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume]
     volume_mounts: list[VolumeMount]
-    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
 
@@ -58,10 +54,10 @@ class SessionSpec:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.env_from_entry import EnvFromEntry
+        from ..models.execution_env import ExecutionEnv
         from ..models.git_repository_volume import GitRepositoryVolume
         from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
-        from ..models.session_spec_env import SessionSpecEnv
         from ..models.volume_mount import VolumeMount
         agent_id = self.agent_id
 
@@ -102,7 +98,7 @@ class SessionSpec:
 
 
         field_dict: dict[str, Any] = {}
-        field_dict.update(self.additional_properties)
+
         field_dict.update({
             "agentId": agent_id,
             "environmentId": environment_id,
@@ -120,10 +116,10 @@ class SessionSpec:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.env_from_entry import EnvFromEntry
+        from ..models.execution_env import ExecutionEnv
         from ..models.git_repository_volume import GitRepositoryVolume
         from ..models.memory_volume import MemoryVolume
         from ..models.secret_volume import SecretVolume
-        from ..models.session_spec_env import SessionSpecEnv
         from ..models.volume_mount import VolumeMount
         d = dict(src_dict)
         agent_id = d.pop("agentId")
@@ -141,7 +137,7 @@ class SessionSpec:
 
 
 
-        env = SessionSpecEnv.from_dict(d.pop("env"))
+        env = ExecutionEnv.from_dict(d.pop("env"))
 
 
 
@@ -213,22 +209,5 @@ class SessionSpec:
             volume_mounts=volume_mounts,
         )
 
-
-        session_spec.additional_properties = d
         return session_spec
 
-    @property
-    def additional_keys(self) -> list[str]:
-        return list(self.additional_properties.keys())
-
-    def __getitem__(self, key: str) -> Any:
-        return self.additional_properties[key]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.additional_properties[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self.additional_properties[key]
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.additional_properties

@@ -10,13 +10,10 @@ import websockets
 
 from .client import AuthenticatedClient, Client
 from .api.agents import create_agent as create_agent_api
-from .api.agents import list_agent_handoff_candidates as list_agent_handoff_candidates_api
 from .api.agents import list_agent_versions as list_agent_versions_api
 from .api.agents import list_agents as list_agents_api
 from .api.agents import read_agent as read_agent_api
-from .api.agents import read_agent_memory as read_agent_memory_api
 from .api.agents import read_agent_version as read_agent_version_api
-from .api.agents import replace_agent_memory as replace_agent_memory_api
 from .api.agents import update_agent as update_agent_api
 from .api.audit import list_audit_records as list_audit_records_api
 from .api.audit import read_audit_record as read_audit_record_api
@@ -425,15 +422,6 @@ class _AgentsResource:
 
     def update(self, agent_id: str, body: Any) -> Any:
         return _unwrap(update_agent_api.sync_detailed(agent_id=agent_id, client=self._client, body=body))
-
-    def list_handoff_candidates(self, agent_id: str, **query: Any) -> Any:
-        return _unwrap(list_agent_handoff_candidates_api.sync_detailed(agent_id=agent_id, client=self._client, **query))
-
-    def get_memory(self, agent_id: str) -> Any:
-        return _unwrap(read_agent_memory_api.sync_detailed(agent_id=agent_id, client=self._client))
-
-    def replace_memory(self, agent_id: str, body: Any) -> Any:
-        return _unwrap(replace_agent_memory_api.sync_detailed(agent_id=agent_id, client=self._client, body=body))
 
     def list_versions(self, agent_id: str) -> Any:
         return _unwrap(list_agent_versions_api.sync_detailed(agent_id=agent_id, client=self._client))

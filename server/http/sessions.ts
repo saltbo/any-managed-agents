@@ -10,7 +10,13 @@ import {
   EnvironmentTypeSchema,
   RuntimeSchema,
 } from '../contracts/environment-contracts'
-import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
+import {
+  ExecutionSpecInputSchema,
+  ExecutionSpecSchema,
+  type VolumeMountSchema,
+  type VolumeSchema,
+} from '../contracts/execution-spec'
+import { ResourceMetadataSchema } from '../contracts/resource-contracts'
 import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
 import type { Session, SessionApproval, SessionConnection, SessionEvent, SessionMessage } from '../domain/session'
 import type { Env } from '../env'
@@ -19,7 +25,6 @@ import {
   AuthenticatedOperation,
   csvResponse,
   type DepsEnv,
-  EnvFromEntrySchema,
   ErrorResponseSchema,
   eventListQuerySchema,
   formatListCursor,
@@ -49,12 +54,18 @@ const MAX_EVENT_BATCH = 100
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const SessionEnvironmentJsonObjectSchema = JsonObjectSchema.openapi('SessionEnvironmentJsonObject')
-const SessionHandoffTargetSchema = z.object({ role: z.string().optional(), capability: z.string().optional() })
-const SessionHandoffSchema = z.object({
-  enabled: z.boolean(),
-  accepts: z.object({ roles: z.array(z.string()), capabilities: z.array(z.string()) }),
-  targets: z.array(SessionHandoffTargetSchema),
-})
+const SessionSubagentSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    systemPrompt: z.string(),
+    model: z.string().nullable(),
+    allowedTools: z.array(z.string()),
+    skills: z.array(z.string()),
+    mcpConnectors: z.array(z.string()),
+  })
+  .strict()
+  .openapi('SessionSubagent')
 
 const AgentVersionSnapshotSchema = z
   .object({
@@ -62,14 +73,12 @@ const AgentVersionSnapshotSchema = z
     agentId: z.string(),
     projectId: z.string(),
     version: z.number().int(),
-    systemPrompt: z.string().nullable(),
+    systemPrompt: z.string(),
     provider: z.string().openapi({ example: 'workers-ai' }),
     model: z.string().nullable(),
     skills: z.array(z.string()),
-    subagents: z.array(JsonObjectSchema),
-    role: z.string().nullable(),
-    handoff: SessionHandoffSchema,
-    tools: z.array(JsonObjectSchema),
+    subagents: z.array(SessionSubagentSchema),
+    allowedTools: z.array(z.string()),
     mcpConnectors: z.array(z.string()),
     createdAt: z.string().datetime(),
   })
@@ -95,49 +104,29 @@ const SessionPlacementSchema = z
     hostingMode: EnvironmentHostingModeSchema,
     provider: z.string().openapi({ example: 'workers-ai' }),
     model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
-    driver: z.string().nullable().openapi({ example: 'ama-cloud' }),
-    backend: z.string().nullable().openapi({ example: 'ama-cloud' }),
-    protocol: z.string().nullable().openapi({ example: 'ama-runtime-rpc' }),
   })
   .openapi('SessionPlacement')
 
-const SessionMetadataSchema = z
-  .object({
-    uid: z.string().openapi({ example: 'session_abc123' }),
-    pid: z.string().openapi({ example: 'project_abc123' }),
-    name: z.string().openapi({ example: 'Implement billing export' }),
-    labels: z.record(z.string(), z.string()),
-    annotations: z.record(z.string(), z.string()),
-    createdBy: z.string().nullable(),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
-    archivedAt: z.string().datetime().nullable(),
-  })
-  .openapi('SessionMetadata')
+const SessionMetadataSchema = ResourceMetadataSchema.openapi('SessionMetadata')
 
-const SessionSpecSchema = z
+const SessionCreateMetadataSchema = z
   .object({
-    agentId: z.string().openapi({ example: 'agent_abc123' }),
-    environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
-    runtime: RuntimeSchema,
-    env: z.record(z.string(), z.string()).openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    envFrom: z.array(EnvFromEntrySchema).openapi({
-      example: [
-        {
-          type: 'secret',
-          name: 'AK_AGENT_KEY',
-          secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
-        },
-      ],
-    }),
-    volumes: z.array(VolumeSchema).openapi({
-      example: [{ name: 'source', type: 'git_repository', url: 'https://github.com/saltbo/any-managed-agents.git' }],
-    }),
-    volumeMounts: z.array(VolumeMountSchema).openapi({
-      example: [{ name: 'source', mountPath: '/workspace/repos/saltbo/any-managed-agents', readOnly: true }],
-    }),
+    name: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
+    labels: z
+      .record(z.string(), z.string())
+      .optional()
+      .openapi({ example: { app: 'agent-kanban' } }),
+    annotations: z
+      .record(z.string(), z.string())
+      .optional()
+      .openapi({ example: { ticket: 'AMA-123' } }),
   })
-  .openapi('SessionSpec')
+  .strict()
+  .openapi('SessionCreateMetadata')
+
+const SessionUpdateMetadataSchema = SessionCreateMetadataSchema.partial().strict().openapi('SessionUpdateMetadata')
+
+const SessionSpecSchema = ExecutionSpecSchema.openapi('SessionSpec')
 
 const SessionConditionSchema = z
   .object({
@@ -275,33 +264,8 @@ const SESSION_FRAME_SCHEMAS = {
 
 const CreateSessionSchema = z
   .object({
-    agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
-    // Optional: omit to let the session resolve a runner-capable environment
-    // for the runtime instead of pinning one.
-    environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
-    runtime: RuntimeSchema.openapi({ example: 'codex' }),
-    runtimeConfig: JsonObjectSchema.optional().openapi({ example: { sandboxMode: 'workspace-write' } }),
-    name: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
-    metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
-    env: z
-      .record(z.string(), z.string())
-      .optional()
-      .openapi({ example: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_abc123' } }),
-    envFrom: z
-      .array(EnvFromEntrySchema)
-      .max(50)
-      .optional()
-      .openapi({
-        example: [
-          {
-            type: 'secret',
-            name: 'AK_AGENT_KEY',
-            secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
-          },
-        ],
-      }),
-    volumes: z.array(VolumeSchema).max(50).optional(),
-    volumeMounts: z.array(VolumeMountSchema).max(50).optional(),
+    metadata: SessionCreateMetadataSchema.optional(),
+    spec: ExecutionSpecInputSchema,
     prompt: z
       .string()
       .trim()
@@ -314,17 +278,14 @@ const CreateSessionSchema = z
 
 const UpdateSessionSchema = z
   .object({
-    name: z.string().min(1).max(160).nullable().optional().openapi({ example: 'Implement billing export' }),
-    metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
+    metadata: SessionUpdateMetadataSchema.optional(),
     state: z.literal('stopped').optional().openapi({ example: 'stopped' }),
     archived: z.boolean().optional().openapi({ example: true }),
   })
   .strict()
-  .refine(
-    (body) =>
-      body.name !== undefined || body.metadata !== undefined || body.state !== undefined || body.archived !== undefined,
-    { message: 'Provide at least one of name, metadata, state, or archived.' },
-  )
+  .refine((body) => body.metadata !== undefined || body.state !== undefined || body.archived !== undefined, {
+    message: 'Provide at least one of metadata, state, or archived.',
+  })
   .openapi('UpdateSessionRequest')
 
 const SessionConnectionSchema = z
@@ -489,7 +450,7 @@ const SessionApprovalListResponseSchema = listResponseSchema('SessionApprovalLis
 
 function serializeSession(record: Session): z.infer<typeof SessionSchema> {
   return {
-    metadata: record.metadata,
+    metadata: serializeSessionMetadata(record.metadata),
     spec: {
       ...record.spec,
       volumes: record.spec.volumes as z.infer<typeof VolumeSchema>[],
@@ -500,7 +461,7 @@ function serializeSession(record: Session): z.infer<typeof SessionSchema> {
       bindings: {
         agent: {
           versionId: record.status.bindings.agent.versionId,
-          snapshot: record.status.bindings.agent.snapshot as z.infer<typeof AgentVersionSnapshotSchema>,
+          snapshot: serializeAgentSnapshot(record.status.bindings.agent.snapshot),
         },
         environment: {
           id: record.status.bindings.environment.id,
@@ -511,9 +472,34 @@ function serializeSession(record: Session): z.infer<typeof SessionSchema> {
         },
         runtime: record.status.bindings.runtime,
       },
-      placement: record.status.placement,
+      placement: record.status.placement
+        ? {
+            hostingMode: record.status.placement.hostingMode,
+            provider: record.status.placement.provider,
+            model: record.status.placement.model,
+          }
+        : null,
     },
   }
+}
+
+function serializeSessionMetadata(metadata: Session['metadata']): z.infer<typeof SessionMetadataSchema> {
+  return {
+    uid: metadata.uid,
+    projectId: metadata.pid,
+    name: metadata.name,
+    description: null,
+    labels: metadata.labels,
+    annotations: metadata.annotations,
+    createdBy: metadata.createdBy,
+    createdAt: metadata.createdAt,
+    updatedAt: metadata.updatedAt,
+    archivedAt: metadata.archivedAt,
+  }
+}
+
+function serializeAgentSnapshot(snapshot: Session['status']['bindings']['agent']['snapshot']) {
+  return snapshot
 }
 
 function asSessionConnectionResponse(record: SessionConnection): z.infer<typeof SessionConnectionSchema> {
@@ -1009,18 +995,20 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       // provider/policy/runtime checks, session-row build, sandbox boot or
       // self-hosted work-item enqueue all live behind the runtime usecase), so
       // the route calls the runtime usecase with deps directly.
+      const metadata = body.metadata ?? {}
+      const spec = body.spec
       const outcome = await createRuntimeSession(deps, auth, {
-        agentId: body.agentId,
-        ...(body.environmentId !== undefined ? { environmentId: body.environmentId } : {}),
+        agentId: spec.agentId,
+        ...(spec.environmentId !== undefined ? { environmentId: spec.environmentId } : {}),
         options: {
-          ...(body.name !== undefined ? { name: body.name } : {}),
-          ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
-          runtime: body.runtime,
-          ...(body.runtimeConfig !== undefined ? { runtimeConfig: body.runtimeConfig } : {}),
-          ...(body.env !== undefined ? { env: body.env } : {}),
-          ...(body.envFrom !== undefined ? { envFrom: body.envFrom } : {}),
-          ...(body.volumes !== undefined ? { volumes: body.volumes } : {}),
-          ...(body.volumeMounts !== undefined ? { volumeMounts: body.volumeMounts } : {}),
+          ...(metadata.name !== undefined ? { name: metadata.name } : {}),
+          metadata: { labels: metadata.labels ?? {}, annotations: metadata.annotations ?? {} },
+          runtime: spec.runtime,
+          runtimeConfig: {},
+          ...(spec.env !== undefined ? { env: spec.env } : {}),
+          ...(spec.envFrom !== undefined ? { envFrom: spec.envFrom } : {}),
+          ...(spec.volumes !== undefined ? { volumes: spec.volumes } : {}),
+          ...(spec.volumeMounts !== undefined ? { volumeMounts: spec.volumeMounts } : {}),
           prompt: body.prompt,
         },
         requestId: requestId(c),
@@ -1100,9 +1088,17 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (!session) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
+      const metadataPatch = body.metadata
       const patch: UpdateSessionPatch = {
-        ...(body.name !== undefined ? { name: body.name } : {}),
-        ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
+        ...(metadataPatch?.name !== undefined ? { name: metadataPatch.name } : {}),
+        ...(metadataPatch !== undefined
+          ? {
+              metadata: {
+                ...(metadataPatch.labels !== undefined ? { labels: metadataPatch.labels } : {}),
+                ...(metadataPatch.annotations !== undefined ? { annotations: metadataPatch.annotations } : {}),
+              },
+            }
+          : {}),
         ...(body.state !== undefined ? { state: body.state } : {}),
         ...(body.archived !== undefined ? { archived: body.archived } : {}),
       }

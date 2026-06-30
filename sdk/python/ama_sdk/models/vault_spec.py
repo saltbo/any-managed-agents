@@ -9,10 +9,7 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.vault_spec_scope import VaultSpecScope
-from typing import cast
 
-if TYPE_CHECKING:
-  from ..models.vault_spec_metadata import VaultSpecMetadata
 
 
 
@@ -28,12 +25,10 @@ class VaultSpec:
         Attributes:
             organization_id (str):  Example: org_abc123.
             scope (VaultSpecScope):  Example: project.
-            metadata (VaultSpecMetadata):  Example: {'owner': 'platform'}.
      """
 
     organization_id: str
     scope: VaultSpecScope
-    metadata: VaultSpecMetadata
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -41,12 +36,9 @@ class VaultSpec:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.vault_spec_metadata import VaultSpecMetadata
         organization_id = self.organization_id
 
         scope = self.scope.value
-
-        metadata = self.metadata.to_dict()
 
 
         field_dict: dict[str, Any] = {}
@@ -54,7 +46,6 @@ class VaultSpec:
         field_dict.update({
             "organizationId": organization_id,
             "scope": scope,
-            "metadata": metadata,
         })
 
         return field_dict
@@ -63,7 +54,6 @@ class VaultSpec:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.vault_spec_metadata import VaultSpecMetadata
         d = dict(src_dict)
         organization_id = d.pop("organizationId")
 
@@ -72,15 +62,9 @@ class VaultSpec:
 
 
 
-        metadata = VaultSpecMetadata.from_dict(d.pop("metadata"))
-
-
-
-
         vault_spec = cls(
             organization_id=organization_id,
             scope=scope,
-            metadata=metadata,
         )
 
 

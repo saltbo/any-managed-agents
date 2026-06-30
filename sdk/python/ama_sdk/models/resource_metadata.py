@@ -28,7 +28,7 @@ class ResourceMetadata:
     """ 
         Attributes:
             uid (str):  Example: resource_abc123.
-            pid (None | str):  Example: project_abc123.
+            project_id (None | str):  Example: project_abc123.
             name (str):  Example: Default resource.
             description (None | str):  Example: Default project resource..
             labels (ResourceMetadataLabels):
@@ -40,7 +40,7 @@ class ResourceMetadata:
      """
 
     uid: str
-    pid: None | str
+    project_id: None | str
     name: str
     description: None | str
     labels: ResourceMetadataLabels
@@ -60,8 +60,8 @@ class ResourceMetadata:
         from ..models.resource_metadata_labels import ResourceMetadataLabels
         uid = self.uid
 
-        pid: None | str
-        pid = self.pid
+        project_id: None | str
+        project_id = self.project_id
 
         name = self.name
 
@@ -90,7 +90,7 @@ class ResourceMetadata:
         field_dict.update(self.additional_properties)
         field_dict.update({
             "uid": uid,
-            "pid": pid,
+            "projectId": project_id,
             "name": name,
             "description": description,
             "labels": labels,
@@ -112,12 +112,12 @@ class ResourceMetadata:
         d = dict(src_dict)
         uid = d.pop("uid")
 
-        def _parse_pid(data: object) -> None | str:
+        def _parse_project_id(data: object) -> None | str:
             if data is None:
                 return data
             return cast(None | str, data)
 
-        pid = _parse_pid(d.pop("pid"))
+        project_id = _parse_project_id(d.pop("projectId"))
 
 
         name = d.pop("name")
@@ -178,7 +178,7 @@ class ResourceMetadata:
 
         resource_metadata = cls(
             uid=uid,
-            pid=pid,
+            project_id=project_id,
             name=name,
             description=description,
             labels=labels,

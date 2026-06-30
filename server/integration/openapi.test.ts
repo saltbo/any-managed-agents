@@ -36,6 +36,7 @@ const EXPECTED_RESTISH_OPERATIONS = {
   Leases: ['listLeases', 'createLease'],
   Providers: ['listProviders', 'listModels'],
   Vaults: ['listVaults', 'createVault'],
+  'Memory Stores': ['listMemoryStores', 'createMemoryStore'],
   Connectors: ['listConnectors', 'readConnector'],
   Usage: ['listUsageRecords', 'readUsageSummary'],
   Audit: ['listAuditRecords', 'readAuditRecord'],
@@ -89,6 +90,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/v1/agents/{agentId}')
     expect(doc.paths).toHaveProperty('/api/v1/agents/{agentId}/versions')
     expect(doc.paths).toHaveProperty('/api/v1/agents/{agentId}/versions/{version}')
+    expect(doc.paths).not.toHaveProperty('/api/v1/agents/{agentId}/memory')
     expect(doc.paths).toHaveProperty('/api/v1/sessions')
     expect(doc.paths).toHaveProperty('/api/v1/environments')
     expect(doc.paths).toHaveProperty('/api/v1/environments/{environmentId}')
@@ -151,6 +153,10 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/v1/vaults/{vaultId}/credentials/{credentialId}')
     expect(doc.paths).toHaveProperty('/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions')
     expect(doc.paths).toHaveProperty('/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}')
+    expect(doc.paths).toHaveProperty('/api/v1/memory-stores')
+    expect(doc.paths).toHaveProperty('/api/v1/memory-stores/{storeId}')
+    expect(doc.paths).toHaveProperty('/api/v1/memory-stores/{storeId}/memories')
+    expect(doc.paths).toHaveProperty('/api/v1/memory-stores/{storeId}/memories/{memoryId}')
 
     expect(doc.paths['/api/v1/sessions']).toHaveProperty('get')
     expect(doc.paths['/api/v1/sessions']).toHaveProperty('post')
@@ -193,6 +199,14 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}']).toHaveProperty(
       'delete',
     )
+    expect(doc.paths['/api/v1/memory-stores']).toHaveProperty('get')
+    expect(doc.paths['/api/v1/memory-stores']).toHaveProperty('post')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}']).toHaveProperty('get')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}']).toHaveProperty('patch')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}/memories']).toHaveProperty('get')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}/memories']).toHaveProperty('post')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}/memories/{memoryId}']).toHaveProperty('patch')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}/memories/{memoryId}']).toHaveProperty('delete')
 
     expect(doc.paths['/api/v1/providers']).toHaveProperty('get')
     expect(doc.paths['/api/v1/providers/{providerId}']).toHaveProperty('get')
@@ -215,6 +229,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/sessions'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/v1/vaults'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/v1/runners'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/v1/memory-stores'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/v1/providers'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/v1/connectors'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/v1/usage-records'].get.security).toEqual([{ bearerAuth: [] }])
@@ -226,6 +241,10 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/sessions'].get.operationId).toBe('listSessions')
     expect(doc.paths['/api/v1/runners'].get.operationId).toBe('listRunners')
     expect(doc.paths['/api/v1/vaults'].get.operationId).toBe('listVaults')
+    expect(doc.paths['/api/v1/memory-stores'].get.operationId).toBe('listMemoryStores')
+    expect(doc.paths['/api/v1/memory-stores'].post.operationId).toBe('createMemoryStore')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}'].get.operationId).toBe('readMemoryStore')
+    expect(doc.paths['/api/v1/memory-stores/{storeId}'].patch.operationId).toBe('updateMemoryStore')
     expect(doc.paths['/api/v1/providers'].get.operationId).toBe('listProviders')
     expect(doc.paths['/api/v1/connectors'].get.operationId).toBe('listConnectors')
     expect(doc.paths['/api/v1/usage-summary'].get.operationId).toBe('readUsageSummary')
@@ -295,6 +314,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('VaultCredential')
     expect(doc.components?.schemas).toHaveProperty('VaultCredentialVersion')
     expect(doc.components?.schemas).toHaveProperty('CreateVaultRequest')
+    expect(doc.components?.schemas).toHaveProperty('UpdateVaultRequest')
     expect(doc.components?.schemas).toHaveProperty('CreateVaultCredentialRequest')
     expect(doc.components?.schemas).toHaveProperty('CreateVaultCredentialVersionRequest')
     expect(doc.components?.schemas).toHaveProperty('Provider')
@@ -319,7 +339,12 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('UpdateTriggerRequest')
     expect(doc.components?.schemas).toHaveProperty('MemoryStore')
     expect(doc.components?.schemas).toHaveProperty('MemoryStoreMemory')
-    expect(doc.components?.schemas).toHaveProperty('AgentMemory')
+    expect(doc.components?.schemas).toHaveProperty('CreateMemoryStoreRequest')
+    expect(doc.components?.schemas).toHaveProperty('UpdateMemoryStoreRequest')
+    expect(doc.components?.schemas).not.toHaveProperty('AgentMemory')
+    expect(doc.components?.schemas).not.toHaveProperty('AgentMemorySpec')
+    expect(doc.components?.schemas).not.toHaveProperty('AgentMemoryStatus')
+    expect(doc.components?.schemas).not.toHaveProperty('ReplaceAgentMemoryRequest')
 
     expect(doc.components?.schemas).not.toHaveProperty('GovernancePolicy')
     expect(doc.components?.schemas).not.toHaveProperty('McpConnector')
@@ -327,7 +352,31 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).not.toHaveProperty('ScheduledAgentTrigger')
     expect(doc.components?.schemas).not.toHaveProperty('ScheduledTriggerRun')
 
-    for (const schemaName of ['CreateEnvironmentRequest', 'UpdateEnvironmentRequest', 'SessionEnvironmentSnapshot']) {
+    for (const schemaName of ['CreateEnvironmentRequest', 'UpdateEnvironmentRequest']) {
+      const properties = schemaProperties(doc, schemaName)
+      expect(properties).toEqual(expect.arrayContaining(['metadata', 'spec']))
+      expect(properties).not.toContain('name')
+      expect(properties).not.toContain('description')
+      expect(properties).not.toContain('runtimeConfig')
+    }
+    for (const schemaName of [
+      'CreateVaultRequest',
+      'UpdateVaultRequest',
+      'CreateMemoryStoreRequest',
+      'UpdateMemoryStoreRequest',
+    ]) {
+      const properties = schemaProperties(doc, schemaName)
+      expect(properties).toEqual(expect.arrayContaining(['metadata', 'spec']))
+      expect(properties).not.toContain('name')
+      expect(properties).not.toContain('description')
+      expect(properties).not.toContain('scope')
+    }
+    for (const schemaName of ['VaultSpec', 'MemoryStoreSpec']) {
+      const properties = schemaProperties(doc, schemaName)
+      expect(properties).not.toContain('metadata')
+    }
+    expect(schemaProperties(doc, 'VaultSpec')).toContain('scope')
+    for (const schemaName of ['EnvironmentSpec', 'SessionEnvironmentSnapshot']) {
       const properties = schemaProperties(doc, schemaName)
       expect(properties).toEqual(expect.arrayContaining(['type', 'networking', 'packages']))
       expect(properties).not.toContain('hostingMode')
@@ -348,7 +397,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(resourceMetadataProperties).toEqual(
       expect.arrayContaining([
         'uid',
-        'pid',
+        'projectId',
         'name',
         'description',
         'labels',
@@ -362,7 +411,6 @@ describe('[CF] OpenAPI documentation', () => {
     for (const schemaName of [
       'Agent',
       'AgentVersion',
-      'AgentMemory',
       'Environment',
       'EnvironmentVersion',
       'Vault',
@@ -413,16 +461,24 @@ describe('[CF] OpenAPI documentation', () => {
     }
     const createTriggerProperties = createTriggerSchema?.properties
     expect(createTriggerProperties).toMatchObject({
-      name: { type: 'string', minLength: 1, maxLength: 160 },
+      metadata: { $ref: '#/components/schemas/TriggerCreateMetadata' },
+      spec: { type: 'object' },
+    })
+    expect(createTriggerSchema?.required).toEqual(expect.arrayContaining(['metadata', 'spec']))
+    expect(createTriggerSchema?.required).not.toContain('nextDueAt')
+    const createTriggerSpec = createTriggerProperties?.spec as
+      | { properties?: Record<string, { type?: string; properties?: Record<string, unknown>; oneOf?: unknown[] }> }
+      | undefined
+    expect(createTriggerSpec?.properties).toMatchObject({
       source: { oneOf: expect.any(Array) },
       suspend: { type: 'boolean' },
       template: { type: 'object' },
-      nextDueAt: { type: 'string' },
     })
-    expect(createTriggerSchema?.required).toEqual(expect.arrayContaining(['name', 'source', 'template']))
-    expect(createTriggerSchema?.required).not.toContain('nextDueAt')
-    expect(createTriggerSchema?.required).not.toContain('suspend')
-    const templateSpec = createTriggerProperties?.template?.properties?.spec as
+    expect(createTriggerSpec?.properties).not.toHaveProperty('nextDueAt')
+    const template = createTriggerSpec?.properties?.template as
+      | { properties?: Record<string, { type?: string; properties?: Record<string, unknown> }> }
+      | undefined
+    const templateSpec = template?.properties?.spec as
       | {
           properties?: Record<
             string,
@@ -438,7 +494,7 @@ describe('[CF] OpenAPI documentation', () => {
       promptTemplate: { type: 'string', minLength: 1, maxLength: 16000 },
       volumes: { type: 'array' },
       volumeMounts: { type: 'array' },
-      env: { type: 'object' },
+      env: { $ref: '#/components/schemas/ExecutionEnv' },
       envFrom: { type: 'array' },
     })
     // environmentId is optional: an unpinned trigger resolves an environment per
@@ -463,9 +519,9 @@ describe('[CF] OpenAPI documentation', () => {
     )?.properties
     expect(triggerRunSpecProperties).toMatchObject({
       scheduledFor: { type: 'string', nullable: true },
-      idempotencyKey: { type: 'string' },
-      correlationId: { type: 'string' },
     })
+    expect(triggerRunSpecProperties).not.toHaveProperty('idempotencyKey')
+    expect(triggerRunSpecProperties).not.toHaveProperty('correlationId')
     const triggerRunStatusProperties = (
       doc.components?.schemas?.TriggerRunStatus as {
         properties?: Record<string, { type?: string; nullable?: boolean }>
@@ -475,6 +531,8 @@ describe('[CF] OpenAPI documentation', () => {
       heartbeatAt: { type: 'string', nullable: true },
       triggeredAt: { type: 'string' },
       phase: { type: 'string' },
+      idempotencyKey: { type: 'string' },
+      correlationId: { type: 'string' },
       sessionId: { type: 'string', nullable: true },
     })
   })
@@ -536,11 +594,17 @@ describe('[CF] OpenAPI documentation', () => {
   })
 
   it('serves interactive API docs', async () => {
-    const res = await SELF.fetch('https://example.com/api/v1/docs')
+    const res = await SELF.fetch('https://example.com/api/docs')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('text/html')
     expect(await res.text()).toContain('/api/v1/openapi.json')
+
+    const rootDocs = await SELF.fetch('https://example.com/docs')
+    expect(rootDocs.status).toBe(404)
+
+    const versionedDocs = await SELF.fetch('https://example.com/api/v1/docs')
+    expect(versionedDocs.status).toBe(404)
   })
 
   it('keeps session environment snapshots on the strict environment networking contract', async () => {
@@ -608,14 +672,15 @@ describe('[CF] OpenAPI documentation', () => {
     expect(schemas.Session.properties).not.toHaveProperty('durableObjectName')
     expect(schemas.Session.properties).not.toHaveProperty('sandboxId')
     expect(schemas.Session.properties).not.toHaveProperty('runtimeEndpointPath')
-    expect(schemas.SessionPlacement.required).toEqual(
-      expect.arrayContaining(['hostingMode', 'provider', 'model', 'driver', 'backend', 'protocol']),
-    )
+    expect(schemas.SessionPlacement.required).toEqual(expect.arrayContaining(['hostingMode', 'provider', 'model']))
     expect(schemas.SessionPlacement.properties).toEqual(
       expect.objectContaining({
         hostingMode: { $ref: '#/components/schemas/EnvironmentHostingMode' },
       }),
     )
     expect(schemas.SessionPlacement.properties).not.toHaveProperty('runtimeOwner')
+    expect(schemas.SessionPlacement.properties).not.toHaveProperty('driver')
+    expect(schemas.SessionPlacement.properties).not.toHaveProperty('backend')
+    expect(schemas.SessionPlacement.properties).not.toHaveProperty('protocol')
   })
 })

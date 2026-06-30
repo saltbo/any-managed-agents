@@ -43,9 +43,9 @@ function request(overrides: Partial<RuntimeProviderRequest> = {}): RuntimeProvid
     env: { HOME: '/home/agent' },
     prompt: 'USER_TASK',
     agentSnapshot: {
-      instructions: 'SYSTEM_PROMPT',
+      systemPrompt: 'SYSTEM_PROMPT',
       skills: ['saltbo/agent-kanban@ak-maintainer'],
-      subagents: [{ username: 'reviewer', role: 'reviewer' }],
+      subagents: [{ name: 'reviewer', description: 'Reviews pull requests' }],
     },
     ...overrides,
   }
@@ -64,7 +64,7 @@ afterEach(() => {
 })
 
 describe('codexProvider', () => {
-  it('passes agent instructions through Codex developer instructions without prefixing the user prompt', async () => {
+  it('passes agent system prompt through Codex developer instructions without prefixing the user prompt', async () => {
     runStreamedMock.mockResolvedValue({ events: events() })
     startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
 
@@ -83,7 +83,9 @@ describe('codexProvider', () => {
       config: { developer_instructions: string }
     }
     expect(codexOptions.config.developer_instructions).toContain('Skills: saltbo/agent-kanban@ak-maintainer')
-    expect(codexOptions.config.developer_instructions).toContain('Available subagents: @reviewer (reviewer)')
+    expect(codexOptions.config.developer_instructions).toContain(
+      'Available subagents: @reviewer (Reviews pull requests)',
+    )
     expect(codexOptions.config).not.toHaveProperty('instructions')
     for await (const _event of handle.events) {
       // drain the stream so async generator cleanup runs

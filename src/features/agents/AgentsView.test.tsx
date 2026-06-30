@@ -110,7 +110,7 @@ describe('[spec: agents/console-list] AgentsView', () => {
   })
 
   it('renders None for skills and tools when both are empty', () => {
-    const agent = buildAgent({ skills: [], tools: [] })
+    const agent = buildAgent({ skills: [], allowedTools: [] })
     render(
       <MemoryRouter>
         <AgentsView

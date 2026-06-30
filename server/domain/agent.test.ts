@@ -1,98 +1,42 @@
 import { describe, expect, it } from 'vitest'
 import {
-  type AgentToolAttachment,
-  defaultAgentHandoff,
-  governanceBlocksTool,
+  defaultAllowedTools,
   hasSecretMaterial,
-  matchesHandoffTarget,
-  mergeMetadata,
   nextVersionNumber,
-  normalizeToolAttachments,
-  validateConfigSecrets,
-  validateHandoff,
+  validateAllowedTools,
   validateSkills,
-  validateToolAttachments,
+  validateSubagents,
 } from './agent'
 
-function tool(partial: Partial<AgentToolAttachment> & { name: string }): AgentToolAttachment {
-  return {
-    description: null,
-    inputSchema: {},
-    approvalMode: 'project_policy',
-    policyMetadata: {},
-    ...partial,
-  }
-}
-
-describe('[spec: agents/tool-contract] normalizeToolAttachments', () => {
-  it('applies attachment defaults to sparse inputs', () => {
-    expect(normalizeToolAttachments([{ name: 'repo.read' }])).toEqual([
-      { name: 'repo.read', description: null, inputSchema: {}, approvalMode: 'project_policy', policyMetadata: {} },
+describe('[spec: agents/tool-contract] validateAllowedTools', () => {
+  it('defaults to the complete AMA sandbox tool set', () => {
+    expect(defaultAllowedTools()).toEqual([
+      'read',
+      'bash',
+      'edit',
+      'write',
+      'grep',
+      'find',
+      'ls',
+      'fetch',
+      'web_search',
     ])
   })
 
-  it('preserves provided fields', () => {
-    expect(
-      normalizeToolAttachments([
-        { name: 'web_search', description: 'Search', inputSchema: { a: 1 }, approvalMode: 'per_call' },
-      ]),
-    ).toEqual([
-      {
-        name: 'web_search',
-        description: 'Search',
-        inputSchema: { a: 1 },
-        approvalMode: 'per_call',
-        policyMetadata: {},
-      },
-    ])
-  })
-})
-
-describe('[spec: agents/tool-contract] governanceBlocksTool', () => {
-  it('blocks explicitly blocked tools and wildcards', () => {
-    expect(governanceBlocksTool({ blockedTools: ['repo.delete'] }, 'repo.delete')).toBe(true)
-    expect(governanceBlocksTool({ blockedTools: ['*'] }, 'anything')).toBe(true)
-  })
-
-  it('blocks tools outside a non-wildcard allowlist', () => {
-    expect(governanceBlocksTool({ allowedTools: ['web_search'] }, 'repo.read')).toBe(true)
-    expect(governanceBlocksTool({ allowedTools: ['web_search'] }, 'web_search')).toBe(false)
-    expect(governanceBlocksTool({ allowedTools: ['*'] }, 'web_search')).toBe(false)
-  })
-
-  it('blocks when the default effect is deny', () => {
-    expect(governanceBlocksTool({ defaultEffect: 'deny' }, 'web_search')).toBe(true)
-    expect(governanceBlocksTool({}, 'web_search')).toBe(false)
-  })
-})
-
-describe('[spec: agents/tool-contract] validateToolAttachments', () => {
   it('rejects duplicate tool names', () => {
-    expect(validateToolAttachments([tool({ name: 'a' }), tool({ name: 'a' })], {})).toEqual({
-      tools: 'Tool is attached more than once: a',
+    expect(validateAllowedTools(['read', 'read'])).toEqual({
+      allowedTools: 'Tool is listed more than once: read',
     })
   })
 
-  it('rejects platform-blocked tools', () => {
-    expect(validateToolAttachments([tool({ name: 'secrets.read' })], {})).toEqual({
-      tools: 'Tool is blocked by policy: secrets.read',
+  it('rejects unsupported tool names', () => {
+    expect(validateAllowedTools(['repo.delete'])).toEqual({
+      allowedTools: 'Tool is not supported by the AMA sandbox runtime: repo.delete',
     })
   })
 
-  it('rejects policy-blocked tools', () => {
-    expect(validateToolAttachments([tool({ name: 'repo.delete' })], { blockedTools: ['repo.delete'] })).toEqual({
-      tools: 'Tool is blocked by policy: repo.delete',
-    })
-  })
-
-  it('rejects secret material inside a tool', () => {
-    expect(validateToolAttachments([tool({ name: 'repo.read', policyMetadata: { token: 'raw-secret' } })], {})).toEqual(
-      { tools: 'Secret material must be stored in a vault.' },
-    )
-  })
-
-  it('accepts a clean tool set', () => {
-    expect(validateToolAttachments([tool({ name: 'web_search' }), tool({ name: 'repo.read' })], {})).toBeNull()
+  it('accepts supported sandbox tools', () => {
+    expect(validateAllowedTools(['read', 'bash', 'fetch'])).toBeNull()
   })
 })
 
@@ -113,50 +57,37 @@ describe('[spec: agents/validation] validateSkills', () => {
   })
 })
 
-describe('[spec: agents/validation] validateHandoff', () => {
-  it('requires stable identifiers', () => {
-    expect(
-      validateHandoff({ enabled: true, accepts: { roles: ['has space'], capabilities: [] }, targets: [] }),
-    ).toMatchObject({ handoff: expect.any(String) })
-    expect(
-      validateHandoff({
-        enabled: true,
-        accepts: { roles: ['maintainer'], capabilities: ['issue-triage', 'code-review'] },
-        targets: [],
-      }),
-    ).toBeNull()
+describe('[spec: agents/validation] validateSubagents', () => {
+  const subagent = {
+    name: 'reviewer',
+    description: 'Reviews the work.',
+    systemPrompt: 'Review the work.',
+    model: null,
+    allowedTools: ['read'],
+    skills: [],
+    mcpConnectors: [],
+  }
+
+  it('requires stable sub-agent names, descriptions, and system prompts', () => {
+    expect(validateSubagents([{ ...subagent, name: 'has space' }])).toMatchObject({ subagents: expect.any(String) })
+    expect(validateSubagents([{ ...subagent, description: '' }])).toEqual({
+      subagents: 'Sub-agent description is required: reviewer',
+    })
+    expect(validateSubagents([{ ...subagent, systemPrompt: '' }])).toEqual({
+      subagents: 'Sub-agent system prompt is required: reviewer',
+    })
+    expect(validateSubagents([subagent])).toBeNull()
   })
 
-  it('rejects handoff identifiers that look like secret material', () => {
-    expect(
-      validateHandoff({
-        enabled: true,
-        accepts: { roles: [], capabilities: ['raw-secret-value-xxxxxxxxxxxxxxxxx'] },
-        targets: [],
-      }),
-    ).toEqual({
-      handoff: 'Secret material must be stored in a vault.',
+  it('rejects duplicate sub-agent names', () => {
+    expect(validateSubagents([subagent, { ...subagent, model: 'qa' }])).toEqual({
+      subagents: 'Sub-agent is configured more than once: reviewer',
     })
   })
 
-  it('rejects secret-looking handoff target role and capability values', () => {
-    expect(
-      validateHandoff({
-        enabled: true,
-        accepts: { roles: [], capabilities: [] },
-        targets: [{ role: 'raw-secret-value-xxxxxxxxxxxxxxxxx' }],
-      }),
-    ).toEqual({
-      handoff: 'Secret material must be stored in a vault.',
-    })
-    expect(
-      validateHandoff({
-        enabled: true,
-        accepts: { roles: [], capabilities: [] },
-        targets: [{ capability: 'raw-secret-value-xxxxxxxxxxxxxxxxx' }],
-      }),
-    ).toEqual({
-      handoff: 'Secret material must be stored in a vault.',
+  it('rejects secret material inside sub-agents', () => {
+    expect(validateSubagents([{ ...subagent, systemPrompt: 'raw-secret-token' }])).toEqual({
+      subagents: 'Secret material must be stored in a vault.',
     })
   })
 })
@@ -170,62 +101,9 @@ describe('[spec: agents/validation] hasSecretMaterial', () => {
   })
 })
 
-describe('[spec: agents/validation] validateConfigSecrets', () => {
-  const clean = { subagents: [], handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] } }
-
-  it('flags the offending free-form field', () => {
-    expect(
-      validateConfigSecrets({
-        ...clean,
-        handoff: { enabled: true, accepts: { roles: [], capabilities: [] }, targets: [{ capability: 'raw-secret' }] },
-      }),
-    ).toEqual({
-      handoff: 'Secret material must be stored in a vault.',
-    })
-  })
-
-  it('flags secret material in subagents array', () => {
-    expect(validateConfigSecrets({ ...clean, subagents: [{ token: 'raw-secret' }] })).toEqual({
-      subagents: 'Secret material must be stored in a vault.',
-    })
-  })
-
-  it('passes a clean config', () => {
-    expect(validateConfigSecrets(clean)).toBeNull()
-  })
-})
-
-describe('[spec: agents/lifecycle] mergeMetadata', () => {
-  it('overwrites present keys and drops keys set to null', () => {
-    expect(mergeMetadata({ owner: 'platform', remove: 'stale' }, { owner: 'runtime', remove: null })).toEqual({
-      owner: 'runtime',
-    })
-  })
-
-  it('returns current unchanged when no update', () => {
-    expect(mergeMetadata({ owner: 'platform' }, undefined)).toEqual({ owner: 'platform' })
-  })
-})
-
 describe('[spec: agents/lifecycle] nextVersionNumber', () => {
   it('starts at 1 and increments', () => {
     expect(nextVersionNumber(null)).toBe(1)
     expect(nextVersionNumber(3)).toBe(4)
-  })
-})
-
-describe('[spec: agents/handoff] handoff target resolution', () => {
-  it('provides the default disabled handoff contract', () => {
-    expect(defaultAgentHandoff()).toEqual({ enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] })
-  })
-
-  it('matches a candidate by role or capability', () => {
-    const candidate = {
-      role: 'worker',
-      handoff: { enabled: true, accepts: { roles: [], capabilities: ['implementation'] }, targets: [] },
-    }
-    expect(matchesHandoffTarget([{ role: 'worker' }], candidate)).toBe(true)
-    expect(matchesHandoffTarget([{ capability: 'implementation' }], candidate)).toBe(true)
-    expect(matchesHandoffTarget([{ role: 'reviewer' }], candidate)).toBe(false)
   })
 })

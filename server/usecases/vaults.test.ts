@@ -24,7 +24,7 @@ function vault(
       }),
       ...overrides.metadata,
     },
-    spec: { organizationId: 'org_1', scope: 'project', metadata: {}, ...overrides.spec },
+    spec: { organizationId: 'org_1', scope: 'project', ...overrides.spec },
     status: { phase: 'active', ...overrides.status },
   }
 }

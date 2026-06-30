@@ -22,7 +22,7 @@ function buildAgent(overrides: AgentOverrides = {}): Agent {
 
 function buildAgentVersion(overrides: AgentVersionOverrides = {}): AgentVersion {
   return resourceAgentVersion({
-    tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+    allowedTools: ['read'],
     createdAt: now,
     ...overrides,
   })
@@ -39,9 +39,7 @@ function buildSessionAgentSnapshot(overrides: Partial<SessionAgentSnapshot> = {}
     model: '@cf/moonshotai/kimi-k2.6',
     skills: [],
     subagents: [],
-    role: null,
-    handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-    tools: [],
+    allowedTools: ['read', 'bash'],
     mcpConnectors: [],
     createdAt: now,
     ...overrides,
@@ -149,13 +147,11 @@ describe('[spec: agents/console-detail] AgentDetailView', () => {
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull()
   })
 
-  it('renders None for skills, tools, connectors, role, and tags when all are empty', () => {
+  it('renders None for skills, allowed tools, and connectors when all are empty', () => {
     const agent = buildAgent({
       skills: [],
-      tools: [],
+      allowedTools: [],
       mcpConnectors: [],
-      role: null,
-      handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
     })
     render(
       <MemoryRouter>
@@ -163,7 +159,7 @@ describe('[spec: agents/console-detail] AgentDetailView', () => {
       </MemoryRouter>,
     )
     const nones = screen.getAllByText('None')
-    expect(nones.length).toBeGreaterThanOrEqual(4)
+    expect(nones.length).toBeGreaterThanOrEqual(3)
   })
 
   it('renders agent without currentVersionId falling back to agent.id', () => {
@@ -186,25 +182,13 @@ describe('[spec: agents/console-detail] AgentDetailView', () => {
     expect(screen.getByText('github-connector')).toBeInTheDocument()
   })
 
-  it('renders role value when set', () => {
-    const agent = buildAgent({ role: 'maintainer' })
+  it('renders allowed tools value when set', () => {
+    const agent = buildAgent({ allowedTools: ['read', 'bash'] })
     render(
       <MemoryRouter>
         <AgentDetailView agent={agent} versions={[]} sessions={[]} />
       </MemoryRouter>,
     )
-    expect(screen.getByText('maintainer')).toBeInTheDocument()
-  })
-
-  it('renders capability tags value when set', () => {
-    const agent = buildAgent({
-      handoff: { enabled: true, accepts: { roles: [], capabilities: ['triage', 'code-review'] }, targets: [] },
-    })
-    render(
-      <MemoryRouter>
-        <AgentDetailView agent={agent} versions={[]} sessions={[]} />
-      </MemoryRouter>,
-    )
-    expect(screen.getByText('triage, code-review')).toBeInTheDocument()
+    expect(screen.getByText('read, bash')).toBeInTheDocument()
   })
 })

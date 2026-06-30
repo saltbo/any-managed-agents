@@ -47,7 +47,7 @@ function buildAgent(overrides: AgentOverrides = {}): Agent {
     systemPrompt: 'Do things',
     model: '@cf/model',
     skills: [],
-    tools: [],
+    allowedTools: [],
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,

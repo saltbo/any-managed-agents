@@ -74,12 +74,16 @@ export function EnvironmentDetailPage() {
   const updateEnvironment = useMutation({
     mutationFn: (input: EnvironmentFormState) =>
       api.updateEnvironment(environmentId as string, {
-        name: input.name,
-        description: input.description,
-        type: input.type,
-        networking: networkingFromForm(input),
-        packages: parsePackages(input.packages),
-        variables: parseVariables(input.variables),
+        metadata: {
+          name: input.name,
+          ...(input.description ? { description: input.description } : { description: null }),
+        },
+        spec: {
+          type: input.type,
+          networking: networkingFromForm(input),
+          packages: parsePackages(input.packages),
+          variables: parseVariables(input.variables),
+        },
       }),
     onSuccess: () => {
       toast.success('Environment updated')

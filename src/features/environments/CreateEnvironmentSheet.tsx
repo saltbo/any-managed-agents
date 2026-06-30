@@ -47,12 +47,16 @@ export function CreateEnvironmentSheet({
   const createEnvironment = useMutation({
     mutationFn: () =>
       api.createEnvironment({
-        name: form.name,
-        description: form.description,
-        type: form.type,
-        networking: networking(form),
-        packages: parsePackages(form.packages),
-        variables: parseVariables(form.variables),
+        metadata: {
+          name: form.name,
+          ...(form.description ? { description: form.description } : {}),
+        },
+        spec: {
+          type: form.type,
+          networking: networking(form),
+          packages: parsePackages(form.packages),
+          variables: parseVariables(form.variables),
+        },
       }),
     onSuccess: () => {
       onOpenChange(false)

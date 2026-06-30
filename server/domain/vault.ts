@@ -61,7 +61,6 @@ export interface Vault {
 export interface VaultSpec {
   organizationId: string
   scope: VaultScope
-  metadata: Record<string, unknown>
 }
 
 export interface VaultStatus {

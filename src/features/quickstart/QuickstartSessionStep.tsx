@@ -53,9 +53,11 @@ export function QuickstartSessionStep({
       if (!agent || !environment) throw new Error('Quickstart needs an active agent and environment first')
       /* v8 ignore stop */
       return api.createSession({
-        agentId: agent.metadata.uid,
-        environmentId: environment.metadata.uid,
-        runtime: 'ama',
+        spec: {
+          agentId: agent.metadata.uid,
+          environmentId: environment.metadata.uid,
+          runtime: 'ama',
+        },
         prompt: SAFE_EXAMPLE_PROMPT,
       })
     },

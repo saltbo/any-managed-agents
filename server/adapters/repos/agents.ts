@@ -1,11 +1,4 @@
-import type {
-  Agent,
-  AgentConfig,
-  AgentHandoff,
-  AgentMemory,
-  AgentToolAttachment,
-  AgentVersion,
-} from '@server/domain/agent'
+import type { Agent, AgentSpec, AgentSubagent, AgentVersion } from '@server/domain/agent'
 import { DEFAULT_CONNECTORS } from '@server/domain/connector'
 import { resourceMetadata, resourcePhase } from '@server/domain/resource'
 import type {
@@ -17,12 +10,11 @@ import type {
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { agentMemories, agents, agentVersions, connectors, providers } from '../../db/schema'
+import { agents, agentVersions, connectors, providers } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 type AgentRow = typeof agents.$inferSelect
 type AgentVersionRow = typeof agentVersions.$inferSelect
-type AgentMemoryRow = typeof agentMemories.$inferSelect
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -36,62 +28,27 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-}
-
-function normalizeHandoff(value: unknown, capabilityTags: string[]): AgentHandoff {
-  const policy = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
-  const accepts =
-    policy.accepts && typeof policy.accepts === 'object' ? (policy.accepts as Record<string, unknown>) : {}
-  const targets = Array.isArray(policy.targets)
-    ? policy.targets
-        .filter((target): target is Record<string, unknown> => Boolean(target) && typeof target === 'object')
-        .map((target) => ({
-          ...(typeof target.role === 'string' && target.role ? { role: target.role } : {}),
-          ...(typeof target.capability === 'string' && target.capability ? { capability: target.capability } : {}),
-        }))
-        .filter((target) => target.role !== undefined || target.capability !== undefined)
-    : []
+function specFromRow(row: AgentRow | AgentVersionRow): AgentSpec {
   return {
-    enabled: policy.enabled === true,
-    accepts: {
-      roles: stringArray(accepts.roles),
-      capabilities: stringArray(accepts.capabilities).length > 0 ? stringArray(accepts.capabilities) : capabilityTags,
-    },
-    targets,
-  }
-}
-
-function configFromRow(row: AgentRow | AgentVersionRow): AgentConfig {
-  const capabilityTags = parseJson<string[]>(row.capabilityTags)
-  return {
-    systemPrompt: row.instructions,
+    systemPrompt: row.systemPrompt,
     provider: row.providerId,
     model: row.model,
     skills: parseJson<string[]>(row.skills),
-    subagents: parseJson<Record<string, unknown>[]>(row.subagents),
-    role: row.role,
-    handoff: normalizeHandoff(parseJson<Record<string, unknown>>(row.handoffPolicy), capabilityTags),
-    tools: parseJson<AgentToolAttachment[]>(row.tools),
+    subagents: parseJson<AgentSubagent[]>(row.subagents),
+    allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
   }
 }
 
-function configColumns(config: AgentConfig) {
+function specColumns(spec: AgentSpec) {
   return {
-    instructions: config.systemPrompt,
-    providerId: config.provider,
-    model: config.model,
-    skills: stringify(config.skills),
-    subagents: stringify(config.subagents),
-    role: config.role,
-    capabilityTags: stringify(config.handoff.accepts.capabilities),
-    handoffPolicy: stringify(config.handoff),
-    memoryPolicy: stringify({}),
-    tools: stringify(config.tools),
-    mcpConnectors: stringify(config.mcpConnectors),
-    metadata: stringify({}),
+    systemPrompt: spec.systemPrompt,
+    providerId: spec.provider,
+    model: spec.model,
+    skills: stringify(spec.skills),
+    subagents: stringify(spec.subagents),
+    allowedTools: stringify(spec.allowedTools),
+    mcpConnectors: stringify(spec.mcpConnectors),
   }
 }
 
@@ -118,7 +75,7 @@ function agentRecordFrom(row: AgentRow, version: number): Agent {
       updatedAt: row.updatedAt,
       archivedAt: row.archivedAt,
     }),
-    spec: configFromRow(row),
+    spec: specFromRow(row),
     status: {
       phase: resourcePhase(row.archivedAt),
       currentVersionId: row.currentVersionId,
@@ -136,29 +93,11 @@ function versionRecordFrom(row: AgentVersionRow): AgentVersion {
       createdAt: row.createdAt,
       updatedAt: row.createdAt,
     }),
-    spec: configFromRow(row),
+    spec: specFromRow(row),
     status: {
       agentId: row.agentId,
       version: row.version,
     },
-  }
-}
-
-function memoryRecordFrom(row: AgentMemoryRow): AgentMemory {
-  return {
-    metadata: resourceMetadata({
-      uid: row.agentId,
-      pid: row.projectId,
-      name: 'memory',
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    }),
-    spec: {
-      agentId: row.agentId,
-      content: row.content,
-      metadata: parseJson<Record<string, unknown>>(row.metadata),
-    },
-    status: { phase: 'active' },
   }
 }
 
@@ -226,7 +165,7 @@ export function createAgentRepo(db: Db): AgentRepo {
       return row?.version ?? null
     },
 
-    async insertVersion(agent, config, createdAt): Promise<AgentVersion> {
+    async insertVersion(agent, spec, createdAt): Promise<AgentVersion> {
       const latest = await this.latestVersionNumber(agent.metadata.uid)
       const row = {
         id: newId('agentver'),
@@ -234,7 +173,7 @@ export function createAgentRepo(db: Db): AgentRepo {
         projectId: agent.metadata.pid ?? '',
         version: (latest ?? 0) + 1,
         createdAt,
-        ...configColumns(config),
+        ...specColumns(spec),
       }
       await db.insert(agentVersions).values(row)
       return versionRecordFrom(row)
@@ -274,7 +213,7 @@ export function createAgentRepo(db: Db): AgentRepo {
         currentVersionId: null,
         createdAt,
         updatedAt: createdAt,
-        ...configColumns(input.config),
+        ...specColumns(input.spec),
       }
       await db.insert(agents).values(row)
       return agentRecordFrom(row, 0)
@@ -293,7 +232,7 @@ export function createAgentRepo(db: Db): AgentRepo {
           archivedAt: fields.archivedAt,
           currentVersionId: fields.currentVersionId,
           updatedAt,
-          ...configColumns(fields.config),
+          ...specColumns(fields.spec),
         })
         .where(and(eq(agents.id, agentId), eq(agents.projectId, projectId)))
     },
@@ -303,33 +242,6 @@ export function createAgentRepo(db: Db): AgentRepo {
         .update(agents)
         .set({ archivedAt: null, updatedAt })
         .where(and(eq(agents.id, agentId), eq(agents.projectId, projectId)))
-    },
-
-    async findMemory(projectId, agentId) {
-      const row = await db
-        .select()
-        .from(agentMemories)
-        .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, projectId)))
-        .get()
-      return row ? memoryRecordFrom(row) : null
-    },
-
-    async insertMemory(record: AgentMemory) {
-      await db.insert(agentMemories).values({
-        agentId: record.spec.agentId,
-        projectId: record.metadata.pid ?? '',
-        content: record.spec.content,
-        metadata: stringify(record.spec.metadata),
-        createdAt: record.metadata.createdAt,
-        updatedAt: record.metadata.updatedAt,
-      })
-    },
-
-    async replaceMemory(projectId, agentId, content, metadata, updatedAt) {
-      await db
-        .update(agentMemories)
-        .set({ content, metadata: stringify(metadata), updatedAt })
-        .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, projectId)))
     },
 
     async providerEnabled(_projectId, providerId) {

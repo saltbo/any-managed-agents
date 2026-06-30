@@ -13,6 +13,7 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.create_memory_store_request_metadata import CreateMemoryStoreRequestMetadata
+  from ..models.create_memory_store_request_spec import CreateMemoryStoreRequestSpec
 
 
 
@@ -26,15 +27,12 @@ T = TypeVar("T", bound="CreateMemoryStoreRequest")
 class CreateMemoryStoreRequest:
     """ 
         Attributes:
-            name (str):  Example: Team conventions.
-            description (str | Unset):  Example: Shared repository and review preferences..
-            metadata (CreateMemoryStoreRequestMetadata | Unset):  Example: {'owner': 'platform'}.
+            metadata (CreateMemoryStoreRequestMetadata):
+            spec (CreateMemoryStoreRequestSpec | Unset):
      """
 
-    name: str
-    description: str | Unset = UNSET
-    metadata: CreateMemoryStoreRequestMetadata | Unset = UNSET
-    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+    metadata: CreateMemoryStoreRequestMetadata
+    spec: CreateMemoryStoreRequestSpec | Unset = UNSET
 
 
 
@@ -42,24 +40,21 @@ class CreateMemoryStoreRequest:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.create_memory_store_request_metadata import CreateMemoryStoreRequestMetadata
-        name = self.name
+        from ..models.create_memory_store_request_spec import CreateMemoryStoreRequestSpec
+        metadata = self.metadata.to_dict()
 
-        description = self.description
-
-        metadata: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.metadata, Unset):
-            metadata = self.metadata.to_dict()
+        spec: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.spec, Unset):
+            spec = self.spec.to_dict()
 
 
         field_dict: dict[str, Any] = {}
-        field_dict.update(self.additional_properties)
+
         field_dict.update({
-            "name": name,
+            "metadata": metadata,
         })
-        if description is not UNSET:
-            field_dict["description"] = description
-        if metadata is not UNSET:
-            field_dict["metadata"] = metadata
+        if spec is not UNSET:
+            field_dict["spec"] = spec
 
         return field_dict
 
@@ -68,43 +63,27 @@ class CreateMemoryStoreRequest:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.create_memory_store_request_metadata import CreateMemoryStoreRequestMetadata
+        from ..models.create_memory_store_request_spec import CreateMemoryStoreRequestSpec
         d = dict(src_dict)
-        name = d.pop("name")
+        metadata = CreateMemoryStoreRequestMetadata.from_dict(d.pop("metadata"))
 
-        description = d.pop("description", UNSET)
 
-        _metadata = d.pop("metadata", UNSET)
-        metadata: CreateMemoryStoreRequestMetadata | Unset
-        if isinstance(_metadata,  Unset):
-            metadata = UNSET
+
+
+        _spec = d.pop("spec", UNSET)
+        spec: CreateMemoryStoreRequestSpec | Unset
+        if isinstance(_spec,  Unset):
+            spec = UNSET
         else:
-            metadata = CreateMemoryStoreRequestMetadata.from_dict(_metadata)
+            spec = CreateMemoryStoreRequestSpec.from_dict(_spec)
 
 
 
 
         create_memory_store_request = cls(
-            name=name,
-            description=description,
             metadata=metadata,
+            spec=spec,
         )
 
-
-        create_memory_store_request.additional_properties = d
         return create_memory_store_request
 
-    @property
-    def additional_keys(self) -> list[str]:
-        return list(self.additional_properties.keys())
-
-    def __getitem__(self, key: str) -> Any:
-        return self.additional_properties[key]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.additional_properties[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self.additional_properties[key]
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.additional_properties

@@ -188,13 +188,13 @@ export function SessionDetailView({
                   <Meta label="Provider" value={agentSnapshot.provider} />
                   <Meta label="Model" value={agentSnapshot.model ?? 'None'} />
                   <Meta label="Skills" value={agentSnapshot.skills.join(', ') || 'None'} />
-                  <Meta label="Tools" value={agentSnapshotToolNames(session).join(', ') || 'None'} />
+                  <Meta label="Allowed tools" value={agentSnapshot.allowedTools.join(', ') || 'None'} />
                   <Meta label="MCP connectors" value={agentSnapshot.mcpConnectors.join(', ') || 'None'} />
                 </MetaGrid>
               }
               json={{
                 systemPrompt: agentSnapshot.systemPrompt,
-                handoff: agentSnapshot.handoff,
+                subagents: agentSnapshot.subagents,
               }}
             />
           ) : null}
@@ -276,12 +276,6 @@ function SessionFact({ label, value }: { label: string; value: string }) {
 
 function hostingModeLabel(value: string) {
   return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
-}
-
-function agentSnapshotToolNames(session: Session) {
-  return session.status.bindings.agent.snapshot.tools
-    .map((tool) => (typeof tool.name === 'string' ? tool.name : null))
-    .filter((name): name is string => Boolean(name))
 }
 
 function environmentPackageSummary(packages: {

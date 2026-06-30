@@ -27,9 +27,10 @@ T = TypeVar("T", bound="SessionMetadata")
 class SessionMetadata:
     """ 
         Attributes:
-            uid (str):  Example: session_abc123.
-            pid (str):  Example: project_abc123.
-            name (str):  Example: Implement billing export.
+            uid (str):  Example: resource_abc123.
+            project_id (None | str):  Example: project_abc123.
+            name (str):  Example: Default resource.
+            description (None | str):  Example: Default project resource..
             labels (SessionMetadataLabels):
             annotations (SessionMetadataAnnotations):
             created_by (None | str):
@@ -39,8 +40,9 @@ class SessionMetadata:
      """
 
     uid: str
-    pid: str
+    project_id: None | str
     name: str
+    description: None | str
     labels: SessionMetadataLabels
     annotations: SessionMetadataAnnotations
     created_by: None | str
@@ -58,9 +60,13 @@ class SessionMetadata:
         from ..models.session_metadata_labels import SessionMetadataLabels
         uid = self.uid
 
-        pid = self.pid
+        project_id: None | str
+        project_id = self.project_id
 
         name = self.name
+
+        description: None | str
+        description = self.description
 
         labels = self.labels.to_dict()
 
@@ -84,8 +90,9 @@ class SessionMetadata:
         field_dict.update(self.additional_properties)
         field_dict.update({
             "uid": uid,
-            "pid": pid,
+            "projectId": project_id,
             "name": name,
+            "description": description,
             "labels": labels,
             "annotations": annotations,
             "createdBy": created_by,
@@ -105,9 +112,23 @@ class SessionMetadata:
         d = dict(src_dict)
         uid = d.pop("uid")
 
-        pid = d.pop("pid")
+        def _parse_project_id(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        project_id = _parse_project_id(d.pop("projectId"))
+
 
         name = d.pop("name")
+
+        def _parse_description(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        description = _parse_description(d.pop("description"))
+
 
         labels = SessionMetadataLabels.from_dict(d.pop("labels"))
 
@@ -157,8 +178,9 @@ class SessionMetadata:
 
         session_metadata = cls(
             uid=uid,
-            pid=pid,
+            project_id=project_id,
             name=name,
+            description=description,
             labels=labels,
             annotations=annotations,
             created_by=created_by,

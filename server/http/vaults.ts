@@ -1,5 +1,11 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
+import {
+  ResourceCreateMetadataSchema,
+  ResourceMetadataSchema,
+  ResourcePhaseSchema,
+  ResourceUpdateMetadataSchema,
+  serializeResource,
+} from '@server/contracts/resource-contracts'
 import {
   CREDENTIAL_STATES,
   CREDENTIAL_TYPES,
@@ -40,7 +46,6 @@ const VaultSchema = z
       .object({
         organizationId: z.string().openapi({ example: 'org_abc123' }),
         scope: z.enum(VAULT_SCOPES).openapi({ example: 'project' }),
-        metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
       })
       .openapi('VaultSpec'),
     status: z.object({ phase: ResourcePhaseSchema }).openapi('VaultStatus'),
@@ -102,16 +107,32 @@ const CredentialSchema = z
 
 const CreateVaultSchema = z
   .object({
-    name: z.string().min(1).max(120).openapi({ example: 'Provider credentials' }),
-    description: z.string().max(1000).optional().openapi({ example: 'Credentials used by runtime sessions.' }),
-    scope: z.enum(VAULT_SCOPES).optional().openapi({ example: 'project' }),
-    metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
+    metadata: ResourceCreateMetadataSchema.openapi({
+      example: { name: 'Provider credentials', description: 'Credentials used by runtime sessions.' },
+    }),
+    spec: z
+      .object({
+        scope: z.enum(VAULT_SCOPES).optional().openapi({ example: 'project' }),
+      })
+      .strict(),
   })
+  .strict()
   .openapi('CreateVaultRequest')
 
-const UpdateVaultSchema = CreateVaultSchema.partial()
-  .extend({
+const UpdateVaultSchema = z
+  .object({
+    metadata: ResourceUpdateMetadataSchema.optional(),
+    spec: z
+      .object({
+        scope: z.enum(VAULT_SCOPES).optional().openapi({ example: 'project' }),
+      })
+      .strict()
+      .optional(),
     archived: z.boolean().optional().openapi({ example: true }),
+  })
+  .strict()
+  .refine((body) => body.metadata !== undefined || body.spec !== undefined || body.archived !== undefined, {
+    message: 'Provide metadata, spec, or archived.',
   })
   .openapi('UpdateVaultRequest')
 
@@ -188,8 +209,9 @@ function domainValidation(message: string, fields: Record<string, string>) {
 // version record metadata. It must never leave through API responses or audit
 // snapshots.
 function serializeVersion(record: CredentialVersion) {
+  const resource = serializeResource(record)
   return {
-    ...record,
+    ...resource,
     spec: {
       ...record.spec,
       dataKeys: credentialDataKeys(record.spec.metadata),
@@ -199,8 +221,9 @@ function serializeVersion(record: CredentialVersion) {
 }
 
 function serializeCredential(record: Credential, activeVersion: CredentialVersion | null) {
+  const resource = serializeResource(record)
   return {
-    ...record,
+    ...resource,
     status: { ...record.status, activeVersion: activeVersion ? serializeVersion(activeVersion) : null },
   }
 }
@@ -454,7 +477,10 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
+      return c.json(
+        { data: page.rows.map(serializeResource), pagination: { limit, nextCursor, hasMore: page.hasMore } },
+        200,
+      )
     })
     .openapi(createVaultRoute, async (c) => {
       const body = c.req.valid('json')
@@ -463,15 +489,14 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = body.scope ?? 'project'
+      const scope = body.spec.scope ?? 'project'
       const vault = await deps.vaults.insert(
         {
           organizationId: auth.organization.id,
           projectId: scope === 'project' ? auth.project.id : null,
-          name: body.name,
-          description: body.description ?? null,
+          name: body.metadata.name,
+          description: body.metadata.description ?? null,
           scope,
-          metadata: body.metadata ?? {},
         },
         new Date().toISOString(),
       )
@@ -483,7 +508,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         requestId: requestId(c),
         after: vault,
       })
-      return c.json(vault, 201)
+      return c.json(serializeResource(vault), 201)
     })
     .openapi(readVaultRoute, async (c) => {
       const { vaultId } = c.req.valid('param')
@@ -496,7 +521,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       if (!vault) {
         return vaultNotFound(c)
       }
-      return c.json(vault, 200)
+      return c.json(serializeResource(vault), 200)
     })
     .openapi(updateVaultRoute, async (c) => {
       const { vaultId } = c.req.valid('param')
@@ -510,7 +535,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       if (!vault) {
         return vaultNotFound(c)
       }
-      const scope = body.scope ?? vault.spec.scope
+      const scope = body.spec?.scope ?? vault.spec.scope
       if (scope !== vault.spec.scope && (await deps.vaults.hasCredentials(vault.metadata.uid))) {
         return c.json(
           { error: { type: 'conflict', message: 'Vault scope cannot change after credentials exist' } },
@@ -525,11 +550,10 @@ export function registerVaultRoutes(routes: VaultRoutes) {
             ? null
             : vault.metadata.archivedAt
       const fields = {
-        name: body.name ?? vault.metadata.name,
-        description: body.description ?? vault.metadata.description,
+        name: body.metadata?.name ?? vault.metadata.name,
+        description: body.metadata?.description !== undefined ? body.metadata.description : vault.metadata.description,
         scope,
         projectId: scope === 'project' ? auth.project.id : null,
-        metadata: body.metadata ?? vault.spec.metadata,
         archivedAt,
       }
       await deps.vaults.update(vault.metadata.uid, fields, timestamp)
@@ -543,7 +567,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
           archivedAt: fields.archivedAt,
           updatedAt: timestamp,
         },
-        spec: { ...vault.spec, scope: fields.scope, metadata: fields.metadata },
+        spec: { ...vault.spec, scope: fields.scope },
         status: { phase: fields.archivedAt ? 'archived' : 'active' },
       }
       await deps.audit.record(auth, {
@@ -555,7 +579,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
         before: vault,
         after: updated,
       })
-      return c.json(updated, 200)
+      return c.json(serializeResource(updated), 200)
     })
     .openapi(listCredentialsRoute, async (c) => {
       const { vaultId } = c.req.valid('param')

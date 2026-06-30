@@ -20,13 +20,10 @@ export type AgentInput = RpcRequestType<AgentsRpc['$post']>['json']
 export type AgentPatch = RpcRequestType<AgentsRpc[':agentId']['$patch']>['json']
 export type AgentVersionListResponse = RpcResponseType<AgentsRpc[':agentId']['versions']['$get'], 200>
 export type AgentVersion = ListItem<AgentVersionListResponse>
-export type AgentMemory = RpcResponseType<AgentsRpc[':agentId']['memory']['$get'], 200>
-export type AgentMemoryInput = RpcRequestType<AgentsRpc[':agentId']['memory']['$put']>['json']
 export type AgentSpec = Agent['spec']
-export type JsonObject = AgentMemory['spec']['metadata']
 export type AgentStatus = Agent['status']
-export type AgentToolAttachment = ArrayItem<AgentSpec['tools']>
-export type AgentToolAttachmentInput = ArrayItem<NonNullable<AgentInput['tools']>>
+export type AgentAllowedTool = ArrayItem<AgentSpec['allowedTools']>
+export type AgentAllowedToolInput = ArrayItem<NonNullable<AgentInput['spec']['allowedTools']>>
 export type ResourceMetadata = Agent['metadata']
 export type ResourcePhase = ResourceMetadata['archivedAt'] extends string | null ? AgentStatus['phase'] : never
 
@@ -46,8 +43,4 @@ export const agentsApi = {
     rpcRequest<Agent>(v1.agents[':agentId'].$patch({ param: { agentId: id }, json: { archived: true } })),
   listAgentVersions: (id: string) =>
     rpcRequest<ListResponse<AgentVersion>>(v1.agents[':agentId'].versions.$get({ param: { agentId: id } })),
-  readAgentMemory: (id: string) =>
-    rpcRequest<AgentMemory>(v1.agents[':agentId'].memory.$get({ param: { agentId: id } })),
-  replaceAgentMemory: (id: string, input: AgentMemoryInput) =>
-    rpcRequest<AgentMemory>(v1.agents[':agentId'].memory.$put({ param: { agentId: id }, json: input })),
 }

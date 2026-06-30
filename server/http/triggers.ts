@@ -1,12 +1,17 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
+import {
+  ResourceCreateMetadataSchema,
+  ResourceMetadataSchema,
+  ResourcePhaseSchema,
+  ResourceUpdateMetadataSchema,
+  serializeResource,
+} from '@server/contracts/resource-contracts'
 import { requireAuth } from '../auth/session'
-import { RuntimeSchema } from '../contracts/environment-contracts'
-import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
+import { type EnvFromEntrySchema, ExecutionSpecInputSchema, ExecutionSpecSchema } from '../contracts/execution-spec'
+import type { TriggerRun } from '../domain/trigger'
 import {
   AuthenticatedOperation,
   type DepsEnv,
-  EnvFromEntrySchema,
   ErrorResponseSchema,
   formatListCursor,
   listQuerySchema,
@@ -22,7 +27,8 @@ type TriggerRoutes = OpenAPIHono<DepsEnv>
 
 const RUN_STATES = ['claimed', 'dispatched', 'failed'] as const
 const JsonObjectSchema = z.record(z.string(), z.unknown())
-const EnvSchema = z.record(z.string(), z.string())
+const TriggerCreateMetadataSchema = ResourceCreateMetadataSchema.pick({ name: true }).openapi('TriggerCreateMetadata')
+const TriggerUpdateMetadataSchema = ResourceUpdateMetadataSchema.pick({ name: true }).openapi('TriggerUpdateMetadata')
 
 const TriggerScheduleSchema = z
   .object({
@@ -51,29 +57,10 @@ const TriggerTemplateMetadataSchema = z
   })
   .openapi('TriggerTemplateMetadata')
 
-const TriggerTemplateSpecSchema = z
-  .object({
-    agentId: z.string().openapi({ example: 'agent_abc123' }),
-    environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
-    runtime: RuntimeSchema.openapi({ example: 'codex' }),
-    promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
-    env: EnvSchema.openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    envFrom: z.array(EnvFromEntrySchema).openapi({
-      example: [
-        {
-          type: 'secret',
-          name: 'AK_AGENT_KEY',
-          secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
-        },
-      ],
-    }),
-    volumes: z.array(VolumeSchema).openapi({
-      example: [{ name: 'project-secrets', type: 'secret', secretRef: 'ama://vaults/vault_abc123' }],
-    }),
-    volumeMounts: z.array(VolumeMountSchema).openapi({
-      example: [{ name: 'project-secrets', mountPath: '/workspace/.ama/secrets/project', readOnly: true }],
-    }),
-  })
+const TriggerTemplateSpecSchema = ExecutionSpecSchema.extend({
+  promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
+})
+  .strict()
   .openapi('TriggerTemplateSpec')
 
 const TriggerTemplateSchema = z
@@ -115,14 +102,14 @@ const TriggerRunSchema = z
       .object({
         triggerId: z.string().openapi({ example: 'trigger_abc123' }),
         scheduledFor: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:00:00.000Z' }),
-        idempotencyKey: z.string().openapi({ example: 'trigger_abc123:2026-05-26T12:00:00.000Z' }),
-        correlationId: z.string().openapi({ example: 'schedule:trigger_abc123:2026-05-26T12:00:00.000Z' }),
         metadata: JsonObjectSchema.openapi({ example: { source: 'trigger' } }),
       })
       .openapi('TriggerRunSpec'),
     status: z
       .object({
         phase: z.enum(RUN_STATES).openapi({ example: 'dispatched' }),
+        idempotencyKey: z.string().openapi({ example: 'trigger_abc123:2026-05-26T12:00:00.000Z' }),
+        correlationId: z.string().openapi({ example: 'schedule:trigger_abc123:2026-05-26T12:00:00.000Z' }),
         heartbeatAt: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:01:00.000Z' }),
         triggeredAt: z.string().datetime().openapi({ example: '2026-05-26T12:01:00.000Z' }),
         sessionId: z.string().nullable().openapi({ example: 'session_abc123' }),
@@ -141,20 +128,11 @@ const SchedulePayloadSchema = z
   .strict()
 
 const CreateTriggerTemplateMetadataSchema = TriggerTemplateMetadataSchema.partial().optional()
-const CreateTriggerTemplateSpecSchema = z
-  .object({
-    agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
-    environmentId: z.string().min(1).nullable().optional().openapi({ example: 'env_abc123' }),
-    runtime: RuntimeSchema.openapi({ example: 'codex' }),
-    promptTemplate: z.string().trim().min(1).max(16000).openapi({
-      example: 'Research current Canadian banking bonus offers.',
-    }),
-    env: EnvSchema.optional().openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    envFrom: z.array(EnvFromEntrySchema).max(50).optional(),
-    volumes: z.array(VolumeSchema).max(50).optional(),
-    volumeMounts: z.array(VolumeMountSchema).max(50).optional(),
-  })
-  .strict()
+const CreateTriggerTemplateSpecSchema = ExecutionSpecInputSchema.extend({
+  promptTemplate: z.string().trim().min(1).max(16000).openapi({
+    example: 'Research current Canadian banking bonus offers.',
+  }),
+}).strict()
 
 const CreateTriggerTemplateSchema = z
   .object({
@@ -165,14 +143,17 @@ const CreateTriggerTemplateSchema = z
 
 const CreateTriggerSchema = z
   .object({
-    name: z.string().min(1).max(160).openapi({ example: 'Daily research heartbeat' }),
-    source: z.discriminatedUnion('type', [
-      z.object({ type: z.literal('schedule'), schedule: SchedulePayloadSchema }),
-      z.object({ type: z.literal('http') }),
-    ]),
-    suspend: z.boolean().optional().openapi({ example: false }),
-    template: CreateTriggerTemplateSchema,
-    nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-26T12:00:00.000Z' }),
+    metadata: TriggerCreateMetadataSchema.openapi({ example: { name: 'Daily research heartbeat' } }),
+    spec: z
+      .object({
+        source: z.discriminatedUnion('type', [
+          z.object({ type: z.literal('schedule'), schedule: SchedulePayloadSchema }),
+          z.object({ type: z.literal('http') }),
+        ]),
+        suspend: z.boolean().optional().openapi({ example: false }),
+        template: CreateTriggerTemplateSchema,
+      })
+      .strict(),
   })
   .strict()
   .openapi('CreateTriggerRequest')
@@ -186,19 +167,26 @@ const UpdateTriggerTemplateSchema = z
 
 const UpdateTriggerSchema = z
   .object({
-    name: z.string().min(1).max(160).optional().openapi({ example: 'Daily research heartbeat' }),
-    source: z
-      .discriminatedUnion('type', [
-        z.object({ type: z.literal('schedule'), schedule: SchedulePayloadSchema.partial().optional() }),
-        z.object({ type: z.literal('http') }),
-      ])
+    metadata: TriggerUpdateMetadataSchema.optional(),
+    spec: z
+      .object({
+        source: z
+          .discriminatedUnion('type', [
+            z.object({ type: z.literal('schedule'), schedule: SchedulePayloadSchema }),
+            z.object({ type: z.literal('http') }),
+          ])
+          .optional(),
+        suspend: z.boolean().optional().openapi({ example: true }),
+        template: UpdateTriggerTemplateSchema.optional(),
+      })
+      .strict()
       .optional(),
-    suspend: z.boolean().optional().openapi({ example: true }),
-    template: UpdateTriggerTemplateSchema.optional(),
     archived: z.boolean().optional().openapi({ example: true }),
-    nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-27T12:00:00.000Z' }),
   })
   .strict()
+  .refine((body) => body.metadata !== undefined || body.spec !== undefined || body.archived !== undefined, {
+    message: 'Provide metadata, spec, or archived.',
+  })
   .openapi('UpdateTriggerRequest')
 
 const TriggerParamsSchema = z.object({
@@ -412,38 +400,39 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       }
       const scope = auth
       try {
+        const spec = body.spec
         const trigger = await createTrigger(deps, scope, {
           config: {
-            name: body.name,
+            name: body.metadata.name,
             source:
-              body.source.type === 'schedule'
+              spec.source.type === 'schedule'
                 ? {
                     type: 'schedule',
                     schedule: {
                       type: 'interval',
-                      intervalSeconds: body.source.schedule.intervalSeconds,
-                      windowSeconds: body.source.schedule.windowSeconds ?? 0,
+                      intervalSeconds: spec.source.schedule.intervalSeconds,
+                      windowSeconds: spec.source.schedule.windowSeconds ?? 0,
                     },
                   }
                 : { type: 'http' },
-            suspend: body.suspend ?? false,
+            suspend: spec.suspend ?? false,
             template: {
               metadata: {
-                labels: body.template.metadata?.labels ?? {},
-                annotations: body.template.metadata?.annotations ?? {},
+                labels: spec.template.metadata?.labels ?? {},
+                annotations: spec.template.metadata?.annotations ?? {},
               },
               spec: {
-                agentId: body.template.spec.agentId,
-                environmentId: body.template.spec.environmentId ?? null,
-                runtime: body.template.spec.runtime,
-                promptTemplate: body.template.spec.promptTemplate,
-                env: body.template.spec.env ?? {},
-                envFrom: normalizeEnvFrom(body.template.spec.envFrom ?? []),
-                volumes: body.template.spec.volumes ?? [],
-                volumeMounts: body.template.spec.volumeMounts ?? [],
+                agentId: spec.template.spec.agentId,
+                environmentId: spec.template.spec.environmentId ?? null,
+                runtime: spec.template.spec.runtime,
+                promptTemplate: spec.template.spec.promptTemplate,
+                env: spec.template.spec.env ?? {},
+                envFrom: normalizeEnvFrom(spec.template.spec.envFrom ?? []),
+                volumes: spec.template.spec.volumes ?? [],
+                volumeMounts: spec.template.spec.volumeMounts ?? [],
               },
             },
-            nextDueAt: body.nextDueAt ?? null,
+            nextDueAt: null,
           },
         })
         await deps.audit.record(scope, {
@@ -454,7 +443,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
           requestId: requestId(c),
           after: trigger,
         })
-        return c.json(trigger, 201)
+        return c.json(serializeResource(trigger), 201)
       } catch (error) {
         return conflictOrValidation(c, error)
       }
@@ -488,7 +477,10 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
+      return c.json(
+        { data: page.rows.map(serializeResource), pagination: { limit, nextCursor, hasMore: page.hasMore } },
+        200,
+      )
     })
     .openapi(readRouteDefinition, async (c) => {
       const deps = c.get('deps')
@@ -500,7 +492,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       if (!trigger) {
         return c.json(errorBody('not_found', 'Trigger not found'), 404)
       }
-      return c.json(trigger, 200)
+      return c.json(serializeResource(trigger), 200)
     })
     .openapi(updateRouteDefinition, async (c) => {
       const deps = c.get('deps')
@@ -526,7 +518,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
           before: trigger,
           after: result.trigger,
         })
-        return c.json(result.trigger, 200)
+        return c.json(serializeResource(result.trigger), 200)
       } catch (error) {
         return conflictOrValidation(c, error)
       }
@@ -588,7 +580,10 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       const last = page.rows.at(-1)
       const nextCursor =
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
-      return c.json({ data: page.rows, pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
+      return c.json(
+        { data: page.rows.map(serializeTriggerRun), pagination: { limit, nextCursor, hasMore: page.hasMore } },
+        200,
+      )
     })
     .openapi(createRunRouteDefinition, async (c) => {
       const deps = c.get('deps')
@@ -615,7 +610,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         if (!run) {
           throw new Error('HTTP trigger run was not persisted')
         }
-        return c.json(run, 201)
+        return c.json(serializeTriggerRun(run), 201)
       } catch (error) {
         return conflictOrValidation(c, error)
       }
@@ -635,63 +630,60 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       if (!run) {
         return c.json(errorBody('not_found', 'Trigger run not found'), 404)
       }
-      return c.json(run, 200)
+      return c.json(serializeTriggerRun(run), 200)
     })
 }
 
 // --- helpers ---
 
 function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTriggerPatch {
+  const spec = body.spec
   const templateMetadata =
-    body.template?.metadata === undefined
+    spec?.template?.metadata === undefined
       ? undefined
       : {
-          ...(body.template.metadata.labels !== undefined ? { labels: body.template.metadata.labels } : {}),
-          ...(body.template.metadata.annotations !== undefined
-            ? { annotations: body.template.metadata.annotations }
+          ...(spec.template.metadata.labels !== undefined ? { labels: spec.template.metadata.labels } : {}),
+          ...(spec.template.metadata.annotations !== undefined
+            ? { annotations: spec.template.metadata.annotations }
             : {}),
         }
   const templateSpec =
-    body.template?.spec === undefined
+    spec?.template?.spec === undefined
       ? undefined
       : {
-          ...(body.template.spec.agentId !== undefined ? { agentId: body.template.spec.agentId } : {}),
-          ...(body.template.spec.environmentId !== undefined
-            ? { environmentId: body.template.spec.environmentId ?? null }
+          ...(spec.template.spec.agentId !== undefined ? { agentId: spec.template.spec.agentId } : {}),
+          ...(spec.template.spec.environmentId !== undefined
+            ? { environmentId: spec.template.spec.environmentId ?? null }
             : {}),
-          ...(body.template.spec.runtime !== undefined ? { runtime: body.template.spec.runtime } : {}),
-          ...(body.template.spec.promptTemplate !== undefined
-            ? { promptTemplate: body.template.spec.promptTemplate }
+          ...(spec.template.spec.runtime !== undefined ? { runtime: spec.template.spec.runtime } : {}),
+          ...(spec.template.spec.promptTemplate !== undefined
+            ? { promptTemplate: spec.template.spec.promptTemplate }
             : {}),
-          ...(body.template.spec.env !== undefined ? { env: body.template.spec.env } : {}),
-          ...(body.template.spec.envFrom !== undefined
-            ? { envFrom: normalizeEnvFrom(body.template.spec.envFrom) }
+          ...(spec.template.spec.env !== undefined ? { env: spec.template.spec.env } : {}),
+          ...(spec.template.spec.envFrom !== undefined
+            ? { envFrom: normalizeEnvFrom(spec.template.spec.envFrom) }
             : {}),
-          ...(body.template.spec.volumes !== undefined ? { volumes: body.template.spec.volumes } : {}),
-          ...(body.template.spec.volumeMounts !== undefined ? { volumeMounts: body.template.spec.volumeMounts } : {}),
+          ...(spec.template.spec.volumes !== undefined ? { volumes: spec.template.spec.volumes } : {}),
+          ...(spec.template.spec.volumeMounts !== undefined ? { volumeMounts: spec.template.spec.volumeMounts } : {}),
         }
   return {
-    ...(body.name !== undefined ? { name: body.name } : {}),
-    ...(body.source !== undefined
+    ...(body.metadata?.name !== undefined ? { name: body.metadata.name } : {}),
+    ...(spec?.source !== undefined
       ? {
           source:
-            body.source.type === 'schedule'
+            spec.source.type === 'schedule'
               ? {
                   type: 'schedule' as const,
                   schedule: {
-                    ...(body.source.schedule?.intervalSeconds !== undefined
-                      ? { intervalSeconds: body.source.schedule.intervalSeconds }
-                      : {}),
-                    ...(body.source.schedule?.windowSeconds !== undefined
-                      ? { windowSeconds: body.source.schedule.windowSeconds }
-                      : {}),
+                    intervalSeconds: spec.source.schedule.intervalSeconds,
+                    windowSeconds: spec.source.schedule.windowSeconds ?? 0,
                   },
                 }
               : { type: 'http' as const },
         }
       : {}),
-    ...(body.suspend !== undefined ? { suspend: body.suspend } : {}),
-    ...(body.template !== undefined
+    ...(spec?.suspend !== undefined ? { suspend: spec.suspend } : {}),
+    ...(spec?.template !== undefined
       ? {
           template: {
             ...(templateMetadata !== undefined ? { metadata: templateMetadata } : {}),
@@ -700,7 +692,24 @@ function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTrigger
         }
       : {}),
     ...(body.archived !== undefined ? { archived: body.archived } : {}),
-    ...(body.nextDueAt !== undefined ? { nextDueAt: body.nextDueAt } : {}),
+  }
+}
+
+function serializeTriggerRun(run: TriggerRun): z.infer<typeof TriggerRunSchema> {
+  const resource = serializeResource(run)
+  const { idempotencyKey, correlationId, ...spec } = run.spec
+  return {
+    ...resource,
+    spec,
+    status: {
+      phase: run.status.phase,
+      idempotencyKey,
+      correlationId,
+      heartbeatAt: run.status.heartbeatAt,
+      triggeredAt: run.status.triggeredAt,
+      sessionId: run.status.sessionId,
+      errorMessage: run.status.errorMessage,
+    },
   }
 }
 

@@ -338,7 +338,7 @@ export type Agent = {
 
 export type ResourceMetadata = {
     uid: string;
-    pid: string | null;
+    projectId: string | null;
     name: string;
     description: string | null;
     labels: {
@@ -354,47 +354,23 @@ export type ResourceMetadata = {
 };
 
 export type AgentSpec = {
-    systemPrompt: string | null;
+    systemPrompt: string;
     provider: string | null;
     model: string | null;
     skills: Array<string>;
     subagents: Array<AgentSubagent>;
-    role: string | null;
-    handoff: AgentHandoff;
-    tools: Array<AgentToolAttachment>;
+    allowedTools: Array<string>;
     mcpConnectors: Array<string>;
 };
 
 export type AgentSubagent = {
-    username?: string;
-    role?: string;
-    [key: string]: unknown;
-};
-
-export type AgentHandoff = {
-    enabled: boolean;
-    accepts: {
-        roles: Array<string>;
-        capabilities: Array<string>;
-    };
-    targets: Array<AgentHandoffTarget>;
-};
-
-export type AgentHandoffTarget = {
-    role?: string;
-    capability?: string;
-};
-
-export type AgentToolAttachment = {
     name: string;
-    description: string | null;
-    inputSchema: {
-        [key: string]: unknown;
-    };
-    approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy';
-    policyMetadata: {
-        [key: string]: unknown;
-    };
+    description: string;
+    systemPrompt: string;
+    model: string | null;
+    allowedTools: Array<string>;
+    skills: Array<string>;
+    mcpConnectors: Array<string>;
 };
 
 export type AgentStatus = {
@@ -406,47 +382,53 @@ export type AgentStatus = {
 export type ResourcePhase = 'active' | 'archived';
 
 export type CreateAgentRequest = {
-    name: string;
-    description?: string | null;
-    systemPrompt?: string | null;
-    provider?: string | null;
-    model?: string | null;
-    skills?: Array<string>;
-    subagents?: Array<AgentSubagent>;
-    role?: string | null;
-    handoff?: AgentHandoff;
-    tools?: Array<AgentToolAttachmentInput>;
-    mcpConnectors?: Array<string>;
+    metadata: ResourceCreateMetadata;
+    spec: {
+        systemPrompt: string;
+        provider?: string | null;
+        model?: string | null;
+        skills?: Array<string>;
+        subagents?: Array<AgentSubagentInput>;
+        allowedTools?: Array<string>;
+        mcpConnectors?: Array<string>;
+    };
 };
 
-export type AgentToolAttachmentInput = {
+export type ResourceCreateMetadata = {
     name: string;
     description?: string | null;
-    inputSchema?: {
-        [key: string]: unknown;
-    };
-    approvalMode?: 'none' | 'per_call' | 'always_required' | 'project_policy';
-    policyMetadata?: {
-        [key: string]: unknown;
-    };
+};
+
+export type AgentSubagentInput = {
+    name: string;
+    description: string;
+    systemPrompt: string;
+    model?: string | null;
+    allowedTools?: Array<string>;
+    skills?: Array<string>;
+    mcpConnectors?: Array<string>;
 };
 
 export type UpdateAgentRequest = {
-    name?: string;
-    description?: string | null;
-    systemPrompt?: string | null;
-    provider?: string | null;
-    model?: string | null;
-    skills?: Array<string>;
-    subagents?: Array<AgentSubagent>;
-    role?: string | null;
-    handoff?: AgentHandoff;
-    tools?: Array<AgentToolAttachmentInput>;
-    mcpConnectors?: Array<string>;
+    metadata?: ResourceUpdateMetadata;
+    spec?: {
+        systemPrompt?: string;
+        provider?: string | null;
+        model?: string | null;
+        skills?: Array<string>;
+        subagents?: Array<AgentSubagentInput>;
+        allowedTools?: Array<string>;
+        mcpConnectors?: Array<string>;
+    };
     /**
      * Lifecycle transition: true archives the agent, false unarchives it.
      */
     archived?: boolean;
+};
+
+export type ResourceUpdateMetadata = {
+    name?: string;
+    description?: string | null;
 };
 
 export type AgentVersionListResponse = {
@@ -463,43 +445,6 @@ export type AgentVersion = {
 export type AgentVersionStatus = {
     agentId: string;
     version: number;
-};
-
-export type AgentHandoffCandidateListResponse = {
-    data: Array<AgentHandoffCandidate>;
-    pagination: ListPagination;
-};
-
-export type AgentHandoffCandidate = {
-    id: string;
-    name: string;
-    role: string | null;
-    capabilities: Array<string>;
-};
-
-export type AgentMemory = {
-    metadata: ResourceMetadata;
-    spec: AgentMemorySpec;
-    status: AgentMemoryStatus;
-};
-
-export type AgentMemorySpec = {
-    agentId: string;
-    content: string;
-    metadata: {
-        [key: string]: unknown;
-    };
-};
-
-export type AgentMemoryStatus = {
-    phase: ResourcePhase;
-};
-
-export type ReplaceAgentMemoryRequest = {
-    content: string;
-    metadata?: {
-        [key: string]: unknown;
-    };
 };
 
 export type EnvironmentListResponse = {
@@ -554,31 +499,33 @@ export type EnvironmentStatus = {
 };
 
 export type CreateEnvironmentRequest = {
-    name: string;
-    description?: string | null;
-    scope?: EnvironmentScope;
-    type?: EnvironmentType;
-    networking?: EnvironmentNetworking;
-    packages?: EnvironmentPackages;
-    variables?: {
-        [key: string]: {
-            description?: string;
-            required?: boolean;
+    metadata: ResourceCreateMetadata & unknown;
+    spec: {
+        scope?: EnvironmentScope;
+        type?: EnvironmentType;
+        networking?: EnvironmentNetworking;
+        packages?: EnvironmentPackages;
+        variables?: {
+            [key: string]: {
+                description?: string;
+                required?: boolean;
+            };
         };
     };
 };
 
 export type UpdateEnvironmentRequest = {
-    name?: string;
-    description?: string | null;
-    scope?: EnvironmentScope;
-    type?: EnvironmentType;
-    networking?: EnvironmentNetworking;
-    packages?: EnvironmentPackages;
-    variables?: {
-        [key: string]: {
-            description?: string;
-            required?: boolean;
+    metadata?: ResourceUpdateMetadata;
+    spec?: {
+        scope?: EnvironmentScope;
+        type?: EnvironmentType;
+        networking?: EnvironmentNetworking;
+        packages?: EnvironmentPackages;
+        variables?: {
+            [key: string]: {
+                description?: string;
+                required?: boolean;
+            };
         };
     };
     /**
@@ -1039,16 +986,18 @@ export type TriggerTemplateSpec = {
     agentId: string;
     environmentId: string | null;
     runtime: Runtime;
-    promptTemplate: string;
-    env: {
-        [key: string]: string;
-    };
+    env: ExecutionEnv;
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
     volumeMounts: Array<VolumeMount>;
+    promptTemplate: string;
 };
 
 export type Runtime = 'ama' | 'claude-code' | 'codex' | 'copilot';
+
+export type ExecutionEnv = {
+    [key: string]: string;
+};
 
 export type EnvFromEntry = {
     type: 'secret';
@@ -1102,41 +1051,44 @@ export type TriggerStatus = {
 };
 
 export type CreateTriggerRequest = {
+    metadata: TriggerCreateMetadata;
+    spec: {
+        source: {
+            type: 'schedule';
+            schedule: {
+                type?: 'interval';
+                intervalSeconds: number;
+                windowSeconds?: number;
+            };
+        } | {
+            type: 'http';
+        };
+        suspend?: boolean;
+        template: {
+            metadata?: {
+                labels?: {
+                    [key: string]: string;
+                };
+                annotations?: {
+                    [key: string]: string;
+                };
+            };
+            spec: {
+                agentId: string;
+                environmentId?: string | null;
+                runtime: Runtime;
+                env?: ExecutionEnv;
+                envFrom?: Array<EnvFromEntry>;
+                volumes?: Array<Volume>;
+                volumeMounts?: Array<VolumeMount>;
+                promptTemplate: string;
+            };
+        };
+    };
+};
+
+export type TriggerCreateMetadata = {
     name: string;
-    source: {
-        type: 'schedule';
-        schedule: {
-            type?: 'interval';
-            intervalSeconds: number;
-            windowSeconds?: number;
-        };
-    } | {
-        type: 'http';
-    };
-    suspend?: boolean;
-    template: {
-        metadata?: {
-            labels?: {
-                [key: string]: string;
-            };
-            annotations?: {
-                [key: string]: string;
-            };
-        };
-        spec: {
-            agentId: string;
-            environmentId?: string | null;
-            runtime: Runtime;
-            promptTemplate: string;
-            env?: {
-                [key: string]: string;
-            };
-            envFrom?: Array<EnvFromEntry>;
-            volumes?: Array<Volume>;
-            volumeMounts?: Array<VolumeMount>;
-        };
-    };
-    nextDueAt?: string;
 };
 
 export type TriggerListResponse = {
@@ -1145,42 +1097,45 @@ export type TriggerListResponse = {
 };
 
 export type UpdateTriggerRequest = {
-    name?: string;
-    source?: {
-        type: 'schedule';
-        schedule?: {
-            type?: 'interval';
-            intervalSeconds?: number;
-            windowSeconds?: number;
+    metadata?: TriggerUpdateMetadata;
+    spec?: {
+        source?: {
+            type: 'schedule';
+            schedule: {
+                type?: 'interval';
+                intervalSeconds: number;
+                windowSeconds?: number;
+            };
+        } | {
+            type: 'http';
         };
-    } | {
-        type: 'http';
-    };
-    suspend?: boolean;
-    template?: {
-        metadata?: {
-            labels?: {
-                [key: string]: string;
+        suspend?: boolean;
+        template?: {
+            metadata?: {
+                labels?: {
+                    [key: string]: string;
+                };
+                annotations?: {
+                    [key: string]: string;
+                };
             };
-            annotations?: {
-                [key: string]: string;
+            spec?: {
+                agentId?: string;
+                environmentId?: string | null;
+                runtime?: Runtime;
+                env?: ExecutionEnv;
+                envFrom?: Array<EnvFromEntry>;
+                volumes?: Array<Volume>;
+                volumeMounts?: Array<VolumeMount>;
+                promptTemplate?: string;
             };
-        };
-        spec?: {
-            agentId?: string;
-            environmentId?: string | null;
-            runtime?: Runtime;
-            promptTemplate?: string;
-            env?: {
-                [key: string]: string;
-            };
-            envFrom?: Array<EnvFromEntry>;
-            volumes?: Array<Volume>;
-            volumeMounts?: Array<VolumeMount>;
         };
     };
     archived?: boolean;
-    nextDueAt?: string;
+};
+
+export type TriggerUpdateMetadata = {
+    name?: string;
 };
 
 export type TriggerRunListResponse = {
@@ -1197,8 +1152,6 @@ export type TriggerRun = {
 export type TriggerRunSpec = {
     triggerId: string;
     scheduledFor: string | null;
-    idempotencyKey: string;
-    correlationId: string;
     metadata: {
         [key: string]: unknown;
     };
@@ -1206,6 +1159,8 @@ export type TriggerRunSpec = {
 
 export type TriggerRunStatus = {
     phase: 'claimed' | 'dispatched' | 'failed';
+    idempotencyKey: string;
+    correlationId: string;
     heartbeatAt: string | null;
     triggeredAt: string;
     sessionId: string | null;
@@ -1224,8 +1179,9 @@ export type Session = {
 
 export type SessionMetadata = {
     uid: string;
-    pid: string;
+    projectId: string | null;
     name: string;
+    description: string | null;
     labels: {
         [key: string]: string;
     };
@@ -1242,9 +1198,7 @@ export type SessionSpec = {
     agentId: string;
     environmentId: string | null;
     runtime: Runtime;
-    env: {
-        [key: string]: string;
-    };
+    env: ExecutionEnv;
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
     volumeMounts: Array<VolumeMount>;
@@ -1286,30 +1240,24 @@ export type SessionAgentSnapshot = {
     agentId: string;
     projectId: string;
     version: number;
-    systemPrompt: string | null;
+    systemPrompt: string;
     provider: string;
     model: string | null;
     skills: Array<string>;
-    subagents: Array<{
-        [key: string]: unknown;
-    }>;
-    role: string | null;
-    handoff: {
-        enabled: boolean;
-        accepts: {
-            roles: Array<string>;
-            capabilities: Array<string>;
-        };
-        targets: Array<{
-            role?: string;
-            capability?: string;
-        }>;
-    };
-    tools: Array<{
-        [key: string]: unknown;
-    }>;
+    subagents: Array<SessionSubagent>;
+    allowedTools: Array<string>;
     mcpConnectors: Array<string>;
     createdAt: string;
+};
+
+export type SessionSubagent = {
+    name: string;
+    description: string;
+    systemPrompt: string;
+    model: string | null;
+    allowedTools: Array<string>;
+    skills: Array<string>;
+    mcpConnectors: Array<string>;
 };
 
 export type SessionEnvironmentSnapshot = {
@@ -1333,31 +1281,34 @@ export type SessionPlacement = {
     hostingMode: EnvironmentHostingMode;
     provider: string;
     model: string | null;
-    driver: string | null;
-    backend: string | null;
-    protocol: string | null;
 } | null;
 
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted';
 
 export type CreateSessionRequest = {
-    agentId: string;
-    environmentId?: string;
-    runtime: Runtime;
-    runtimeConfig?: {
-        [key: string]: unknown;
-    };
+    metadata?: SessionCreateMetadata;
+    spec: ExecutionSpecInput;
+    prompt: string;
+};
+
+export type SessionCreateMetadata = {
     name?: string;
-    metadata?: {
-        [key: string]: unknown;
-    };
-    env?: {
+    labels?: {
         [key: string]: string;
     };
+    annotations?: {
+        [key: string]: string;
+    };
+};
+
+export type ExecutionSpecInput = {
+    agentId: string;
+    environmentId?: string | null;
+    runtime: Runtime;
+    env?: ExecutionEnv;
     envFrom?: Array<EnvFromEntry>;
     volumes?: Array<Volume>;
     volumeMounts?: Array<VolumeMount>;
-    prompt: string;
 };
 
 export type SessionListResponse = {
@@ -1366,12 +1317,19 @@ export type SessionListResponse = {
 };
 
 export type UpdateSessionRequest = {
-    name?: string | null;
-    metadata?: {
-        [key: string]: unknown;
-    };
+    metadata?: SessionUpdateMetadata;
     state?: 'stopped';
     archived?: boolean;
+};
+
+export type SessionUpdateMetadata = {
+    name?: string;
+    labels?: {
+        [key: string]: string;
+    };
+    annotations?: {
+        [key: string]: string;
+    };
 };
 
 export type SessionConnection = {
@@ -1484,9 +1442,7 @@ export type MemoryStore = {
 };
 
 export type MemoryStoreSpec = {
-    metadata: {
-        [key: string]: unknown;
-    };
+    [key: string]: never;
 };
 
 export type MemoryStoreStatus = {
@@ -1494,18 +1450,16 @@ export type MemoryStoreStatus = {
 };
 
 export type CreateMemoryStoreRequest = {
-    name: string;
-    description?: string;
-    metadata?: {
-        [key: string]: unknown;
+    metadata: ResourceCreateMetadata & unknown;
+    spec?: {
+        [key: string]: never;
     };
 };
 
 export type UpdateMemoryStoreRequest = {
-    name?: string;
-    description?: string;
-    metadata?: {
-        [key: string]: unknown;
+    metadata?: ResourceUpdateMetadata;
+    spec?: {
+        [key: string]: never;
     };
     archived?: boolean;
 };
@@ -1564,9 +1518,6 @@ export type Vault = {
 export type VaultSpec = {
     organizationId: string;
     scope: 'project' | 'organization';
-    metadata: {
-        [key: string]: unknown;
-    };
 };
 
 export type VaultStatus = {
@@ -1574,20 +1525,16 @@ export type VaultStatus = {
 };
 
 export type CreateVaultRequest = {
-    name: string;
-    description?: string;
-    scope?: 'project' | 'organization';
-    metadata?: {
-        [key: string]: unknown;
+    metadata: ResourceCreateMetadata & unknown;
+    spec: {
+        scope?: 'project' | 'organization';
     };
 };
 
 export type UpdateVaultRequest = {
-    name?: string;
-    description?: string;
-    scope?: 'project' | 'organization';
-    metadata?: {
-        [key: string]: unknown;
+    metadata?: ResourceUpdateMetadata;
+    spec?: {
+        scope?: 'project' | 'organization';
     };
     archived?: boolean;
 };
@@ -1688,64 +1635,6 @@ export type CreateVaultCredentialVersionRequest = {
     metadata?: {
         [key: string]: unknown;
     };
-};
-
-export type TriggerWritable = {
-    metadata: ResourceMetadata;
-    spec: TriggerSpecWritable;
-    status: TriggerStatus;
-};
-
-export type TriggerSpecWritable = {
-    source: TriggerSource;
-    suspend: boolean;
-    template: TriggerTemplateWritable;
-};
-
-export type TriggerTemplateWritable = {
-    metadata: TriggerTemplateMetadata;
-    spec: TriggerTemplateSpecWritable;
-};
-
-export type TriggerTemplateSpecWritable = {
-    agentId: string;
-    environmentId: string | null;
-    runtime: Runtime;
-    promptTemplate: string;
-    env: {
-        [key: string]: string;
-    };
-    envFrom: Array<EnvFromEntry>;
-    volumes: Array<Volume>;
-    volumeMounts: Array<VolumeMount>;
-};
-
-export type TriggerListResponseWritable = {
-    data: Array<TriggerWritable>;
-    pagination: ListPagination;
-};
-
-export type SessionWritable = {
-    metadata: SessionMetadata;
-    spec: SessionSpecWritable;
-    status: SessionStatus;
-};
-
-export type SessionSpecWritable = {
-    agentId: string;
-    environmentId: string | null;
-    runtime: Runtime;
-    env: {
-        [key: string]: string;
-    };
-    envFrom: Array<EnvFromEntry>;
-    volumes: Array<Volume>;
-    volumeMounts: Array<VolumeMount>;
-};
-
-export type SessionListResponseWritable = {
-    data: Array<SessionWritable>;
-    pagination: ListPagination;
 };
 
 export type GetHealthData = {
@@ -2160,118 +2049,6 @@ export type ReadAgentVersionResponses = {
 };
 
 export type ReadAgentVersionResponse = ReadAgentVersionResponses[keyof ReadAgentVersionResponses];
-
-export type ListAgentHandoffCandidatesData = {
-    body?: never;
-    path: {
-        agentId: string;
-    };
-    query?: {
-        role?: string;
-        capability?: string;
-    };
-    url: '/api/v1/agents/{agentId}/handoff-candidates';
-};
-
-export type ListAgentHandoffCandidatesErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Agent not found
-     */
-    404: ErrorResponse;
-};
-
-export type ListAgentHandoffCandidatesError = ListAgentHandoffCandidatesErrors[keyof ListAgentHandoffCandidatesErrors];
-
-export type ListAgentHandoffCandidatesResponses = {
-    /**
-     * Handoff candidates
-     */
-    200: AgentHandoffCandidateListResponse;
-};
-
-export type ListAgentHandoffCandidatesResponse = ListAgentHandoffCandidatesResponses[keyof ListAgentHandoffCandidatesResponses];
-
-export type ReadAgentMemoryData = {
-    body?: never;
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/v1/agents/{agentId}/memory';
-};
-
-export type ReadAgentMemoryErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Agent not found
-     */
-    404: ErrorResponse;
-    /**
-     * Agent memory disabled
-     */
-    409: ErrorResponse;
-};
-
-export type ReadAgentMemoryError = ReadAgentMemoryErrors[keyof ReadAgentMemoryErrors];
-
-export type ReadAgentMemoryResponses = {
-    /**
-     * Agent memory
-     */
-    200: AgentMemory;
-};
-
-export type ReadAgentMemoryResponse = ReadAgentMemoryResponses[keyof ReadAgentMemoryResponses];
-
-export type ReplaceAgentMemoryData = {
-    body: ReplaceAgentMemoryRequest;
-    path: {
-        agentId: string;
-    };
-    query?: never;
-    url: '/api/v1/agents/{agentId}/memory';
-};
-
-export type ReplaceAgentMemoryErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Agent not found
-     */
-    404: ErrorResponse;
-    /**
-     * Agent memory disabled
-     */
-    409: ErrorResponse;
-};
-
-export type ReplaceAgentMemoryError = ReplaceAgentMemoryErrors[keyof ReplaceAgentMemoryErrors];
-
-export type ReplaceAgentMemoryResponses = {
-    /**
-     * Replaced agent memory
-     */
-    200: AgentMemory;
-};
-
-export type ReplaceAgentMemoryResponse = ReplaceAgentMemoryResponses[keyof ReplaceAgentMemoryResponses];
 
 export type ListEnvironmentsData = {
     body?: never;

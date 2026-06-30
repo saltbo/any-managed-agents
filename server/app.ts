@@ -1,4 +1,4 @@
-import { swaggerUI } from '@hono/swagger-ui'
+import { Scalar } from '@scalar/hono-api-reference'
 import { cors } from 'hono/cors'
 import { createDeps } from './composition'
 import { RUNNER_PROTOCOL_SCHEMAS } from './contracts/runner-protocol'
@@ -123,7 +123,13 @@ export function createApp() {
     servers: [{ url: '/' }],
   })
 
-  routes.get('/api/v1/docs', swaggerUI({ url: '/api/v1/openapi.json' }))
+  routes.get(
+    '/api/docs',
+    Scalar({
+      pageTitle: 'Any Managed Agents API Reference',
+      url: '/api/v1/openapi.json',
+    }),
+  )
 
   // The runtime data-plane proxy mounts after the typed /api/v1/runtime
   // sub-router so its catch-all only matches the session protocol paths.

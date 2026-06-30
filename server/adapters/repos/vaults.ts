@@ -66,7 +66,6 @@ function vaultRecordFrom(row: VaultRow): Vault {
     spec: {
       organizationId: row.organizationId,
       scope: row.scope as VaultScope,
-      metadata: parseJson<Record<string, unknown>>(row.metadata),
     },
     status: { phase: resourcePhase(row.archivedAt) },
   }
@@ -189,7 +188,6 @@ export function createVaultRepo(db: Db): VaultRepo {
         name: input.name,
         description: input.description,
         scope: input.scope,
-        metadata: stringify(input.metadata),
         archivedAt: null,
         createdAt,
         updatedAt: createdAt,
@@ -206,7 +204,6 @@ export function createVaultRepo(db: Db): VaultRepo {
           description: fields.description,
           scope: fields.scope,
           projectId: fields.projectId,
-          metadata: stringify(fields.metadata),
           archivedAt: fields.archivedAt,
           updatedAt,
         })

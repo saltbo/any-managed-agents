@@ -13,7 +13,7 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.update_session_request_metadata import UpdateSessionRequestMetadata
+  from ..models.session_update_metadata import SessionUpdateMetadata
 
 
 
@@ -27,14 +27,12 @@ T = TypeVar("T", bound="UpdateSessionRequest")
 class UpdateSessionRequest:
     """ 
         Attributes:
-            name (None | str | Unset):  Example: Implement billing export.
-            metadata (UpdateSessionRequestMetadata | Unset):  Example: {'ticket': 'AMA-123'}.
+            metadata (SessionUpdateMetadata | Unset):
             state (UpdateSessionRequestState | Unset):  Example: stopped.
             archived (bool | Unset):  Example: True.
      """
 
-    name: None | str | Unset = UNSET
-    metadata: UpdateSessionRequestMetadata | Unset = UNSET
+    metadata: SessionUpdateMetadata | Unset = UNSET
     state: UpdateSessionRequestState | Unset = UNSET
     archived: bool | Unset = UNSET
 
@@ -43,13 +41,7 @@ class UpdateSessionRequest:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.update_session_request_metadata import UpdateSessionRequestMetadata
-        name: None | str | Unset
-        if isinstance(self.name, Unset):
-            name = UNSET
-        else:
-            name = self.name
-
+        from ..models.session_update_metadata import SessionUpdateMetadata
         metadata: dict[str, Any] | Unset = UNSET
         if not isinstance(self.metadata, Unset):
             metadata = self.metadata.to_dict()
@@ -66,8 +58,6 @@ class UpdateSessionRequest:
 
         field_dict.update({
         })
-        if name is not UNSET:
-            field_dict["name"] = name
         if metadata is not UNSET:
             field_dict["metadata"] = metadata
         if state is not UNSET:
@@ -81,24 +71,14 @@ class UpdateSessionRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.update_session_request_metadata import UpdateSessionRequestMetadata
+        from ..models.session_update_metadata import SessionUpdateMetadata
         d = dict(src_dict)
-        def _parse_name(data: object) -> None | str | Unset:
-            if data is None:
-                return data
-            if isinstance(data, Unset):
-                return data
-            return cast(None | str | Unset, data)
-
-        name = _parse_name(d.pop("name", UNSET))
-
-
         _metadata = d.pop("metadata", UNSET)
-        metadata: UpdateSessionRequestMetadata | Unset
+        metadata: SessionUpdateMetadata | Unset
         if isinstance(_metadata,  Unset):
             metadata = UNSET
         else:
-            metadata = UpdateSessionRequestMetadata.from_dict(_metadata)
+            metadata = SessionUpdateMetadata.from_dict(_metadata)
 
 
 
@@ -116,7 +96,6 @@ class UpdateSessionRequest:
         archived = d.pop("archived", UNSET)
 
         update_session_request = cls(
-            name=name,
             metadata=metadata,
             state=state,
             archived=archived,

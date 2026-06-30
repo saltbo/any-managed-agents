@@ -238,11 +238,8 @@ func (w *Workspace) PrepareAgent(ctx context.Context, runtimeName string, agentS
 
 func (w *Workspace) AgentSystemPrompt(agentSnapshot map[string]any) string {
 	sections := []string{}
-	for _, key := range []string{"systemPrompt", "instructions"} {
-		if value, ok := agentSnapshot[key].(string); ok && strings.TrimSpace(value) != "" {
-			sections = append(sections, strings.TrimSpace(value))
-			break
-		}
+	if value, ok := agentSnapshot["systemPrompt"].(string); ok && strings.TrimSpace(value) != "" {
+		sections = append(sections, strings.TrimSpace(value))
 	}
 	if section := agentCapabilitiesSection(agentSnapshot); section != "" {
 		sections = append(sections, section)

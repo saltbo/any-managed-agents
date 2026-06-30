@@ -109,24 +109,17 @@ export const agents = sqliteTable(
       .references(() => projects.id),
     name: text('name').notNull(),
     description: text('description'),
-    instructions: text('instructions'),
+    systemPrompt: text('system_prompt').notNull(),
     // null = resolve the project default provider at session start.
     providerId: text('provider_id').references(() => providers.id),
     model: text('model'),
     skills: text('skills').notNull().default('[]'),
-    // JSON value-object array of { username?, role? } handoff sub-agent descriptors.
+    // JSON value-object array of AgentSubagent descriptors.
     subagents: text('subagents').notNull().default('[]'),
-    role: text('role'),
-    capabilityTags: text('capability_tags').notNull().default('[]'),
-    handoffPolicy: text('handoff_policy').notNull().default('{}'),
-    memoryPolicy: text('memory_policy').notNull().default('{"enabled":false}'),
-    // JSON array of AgentToolAttachment value objects (name/approvalMode/policyMetadata).
-    // Not a join table: validated + snapshotted atomically per version.
-    tools: text('tools').notNull().default('[]'),
+    allowedTools: text('allowed_tools').notNull().default('[]'),
     // JSON array of connector slugs. Resolved against the platform MCP catalog
     // at session start, not FK'd (slugs are stable connector ids).
     mcpConnectors: text('mcp_connectors').notNull().default('[]'),
-    metadata: text('metadata').notNull().default('{}'),
     archivedAt: text('archived_at'),
     // Intentionally NOT a FK to agent_versions: agents<->agent_versions is a
     // circular reference (agent_versions.agentId FKs agents.id). The pointer is
@@ -153,7 +146,7 @@ export const agentVersions = sqliteTable(
       .notNull()
       .references(() => projects.id),
     version: integer('version').notNull(),
-    instructions: text('instructions'),
+    systemPrompt: text('system_prompt').notNull(),
     // Snapshot value, intentionally NOT FK'd to providers: a version must survive
     // a hard provider delete (providers support DELETE). Resolved live only when
     // a session is created from this version. Contrast agents.providerId, which IS
@@ -162,36 +155,14 @@ export const agentVersions = sqliteTable(
     model: text('model'),
     skills: text('skills').notNull().default('[]'),
     subagents: text('subagents').notNull().default('[]'),
-    role: text('role'),
-    capabilityTags: text('capability_tags').notNull().default('[]'),
-    handoffPolicy: text('handoff_policy').notNull().default('{}'),
-    memoryPolicy: text('memory_policy').notNull().default('{"enabled":false}'),
-    tools: text('tools').notNull().default('[]'),
+    allowedTools: text('allowed_tools').notNull().default('[]'),
     mcpConnectors: text('mcp_connectors').notNull().default('[]'),
-    metadata: text('metadata').notNull().default('{}'),
     createdAt: text('created_at').notNull(),
   },
   (table) => [
     index('idx_agent_versions_agent_id').on(table.agentId),
     uniqueIndex('idx_agent_versions_agent_version').on(table.agentId, table.version),
   ],
-)
-
-export const agentMemories = sqliteTable(
-  'agent_memories',
-  {
-    agentId: text('agent_id')
-      .primaryKey()
-      .references(() => agents.id),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
-    content: text('content').notNull().default(''),
-    metadata: text('metadata').notNull().default('{}'),
-    createdAt: text('created_at').notNull(),
-    updatedAt: text('updated_at').notNull(),
-  },
-  (table) => [index('idx_agent_memories_project_updated').on(table.projectId, table.updatedAt, table.agentId)],
 )
 
 export const memoryStores = sqliteTable(
@@ -203,7 +174,6 @@ export const memoryStores = sqliteTable(
       .references(() => projects.id),
     name: text('name').notNull(),
     description: text('description'),
-    metadata: text('metadata').notNull().default('{}'),
     archivedAt: text('archived_at'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -316,7 +286,6 @@ export const vaults = sqliteTable(
     scope: text('scope', { enum: ['project', 'organization'] })
       .notNull()
       .default('project'),
-    metadata: text('metadata').notNull().default('{}'),
     archivedAt: text('archived_at'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),

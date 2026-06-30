@@ -81,10 +81,12 @@ describe('quickstart step sequencing — all-complete fallback [spec: quickstart
 describe('quickstart environment input [spec: quickstart/environment-input]', () => {
   it('creates an unrestricted cloud environment', () => {
     expect(quickstartEnvironmentInput({ ...defaultQuickstartEnvironmentForm, name: ' Env ' })).toMatchObject({
-      name: 'Env',
-      type: 'cloud',
-      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
-      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+      metadata: { name: 'Env' },
+      spec: {
+        type: 'cloud',
+        networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+      },
     })
   })
 
@@ -96,7 +98,7 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
       mcpAccess: true,
       packageManagerAccess: false,
     })
-    expect(input.networking).toEqual({
+    expect(input.spec.networking).toEqual({
       type: 'limited',
       allowMcpServers: true,
       allowPackageManagers: false,
@@ -112,7 +114,7 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
       mcpAccess: false,
       packageManagerAccess: true,
     })
-    expect(input.networking).toEqual({
+    expect(input.spec.networking).toEqual({
       type: 'limited',
       allowMcpServers: false,
       allowPackageManagers: true,
@@ -124,36 +126,28 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
 describe('quickstart sandbox add-on [spec: quickstart/sandbox-addon]', () => {
   it('adds sandbox tools and carries skills consistent with the agent schema', () => {
     const agent = resourceAgent({
-      tools: [
-        { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-        { name: 'bash', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      ],
+      allowedTools: ['read', 'bash'],
       skills: [],
     })
     expect(agentHasSandboxExecution(agent)).toBe(true)
     expect(
       agentHasSandboxExecution(
         resourceAgent({
-          tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+          allowedTools: ['read'],
           skills: [],
         }),
       ),
     ).toBe(false)
     expect(sandboxAgentInput(agent)).toEqual({
-      tools: [
-        { name: 'read' },
-        { name: 'bash' },
-        { name: 'edit' },
-        { name: 'write' },
-        { name: 'grep' },
-        { name: 'find' },
-        { name: 'ls' },
-        { name: 'fetch' },
-        { name: 'web_search' },
-      ],
-      skills: ['ama@coding-agent'],
+      spec: {
+        systemPrompt: 'Do the work',
+        allowedTools: ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls', 'fetch', 'web_search'],
+        skills: ['ama@coding-agent'],
+      },
     })
-    expect(sandboxAgentInput(resourceAgent({ tools: [], skills: ['team@skill'] })).skills).toEqual(['team@skill'])
+    expect(sandboxAgentInput(resourceAgent({ allowedTools: [], skills: ['team@skill'] })).spec?.skills).toEqual([
+      'team@skill',
+    ])
   })
 })
 

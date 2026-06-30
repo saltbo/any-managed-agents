@@ -12,7 +12,8 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.update_memory_store_request_metadata import UpdateMemoryStoreRequestMetadata
+  from ..models.resource_update_metadata import ResourceUpdateMetadata
+  from ..models.update_memory_store_request_spec import UpdateMemoryStoreRequestSpec
 
 
 
@@ -26,45 +27,41 @@ T = TypeVar("T", bound="UpdateMemoryStoreRequest")
 class UpdateMemoryStoreRequest:
     """ 
         Attributes:
-            name (str | Unset):  Example: Team conventions.
-            description (str | Unset):  Example: Shared repository and review preferences..
-            metadata (UpdateMemoryStoreRequestMetadata | Unset):  Example: {'owner': 'platform'}.
+            metadata (ResourceUpdateMetadata | Unset):
+            spec (UpdateMemoryStoreRequestSpec | Unset):
             archived (bool | Unset):  Example: True.
      """
 
-    name: str | Unset = UNSET
-    description: str | Unset = UNSET
-    metadata: UpdateMemoryStoreRequestMetadata | Unset = UNSET
+    metadata: ResourceUpdateMetadata | Unset = UNSET
+    spec: UpdateMemoryStoreRequestSpec | Unset = UNSET
     archived: bool | Unset = UNSET
-    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.update_memory_store_request_metadata import UpdateMemoryStoreRequestMetadata
-        name = self.name
-
-        description = self.description
-
+        from ..models.resource_update_metadata import ResourceUpdateMetadata
+        from ..models.update_memory_store_request_spec import UpdateMemoryStoreRequestSpec
         metadata: dict[str, Any] | Unset = UNSET
         if not isinstance(self.metadata, Unset):
             metadata = self.metadata.to_dict()
+
+        spec: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.spec, Unset):
+            spec = self.spec.to_dict()
 
         archived = self.archived
 
 
         field_dict: dict[str, Any] = {}
-        field_dict.update(self.additional_properties)
+
         field_dict.update({
         })
-        if name is not UNSET:
-            field_dict["name"] = name
-        if description is not UNSET:
-            field_dict["description"] = description
         if metadata is not UNSET:
             field_dict["metadata"] = metadata
+        if spec is not UNSET:
+            field_dict["spec"] = spec
         if archived is not UNSET:
             field_dict["archived"] = archived
 
@@ -74,18 +71,25 @@ class UpdateMemoryStoreRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.update_memory_store_request_metadata import UpdateMemoryStoreRequestMetadata
+        from ..models.resource_update_metadata import ResourceUpdateMetadata
+        from ..models.update_memory_store_request_spec import UpdateMemoryStoreRequestSpec
         d = dict(src_dict)
-        name = d.pop("name", UNSET)
-
-        description = d.pop("description", UNSET)
-
         _metadata = d.pop("metadata", UNSET)
-        metadata: UpdateMemoryStoreRequestMetadata | Unset
+        metadata: ResourceUpdateMetadata | Unset
         if isinstance(_metadata,  Unset):
             metadata = UNSET
         else:
-            metadata = UpdateMemoryStoreRequestMetadata.from_dict(_metadata)
+            metadata = ResourceUpdateMetadata.from_dict(_metadata)
+
+
+
+
+        _spec = d.pop("spec", UNSET)
+        spec: UpdateMemoryStoreRequestSpec | Unset
+        if isinstance(_spec,  Unset):
+            spec = UNSET
+        else:
+            spec = UpdateMemoryStoreRequestSpec.from_dict(_spec)
 
 
 
@@ -93,28 +97,10 @@ class UpdateMemoryStoreRequest:
         archived = d.pop("archived", UNSET)
 
         update_memory_store_request = cls(
-            name=name,
-            description=description,
             metadata=metadata,
+            spec=spec,
             archived=archived,
         )
 
-
-        update_memory_store_request.additional_properties = d
         return update_memory_store_request
 
-    @property
-    def additional_keys(self) -> list[str]:
-        return list(self.additional_properties.keys())
-
-    def __getitem__(self, key: str) -> Any:
-        return self.additional_properties[key]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.additional_properties[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self.additional_properties[key]
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.additional_properties

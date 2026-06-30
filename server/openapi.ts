@@ -1,6 +1,7 @@
 import type { Hook } from '@hono/zod-openapi'
 import { OpenAPIHono, z } from '@hono/zod-openapi'
 import type { Context, Env as HonoBaseEnv } from 'hono'
+import { EnvFromEntrySchema } from './contracts/execution-spec'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
 
@@ -55,18 +56,7 @@ export const SecretRefSchema = z
 
 export const NullableSecretRefSchema = SecretRefSchema.nullable().openapi('NullableSecretRef')
 
-export const EnvFromEntrySchema = z
-  .object({
-    type: z.literal('secret').openapi({ example: 'secret' }),
-    name: z.string().min(1).max(120).openapi({ example: 'API_TOKEN' }),
-    secretRef: z
-      .string()
-      .min(1)
-      .openapi({ example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123' }),
-    key: z.string().min(1).max(253).optional().openapi({ example: 'token' }),
-  })
-  .strict()
-  .openapi('EnvFromEntry')
+export { EnvFromEntrySchema }
 
 const limitQuery = z.coerce
   .number()

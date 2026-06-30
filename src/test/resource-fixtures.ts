@@ -4,7 +4,6 @@ import type {
   AgentVersion,
   Environment,
   EnvironmentSpec,
-  JsonObject,
   MemoryStore,
   MemoryStoreMemory,
   ResourceMetadata,
@@ -16,6 +15,7 @@ import type {
 } from '@/lib/amarpc'
 
 const now = '2026-05-23T00:00:00.000Z'
+type JsonObject = VaultCredential['spec']['metadata']
 
 export type ResourceMetadataOverrides = Partial<ResourceMetadata> & {
   id?: string
@@ -27,7 +27,7 @@ export type ResourceMetadataOverrides = Partial<ResourceMetadata> & {
 export function metadata(overrides: ResourceMetadataOverrides = {}): ResourceMetadata {
   return {
     uid: overrides.uid ?? overrides.id ?? 'resource_1',
-    pid: overrides.pid === undefined ? 'project_1' : overrides.pid,
+    projectId: overrides.projectId === undefined ? 'project_1' : overrides.projectId,
     name: overrides.name ?? 'Resource',
     description: overrides.description === undefined ? null : overrides.description,
     labels: overrides.labels ?? {},
@@ -59,12 +59,7 @@ export function agent(overrides: AgentOverrides = {}): Agent {
       model: overrides.model === undefined ? '@cf/moonshotai/kimi-k2.6' : overrides.model,
       skills: overrides.skills ?? ['ama@coding-agent'],
       subagents: overrides.subagents ?? [],
-      role: overrides.role === undefined ? null : overrides.role,
-      handoff: overrides.handoff ?? { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-      tools: overrides.tools ?? [
-        { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-        { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-      ],
+      allowedTools: overrides.allowedTools ?? ['read', 'write'],
       mcpConnectors: overrides.mcpConnectors ?? [],
     },
     status: {
@@ -170,7 +165,6 @@ export function environment(overrides: EnvironmentOverrides = {}): Environment {
 export type VaultOverrides = ResourceMetadataOverrides & {
   organizationId?: string
   scope?: 'project' | 'organization'
-  metadata?: JsonObject
 }
 
 export function vault(overrides: VaultOverrides = {}): Vault {
@@ -184,7 +178,6 @@ export function vault(overrides: VaultOverrides = {}): Vault {
     spec: {
       organizationId: overrides.organizationId ?? 'org_1',
       scope: overrides.scope ?? 'project',
-      metadata: overrides.metadata ?? {},
     },
     status: {
       phase: overrides.archivedAt ? 'archived' : 'active',
@@ -267,16 +260,12 @@ export function credential(overrides: VaultCredentialOverrides = {}): VaultCrede
   }
 }
 
-export type MemoryStoreOverrides = ResourceMetadataOverrides & {
-  metadata?: JsonObject
-}
+export type MemoryStoreOverrides = ResourceMetadataOverrides
 
 export function memoryStore(overrides: MemoryStoreOverrides = {}): MemoryStore {
   return {
     metadata: metadata({ id: 'store_1', name: 'Project memory', description: 'Reusable notes', ...overrides }),
-    spec: {
-      metadata: overrides.metadata ?? {},
-    },
+    spec: {},
     status: {
       phase: overrides.archivedAt ? 'archived' : 'active',
     },

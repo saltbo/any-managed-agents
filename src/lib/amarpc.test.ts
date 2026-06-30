@@ -44,6 +44,12 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
   }
 
+  function requestJson(fetchMock: ReturnType<typeof vi.fn>, callIndex: number) {
+    const body = fetchMock.mock.calls[callIndex]?.[1]?.body
+    expect(typeof body).toBe('string')
+    return JSON.parse(body as string) as unknown
+  }
+
   const listPage = { data: [], pagination: { limit: 25, nextCursor: null, hasMore: false } }
 
   it('serializes list options through the shared authenticated client', async () => {
@@ -350,11 +356,11 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     const agentFixture = agent({
       id: 'agent_1',
       name: 'Test Agent',
-      systemPrompt: null,
+      systemPrompt: 'Do the work.',
       provider: null,
       model: null,
       skills: [],
-      tools: [],
+      allowedTools: [],
       currentVersionId: null,
       createdAt: '',
       updatedAt: '',
@@ -372,7 +378,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('createAgent posts JSON', async () => {
       const fetchMock = makeJsonFetch(agentFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.createAgent({ name: 'Test Agent' })
+      await api.createAgent({ metadata: { name: 'Test Agent' }, spec: { systemPrompt: 'Do the work.' } })
       const [, init] = fetchMock.mock.calls[0]!
       expect(init?.method).toBe('POST')
     })
@@ -380,7 +386,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('updateAgent patches the agent', async () => {
       const fetchMock = makeJsonFetch(agentFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.updateAgent('agent_1', { name: 'Renamed' })
+      await api.updateAgent('agent_1', { metadata: { name: 'Renamed' } })
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/agents/agent_1')
     })
@@ -398,28 +404,6 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       await api.listAgentVersions('agent_1')
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/agents/agent_1/versions')
-    })
-
-    it('readAgentMemory calls the memory sub-resource', async () => {
-      const fetchMock = makeJsonFetch({
-        metadata: { ...agentFixture.metadata, uid: 'agentmem_1', name: 'Agent memory' },
-        spec: { agentId: 'agent_1', content: 'facts', metadata: {} },
-        status: { phase: 'active' },
-      })
-      vi.stubGlobal('fetch', fetchMock)
-      const result = await api.readAgentMemory('agent_1')
-      expect(result.spec.content).toBe('facts')
-    })
-
-    it('replaceAgentMemory puts new content', async () => {
-      const fetchMock = makeJsonFetch({
-        metadata: { ...agentFixture.metadata, uid: 'agentmem_1', name: 'Agent memory' },
-        spec: { agentId: 'agent_1', content: 'new facts', metadata: {} },
-        status: { phase: 'active' },
-      })
-      vi.stubGlobal('fetch', fetchMock)
-      const result = await api.replaceAgentMemory('agent_1', { content: 'new facts' })
-      expect(result.spec.content).toBe('new facts')
     })
   })
 
@@ -454,7 +438,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('createEnvironment posts JSON', async () => {
       const fetchMock = makeJsonFetch(envFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.createEnvironment({ name: 'Prod' })
+      await api.createEnvironment({ metadata: { name: 'Prod' }, spec: {} })
       const [, init] = fetchMock.mock.calls[0]!
       expect(init?.method).toBe('POST')
     })
@@ -462,7 +446,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('updateEnvironment patches the environment', async () => {
       const fetchMock = makeJsonFetch(envFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.updateEnvironment('env_1', { name: 'Updated' })
+      await api.updateEnvironment('env_1', { metadata: { name: 'Updated' } })
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/environments/env_1')
     })
@@ -490,7 +474,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     const sessionFixture = {
       metadata: {
         uid: 'sess_1',
-        pid: 'p1',
+        projectId: 'p1',
         name: 'sess_1',
         labels: {},
         annotations: {},
@@ -527,9 +511,11 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const fetchMock = makeJsonFetch(sessionFixture)
       vi.stubGlobal('fetch', fetchMock)
       await api.createSession({
-        agentId: 'agent_1',
-        environmentId: 'env_1',
-        runtime: 'ama',
+        spec: {
+          agentId: 'agent_1',
+          environmentId: 'env_1',
+          runtime: 'ama',
+        },
         prompt: 'Run AMA session',
       })
       const [, init] = fetchMock.mock.calls[0]!
@@ -638,7 +624,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     const triggerFixture = {
       metadata: {
         uid: 'trigger_1',
-        pid: 'project_1',
+        projectId: 'project_1',
         name: 'Nightly run',
         description: null,
         labels: {},
@@ -685,20 +671,22 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const fetchMock = makeJsonFetch(triggerFixture)
       vi.stubGlobal('fetch', fetchMock)
       await api.createTrigger({
-        name: 'Nightly run',
-        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 } },
-        suspend: false,
-        template: {
-          metadata: { labels: {}, annotations: {} },
-          spec: {
-            agentId: 'agent_1',
-            environmentId: null,
-            runtime: 'ama',
-            promptTemplate: 'Run checks',
-            env: {},
-            envFrom: [],
-            volumes: [],
-            volumeMounts: [],
+        metadata: { name: 'Nightly run' },
+        spec: {
+          source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 } },
+          suspend: false,
+          template: {
+            metadata: { labels: {}, annotations: {} },
+            spec: {
+              agentId: 'agent_1',
+              environmentId: null,
+              runtime: 'ama',
+              promptTemplate: 'Run checks',
+              env: {},
+              envFrom: [],
+              volumes: [],
+              volumeMounts: [],
+            },
           },
         },
       })
@@ -718,7 +706,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('updateTrigger patches the trigger', async () => {
       const fetchMock = makeJsonFetch(triggerFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.updateTrigger('trigger_1', { suspend: true })
+      await api.updateTrigger('trigger_1', { spec: { suspend: true } })
       const [url, init] = fetchMock.mock.calls[0]!
       expect(url).toContain('/api/v1/triggers/trigger_1')
       expect(init?.method).toBe('PATCH')
@@ -750,7 +738,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     const memoryStoreFixture = {
       metadata: {
         uid: 'mem_1',
-        pid: 'project_1',
+        projectId: 'project_1',
         name: 'Project memory',
         description: null,
         labels: {},
@@ -766,7 +754,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     const memoryFixture = {
       metadata: {
         uid: 'memory_1',
-        pid: 'project_1',
+        projectId: 'project_1',
         name: 'facts.md',
         description: null,
         labels: {},
@@ -795,14 +783,17 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       vi.stubGlobal('fetch', fetchMock)
 
       await api.readMemoryStore('mem_1')
-      await api.createMemoryStore({ name: 'Project memory' })
-      await api.updateMemoryStore('mem_1', { description: 'Shared facts' })
+      await api.createMemoryStore({ metadata: { name: 'Project memory' }, spec: {} })
+      await api.updateMemoryStore('mem_1', { metadata: { description: 'Shared facts' } })
       await api.archiveMemoryStore('mem_1')
 
       expect(fetchMock.mock.calls[0]?.[0] as string).toContain('/api/v1/memory-stores/mem_1')
       expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('POST')
+      expect(requestJson(fetchMock, 1)).toEqual({ metadata: { name: 'Project memory' }, spec: {} })
       expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('PATCH')
+      expect(requestJson(fetchMock, 2)).toEqual({ metadata: { description: 'Shared facts' } })
       expect(fetchMock.mock.calls[3]?.[1]?.method).toBe('PATCH')
+      expect(requestJson(fetchMock, 3)).toEqual({ archived: true })
     })
 
     it('manages memory records under a memory store', async () => {
@@ -904,9 +895,10 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('createVault posts JSON', async () => {
       const fetchMock = makeJsonFetch(vaultFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.createVault({ name: 'My Vault' })
+      await api.createVault({ metadata: { name: 'My Vault' }, spec: {} })
       const [, init] = fetchMock.mock.calls[0]!
       expect(init?.method).toBe('POST')
+      expect(requestJson(fetchMock, 0)).toEqual({ metadata: { name: 'My Vault' }, spec: {} })
     })
 
     it('archiveVault patches with archived:true', async () => {
@@ -914,6 +906,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.archiveVault('vault_1')
       expect(result.metadata.archivedAt).toBeTruthy()
+      expect(requestJson(fetchMock, 0)).toEqual({ archived: true })
     })
 
     it('listVaultCredentials calls the credentials sub-resource', async () => {
@@ -947,7 +940,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         activeVersion: {
           metadata: {
             uid: 'ver_1',
-            pid: 'project_1',
+            projectId: 'project_1',
             name: 'Credential v2',
             description: null,
             labels: {},
@@ -1036,7 +1029,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         capabilities: [],
         supportedAuthModes: [],
         setupRequirements: [],
-        tools: [],
+        allowedTools: [],
         metadata: {},
         availability: 'available' as const,
         createdAt: '',

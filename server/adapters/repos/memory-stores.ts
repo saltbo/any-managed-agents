@@ -41,7 +41,7 @@ function storeRecordFrom(row: MemoryStoreRow): MemoryStore {
       updatedAt: row.updatedAt,
       archivedAt: row.archivedAt,
     }),
-    spec: { metadata: parseJson<Record<string, unknown>>(row.metadata) },
+    spec: {},
     status: { phase: resourcePhase(row.archivedAt) },
   }
 }
@@ -105,7 +105,6 @@ export function createMemoryStoreRepo(db: Db): MemoryStoreRepo {
         projectId: input.projectId,
         name: input.name,
         description: input.description,
-        metadata: stringify(input.metadata),
         archivedAt: null,
         createdAt,
         updatedAt: createdAt,
@@ -120,7 +119,6 @@ export function createMemoryStoreRepo(db: Db): MemoryStoreRepo {
         .set({
           name: fields.name,
           description: fields.description,
-          metadata: stringify(fields.metadata),
           archivedAt: fields.archivedAt,
           updatedAt,
         })

@@ -186,17 +186,13 @@ func TestWorkspaceAgentSystemPromptIncludesCapabilities(t *testing.T) {
 	prompt := (&Workspace{}).AgentSystemPrompt(map[string]any{
 		"systemPrompt":    "Be precise.",
 		"skills":          []any{"review", "triage"},
-		"capabilityTags":  []any{"go", "runner"},
-		"subagents":       []any{map[string]any{"username": "reviewer", "role": "review"}},
-		"handoffPolicy":   map[string]any{"enabled": true},
+		"subagents":       []any{map[string]any{"name": "reviewer", "description": "Reviews pull requests"}},
 		"ignoredProperty": "ignored",
 	})
 	for _, want := range []string{
 		"Be precise.",
 		"Skills: review, triage",
-		"Capability tags: go, runner",
-		"Available subagents: @reviewer (review)",
-		`Handoff policy: {"enabled":true}`,
+		"Available subagents: @reviewer (Reviews pull requests)",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected prompt to contain %q, got %s", want, prompt)

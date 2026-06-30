@@ -74,9 +74,7 @@ const defaultAgentSnapshot: SessionAgentSnapshot = {
   model: '@cf/moonshotai/kimi-k2.6',
   skills: [],
   subagents: [],
-  role: null,
-  handoff: { enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] },
-  tools: [],
+  allowedTools: ['read', 'bash'],
   mcpConnectors: [],
   createdAt: '2026-05-23T00:00:00.000Z',
 }

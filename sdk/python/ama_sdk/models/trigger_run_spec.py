@@ -28,15 +28,11 @@ class TriggerRunSpec:
         Attributes:
             trigger_id (str):  Example: trigger_abc123.
             scheduled_for (datetime.datetime | None):  Example: 2026-05-26T12:00:00.000Z.
-            idempotency_key (str):  Example: trigger_abc123:2026-05-26T12:00:00.000Z.
-            correlation_id (str):  Example: schedule:trigger_abc123:2026-05-26T12:00:00.000Z.
             metadata (TriggerRunSpecMetadata):  Example: {'source': 'trigger'}.
      """
 
     trigger_id: str
     scheduled_for: datetime.datetime | None
-    idempotency_key: str
-    correlation_id: str
     metadata: TriggerRunSpecMetadata
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -54,10 +50,6 @@ class TriggerRunSpec:
         else:
             scheduled_for = self.scheduled_for
 
-        idempotency_key = self.idempotency_key
-
-        correlation_id = self.correlation_id
-
         metadata = self.metadata.to_dict()
 
 
@@ -66,8 +58,6 @@ class TriggerRunSpec:
         field_dict.update({
             "triggerId": trigger_id,
             "scheduledFor": scheduled_for,
-            "idempotencyKey": idempotency_key,
-            "correlationId": correlation_id,
             "metadata": metadata,
         })
 
@@ -99,10 +89,6 @@ class TriggerRunSpec:
         scheduled_for = _parse_scheduled_for(d.pop("scheduledFor"))
 
 
-        idempotency_key = d.pop("idempotencyKey")
-
-        correlation_id = d.pop("correlationId")
-
         metadata = TriggerRunSpecMetadata.from_dict(d.pop("metadata"))
 
 
@@ -111,8 +97,6 @@ class TriggerRunSpec:
         trigger_run_spec = cls(
             trigger_id=trigger_id,
             scheduled_for=scheduled_for,
-            idempotency_key=idempotency_key,
-            correlation_id=correlation_id,
             metadata=metadata,
         )
 

@@ -1,5 +1,11 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { ResourceMetadataSchema, ResourcePhaseSchema } from '@server/contracts/resource-contracts'
+import {
+  ResourceCreateMetadataSchema,
+  ResourceMetadataSchema,
+  ResourcePhaseSchema,
+  ResourceUpdateMetadataSchema,
+  serializeResource,
+} from '@server/contracts/resource-contracts'
 import { requireAuth } from '../auth/session'
 import {
   EnvironmentNetworkingSchema,
@@ -22,10 +28,12 @@ import { requestId } from './request-context'
 
 type EnvironmentRoutes = OpenAPIHono<DepsEnv>
 
-const VariableSchema = z.object({
-  description: z.string().max(500).optional(),
-  required: z.boolean().optional(),
-})
+const VariableSchema = z
+  .object({
+    description: z.string().max(500).optional(),
+    required: z.boolean().optional(),
+  })
+  .strict()
 
 const EnvironmentSpecSchema = z
   .object({
@@ -75,27 +83,35 @@ const EnvironmentVersionSchema = z
 
 const EnvironmentPayloadSchema = z
   .object({
-    name: z.string().min(1).max(120).openapi({ example: 'Node workspace' }),
-    description: z.string().max(1000).nullable().optional().openapi({ example: 'Default Node.js environment.' }),
-    scope: EnvironmentScopeSchema.optional(),
-    type: EnvironmentTypeSchema.optional(),
-    networking: EnvironmentNetworkingSchema.optional(),
-    packages: EnvironmentPackagesSchema.optional(),
-    variables: z
-      .record(z.string(), VariableSchema)
-      .optional()
-      .openapi({ example: { NODE_ENV: { required: true } } }),
+    metadata: ResourceCreateMetadataSchema.openapi({ example: { name: 'Node workspace' } }),
+    spec: z
+      .object({
+        scope: EnvironmentScopeSchema.optional(),
+        type: EnvironmentTypeSchema.optional(),
+        networking: EnvironmentNetworkingSchema.optional(),
+        packages: EnvironmentPackagesSchema.optional(),
+        variables: z
+          .record(z.string().min(1).max(120), VariableSchema)
+          .optional()
+          .openapi({ example: { NODE_ENV: { required: true } } }),
+      })
+      .strict(),
   })
   .strict()
 const CreateEnvironmentSchema = EnvironmentPayloadSchema.openapi('CreateEnvironmentRequest')
-const UpdateEnvironmentSchema = EnvironmentPayloadSchema.partial()
-  .extend({
+const UpdateEnvironmentSchema = z
+  .object({
+    metadata: ResourceUpdateMetadataSchema.optional(),
+    spec: EnvironmentPayloadSchema.shape.spec.partial().optional(),
     archived: z.boolean().optional().openapi({
       description: 'Lifecycle transition: true archives the environment, false unarchives it.',
       example: false,
     }),
   })
   .strict()
+  .refine((body) => body.metadata !== undefined || body.spec !== undefined || body.archived !== undefined, {
+    message: 'Provide metadata, spec, or archived.',
+  })
   .openapi('UpdateEnvironmentRequest')
 
 const EnvironmentParamsSchema = z.object({
@@ -264,7 +280,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
         page.hasMore && last ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid }) : null
       return c.json(
         {
-          data: page.rows,
+          data: page.rows.map(serializeResource),
           pagination: { limit, nextCursor, hasMore: page.hasMore },
         },
         200,
@@ -279,11 +295,11 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       }
       try {
         const environment = await createEnvironment(deps, auth, {
-          name: body.name,
-          description: body.description ?? null,
+          name: body.metadata.name,
+          description: body.metadata.description ?? null,
           config: configFromPayload(body),
         })
-        return c.json(environment, 201)
+        return c.json(serializeResource(environment), 201)
       } catch (error) {
         return validationOr(c, error)
       }
@@ -299,7 +315,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       if (!environment) {
         return notFound(c)
       }
-      return c.json(environment, 200)
+      return c.json(serializeResource(environment), 200)
     })
     .openapi(updateRoute, async (c) => {
       const { environmentId } = c.req.valid('param')
@@ -338,7 +354,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
             after: { archivedAt: null },
           })
         }
-        return c.json(result.environment, 200)
+        return c.json(serializeResource(result.environment), 200)
       } catch (error) {
         if (error instanceof EnvironmentArchivedError) {
           return c.json({ error: { type: 'conflict', message: error.message } }, 409)
@@ -360,7 +376,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       const versions = await deps.environments.listVersions(auth.project.id, environmentId)
       return c.json(
         {
-          data: versions,
+          data: versions.map(serializeResource),
           pagination: { limit: versions.length, nextCursor: null, hasMore: false },
         },
         200,
@@ -381,33 +397,35 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       if (!row) {
         return c.json({ error: { type: 'not_found', message: 'Environment version not found' } }, 404)
       }
-      return c.json(row, 200)
+      return c.json(serializeResource(row), 200)
     })
 }
 
 // --- helpers ---
 
 function configFromPayload(body: z.infer<typeof EnvironmentPayloadSchema>) {
+  const spec = body.spec
   return {
-    scope: body.scope ?? ('project' as const),
-    type: body.type ?? ('cloud' as const),
-    networking: body.networking ?? { type: 'open' as const, allowMcpServers: false, allowPackageManagers: true },
-    packages: body.packages ?? { type: 'packages' as const, apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
-    variables: body.variables ?? {},
+    scope: spec.scope ?? ('project' as const),
+    type: spec.type ?? ('cloud' as const),
+    networking: spec.networking ?? { type: 'open' as const, allowMcpServers: false, allowPackageManagers: true },
+    packages: spec.packages ?? { type: 'packages' as const, apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+    variables: spec.variables ?? {},
   }
 }
 
 // Builds the usecase patch from the validated PATCH body: only present fields
 // are forwarded (so an absent field is distinct from an explicit null).
 function patchFromBody(body: z.infer<typeof UpdateEnvironmentSchema>): UpdateEnvironmentPatch {
+  const spec = body.spec
   return {
-    ...(body.name !== undefined ? { name: body.name } : {}),
-    ...(body.description !== undefined ? { description: body.description } : {}),
-    ...(body.scope !== undefined ? { scope: body.scope } : {}),
-    ...(body.type !== undefined ? { type: body.type } : {}),
-    ...(body.networking !== undefined ? { networking: body.networking } : {}),
-    ...(body.packages !== undefined ? { packages: body.packages } : {}),
-    ...(body.variables !== undefined ? { variables: body.variables } : {}),
+    ...(body.metadata?.name !== undefined ? { name: body.metadata.name } : {}),
+    ...(body.metadata?.description !== undefined ? { description: body.metadata.description } : {}),
+    ...(spec?.scope !== undefined ? { scope: spec.scope } : {}),
+    ...(spec?.type !== undefined ? { type: spec.type } : {}),
+    ...(spec?.networking !== undefined ? { networking: spec.networking } : {}),
+    ...(spec?.packages !== undefined ? { packages: spec.packages } : {}),
+    ...(spec?.variables !== undefined ? { variables: spec.variables } : {}),
     ...(body.archived !== undefined ? { archived: body.archived } : {}),
   }
 }

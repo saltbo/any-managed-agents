@@ -85,31 +85,41 @@ export const defaultQuickstartEnvironmentForm: QuickstartEnvironmentForm = {
 
 export function quickstartEnvironmentInput(form: QuickstartEnvironmentForm): EnvironmentInput {
   const base: EnvironmentInput = {
-    name: form.name.trim(),
-    description: 'Reusable sandbox template created in quickstart.',
-    type: 'cloud',
-    packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+    metadata: {
+      name: form.name.trim(),
+      description: 'Reusable sandbox template created in quickstart.',
+    },
+    spec: {
+      type: 'cloud',
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+    },
   }
   if (form.networkChoice === 'unrestricted') {
     return {
       ...base,
-      networking: {
-        type: 'open',
-        allowMcpServers: form.mcpAccess,
-        allowPackageManagers: form.packageManagerAccess,
+      spec: {
+        ...base.spec,
+        networking: {
+          type: 'open',
+          allowMcpServers: form.mcpAccess,
+          allowPackageManagers: form.packageManagerAccess,
+        },
       },
     }
   }
   return {
     ...base,
-    networking: {
-      type: 'limited',
-      allowMcpServers: form.mcpAccess,
-      allowPackageManagers: form.packageManagerAccess,
-      allowedHosts: form.allowedHosts
-        .split(/\r?\n/)
-        .map((host) => host.trim())
-        .filter(Boolean),
+    spec: {
+      ...base.spec,
+      networking: {
+        type: 'limited',
+        allowMcpServers: form.mcpAccess,
+        allowPackageManagers: form.packageManagerAccess,
+        allowedHosts: form.allowedHosts
+          .split(/\r?\n/)
+          .map((host) => host.trim())
+          .filter(Boolean),
+      },
     },
   }
 }
@@ -120,16 +130,18 @@ export const SANDBOX_TOOLS = AMA_SANDBOX_TOOL_NAMES
 export const DEFAULT_SANDBOX_SKILL = 'ama@coding-agent'
 
 export function agentHasSandboxExecution(agent: Agent) {
-  const names = agent.spec.tools.map((tool) => tool.name)
-  return names.length === 0 || names.includes('*') || names.includes('bash')
+  return agent.spec.allowedTools.includes('bash')
 }
 
 export function sandboxAgentInput(agent: Agent): Partial<AgentInput> {
-  const existing = agent.spec.tools.map((tool) => tool.name)
+  const existing = agent.spec.allowedTools
   const merged = [...new Set([...existing, ...SANDBOX_TOOLS])]
   return {
-    tools: merged.map((name) => ({ name })),
-    skills: agent.spec.skills.length > 0 ? agent.spec.skills : [DEFAULT_SANDBOX_SKILL],
+    spec: {
+      systemPrompt: agent.spec.systemPrompt,
+      allowedTools: merged,
+      skills: agent.spec.skills.length > 0 ? agent.spec.skills : [DEFAULT_SANDBOX_SKILL],
+    },
   }
 }
 
@@ -146,9 +158,11 @@ export interface QuickstartIntegrationInput {
 export function quickstartIntegrationExamples(input: QuickstartIntegrationInput) {
   const authHeader = '-H "Authorization: Bearer $AMA_ACCESS_TOKEN"'
   const sessionBody = JSON.stringify({
-    agentId: input.agentId,
-    environmentId: input.environmentId,
-    runtime: 'ama',
+    spec: {
+      agentId: input.agentId,
+      environmentId: input.environmentId,
+      runtime: 'ama',
+    },
     prompt: SAFE_EXAMPLE_PROMPT,
   })
   const liveSessionUrl = input.runtimePath

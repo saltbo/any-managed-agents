@@ -189,7 +189,7 @@ describe('[spec: vaults/console-list] VaultsView', () => {
   })
 
   it('shows Organization in project cell when project metadata has no project id', () => {
-    const vaults = [vault({ pid: null })]
+    const vaults = [vault({ projectId: null })]
     render(
       <MemoryRouter>
         <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={vi.fn()} />
@@ -632,7 +632,8 @@ describe('[spec: vaults/create-sheet] CreateVaultSheet', () => {
     server.use(
       http.post('*/api/v1/vaults', async ({ request }) => {
         const body = (await request.json()) as Record<string, unknown>
-        const created = vault({ id: 'vault_new', name: String(body.name ?? 'Provider credentials') })
+        const metadata = body.metadata as { name?: unknown } | undefined
+        const created = vault({ id: 'vault_new', name: String(metadata?.name ?? 'Provider credentials') })
         vaults.put(created)
         return HttpResponse.json(created, { status: 201 })
       }),
@@ -1349,7 +1350,8 @@ describe('[spec: vaults/console-page] VaultsPage', () => {
       }),
       http.post('*/api/v1/vaults', async ({ request }) => {
         const body = (await request.json()) as Record<string, unknown>
-        const created = vault({ id: `vault_${vaults.items.size + 1}`, name: String(body.name ?? 'New Vault') })
+        const metadata = body.metadata as { name?: unknown } | undefined
+        const created = vault({ id: `vault_${vaults.items.size + 1}`, name: String(metadata?.name ?? 'New Vault') })
         vaults.put(created)
         return HttpResponse.json(created, { status: 201 })
       }),

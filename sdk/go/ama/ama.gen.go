@@ -22,54 +22,6 @@ const (
 	BearerAuthScopes bearerAuthContextKey = "bearerAuth.Scopes"
 )
 
-// Defines values for AgentToolAttachmentApprovalMode.
-const (
-	AgentToolAttachmentApprovalModeAlwaysRequired AgentToolAttachmentApprovalMode = "always_required"
-	AgentToolAttachmentApprovalModeNone           AgentToolAttachmentApprovalMode = "none"
-	AgentToolAttachmentApprovalModePerCall        AgentToolAttachmentApprovalMode = "per_call"
-	AgentToolAttachmentApprovalModeProjectPolicy  AgentToolAttachmentApprovalMode = "project_policy"
-)
-
-// Valid indicates whether the value is a known member of the AgentToolAttachmentApprovalMode enum.
-func (e AgentToolAttachmentApprovalMode) Valid() bool {
-	switch e {
-	case AgentToolAttachmentApprovalModeAlwaysRequired:
-		return true
-	case AgentToolAttachmentApprovalModeNone:
-		return true
-	case AgentToolAttachmentApprovalModePerCall:
-		return true
-	case AgentToolAttachmentApprovalModeProjectPolicy:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AgentToolAttachmentInputApprovalMode.
-const (
-	AgentToolAttachmentInputApprovalModeAlwaysRequired AgentToolAttachmentInputApprovalMode = "always_required"
-	AgentToolAttachmentInputApprovalModeNone           AgentToolAttachmentInputApprovalMode = "none"
-	AgentToolAttachmentInputApprovalModePerCall        AgentToolAttachmentInputApprovalMode = "per_call"
-	AgentToolAttachmentInputApprovalModeProjectPolicy  AgentToolAttachmentInputApprovalMode = "project_policy"
-)
-
-// Valid indicates whether the value is a known member of the AgentToolAttachmentInputApprovalMode enum.
-func (e AgentToolAttachmentInputApprovalMode) Valid() bool {
-	switch e {
-	case AgentToolAttachmentInputApprovalModeAlwaysRequired:
-		return true
-	case AgentToolAttachmentInputApprovalModeNone:
-		return true
-	case AgentToolAttachmentInputApprovalModePerCall:
-		return true
-	case AgentToolAttachmentInputApprovalModeProjectPolicy:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for AuditRecordActorType.
 const (
 	System AuditRecordActorType = "system"
@@ -424,45 +376,45 @@ func (e CreateSessionMessageRequestType) Valid() bool {
 	}
 }
 
-// Defines values for CreateTriggerRequestSource0ScheduleType.
+// Defines values for CreateTriggerRequestSpecSource0ScheduleType.
 const (
-	CreateTriggerRequestSource0ScheduleTypeInterval CreateTriggerRequestSource0ScheduleType = "interval"
+	CreateTriggerRequestSpecSource0ScheduleTypeInterval CreateTriggerRequestSpecSource0ScheduleType = "interval"
 )
 
-// Valid indicates whether the value is a known member of the CreateTriggerRequestSource0ScheduleType enum.
-func (e CreateTriggerRequestSource0ScheduleType) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateTriggerRequestSpecSource0ScheduleType enum.
+func (e CreateTriggerRequestSpecSource0ScheduleType) Valid() bool {
 	switch e {
-	case CreateTriggerRequestSource0ScheduleTypeInterval:
+	case CreateTriggerRequestSpecSource0ScheduleTypeInterval:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for CreateTriggerRequestSource0Type.
+// Defines values for CreateTriggerRequestSpecSource0Type.
 const (
-	CreateTriggerRequestSource0TypeSchedule CreateTriggerRequestSource0Type = "schedule"
+	CreateTriggerRequestSpecSource0TypeSchedule CreateTriggerRequestSpecSource0Type = "schedule"
 )
 
-// Valid indicates whether the value is a known member of the CreateTriggerRequestSource0Type enum.
-func (e CreateTriggerRequestSource0Type) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateTriggerRequestSpecSource0Type enum.
+func (e CreateTriggerRequestSpecSource0Type) Valid() bool {
 	switch e {
-	case CreateTriggerRequestSource0TypeSchedule:
+	case CreateTriggerRequestSpecSource0TypeSchedule:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for CreateTriggerRequestSource1Type.
+// Defines values for CreateTriggerRequestSpecSource1Type.
 const (
-	CreateTriggerRequestSource1TypeHttp CreateTriggerRequestSource1Type = "http"
+	CreateTriggerRequestSpecSource1TypeHttp CreateTriggerRequestSpecSource1Type = "http"
 )
 
-// Valid indicates whether the value is a known member of the CreateTriggerRequestSource1Type enum.
-func (e CreateTriggerRequestSource1Type) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateTriggerRequestSpecSource1Type enum.
+func (e CreateTriggerRequestSpecSource1Type) Valid() bool {
 	switch e {
-	case CreateTriggerRequestSource1TypeHttp:
+	case CreateTriggerRequestSpecSource1TypeHttp:
 		return true
 	default:
 		return false
@@ -499,18 +451,18 @@ func (e CreateVaultCredentialRequestType) Valid() bool {
 	}
 }
 
-// Defines values for CreateVaultRequestScope.
+// Defines values for CreateVaultRequestSpecScope.
 const (
-	CreateVaultRequestScopeOrganization CreateVaultRequestScope = "organization"
-	CreateVaultRequestScopeProject      CreateVaultRequestScope = "project"
+	CreateVaultRequestSpecScopeOrganization CreateVaultRequestSpecScope = "organization"
+	CreateVaultRequestSpecScopeProject      CreateVaultRequestSpecScope = "project"
 )
 
-// Valid indicates whether the value is a known member of the CreateVaultRequestScope enum.
-func (e CreateVaultRequestScope) Valid() bool {
+// Valid indicates whether the value is a known member of the CreateVaultRequestSpecScope enum.
+func (e CreateVaultRequestSpecScope) Valid() bool {
 	switch e {
-	case CreateVaultRequestScopeOrganization:
+	case CreateVaultRequestSpecScopeOrganization:
 		return true
-	case CreateVaultRequestScopeProject:
+	case CreateVaultRequestSpecScopeProject:
 		return true
 	default:
 		return false
@@ -1639,13 +1591,13 @@ func (e UpdateSessionRequestState) Valid() bool {
 	}
 }
 
-// Defines values for UpdateTriggerRequestSource0ScheduleType.
+// Defines values for UpdateTriggerRequestSpecSource0ScheduleType.
 const (
-	Interval UpdateTriggerRequestSource0ScheduleType = "interval"
+	Interval UpdateTriggerRequestSpecSource0ScheduleType = "interval"
 )
 
-// Valid indicates whether the value is a known member of the UpdateTriggerRequestSource0ScheduleType enum.
-func (e UpdateTriggerRequestSource0ScheduleType) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateTriggerRequestSpecSource0ScheduleType enum.
+func (e UpdateTriggerRequestSpecSource0ScheduleType) Valid() bool {
 	switch e {
 	case Interval:
 		return true
@@ -1654,13 +1606,13 @@ func (e UpdateTriggerRequestSource0ScheduleType) Valid() bool {
 	}
 }
 
-// Defines values for UpdateTriggerRequestSource0Type.
+// Defines values for UpdateTriggerRequestSpecSource0Type.
 const (
-	Schedule UpdateTriggerRequestSource0Type = "schedule"
+	Schedule UpdateTriggerRequestSpecSource0Type = "schedule"
 )
 
-// Valid indicates whether the value is a known member of the UpdateTriggerRequestSource0Type enum.
-func (e UpdateTriggerRequestSource0Type) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateTriggerRequestSpecSource0Type enum.
+func (e UpdateTriggerRequestSpecSource0Type) Valid() bool {
 	switch e {
 	case Schedule:
 		return true
@@ -1669,13 +1621,13 @@ func (e UpdateTriggerRequestSource0Type) Valid() bool {
 	}
 }
 
-// Defines values for UpdateTriggerRequestSource1Type.
+// Defines values for UpdateTriggerRequestSpecSource1Type.
 const (
-	Http UpdateTriggerRequestSource1Type = "http"
+	Http UpdateTriggerRequestSpecSource1Type = "http"
 )
 
-// Valid indicates whether the value is a known member of the UpdateTriggerRequestSource1Type enum.
-func (e UpdateTriggerRequestSource1Type) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateTriggerRequestSpecSource1Type enum.
+func (e UpdateTriggerRequestSpecSource1Type) Valid() bool {
 	switch e {
 	case Http:
 		return true
@@ -1699,18 +1651,18 @@ func (e UpdateVaultCredentialRequestState) Valid() bool {
 	}
 }
 
-// Defines values for UpdateVaultRequestScope.
+// Defines values for UpdateVaultRequestSpecScope.
 const (
-	UpdateVaultRequestScopeOrganization UpdateVaultRequestScope = "organization"
-	UpdateVaultRequestScopeProject      UpdateVaultRequestScope = "project"
+	UpdateVaultRequestSpecScopeOrganization UpdateVaultRequestSpecScope = "organization"
+	UpdateVaultRequestSpecScopeProject      UpdateVaultRequestSpecScope = "project"
 )
 
-// Valid indicates whether the value is a known member of the UpdateVaultRequestScope enum.
-func (e UpdateVaultRequestScope) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateVaultRequestSpecScope enum.
+func (e UpdateVaultRequestSpecScope) Valid() bool {
 	switch e {
-	case UpdateVaultRequestScopeOrganization:
+	case UpdateVaultRequestSpecScopeOrganization:
 		return true
-	case UpdateVaultRequestScopeProject:
+	case UpdateVaultRequestSpecScopeProject:
 		return true
 	default:
 		return false
@@ -2402,72 +2354,21 @@ type Agent struct {
 	Status   AgentStatus      `json:"status"`
 }
 
-// AgentHandoff defines model for AgentHandoff.
-type AgentHandoff struct {
-	Accepts struct {
-		Capabilities []string `json:"capabilities"`
-		Roles        []string `json:"roles"`
-	} `json:"accepts"`
-	Enabled bool                 `json:"enabled"`
-	Targets []AgentHandoffTarget `json:"targets"`
-}
-
-// AgentHandoffCandidate defines model for AgentHandoffCandidate.
-type AgentHandoffCandidate struct {
-	Capabilities []string `json:"capabilities"`
-	Id           string   `json:"id"`
-	Name         string   `json:"name"`
-	Role         *string  `json:"role"`
-}
-
-// AgentHandoffCandidateListResponse defines model for AgentHandoffCandidateListResponse.
-type AgentHandoffCandidateListResponse struct {
-	Data       []AgentHandoffCandidate `json:"data"`
-	Pagination ListPagination          `json:"pagination"`
-}
-
-// AgentHandoffTarget defines model for AgentHandoffTarget.
-type AgentHandoffTarget struct {
-	Capability *string `json:"capability,omitempty"`
-	Role       *string `json:"role,omitempty"`
-}
-
 // AgentListResponse defines model for AgentListResponse.
 type AgentListResponse struct {
 	Data       []Agent        `json:"data"`
 	Pagination ListPagination `json:"pagination"`
 }
 
-// AgentMemory defines model for AgentMemory.
-type AgentMemory struct {
-	Metadata ResourceMetadata  `json:"metadata"`
-	Spec     AgentMemorySpec   `json:"spec"`
-	Status   AgentMemoryStatus `json:"status"`
-}
-
-// AgentMemorySpec defines model for AgentMemorySpec.
-type AgentMemorySpec struct {
-	AgentId  string                 `json:"agentId"`
-	Content  string                 `json:"content"`
-	Metadata map[string]interface{} `json:"metadata"`
-}
-
-// AgentMemoryStatus defines model for AgentMemoryStatus.
-type AgentMemoryStatus struct {
-	Phase ResourcePhase `json:"phase"`
-}
-
 // AgentSpec defines model for AgentSpec.
 type AgentSpec struct {
-	Handoff       AgentHandoff          `json:"handoff"`
-	McpConnectors []string              `json:"mcpConnectors"`
-	Model         *string               `json:"model"`
-	Provider      *string               `json:"provider"`
-	Role          *string               `json:"role"`
-	Skills        []string              `json:"skills"`
-	Subagents     []AgentSubagent       `json:"subagents"`
-	SystemPrompt  *string               `json:"systemPrompt"`
-	Tools         []AgentToolAttachment `json:"tools"`
+	AllowedTools  []string        `json:"allowedTools"`
+	McpConnectors []string        `json:"mcpConnectors"`
+	Model         *string         `json:"model"`
+	Provider      *string         `json:"provider"`
+	Skills        []string        `json:"skills"`
+	Subagents     []AgentSubagent `json:"subagents"`
+	SystemPrompt  string          `json:"systemPrompt"`
 }
 
 // AgentStatus defines model for AgentStatus.
@@ -2479,34 +2380,25 @@ type AgentStatus struct {
 
 // AgentSubagent defines model for AgentSubagent.
 type AgentSubagent struct {
-	Role                 *string                `json:"role,omitempty"`
-	Username             *string                `json:"username,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	AllowedTools  []string `json:"allowedTools"`
+	Description   string   `json:"description"`
+	McpConnectors []string `json:"mcpConnectors"`
+	Model         *string  `json:"model"`
+	Name          string   `json:"name"`
+	Skills        []string `json:"skills"`
+	SystemPrompt  string   `json:"systemPrompt"`
 }
 
-// AgentToolAttachment defines model for AgentToolAttachment.
-type AgentToolAttachment struct {
-	ApprovalMode   AgentToolAttachmentApprovalMode `json:"approvalMode"`
-	Description    *string                         `json:"description"`
-	InputSchema    map[string]interface{}          `json:"inputSchema"`
-	Name           string                          `json:"name"`
-	PolicyMetadata map[string]interface{}          `json:"policyMetadata"`
+// AgentSubagentInput defines model for AgentSubagentInput.
+type AgentSubagentInput struct {
+	AllowedTools  *[]string `json:"allowedTools,omitempty"`
+	Description   string    `json:"description"`
+	McpConnectors *[]string `json:"mcpConnectors,omitempty"`
+	Model         *string   `json:"model,omitempty"`
+	Name          string    `json:"name"`
+	Skills        *[]string `json:"skills,omitempty"`
+	SystemPrompt  string    `json:"systemPrompt"`
 }
-
-// AgentToolAttachmentApprovalMode defines model for AgentToolAttachment.ApprovalMode.
-type AgentToolAttachmentApprovalMode string
-
-// AgentToolAttachmentInput defines model for AgentToolAttachmentInput.
-type AgentToolAttachmentInput struct {
-	ApprovalMode   *AgentToolAttachmentInputApprovalMode `json:"approvalMode,omitempty"`
-	Description    *string                               `json:"description,omitempty"`
-	InputSchema    *map[string]interface{}               `json:"inputSchema,omitempty"`
-	Name           string                                `json:"name"`
-	PolicyMetadata *map[string]interface{}               `json:"policyMetadata,omitempty"`
-}
-
-// AgentToolAttachmentInputApprovalMode defines model for AgentToolAttachmentInput.ApprovalMode.
-type AgentToolAttachmentInputApprovalMode string
 
 // AgentVersion defines model for AgentVersion.
 type AgentVersion struct {
@@ -2693,17 +2585,16 @@ type ConnectorToolApprovalMode string
 
 // CreateAgentRequest defines model for CreateAgentRequest.
 type CreateAgentRequest struct {
-	Description   *string                     `json:"description,omitempty"`
-	Handoff       *AgentHandoff               `json:"handoff,omitempty"`
-	McpConnectors *[]string                   `json:"mcpConnectors,omitempty"`
-	Model         *string                     `json:"model,omitempty"`
-	Name          string                      `json:"name"`
-	Provider      *string                     `json:"provider,omitempty"`
-	Role          *string                     `json:"role,omitempty"`
-	Skills        *[]string                   `json:"skills,omitempty"`
-	Subagents     *[]AgentSubagent            `json:"subagents,omitempty"`
-	SystemPrompt  *string                     `json:"systemPrompt,omitempty"`
-	Tools         *[]AgentToolAttachmentInput `json:"tools,omitempty"`
+	Metadata ResourceCreateMetadata `json:"metadata"`
+	Spec     struct {
+		AllowedTools  *[]string             `json:"allowedTools,omitempty"`
+		McpConnectors *[]string             `json:"mcpConnectors,omitempty"`
+		Model         *string               `json:"model,omitempty"`
+		Provider      *string               `json:"provider,omitempty"`
+		Skills        *[]string             `json:"skills,omitempty"`
+		Subagents     *[]AgentSubagentInput `json:"subagents,omitempty"`
+		SystemPrompt  string                `json:"systemPrompt"`
+	} `json:"spec"`
 }
 
 // CreateAuthSessionRequest defines model for CreateAuthSessionRequest.
@@ -2734,16 +2625,21 @@ type CreateBudgetRequestWindow string
 
 // CreateEnvironmentRequest defines model for CreateEnvironmentRequest.
 type CreateEnvironmentRequest struct {
-	Description *string                `json:"description,omitempty"`
-	Name        string                 `json:"name"`
-	Networking  *EnvironmentNetworking `json:"networking,omitempty"`
-	Packages    *EnvironmentPackages   `json:"packages,omitempty"`
-	Scope       *EnvironmentScope      `json:"scope,omitempty"`
-	Type        *EnvironmentType       `json:"type,omitempty"`
-	Variables   *map[string]struct {
-		Description *string `json:"description,omitempty"`
-		Required    *bool   `json:"required,omitempty"`
-	} `json:"variables,omitempty"`
+	Metadata struct {
+		// Embedded struct due to allOf(#/components/schemas/ResourceCreateMetadata)
+		ResourceCreateMetadata `yaml:",inline"`
+		// Embedded fields due to inline allOf schema
+	} `json:"metadata"`
+	Spec struct {
+		Networking *EnvironmentNetworking `json:"networking,omitempty"`
+		Packages   *EnvironmentPackages   `json:"packages,omitempty"`
+		Scope      *EnvironmentScope      `json:"scope,omitempty"`
+		Type       *EnvironmentType       `json:"type,omitempty"`
+		Variables  *map[string]struct {
+			Description *string `json:"description,omitempty"`
+			Required    *bool   `json:"required,omitempty"`
+		} `json:"variables,omitempty"`
+	} `json:"spec"`
 }
 
 // CreateHttpTriggerRunRequest defines model for CreateHttpTriggerRunRequest.
@@ -2765,9 +2661,12 @@ type CreateMemoryStoreMemoryRequest struct {
 
 // CreateMemoryStoreRequest defines model for CreateMemoryStoreRequest.
 type CreateMemoryStoreRequest struct {
-	Description *string                  `json:"description,omitempty"`
-	Metadata    *map[string]*interface{} `json:"metadata,omitempty"`
-	Name        string                   `json:"name"`
+	Metadata struct {
+		// Embedded struct due to allOf(#/components/schemas/ResourceCreateMetadata)
+		ResourceCreateMetadata `yaml:",inline"`
+		// Embedded fields due to inline allOf schema
+	} `json:"metadata"`
+	Spec *map[string]interface{} `json:"spec,omitempty"`
 }
 
 // CreateProjectRequest defines model for CreateProjectRequest.
@@ -2805,69 +2704,62 @@ type CreateSessionMessageRequestType string
 
 // CreateSessionRequest defines model for CreateSessionRequest.
 type CreateSessionRequest struct {
-	AgentId       string                  `json:"agentId"`
-	Env           *map[string]string      `json:"env,omitempty"`
-	EnvFrom       *[]EnvFromEntry         `json:"envFrom,omitempty"`
-	EnvironmentId *string                 `json:"environmentId,omitempty"`
-	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
-	Name          *string                 `json:"name,omitempty"`
-	Prompt        string                  `json:"prompt"`
-	Runtime       Runtime                 `json:"runtime"`
-	RuntimeConfig *map[string]interface{} `json:"runtimeConfig,omitempty"`
-	VolumeMounts  *[]VolumeMount          `json:"volumeMounts,omitempty"`
-	Volumes       *[]Volume               `json:"volumes,omitempty"`
+	Metadata *SessionCreateMetadata `json:"metadata,omitempty"`
+	Prompt   string                 `json:"prompt"`
+	Spec     ExecutionSpecInput     `json:"spec"`
 }
 
 // CreateTriggerRequest defines model for CreateTriggerRequest.
 type CreateTriggerRequest struct {
-	Name      string                      `json:"name"`
-	NextDueAt *time.Time                  `json:"nextDueAt,omitempty"`
-	Source    CreateTriggerRequest_Source `json:"source"`
-	Suspend   *bool                       `json:"suspend,omitempty"`
-	Template  struct {
-		Metadata *struct {
-			Annotations *map[string]string `json:"annotations,omitempty"`
-			Labels      *map[string]string `json:"labels,omitempty"`
-		} `json:"metadata,omitempty"`
-		Spec struct {
-			AgentId        string             `json:"agentId"`
-			Env            *map[string]string `json:"env,omitempty"`
-			EnvFrom        *[]EnvFromEntry    `json:"envFrom,omitempty"`
-			EnvironmentId  *string            `json:"environmentId,omitempty"`
-			PromptTemplate string             `json:"promptTemplate"`
-			Runtime        Runtime            `json:"runtime"`
-			VolumeMounts   *[]VolumeMount     `json:"volumeMounts,omitempty"`
-			Volumes        *[]Volume          `json:"volumes,omitempty"`
-		} `json:"spec"`
-	} `json:"template"`
+	Metadata TriggerCreateMetadata `json:"metadata"`
+	Spec     struct {
+		Source   CreateTriggerRequest_Spec_Source `json:"source"`
+		Suspend  *bool                            `json:"suspend,omitempty"`
+		Template struct {
+			Metadata *struct {
+				Annotations *map[string]string `json:"annotations,omitempty"`
+				Labels      *map[string]string `json:"labels,omitempty"`
+			} `json:"metadata,omitempty"`
+			Spec struct {
+				AgentId        string          `json:"agentId"`
+				Env            *ExecutionEnv   `json:"env,omitempty"`
+				EnvFrom        *[]EnvFromEntry `json:"envFrom,omitempty"`
+				EnvironmentId  *string         `json:"environmentId,omitempty"`
+				PromptTemplate string          `json:"promptTemplate"`
+				Runtime        Runtime         `json:"runtime"`
+				VolumeMounts   *[]VolumeMount  `json:"volumeMounts,omitempty"`
+				Volumes        *[]Volume       `json:"volumes,omitempty"`
+			} `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
 }
 
-// CreateTriggerRequestSource0 defines model for .
-type CreateTriggerRequestSource0 struct {
+// CreateTriggerRequestSpecSource0 defines model for .
+type CreateTriggerRequestSpecSource0 struct {
 	Schedule struct {
-		IntervalSeconds int                                      `json:"intervalSeconds"`
-		Type            *CreateTriggerRequestSource0ScheduleType `json:"type,omitempty"`
-		WindowSeconds   *int                                     `json:"windowSeconds,omitempty"`
+		IntervalSeconds int                                          `json:"intervalSeconds"`
+		Type            *CreateTriggerRequestSpecSource0ScheduleType `json:"type,omitempty"`
+		WindowSeconds   *int                                         `json:"windowSeconds,omitempty"`
 	} `json:"schedule"`
-	Type CreateTriggerRequestSource0Type `json:"type"`
+	Type CreateTriggerRequestSpecSource0Type `json:"type"`
 }
 
-// CreateTriggerRequestSource0ScheduleType defines model for CreateTriggerRequest.Source.0.Schedule.Type.
-type CreateTriggerRequestSource0ScheduleType string
+// CreateTriggerRequestSpecSource0ScheduleType defines model for CreateTriggerRequest.Spec.Source.0.Schedule.Type.
+type CreateTriggerRequestSpecSource0ScheduleType string
 
-// CreateTriggerRequestSource0Type defines model for CreateTriggerRequest.Source.0.Type.
-type CreateTriggerRequestSource0Type string
+// CreateTriggerRequestSpecSource0Type defines model for CreateTriggerRequest.Spec.Source.0.Type.
+type CreateTriggerRequestSpecSource0Type string
 
-// CreateTriggerRequestSource1 defines model for .
-type CreateTriggerRequestSource1 struct {
-	Type CreateTriggerRequestSource1Type `json:"type"`
+// CreateTriggerRequestSpecSource1 defines model for .
+type CreateTriggerRequestSpecSource1 struct {
+	Type CreateTriggerRequestSpecSource1Type `json:"type"`
 }
 
-// CreateTriggerRequestSource1Type defines model for CreateTriggerRequest.Source.1.Type.
-type CreateTriggerRequestSource1Type string
+// CreateTriggerRequestSpecSource1Type defines model for CreateTriggerRequest.Spec.Source.1.Type.
+type CreateTriggerRequestSpecSource1Type string
 
-// CreateTriggerRequest_Source defines model for CreateTriggerRequest.Source.
-type CreateTriggerRequest_Source struct {
+// CreateTriggerRequest_Spec_Source defines model for CreateTriggerRequest.Spec.Source.
+type CreateTriggerRequest_Spec_Source struct {
 	union json.RawMessage
 }
 
@@ -2895,14 +2787,18 @@ type CreateVaultCredentialVersionRequest struct {
 
 // CreateVaultRequest defines model for CreateVaultRequest.
 type CreateVaultRequest struct {
-	Description *string                  `json:"description,omitempty"`
-	Metadata    *map[string]interface{}  `json:"metadata,omitempty"`
-	Name        string                   `json:"name"`
-	Scope       *CreateVaultRequestScope `json:"scope,omitempty"`
+	Metadata struct {
+		// Embedded struct due to allOf(#/components/schemas/ResourceCreateMetadata)
+		ResourceCreateMetadata `yaml:",inline"`
+		// Embedded fields due to inline allOf schema
+	} `json:"metadata"`
+	Spec struct {
+		Scope *CreateVaultRequestSpecScope `json:"scope,omitempty"`
+	} `json:"spec"`
 }
 
-// CreateVaultRequestScope defines model for CreateVaultRequest.Scope.
-type CreateVaultRequestScope string
+// CreateVaultRequestSpecScope defines model for CreateVaultRequest.Spec.Scope.
+type CreateVaultRequestSpecScope string
 
 // EnvFromEntry defines model for EnvFromEntry.
 type EnvFromEntry struct {
@@ -3010,6 +2906,20 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
+// ExecutionEnv defines model for ExecutionEnv.
+type ExecutionEnv map[string]string
+
+// ExecutionSpecInput defines model for ExecutionSpecInput.
+type ExecutionSpecInput struct {
+	AgentId       string          `json:"agentId"`
+	Env           *ExecutionEnv   `json:"env,omitempty"`
+	EnvFrom       *[]EnvFromEntry `json:"envFrom,omitempty"`
+	EnvironmentId *string         `json:"environmentId,omitempty"`
+	Runtime       Runtime         `json:"runtime"`
+	VolumeMounts  *[]VolumeMount  `json:"volumeMounts,omitempty"`
+	Volumes       *[]Volume       `json:"volumes,omitempty"`
+}
+
 // GitRepositoryVolume defines model for GitRepositoryVolume.
 type GitRepositoryVolume struct {
 	Name      string                  `json:"name"`
@@ -3108,9 +3018,7 @@ type MemoryStoreMemoryStatus struct {
 }
 
 // MemoryStoreSpec defines model for MemoryStoreSpec.
-type MemoryStoreSpec struct {
-	Metadata map[string]*interface{} `json:"metadata"`
-}
+type MemoryStoreSpec = map[string]interface{}
 
 // MemoryStoreStatus defines model for MemoryStoreStatus.
 type MemoryStoreStatus struct {
@@ -3253,10 +3161,10 @@ type PutRunnerHeartbeatRequest struct {
 // PutRunnerHeartbeatRequestState defines model for PutRunnerHeartbeatRequest.State.
 type PutRunnerHeartbeatRequestState string
 
-// ReplaceAgentMemoryRequest defines model for ReplaceAgentMemoryRequest.
-type ReplaceAgentMemoryRequest struct {
-	Content  string                  `json:"content"`
-	Metadata *map[string]interface{} `json:"metadata,omitempty"`
+// ResourceCreateMetadata defines model for ResourceCreateMetadata.
+type ResourceCreateMetadata struct {
+	Description *string `json:"description,omitempty"`
+	Name        string  `json:"name"`
 }
 
 // ResourceMetadata defines model for ResourceMetadata.
@@ -3268,13 +3176,19 @@ type ResourceMetadata struct {
 	Description *string           `json:"description"`
 	Labels      map[string]string `json:"labels"`
 	Name        string            `json:"name"`
-	Pid         *string           `json:"pid"`
+	ProjectId   *string           `json:"projectId"`
 	Uid         string            `json:"uid"`
 	UpdatedAt   time.Time         `json:"updatedAt"`
 }
 
 // ResourcePhase defines model for ResourcePhase.
 type ResourcePhase string
+
+// ResourceUpdateMetadata defines model for ResourceUpdateMetadata.
+type ResourceUpdateMetadata struct {
+	Description *string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+}
 
 // Runner defines model for Runner.
 type Runner struct {
@@ -3539,30 +3453,18 @@ type SessionAbortFrameType string
 
 // SessionAgentSnapshot defines model for SessionAgentSnapshot.
 type SessionAgentSnapshot struct {
-	AgentId   string    `json:"agentId"`
-	CreatedAt time.Time `json:"createdAt"`
-	Handoff   struct {
-		Accepts struct {
-			Capabilities []string `json:"capabilities"`
-			Roles        []string `json:"roles"`
-		} `json:"accepts"`
-		Enabled bool `json:"enabled"`
-		Targets []struct {
-			Capability *string `json:"capability,omitempty"`
-			Role       *string `json:"role,omitempty"`
-		} `json:"targets"`
-	} `json:"handoff"`
-	Id            string                   `json:"id"`
-	McpConnectors []string                 `json:"mcpConnectors"`
-	Model         *string                  `json:"model"`
-	ProjectId     string                   `json:"projectId"`
-	Provider      string                   `json:"provider"`
-	Role          *string                  `json:"role"`
-	Skills        []string                 `json:"skills"`
-	Subagents     []map[string]interface{} `json:"subagents"`
-	SystemPrompt  *string                  `json:"systemPrompt"`
-	Tools         []map[string]interface{} `json:"tools"`
-	Version       int                      `json:"version"`
+	AgentId       string            `json:"agentId"`
+	AllowedTools  []string          `json:"allowedTools"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	Id            string            `json:"id"`
+	McpConnectors []string          `json:"mcpConnectors"`
+	Model         *string           `json:"model"`
+	ProjectId     string            `json:"projectId"`
+	Provider      string            `json:"provider"`
+	Skills        []string          `json:"skills"`
+	Subagents     []SessionSubagent `json:"subagents"`
+	SystemPrompt  string            `json:"systemPrompt"`
+	Version       int               `json:"version"`
 }
 
 // SessionApproval defines model for SessionApproval.
@@ -3693,6 +3595,13 @@ type SessionConnection struct {
 // SessionConnectionState defines model for SessionConnection.State.
 type SessionConnectionState string
 
+// SessionCreateMetadata defines model for SessionCreateMetadata.
+type SessionCreateMetadata struct {
+	Annotations *map[string]string `json:"annotations,omitempty"`
+	Labels      *map[string]string `json:"labels,omitempty"`
+	Name        *string            `json:"name,omitempty"`
+}
+
 // SessionEnvironmentJsonObject defines model for SessionEnvironmentJsonObject.
 type SessionEnvironmentJsonObject map[string]interface{}
 
@@ -3799,20 +3708,18 @@ type SessionMetadata struct {
 	ArchivedAt  *time.Time        `json:"archivedAt"`
 	CreatedAt   time.Time         `json:"createdAt"`
 	CreatedBy   *string           `json:"createdBy"`
+	Description *string           `json:"description"`
 	Labels      map[string]string `json:"labels"`
 	Name        string            `json:"name"`
-	Pid         string            `json:"pid"`
+	ProjectId   *string           `json:"projectId"`
 	Uid         string            `json:"uid"`
 	UpdatedAt   time.Time         `json:"updatedAt"`
 }
 
 // SessionPlacement defines model for SessionPlacement.
 type SessionPlacement struct {
-	Backend     *string                `json:"backend"`
-	Driver      *string                `json:"driver"`
 	HostingMode EnvironmentHostingMode `json:"hostingMode"`
 	Model       *string                `json:"model"`
-	Protocol    *string                `json:"protocol"`
 	Provider    string                 `json:"provider"`
 }
 
@@ -3836,13 +3743,13 @@ type SessionRunnerUnavailableType string
 
 // SessionSpec defines model for SessionSpec.
 type SessionSpec struct {
-	AgentId       string            `json:"agentId"`
-	Env           map[string]string `json:"env"`
-	EnvFrom       []EnvFromEntry    `json:"envFrom"`
-	EnvironmentId *string           `json:"environmentId"`
-	Runtime       Runtime           `json:"runtime"`
-	VolumeMounts  []VolumeMount     `json:"volumeMounts"`
-	Volumes       []Volume          `json:"volumes"`
+	AgentId       string         `json:"agentId"`
+	Env           ExecutionEnv   `json:"env"`
+	EnvFrom       []EnvFromEntry `json:"envFrom"`
+	EnvironmentId *string        `json:"environmentId"`
+	Runtime       Runtime        `json:"runtime"`
+	VolumeMounts  []VolumeMount  `json:"volumeMounts"`
+	Volumes       []Volume       `json:"volumes"`
 }
 
 // SessionStatus defines model for SessionStatus.
@@ -3868,11 +3775,34 @@ type SessionSteerFrame struct {
 // SessionSteerFrameType defines model for SessionSteerFrame.Type.
 type SessionSteerFrameType string
 
+// SessionSubagent defines model for SessionSubagent.
+type SessionSubagent struct {
+	AllowedTools  []string `json:"allowedTools"`
+	Description   string   `json:"description"`
+	McpConnectors []string `json:"mcpConnectors"`
+	Model         *string  `json:"model"`
+	Name          string   `json:"name"`
+	Skills        []string `json:"skills"`
+	SystemPrompt  string   `json:"systemPrompt"`
+}
+
+// SessionUpdateMetadata defines model for SessionUpdateMetadata.
+type SessionUpdateMetadata struct {
+	Annotations *map[string]string `json:"annotations,omitempty"`
+	Labels      *map[string]string `json:"labels,omitempty"`
+	Name        *string            `json:"name,omitempty"`
+}
+
 // Trigger defines model for Trigger.
 type Trigger struct {
 	Metadata ResourceMetadata `json:"metadata"`
 	Spec     TriggerSpec      `json:"spec"`
 	Status   TriggerStatus    `json:"status"`
+}
+
+// TriggerCreateMetadata defines model for TriggerCreateMetadata.
+type TriggerCreateMetadata struct {
+	Name string `json:"name"`
 }
 
 // TriggerListResponse defines model for TriggerListResponse.
@@ -3896,20 +3826,20 @@ type TriggerRunListResponse struct {
 
 // TriggerRunSpec defines model for TriggerRunSpec.
 type TriggerRunSpec struct {
-	CorrelationId  string                 `json:"correlationId"`
-	IdempotencyKey string                 `json:"idempotencyKey"`
-	Metadata       map[string]interface{} `json:"metadata"`
-	ScheduledFor   *time.Time             `json:"scheduledFor"`
-	TriggerId      string                 `json:"triggerId"`
+	Metadata     map[string]interface{} `json:"metadata"`
+	ScheduledFor *time.Time             `json:"scheduledFor"`
+	TriggerId    string                 `json:"triggerId"`
 }
 
 // TriggerRunStatus defines model for TriggerRunStatus.
 type TriggerRunStatus struct {
-	ErrorMessage *string               `json:"errorMessage"`
-	HeartbeatAt  *time.Time            `json:"heartbeatAt"`
-	Phase        TriggerRunStatusPhase `json:"phase"`
-	SessionId    *string               `json:"sessionId"`
-	TriggeredAt  time.Time             `json:"triggeredAt"`
+	CorrelationId  string                `json:"correlationId"`
+	ErrorMessage   *string               `json:"errorMessage"`
+	HeartbeatAt    *time.Time            `json:"heartbeatAt"`
+	IdempotencyKey string                `json:"idempotencyKey"`
+	Phase          TriggerRunStatusPhase `json:"phase"`
+	SessionId      *string               `json:"sessionId"`
+	TriggeredAt    time.Time             `json:"triggeredAt"`
 }
 
 // TriggerRunStatusPhase defines model for TriggerRunStatus.Phase.
@@ -3976,31 +3906,35 @@ type TriggerTemplateMetadata struct {
 
 // TriggerTemplateSpec defines model for TriggerTemplateSpec.
 type TriggerTemplateSpec struct {
-	AgentId        string            `json:"agentId"`
-	Env            map[string]string `json:"env"`
-	EnvFrom        []EnvFromEntry    `json:"envFrom"`
-	EnvironmentId  *string           `json:"environmentId"`
-	PromptTemplate string            `json:"promptTemplate"`
-	Runtime        Runtime           `json:"runtime"`
-	VolumeMounts   []VolumeMount     `json:"volumeMounts"`
-	Volumes        []Volume          `json:"volumes"`
+	AgentId        string         `json:"agentId"`
+	Env            ExecutionEnv   `json:"env"`
+	EnvFrom        []EnvFromEntry `json:"envFrom"`
+	EnvironmentId  *string        `json:"environmentId"`
+	PromptTemplate string         `json:"promptTemplate"`
+	Runtime        Runtime        `json:"runtime"`
+	VolumeMounts   []VolumeMount  `json:"volumeMounts"`
+	Volumes        []Volume       `json:"volumes"`
+}
+
+// TriggerUpdateMetadata defines model for TriggerUpdateMetadata.
+type TriggerUpdateMetadata struct {
+	Name *string `json:"name,omitempty"`
 }
 
 // UpdateAgentRequest defines model for UpdateAgentRequest.
 type UpdateAgentRequest struct {
 	// Archived Lifecycle transition: true archives the agent, false unarchives it.
-	Archived      *bool                       `json:"archived,omitempty"`
-	Description   *string                     `json:"description,omitempty"`
-	Handoff       *AgentHandoff               `json:"handoff,omitempty"`
-	McpConnectors *[]string                   `json:"mcpConnectors,omitempty"`
-	Model         *string                     `json:"model,omitempty"`
-	Name          *string                     `json:"name,omitempty"`
-	Provider      *string                     `json:"provider,omitempty"`
-	Role          *string                     `json:"role,omitempty"`
-	Skills        *[]string                   `json:"skills,omitempty"`
-	Subagents     *[]AgentSubagent            `json:"subagents,omitempty"`
-	SystemPrompt  *string                     `json:"systemPrompt,omitempty"`
-	Tools         *[]AgentToolAttachmentInput `json:"tools,omitempty"`
+	Archived *bool                   `json:"archived,omitempty"`
+	Metadata *ResourceUpdateMetadata `json:"metadata,omitempty"`
+	Spec     *struct {
+		AllowedTools  *[]string             `json:"allowedTools,omitempty"`
+		McpConnectors *[]string             `json:"mcpConnectors,omitempty"`
+		Model         *string               `json:"model,omitempty"`
+		Provider      *string               `json:"provider,omitempty"`
+		Skills        *[]string             `json:"skills,omitempty"`
+		Subagents     *[]AgentSubagentInput `json:"subagents,omitempty"`
+		SystemPrompt  *string               `json:"systemPrompt,omitempty"`
+	} `json:"spec,omitempty"`
 }
 
 // UpdateBudgetRequest defines model for UpdateBudgetRequest.
@@ -4017,17 +3951,18 @@ type UpdateBudgetRequestWindow string
 // UpdateEnvironmentRequest defines model for UpdateEnvironmentRequest.
 type UpdateEnvironmentRequest struct {
 	// Archived Lifecycle transition: true archives the environment, false unarchives it.
-	Archived    *bool                  `json:"archived,omitempty"`
-	Description *string                `json:"description,omitempty"`
-	Name        *string                `json:"name,omitempty"`
-	Networking  *EnvironmentNetworking `json:"networking,omitempty"`
-	Packages    *EnvironmentPackages   `json:"packages,omitempty"`
-	Scope       *EnvironmentScope      `json:"scope,omitempty"`
-	Type        *EnvironmentType       `json:"type,omitempty"`
-	Variables   *map[string]struct {
-		Description *string `json:"description,omitempty"`
-		Required    *bool   `json:"required,omitempty"`
-	} `json:"variables,omitempty"`
+	Archived *bool                   `json:"archived,omitempty"`
+	Metadata *ResourceUpdateMetadata `json:"metadata,omitempty"`
+	Spec     *struct {
+		Networking *EnvironmentNetworking `json:"networking,omitempty"`
+		Packages   *EnvironmentPackages   `json:"packages,omitempty"`
+		Scope      *EnvironmentScope      `json:"scope,omitempty"`
+		Type       *EnvironmentType       `json:"type,omitempty"`
+		Variables  *map[string]struct {
+			Description *string `json:"description,omitempty"`
+			Required    *bool   `json:"required,omitempty"`
+		} `json:"variables,omitempty"`
+	} `json:"spec,omitempty"`
 }
 
 // UpdateLeaseRequest defines model for UpdateLeaseRequest.
@@ -4054,10 +3989,9 @@ type UpdateMemoryStoreMemoryRequest struct {
 
 // UpdateMemoryStoreRequest defines model for UpdateMemoryStoreRequest.
 type UpdateMemoryStoreRequest struct {
-	Archived    *bool                    `json:"archived,omitempty"`
-	Description *string                  `json:"description,omitempty"`
-	Metadata    *map[string]*interface{} `json:"metadata,omitempty"`
-	Name        *string                  `json:"name,omitempty"`
+	Archived *bool                   `json:"archived,omitempty"`
+	Metadata *ResourceUpdateMetadata `json:"metadata,omitempty"`
+	Spec     *map[string]interface{} `json:"spec,omitempty"`
 }
 
 // UpdateRunnerRequest defines model for UpdateRunnerRequest.
@@ -4076,8 +4010,7 @@ type UpdateRunnerRequestState string
 // UpdateSessionRequest defines model for UpdateSessionRequest.
 type UpdateSessionRequest struct {
 	Archived *bool                      `json:"archived,omitempty"`
-	Metadata *map[string]interface{}    `json:"metadata,omitempty"`
-	Name     *string                    `json:"name,omitempty"`
+	Metadata *SessionUpdateMetadata     `json:"metadata,omitempty"`
 	State    *UpdateSessionRequestState `json:"state,omitempty"`
 }
 
@@ -4086,55 +4019,56 @@ type UpdateSessionRequestState string
 
 // UpdateTriggerRequest defines model for UpdateTriggerRequest.
 type UpdateTriggerRequest struct {
-	Archived  *bool                        `json:"archived,omitempty"`
-	Name      *string                      `json:"name,omitempty"`
-	NextDueAt *time.Time                   `json:"nextDueAt,omitempty"`
-	Source    *UpdateTriggerRequest_Source `json:"source,omitempty"`
-	Suspend   *bool                        `json:"suspend,omitempty"`
-	Template  *struct {
-		Metadata *struct {
-			Annotations *map[string]string `json:"annotations,omitempty"`
-			Labels      *map[string]string `json:"labels,omitempty"`
-		} `json:"metadata,omitempty"`
-		Spec *struct {
-			AgentId        *string            `json:"agentId,omitempty"`
-			Env            *map[string]string `json:"env,omitempty"`
-			EnvFrom        *[]EnvFromEntry    `json:"envFrom,omitempty"`
-			EnvironmentId  *string            `json:"environmentId,omitempty"`
-			PromptTemplate *string            `json:"promptTemplate,omitempty"`
-			Runtime        *Runtime           `json:"runtime,omitempty"`
-			VolumeMounts   *[]VolumeMount     `json:"volumeMounts,omitempty"`
-			Volumes        *[]Volume          `json:"volumes,omitempty"`
-		} `json:"spec,omitempty"`
-	} `json:"template,omitempty"`
+	Archived *bool                  `json:"archived,omitempty"`
+	Metadata *TriggerUpdateMetadata `json:"metadata,omitempty"`
+	Spec     *struct {
+		Source   *UpdateTriggerRequest_Spec_Source `json:"source,omitempty"`
+		Suspend  *bool                             `json:"suspend,omitempty"`
+		Template *struct {
+			Metadata *struct {
+				Annotations *map[string]string `json:"annotations,omitempty"`
+				Labels      *map[string]string `json:"labels,omitempty"`
+			} `json:"metadata,omitempty"`
+			Spec *struct {
+				AgentId        *string         `json:"agentId,omitempty"`
+				Env            *ExecutionEnv   `json:"env,omitempty"`
+				EnvFrom        *[]EnvFromEntry `json:"envFrom,omitempty"`
+				EnvironmentId  *string         `json:"environmentId,omitempty"`
+				PromptTemplate *string         `json:"promptTemplate,omitempty"`
+				Runtime        *Runtime        `json:"runtime,omitempty"`
+				VolumeMounts   *[]VolumeMount  `json:"volumeMounts,omitempty"`
+				Volumes        *[]Volume       `json:"volumes,omitempty"`
+			} `json:"spec,omitempty"`
+		} `json:"template,omitempty"`
+	} `json:"spec,omitempty"`
 }
 
-// UpdateTriggerRequestSource0 defines model for .
-type UpdateTriggerRequestSource0 struct {
-	Schedule *struct {
-		IntervalSeconds *int                                     `json:"intervalSeconds,omitempty"`
-		Type            *UpdateTriggerRequestSource0ScheduleType `json:"type,omitempty"`
-		WindowSeconds   *int                                     `json:"windowSeconds,omitempty"`
-	} `json:"schedule,omitempty"`
-	Type UpdateTriggerRequestSource0Type `json:"type"`
+// UpdateTriggerRequestSpecSource0 defines model for .
+type UpdateTriggerRequestSpecSource0 struct {
+	Schedule struct {
+		IntervalSeconds int                                          `json:"intervalSeconds"`
+		Type            *UpdateTriggerRequestSpecSource0ScheduleType `json:"type,omitempty"`
+		WindowSeconds   *int                                         `json:"windowSeconds,omitempty"`
+	} `json:"schedule"`
+	Type UpdateTriggerRequestSpecSource0Type `json:"type"`
 }
 
-// UpdateTriggerRequestSource0ScheduleType defines model for UpdateTriggerRequest.Source.0.Schedule.Type.
-type UpdateTriggerRequestSource0ScheduleType string
+// UpdateTriggerRequestSpecSource0ScheduleType defines model for UpdateTriggerRequest.Spec.Source.0.Schedule.Type.
+type UpdateTriggerRequestSpecSource0ScheduleType string
 
-// UpdateTriggerRequestSource0Type defines model for UpdateTriggerRequest.Source.0.Type.
-type UpdateTriggerRequestSource0Type string
+// UpdateTriggerRequestSpecSource0Type defines model for UpdateTriggerRequest.Spec.Source.0.Type.
+type UpdateTriggerRequestSpecSource0Type string
 
-// UpdateTriggerRequestSource1 defines model for .
-type UpdateTriggerRequestSource1 struct {
-	Type UpdateTriggerRequestSource1Type `json:"type"`
+// UpdateTriggerRequestSpecSource1 defines model for .
+type UpdateTriggerRequestSpecSource1 struct {
+	Type UpdateTriggerRequestSpecSource1Type `json:"type"`
 }
 
-// UpdateTriggerRequestSource1Type defines model for UpdateTriggerRequest.Source.1.Type.
-type UpdateTriggerRequestSource1Type string
+// UpdateTriggerRequestSpecSource1Type defines model for UpdateTriggerRequest.Spec.Source.1.Type.
+type UpdateTriggerRequestSpecSource1Type string
 
-// UpdateTriggerRequest_Source defines model for UpdateTriggerRequest.Source.
-type UpdateTriggerRequest_Source struct {
+// UpdateTriggerRequest_Spec_Source defines model for UpdateTriggerRequest.Spec.Source.
+type UpdateTriggerRequest_Spec_Source struct {
 	union json.RawMessage
 }
 
@@ -4150,15 +4084,15 @@ type UpdateVaultCredentialRequestState string
 
 // UpdateVaultRequest defines model for UpdateVaultRequest.
 type UpdateVaultRequest struct {
-	Archived    *bool                    `json:"archived,omitempty"`
-	Description *string                  `json:"description,omitempty"`
-	Metadata    *map[string]interface{}  `json:"metadata,omitempty"`
-	Name        *string                  `json:"name,omitempty"`
-	Scope       *UpdateVaultRequestScope `json:"scope,omitempty"`
+	Archived *bool                   `json:"archived,omitempty"`
+	Metadata *ResourceUpdateMetadata `json:"metadata,omitempty"`
+	Spec     *struct {
+		Scope *UpdateVaultRequestSpecScope `json:"scope,omitempty"`
+	} `json:"spec,omitempty"`
 }
 
-// UpdateVaultRequestScope defines model for UpdateVaultRequest.Scope.
-type UpdateVaultRequestScope string
+// UpdateVaultRequestSpecScope defines model for UpdateVaultRequest.Spec.Scope.
+type UpdateVaultRequestSpecScope string
 
 // UsageRecord defines model for UsageRecord.
 type UsageRecord struct {
@@ -4323,9 +4257,8 @@ type VaultListResponse struct {
 
 // VaultSpec defines model for VaultSpec.
 type VaultSpec struct {
-	Metadata       map[string]interface{} `json:"metadata"`
-	OrganizationId string                 `json:"organizationId"`
-	Scope          VaultSpecScope         `json:"scope"`
+	OrganizationId string         `json:"organizationId"`
+	Scope          VaultSpecScope `json:"scope"`
 }
 
 // VaultSpecScope defines model for VaultSpec.Scope.
@@ -4394,12 +4327,6 @@ type ListAgentsParams struct {
 
 // ListAgentsParamsArchived defines parameters for ListAgents.
 type ListAgentsParamsArchived string
-
-// ListAgentHandoffCandidatesParams defines parameters for ListAgentHandoffCandidates.
-type ListAgentHandoffCandidatesParams struct {
-	Role       *string `form:"role,omitempty" json:"role,omitempty"`
-	Capability *string `form:"capability,omitempty" json:"capability,omitempty"`
-}
 
 // ListAuditRecordsParams defines parameters for ListAuditRecords.
 type ListAuditRecordsParams struct {
@@ -4664,9 +4591,6 @@ type CreateAgentJSONRequestBody = CreateAgentRequest
 // UpdateAgentJSONRequestBody defines body for UpdateAgent for application/json ContentType.
 type UpdateAgentJSONRequestBody = UpdateAgentRequest
 
-// ReplaceAgentMemoryJSONRequestBody defines body for ReplaceAgentMemory for application/json ContentType.
-type ReplaceAgentMemoryJSONRequestBody = ReplaceAgentMemoryRequest
-
 // CreateAuthSessionJSONRequestBody defines body for CreateAuthSession for application/json ContentType.
 type CreateAuthSessionJSONRequestBody = CreateAuthSessionRequest
 
@@ -4751,89 +4675,6 @@ type UpdateVaultCredentialJSONRequestBody = UpdateVaultCredentialRequest
 // CreateVaultCredentialVersionJSONRequestBody defines body for CreateVaultCredentialVersion for application/json ContentType.
 type CreateVaultCredentialVersionJSONRequestBody = CreateVaultCredentialVersionRequest
 
-// Getter for additional properties for AgentSubagent. Returns the specified
-// element and whether it was found
-func (a AgentSubagent) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for AgentSubagent
-func (a *AgentSubagent) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for AgentSubagent to handle AdditionalProperties
-func (a *AgentSubagent) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["role"]; found {
-		err = json.Unmarshal(raw, &a.Role)
-		if err != nil {
-			return fmt.Errorf("error reading 'role': %w", err)
-		}
-		delete(object, "role")
-	}
-
-	if raw, found := object["username"]; found {
-		err = json.Unmarshal(raw, &a.Username)
-		if err != nil {
-			return fmt.Errorf("error reading 'username': %w", err)
-		}
-		delete(object, "username")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for AgentSubagent to handle AdditionalProperties
-func (a AgentSubagent) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.Role != nil {
-		object["role"], err = json.Marshal(a.Role)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'role': %w", err)
-		}
-	}
-
-	if a.Username != nil {
-		object["username"], err = json.Marshal(a.Username)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'username': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
 // Getter for additional properties for ProviderModelPricing. Returns the specified
 // element and whether it was found
 func (a ProviderModelPricing) Get(fieldName string) (value interface{}, found bool) {
@@ -4917,22 +4758,22 @@ func (a ProviderModelPricing) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
-// AsCreateTriggerRequestSource0 returns the union data inside the CreateTriggerRequest_Source as a CreateTriggerRequestSource0
-func (t CreateTriggerRequest_Source) AsCreateTriggerRequestSource0() (CreateTriggerRequestSource0, error) {
-	var body CreateTriggerRequestSource0
+// AsCreateTriggerRequestSpecSource0 returns the union data inside the CreateTriggerRequest_Spec_Source as a CreateTriggerRequestSpecSource0
+func (t CreateTriggerRequest_Spec_Source) AsCreateTriggerRequestSpecSource0() (CreateTriggerRequestSpecSource0, error) {
+	var body CreateTriggerRequestSpecSource0
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromCreateTriggerRequestSource0 overwrites any union data inside the CreateTriggerRequest_Source as the provided CreateTriggerRequestSource0
-func (t *CreateTriggerRequest_Source) FromCreateTriggerRequestSource0(v CreateTriggerRequestSource0) error {
+// FromCreateTriggerRequestSpecSource0 overwrites any union data inside the CreateTriggerRequest_Spec_Source as the provided CreateTriggerRequestSpecSource0
+func (t *CreateTriggerRequest_Spec_Source) FromCreateTriggerRequestSpecSource0(v CreateTriggerRequestSpecSource0) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeCreateTriggerRequestSource0 performs a merge with any union data inside the CreateTriggerRequest_Source, using the provided CreateTriggerRequestSource0
-func (t *CreateTriggerRequest_Source) MergeCreateTriggerRequestSource0(v CreateTriggerRequestSource0) error {
+// MergeCreateTriggerRequestSpecSource0 performs a merge with any union data inside the CreateTriggerRequest_Spec_Source, using the provided CreateTriggerRequestSpecSource0
+func (t *CreateTriggerRequest_Spec_Source) MergeCreateTriggerRequestSpecSource0(v CreateTriggerRequestSpecSource0) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4943,22 +4784,22 @@ func (t *CreateTriggerRequest_Source) MergeCreateTriggerRequestSource0(v CreateT
 	return err
 }
 
-// AsCreateTriggerRequestSource1 returns the union data inside the CreateTriggerRequest_Source as a CreateTriggerRequestSource1
-func (t CreateTriggerRequest_Source) AsCreateTriggerRequestSource1() (CreateTriggerRequestSource1, error) {
-	var body CreateTriggerRequestSource1
+// AsCreateTriggerRequestSpecSource1 returns the union data inside the CreateTriggerRequest_Spec_Source as a CreateTriggerRequestSpecSource1
+func (t CreateTriggerRequest_Spec_Source) AsCreateTriggerRequestSpecSource1() (CreateTriggerRequestSpecSource1, error) {
+	var body CreateTriggerRequestSpecSource1
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromCreateTriggerRequestSource1 overwrites any union data inside the CreateTriggerRequest_Source as the provided CreateTriggerRequestSource1
-func (t *CreateTriggerRequest_Source) FromCreateTriggerRequestSource1(v CreateTriggerRequestSource1) error {
+// FromCreateTriggerRequestSpecSource1 overwrites any union data inside the CreateTriggerRequest_Spec_Source as the provided CreateTriggerRequestSpecSource1
+func (t *CreateTriggerRequest_Spec_Source) FromCreateTriggerRequestSpecSource1(v CreateTriggerRequestSpecSource1) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeCreateTriggerRequestSource1 performs a merge with any union data inside the CreateTriggerRequest_Source, using the provided CreateTriggerRequestSource1
-func (t *CreateTriggerRequest_Source) MergeCreateTriggerRequestSource1(v CreateTriggerRequestSource1) error {
+// MergeCreateTriggerRequestSpecSource1 performs a merge with any union data inside the CreateTriggerRequest_Spec_Source, using the provided CreateTriggerRequestSpecSource1
+func (t *CreateTriggerRequest_Spec_Source) MergeCreateTriggerRequestSpecSource1(v CreateTriggerRequestSpecSource1) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -4969,12 +4810,12 @@ func (t *CreateTriggerRequest_Source) MergeCreateTriggerRequestSource1(v CreateT
 	return err
 }
 
-func (t CreateTriggerRequest_Source) MarshalJSON() ([]byte, error) {
+func (t CreateTriggerRequest_Spec_Source) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *CreateTriggerRequest_Source) UnmarshalJSON(b []byte) error {
+func (t *CreateTriggerRequest_Spec_Source) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -5220,22 +5061,22 @@ func (t *TriggerSource) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// AsUpdateTriggerRequestSource0 returns the union data inside the UpdateTriggerRequest_Source as a UpdateTriggerRequestSource0
-func (t UpdateTriggerRequest_Source) AsUpdateTriggerRequestSource0() (UpdateTriggerRequestSource0, error) {
-	var body UpdateTriggerRequestSource0
+// AsUpdateTriggerRequestSpecSource0 returns the union data inside the UpdateTriggerRequest_Spec_Source as a UpdateTriggerRequestSpecSource0
+func (t UpdateTriggerRequest_Spec_Source) AsUpdateTriggerRequestSpecSource0() (UpdateTriggerRequestSpecSource0, error) {
+	var body UpdateTriggerRequestSpecSource0
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromUpdateTriggerRequestSource0 overwrites any union data inside the UpdateTriggerRequest_Source as the provided UpdateTriggerRequestSource0
-func (t *UpdateTriggerRequest_Source) FromUpdateTriggerRequestSource0(v UpdateTriggerRequestSource0) error {
+// FromUpdateTriggerRequestSpecSource0 overwrites any union data inside the UpdateTriggerRequest_Spec_Source as the provided UpdateTriggerRequestSpecSource0
+func (t *UpdateTriggerRequest_Spec_Source) FromUpdateTriggerRequestSpecSource0(v UpdateTriggerRequestSpecSource0) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeUpdateTriggerRequestSource0 performs a merge with any union data inside the UpdateTriggerRequest_Source, using the provided UpdateTriggerRequestSource0
-func (t *UpdateTriggerRequest_Source) MergeUpdateTriggerRequestSource0(v UpdateTriggerRequestSource0) error {
+// MergeUpdateTriggerRequestSpecSource0 performs a merge with any union data inside the UpdateTriggerRequest_Spec_Source, using the provided UpdateTriggerRequestSpecSource0
+func (t *UpdateTriggerRequest_Spec_Source) MergeUpdateTriggerRequestSpecSource0(v UpdateTriggerRequestSpecSource0) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5246,22 +5087,22 @@ func (t *UpdateTriggerRequest_Source) MergeUpdateTriggerRequestSource0(v UpdateT
 	return err
 }
 
-// AsUpdateTriggerRequestSource1 returns the union data inside the UpdateTriggerRequest_Source as a UpdateTriggerRequestSource1
-func (t UpdateTriggerRequest_Source) AsUpdateTriggerRequestSource1() (UpdateTriggerRequestSource1, error) {
-	var body UpdateTriggerRequestSource1
+// AsUpdateTriggerRequestSpecSource1 returns the union data inside the UpdateTriggerRequest_Spec_Source as a UpdateTriggerRequestSpecSource1
+func (t UpdateTriggerRequest_Spec_Source) AsUpdateTriggerRequestSpecSource1() (UpdateTriggerRequestSpecSource1, error) {
+	var body UpdateTriggerRequestSpecSource1
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromUpdateTriggerRequestSource1 overwrites any union data inside the UpdateTriggerRequest_Source as the provided UpdateTriggerRequestSource1
-func (t *UpdateTriggerRequest_Source) FromUpdateTriggerRequestSource1(v UpdateTriggerRequestSource1) error {
+// FromUpdateTriggerRequestSpecSource1 overwrites any union data inside the UpdateTriggerRequest_Spec_Source as the provided UpdateTriggerRequestSpecSource1
+func (t *UpdateTriggerRequest_Spec_Source) FromUpdateTriggerRequestSpecSource1(v UpdateTriggerRequestSpecSource1) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeUpdateTriggerRequestSource1 performs a merge with any union data inside the UpdateTriggerRequest_Source, using the provided UpdateTriggerRequestSource1
-func (t *UpdateTriggerRequest_Source) MergeUpdateTriggerRequestSource1(v UpdateTriggerRequestSource1) error {
+// MergeUpdateTriggerRequestSpecSource1 performs a merge with any union data inside the UpdateTriggerRequest_Spec_Source, using the provided UpdateTriggerRequestSpecSource1
+func (t *UpdateTriggerRequest_Spec_Source) MergeUpdateTriggerRequestSpecSource1(v UpdateTriggerRequestSpecSource1) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -5272,12 +5113,12 @@ func (t *UpdateTriggerRequest_Source) MergeUpdateTriggerRequestSource1(v UpdateT
 	return err
 }
 
-func (t UpdateTriggerRequest_Source) MarshalJSON() ([]byte, error) {
+func (t UpdateTriggerRequest_Spec_Source) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *UpdateTriggerRequest_Source) UnmarshalJSON(b []byte) error {
+func (t *UpdateTriggerRequest_Spec_Source) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -5489,17 +5330,6 @@ type ClientInterface interface {
 	UpdateAgentWithBody(ctx context.Context, agentId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	UpdateAgent(ctx context.Context, agentId string, body UpdateAgentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListAgentHandoffCandidates request
-	ListAgentHandoffCandidates(ctx context.Context, agentId string, params *ListAgentHandoffCandidatesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReadAgentMemory request
-	ReadAgentMemory(ctx context.Context, agentId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReplaceAgentMemoryWithBody request with any body
-	ReplaceAgentMemoryWithBody(ctx context.Context, agentId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ReplaceAgentMemory(ctx context.Context, agentId string, body ReplaceAgentMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAgentVersions request
 	ListAgentVersions(ctx context.Context, agentId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5887,54 +5717,6 @@ func (c *APIClient) UpdateAgentWithBody(ctx context.Context, agentId string, con
 
 func (c *APIClient) UpdateAgent(ctx context.Context, agentId string, body UpdateAgentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateAgentRequest(c.Server, agentId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ListAgentHandoffCandidates(ctx context.Context, agentId string, params *ListAgentHandoffCandidatesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListAgentHandoffCandidatesRequest(c.Server, agentId, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReadAgentMemory(ctx context.Context, agentId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReadAgentMemoryRequest(c.Server, agentId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReplaceAgentMemoryWithBody(ctx context.Context, agentId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReplaceAgentMemoryRequestWithBody(c.Server, agentId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReplaceAgentMemory(ctx context.Context, agentId string, body ReplaceAgentMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReplaceAgentMemoryRequest(c.Server, agentId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -7575,160 +7357,6 @@ func NewUpdateAgentRequestWithBody(server string, agentId string, contentType st
 	}
 
 	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewListAgentHandoffCandidatesRequest generates requests for ListAgentHandoffCandidates
-func NewListAgentHandoffCandidatesRequest(server string, agentId string, params *ListAgentHandoffCandidatesParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agentId", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/%s/handoff-candidates", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.Role != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "role", *params.Role, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Capability != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "capability", *params.Capability, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewReadAgentMemoryRequest generates requests for ReadAgentMemory
-func NewReadAgentMemoryRequest(server string, agentId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agentId", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/%s/memory", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewReplaceAgentMemoryRequest calls the generic ReplaceAgentMemory builder with application/json body
-func NewReplaceAgentMemoryRequest(server string, agentId string, body ReplaceAgentMemoryJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewReplaceAgentMemoryRequestWithBody(server, agentId, "application/json", bodyReader)
-}
-
-// NewReplaceAgentMemoryRequestWithBody generates requests for ReplaceAgentMemory with any type of body
-func NewReplaceAgentMemoryRequestWithBody(server string, agentId string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "agentId", agentId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/agents/%s/memory", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -12719,17 +12347,6 @@ type ClientWithResponsesInterface interface {
 
 	UpdateAgentWithResponse(ctx context.Context, agentId string, body UpdateAgentJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAgentResponse, error)
 
-	// ListAgentHandoffCandidatesWithResponse request
-	ListAgentHandoffCandidatesWithResponse(ctx context.Context, agentId string, params *ListAgentHandoffCandidatesParams, reqEditors ...RequestEditorFn) (*ListAgentHandoffCandidatesResponse, error)
-
-	// ReadAgentMemoryWithResponse request
-	ReadAgentMemoryWithResponse(ctx context.Context, agentId string, reqEditors ...RequestEditorFn) (*ReadAgentMemoryResponse, error)
-
-	// ReplaceAgentMemoryWithBodyWithResponse request with any body
-	ReplaceAgentMemoryWithBodyWithResponse(ctx context.Context, agentId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceAgentMemoryResponse, error)
-
-	ReplaceAgentMemoryWithResponse(ctx context.Context, agentId string, body ReplaceAgentMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceAgentMemoryResponse, error)
-
 	// ListAgentVersionsWithResponse request
 	ListAgentVersionsWithResponse(ctx context.Context, agentId string, reqEditors ...RequestEditorFn) (*ListAgentVersionsResponse, error)
 
@@ -13178,106 +12795,6 @@ func (r UpdateAgentResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateAgentResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListAgentHandoffCandidatesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentHandoffCandidateListResponse
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ListAgentHandoffCandidatesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListAgentHandoffCandidatesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListAgentHandoffCandidatesResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReadAgentMemoryResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentMemory
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReadAgentMemoryResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReadAgentMemoryResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReadAgentMemoryResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReplaceAgentMemoryResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentMemory
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReplaceAgentMemoryResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReplaceAgentMemoryResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReplaceAgentMemoryResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16229,41 +15746,6 @@ func (c *ClientWithResponses) UpdateAgentWithResponse(ctx context.Context, agent
 	return ParseUpdateAgentResponse(rsp)
 }
 
-// ListAgentHandoffCandidatesWithResponse request returning *ListAgentHandoffCandidatesResponse
-func (c *ClientWithResponses) ListAgentHandoffCandidatesWithResponse(ctx context.Context, agentId string, params *ListAgentHandoffCandidatesParams, reqEditors ...RequestEditorFn) (*ListAgentHandoffCandidatesResponse, error) {
-	rsp, err := c.ListAgentHandoffCandidates(ctx, agentId, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListAgentHandoffCandidatesResponse(rsp)
-}
-
-// ReadAgentMemoryWithResponse request returning *ReadAgentMemoryResponse
-func (c *ClientWithResponses) ReadAgentMemoryWithResponse(ctx context.Context, agentId string, reqEditors ...RequestEditorFn) (*ReadAgentMemoryResponse, error) {
-	rsp, err := c.ReadAgentMemory(ctx, agentId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReadAgentMemoryResponse(rsp)
-}
-
-// ReplaceAgentMemoryWithBodyWithResponse request with arbitrary body returning *ReplaceAgentMemoryResponse
-func (c *ClientWithResponses) ReplaceAgentMemoryWithBodyWithResponse(ctx context.Context, agentId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceAgentMemoryResponse, error) {
-	rsp, err := c.ReplaceAgentMemoryWithBody(ctx, agentId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReplaceAgentMemoryResponse(rsp)
-}
-
-func (c *ClientWithResponses) ReplaceAgentMemoryWithResponse(ctx context.Context, agentId string, body ReplaceAgentMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceAgentMemoryResponse, error) {
-	rsp, err := c.ReplaceAgentMemory(ctx, agentId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReplaceAgentMemoryResponse(rsp)
-}
-
 // ListAgentVersionsWithResponse request returning *ListAgentVersionsResponse
 func (c *ClientWithResponses) ListAgentVersionsWithResponse(ctx context.Context, agentId string, reqEditors ...RequestEditorFn) (*ListAgentVersionsResponse, error) {
 	rsp, err := c.ListAgentVersions(ctx, agentId, reqEditors...)
@@ -17425,154 +16907,6 @@ func ParseUpdateAgentResponse(rsp *http.Response) (*UpdateAgentResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Agent
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListAgentHandoffCandidatesResponse parses an HTTP response from a ListAgentHandoffCandidatesWithResponse call
-func ParseListAgentHandoffCandidatesResponse(rsp *http.Response) (*ListAgentHandoffCandidatesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListAgentHandoffCandidatesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AgentHandoffCandidateListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReadAgentMemoryResponse parses an HTTP response from a ReadAgentMemoryWithResponse call
-func ParseReadAgentMemoryResponse(rsp *http.Response) (*ReadAgentMemoryResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReadAgentMemoryResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AgentMemory
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReplaceAgentMemoryResponse parses an HTTP response from a ReplaceAgentMemoryWithResponse call
-func ParseReplaceAgentMemoryResponse(rsp *http.Response) (*ReplaceAgentMemoryResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReplaceAgentMemoryResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AgentMemory
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

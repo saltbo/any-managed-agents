@@ -12,20 +12,6 @@ actions:
     remove: true
   - target: $.components.schemas['ErrorResponse']['properties']['error']['properties']['details'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['AgentSubagent'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentToolAttachment']['properties']['inputSchema'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentToolAttachment']['properties']['policyMetadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentToolAttachmentInput']['properties']['inputSchema'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentToolAttachmentInput']['properties']['policyMetadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['AgentMemorySpec']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['ReplaceAgentMemoryRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['Provider']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['ProviderModel']['properties']['metadata'].additionalProperties.nullable
@@ -72,17 +58,7 @@ actions:
     remove: true
   - target: $.components.schemas['TriggerRunSpec']['properties']['metadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['SessionAgentSnapshot']['properties']['subagents']['items'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionAgentSnapshot']['properties']['tools']['items'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['SessionEnvironmentJsonObject'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateSessionRequest']['properties']['runtimeConfig'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateSessionRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateSessionRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionEvent']['properties']['payload'].additionalProperties.nullable
     remove: true
@@ -97,12 +73,6 @@ actions:
   - target: $.components.schemas['SessionApproval']['properties']['result'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionApprovalDecisionRequest']['properties']['result'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['VaultSpec']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateVaultRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateVaultRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['VaultCredentialSpec']['properties']['metadata'].additionalProperties.nullable
     remove: true

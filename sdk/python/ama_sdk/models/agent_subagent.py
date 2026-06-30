@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..types import UNSET, Unset
+from typing import cast
 
 
 
@@ -23,32 +23,61 @@ T = TypeVar("T", bound="AgentSubagent")
 class AgentSubagent:
     """ 
         Attributes:
-            username (str | Unset):
-            role (str | Unset):
+            name (str):  Example: reviewer.
+            description (str):  Example: Reviews proposed changes for correctness and risk..
+            system_prompt (str):  Example: Review the proposed changes and report risks..
+            model (None | str):  Example: @cf/moonshotai/kimi-k2.6.
+            allowed_tools (list[str]):  Example: ['read', 'grep'].
+            skills (list[str]):  Example: ['ama@code-review'].
+            mcp_connectors (list[str]):  Example: ['github'].
      """
 
-    username: str | Unset = UNSET
-    role: str | Unset = UNSET
-    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+    name: str
+    description: str
+    system_prompt: str
+    model: None | str
+    allowed_tools: list[str]
+    skills: list[str]
+    mcp_connectors: list[str]
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        username = self.username
+        name = self.name
 
-        role = self.role
+        description = self.description
+
+        system_prompt = self.system_prompt
+
+        model: None | str
+        model = self.model
+
+        allowed_tools = self.allowed_tools
+
+
+
+        skills = self.skills
+
+
+
+        mcp_connectors = self.mcp_connectors
+
+
 
 
         field_dict: dict[str, Any] = {}
-        field_dict.update(self.additional_properties)
+
         field_dict.update({
+            "name": name,
+            "description": description,
+            "systemPrompt": system_prompt,
+            "model": model,
+            "allowedTools": allowed_tools,
+            "skills": skills,
+            "mcpConnectors": mcp_connectors,
         })
-        if username is not UNSET:
-            field_dict["username"] = username
-        if role is not UNSET:
-            field_dict["role"] = role
 
         return field_dict
 
@@ -57,31 +86,38 @@ class AgentSubagent:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        username = d.pop("username", UNSET)
+        name = d.pop("name")
 
-        role = d.pop("role", UNSET)
+        description = d.pop("description")
+
+        system_prompt = d.pop("systemPrompt")
+
+        def _parse_model(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        model = _parse_model(d.pop("model"))
+
+
+        allowed_tools = cast(list[str], d.pop("allowedTools"))
+
+
+        skills = cast(list[str], d.pop("skills"))
+
+
+        mcp_connectors = cast(list[str], d.pop("mcpConnectors"))
+
 
         agent_subagent = cls(
-            username=username,
-            role=role,
+            name=name,
+            description=description,
+            system_prompt=system_prompt,
+            model=model,
+            allowed_tools=allowed_tools,
+            skills=skills,
+            mcp_connectors=mcp_connectors,
         )
 
-
-        agent_subagent.additional_properties = d
         return agent_subagent
 
-    @property
-    def additional_keys(self) -> list[str]:
-        return list(self.additional_properties.keys())
-
-    def __getitem__(self, key: str) -> Any:
-        return self.additional_properties[key]
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.additional_properties[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self.additional_properties[key]
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.additional_properties
