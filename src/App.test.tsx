@@ -602,6 +602,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
     expect(await screen.findByRole('heading', { name: 'Create Session' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Start the acceptance path' } })
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create session' }))
     expectToast(await screen.findByText('Session created'))
     expect(window.location.pathname).toBe('/sessions/session_1')
@@ -793,6 +794,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Send a message to the agent').hasAttribute('disabled')).toBe(false)
     })
+    await waitFor(() => expect(socketUrls.length).toBeGreaterThan(1))
     fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), { target: { value: 'Second turn' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/Received: Second turn/)).toBeTruthy()
@@ -813,6 +815,7 @@ describe('App', () => {
       ],
       events: [event({ type: 'runtime.error', payload: { message: 'Runtime crashed' } })],
     })
+    installMockRuntimeWebSocket()
 
     render(<App />)
 
@@ -871,42 +874,6 @@ describe('App', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = normalizeMockUrl(input)
       const method = init?.method ?? 'GET'
-      if (url === '/api/v1/runtime/sessions/session_1/rpc' && method === 'POST') {
-        const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }
-        sentCommands.push(command)
-        runtimeEvents.push(
-          event({
-            id: `${command.id}_tool`,
-            sequence: runtimeEvents.length + 1,
-            type: 'tool_execution_end',
-            payload: {
-              type: 'tool_execution_end',
-              toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
-            },
-          }),
-          event({
-            id: `${command.id}_assistant`,
-            sequence: runtimeEvents.length + 2,
-            type: 'message_end',
-            payload: {
-              type: 'message_end',
-              message: { role: 'assistant', content: `Received: ${command.message}` },
-            },
-          }),
-          event({
-            id: `${command.id}_agent_end`,
-            sequence: runtimeEvents.length + 3,
-            type: 'turn_end',
-            payload: {
-              type: 'turn_end',
-              id: `${command.id}_agent_end`,
-              stage: 'agent_completed',
-              willRetry: false,
-            },
-          }),
-        )
-        return jsonResponse({ id: command.id, type: 'response', command: command.type, success: true })
-      }
       if (url === '/api/v1/projects') {
         return jsonResponse({
           data: [
@@ -962,6 +929,9 @@ describe('App', () => {
       }
       if (url.startsWith('/api/v1/sessions/session_1/events')) {
         return jsonResponse({ data: runtimeEvents })
+      }
+      if (url === '/api/v1/sessions/session_1/messages' && method === 'POST') {
+        return jsonResponse({ error: { message: 'Runtime REST prompt unavailable' } }, 503)
       }
       if (url === '/api/v1/sessions/session_1') {
         return jsonResponse(sessionFixture)
