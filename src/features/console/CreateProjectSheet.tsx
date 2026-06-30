@@ -37,7 +37,7 @@ export function CreateProjectSheet({ open, onOpenChange }: { open: boolean; onOp
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create project</SheetTitle>
           <SheetDescription>

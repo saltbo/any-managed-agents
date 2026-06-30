@@ -16,7 +16,7 @@ type Request struct {
 	Provider      string
 	Model         string
 	AgentSnapshot map[string]any
-	InitialPrompt string
+	Prompt        string
 	Resume        bool
 	ResumeToken   string
 	WorkDir       string

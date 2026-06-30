@@ -34,7 +34,7 @@ export function CreateMemoryStoreSheet({
   })
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create Memory Store</SheetTitle>
           <SheetDescription>Create a reusable set of files that sessions can mount.</SheetDescription>
@@ -103,7 +103,7 @@ export function MemoryEntrySheet({
   }
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{memory ? 'Edit Memory' : 'Add Memory'}</SheetTitle>
           <SheetDescription>Memory path is mounted under AMA's managed store directory.</SheetDescription>

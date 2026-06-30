@@ -78,16 +78,17 @@ function depsFor(session: SessionRow, queueResult = true) {
       workItem: WorkItemInsert,
     ) => Promise<boolean>
   >(async () => queueResult)
+  const recentSessionWorkItems = vi.fn(async () => [
+    {
+      state: 'succeeded',
+      payload: JSON.stringify({ resumeToken: 'payload-token' }),
+      result: JSON.stringify({ resumeToken: 'result-token' }),
+    },
+  ])
   const deps = {
     sessionOrchestration: {
       findSession: async () => session,
-      recentSessionWorkItems: async () => [
-        {
-          state: 'succeeded',
-          payload: JSON.stringify({ resumeToken: 'payload-token' }),
-          result: JSON.stringify({ resumeToken: 'result-token' }),
-        },
-      ],
+      recentSessionWorkItems,
       queueSessionWorkWhenState,
     },
     runnerChannel: {
@@ -97,6 +98,12 @@ function depsFor(session: SessionRow, queueResult = true) {
     },
     audit: { record: vi.fn() },
   } as unknown as PromptDeps
+  return { deps, queueSessionWorkWhenState }
+}
+
+function depsForFirstPrompt(session: SessionRow) {
+  const { deps, queueSessionWorkWhenState } = depsFor(session)
+  vi.mocked(deps.sessionOrchestration.recentSessionWorkItems).mockResolvedValue([])
   return { deps, queueSessionWorkWhenState }
 }
 
@@ -125,7 +132,7 @@ describe('dispatchSessionPrompt [spec: sessions/prompt]', () => {
       type: 'session.start',
       sessionId: 'sess_1',
       runtime: 'codex',
-      initialPrompt: 'resume after review rejection',
+      prompt: 'resume after review rejection',
       resume: true,
       resumeToken: 'result-token',
     })
@@ -138,5 +145,20 @@ describe('dispatchSessionPrompt [spec: sessions/prompt]', () => {
 
     expect(result).toEqual({ ok: false, status: 409, message: 'Session runtime is no longer active' })
     expect(queueSessionWorkWhenState).toHaveBeenCalledTimes(1)
+  })
+
+  it('queues the first self-hosted prompt without resume metadata when the session has no prior work item', async () => {
+    const { deps, queueSessionWorkWhenState } = depsForFirstPrompt(selfHostedSession({ state: 'idle' }))
+
+    const result = await dispatchSessionPrompt(deps, auth, 'sess_1', 'start the session')
+
+    expect(result).toEqual({ ok: true, delivery: 'queued', state: 'accepted' })
+    const workItem = queueSessionWorkWhenState.mock.calls[0]?.[4]
+    expect(JSON.parse(workItem?.payload ?? '{}')).toMatchObject({
+      type: 'session.start',
+      prompt: 'start the session',
+      resume: false,
+      resumeToken: null,
+    })
   })
 })

@@ -125,6 +125,7 @@ async function queueSelfHostedSessionPrompt(
   )
   const submittedAt = now()
   const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
+  const resumeToken = await latestRunnerResumeToken(deps, auth, session.id)
   const queued = await queueSelfHostedSessionWorkWhenState(
     deps,
     auth,
@@ -138,9 +139,9 @@ async function queueSelfHostedSessionPrompt(
       envFrom: parseJson<EnvFromEntry[]>(session.envFrom) ?? [],
       volumes: parseJson<Volume[]>(session.volumes) ?? [],
       volumeMounts: parseJson<VolumeMount[]>(session.volumeMounts) ?? [],
-      initialPrompt: content,
-      resume: true,
-      resumeToken: await latestRunnerResumeToken(deps, auth, session.id),
+      prompt: content,
+      resume: Boolean(resumeToken),
+      resumeToken,
     },
     ['idle', 'running'],
     {

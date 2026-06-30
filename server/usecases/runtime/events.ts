@@ -1,6 +1,6 @@
 // Cross-cutting session event + transcript usecases for the runtime data plane.
 // Deps-first: they append canonical events and read the event stream through
-// deps.sessionOrchestration, and record the initial-prompt failure through
+// deps.sessionOrchestration, and record the prompt failure through
 // deps.audit. No db handle, no adapters — they call ports only. Logic is
 // verbatim from the former server/runtime/session-base helpers; only how the
 // store/audit are acquired changed.
@@ -43,7 +43,7 @@ export async function appendUserPromptEvent(
   })
 }
 
-export async function markInitialPromptFailed(
+export async function markPromptFailed(
   deps: { sessionOrchestration: SessionOrchestrationStore; audit: AuditPort },
   auth: AuthScope,
   session: SessionRow,
@@ -57,7 +57,7 @@ export async function markInitialPromptFailed(
     updatedAt: failedAt,
   })
   await deps.audit.record(auth, {
-    action: 'session.initial_prompt',
+    action: 'session.prompt',
     resourceType: 'session',
     resourceId: session.id,
     outcome: 'failure',

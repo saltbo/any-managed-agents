@@ -47,7 +47,7 @@ class RunnerWorkPayload:
             required_runner_capability (None | str | Unset):
             env (RunnerWorkPayloadEnv | Unset):
             workspace_manifest (RunnerWorkspaceManifest | Unset):
-            initial_prompt (None | str | Unset):
+            prompt (None | str | Unset):
             resume (bool | Unset):
             resume_token (None | str | Unset):
             approved (bool | Unset):
@@ -71,7 +71,7 @@ class RunnerWorkPayload:
     required_runner_capability: None | str | Unset = UNSET
     env: RunnerWorkPayloadEnv | Unset = UNSET
     workspace_manifest: RunnerWorkspaceManifest | Unset = UNSET
-    initial_prompt: None | str | Unset = UNSET
+    prompt: None | str | Unset = UNSET
     resume: bool | Unset = UNSET
     resume_token: None | str | Unset = UNSET
     approved: bool | Unset = UNSET
@@ -141,11 +141,11 @@ class RunnerWorkPayload:
         if not isinstance(self.workspace_manifest, Unset):
             workspace_manifest = self.workspace_manifest.to_dict()
 
-        initial_prompt: None | str | Unset
-        if isinstance(self.initial_prompt, Unset):
-            initial_prompt = UNSET
+        prompt: None | str | Unset
+        if isinstance(self.prompt, Unset):
+            prompt = UNSET
         else:
-            initial_prompt = self.initial_prompt
+            prompt = self.prompt
 
         resume = self.resume
 
@@ -202,8 +202,8 @@ class RunnerWorkPayload:
             field_dict["env"] = env
         if workspace_manifest is not UNSET:
             field_dict["workspaceManifest"] = workspace_manifest
-        if initial_prompt is not UNSET:
-            field_dict["initialPrompt"] = initial_prompt
+        if prompt is not UNSET:
+            field_dict["prompt"] = prompt
         if resume is not UNSET:
             field_dict["resume"] = resume
         if resume_token is not UNSET:
@@ -327,14 +327,14 @@ class RunnerWorkPayload:
 
 
 
-        def _parse_initial_prompt(data: object) -> None | str | Unset:
+        def _parse_prompt(data: object) -> None | str | Unset:
             if data is None:
                 return data
             if isinstance(data, Unset):
                 return data
             return cast(None | str | Unset, data)
 
-        initial_prompt = _parse_initial_prompt(d.pop("initialPrompt", UNSET))
+        prompt = _parse_prompt(d.pop("prompt", UNSET))
 
 
         resume = d.pop("resume", UNSET)
@@ -390,7 +390,7 @@ class RunnerWorkPayload:
             required_runner_capability=required_runner_capability,
             env=env,
             workspace_manifest=workspace_manifest,
-            initial_prompt=initial_prompt,
+            prompt=prompt,
             resume=resume,
             resume_token=resume_token,
             approved=approved,

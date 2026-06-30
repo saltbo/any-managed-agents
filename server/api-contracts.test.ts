@@ -84,7 +84,7 @@ describe('route schema and handler alignment [spec: api-contracts/schema-alignme
       'environmentId',
       // POST /sessions/{id}/events body.events
       'events',
-      'initialPrompt',
+      'prompt',
       'metadata',
       'name',
       'reason',
@@ -101,7 +101,7 @@ describe('route schema and handler alignment [spec: api-contracts/schema-alignme
       'env',
       'envFrom',
       'environmentId',
-      'initialPrompt',
+      'prompt',
       'metadata',
       'name',
       'runtime',

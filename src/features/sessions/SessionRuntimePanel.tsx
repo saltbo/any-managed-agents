@@ -175,7 +175,7 @@ export function SessionRuntimePanel({
         <div className="border-t bg-background">
           <PromptInput
             value={message}
-            disabled={!canSend || runtime.connection !== 'open'}
+            disabled={!canSend}
             busy={runtime.runState === 'running'}
             onChange={setMessage}
             onSubmit={sendMessage}

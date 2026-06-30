@@ -103,7 +103,7 @@ export const RunnerWorkPayloadSchema = z
     requiredRunnerCapability: z.string().nullable().optional(),
     env: StringMapSchema.optional(),
     workspaceManifest: RunnerWorkspaceManifestSchema.optional(),
-    initialPrompt: z.string().nullable().optional(),
+    prompt: z.string().nullable().optional(),
     resume: z.boolean().optional(),
     resumeToken: z.string().nullable().optional(),
     approved: z.boolean().optional(),

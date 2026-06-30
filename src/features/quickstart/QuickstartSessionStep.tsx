@@ -56,7 +56,7 @@ export function QuickstartSessionStep({
         agentId: agent.metadata.uid,
         environmentId: environment.metadata.uid,
         runtime: 'ama',
-        name: `${agent.metadata.name} quickstart session`,
+        prompt: SAFE_EXAMPLE_PROMPT,
       })
     },
     onSuccess: async (session) => {

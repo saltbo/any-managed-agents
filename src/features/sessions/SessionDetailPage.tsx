@@ -55,6 +55,20 @@ export function SessionDetailPage() {
     events: eventsQuery.data?.data ?? EMPTY_EVENTS,
     onEventsChanged: refreshEvents,
   })
+  const sendMessage = useCallback(
+    (content: string) => {
+      if (!sessionId) return
+      void api
+        .sendSessionMessage(sessionId, content)
+        .then(refreshEvents)
+        .catch(() => {
+          if (!runtime.sendPrompt(content)) {
+            refreshEvents()
+          }
+        })
+    },
+    [refreshEvents, runtime, sessionId],
+  )
 
   if (sessionQuery.isPending) return <EmptyState title="Loading session" body="Reading the requested session." />
   if (!session) return <EmptyState title="Session not found" body="The requested session is not in this project." />
@@ -71,7 +85,7 @@ export function SessionDetailPage() {
         onRefreshEvents={refreshEvents}
         chatMessage={message}
         setChatMessage={setMessage}
-        onSendMessage={runtime.sendPrompt}
+        onSendMessage={sendMessage}
         onAbortRuntime={runtime.abort}
       />
     </div>

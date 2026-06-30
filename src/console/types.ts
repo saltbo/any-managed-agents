@@ -35,11 +35,24 @@ export interface SessionFormState {
   agentId: string
   environmentId: string
   runtime: 'ama' | 'claude-code' | 'codex' | 'copilot'
-  name: string
-  metadata: string
-  volumes: string
-  volumeMounts: string
+  prompt: string
+  credentialVaultIds: string[]
+  resources: SessionResourceFormEntry[]
 }
+
+export type SessionResourceFormEntry =
+  | {
+      id: string
+      type: 'git_repository'
+      url: string
+      ref: string
+    }
+  | {
+      id: string
+      type: 'memory'
+      memoryStoreId: string
+      access: 'read_only' | 'read_write'
+    }
 
 export interface VaultFormState {
   name: string

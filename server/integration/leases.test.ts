@@ -78,7 +78,7 @@ async function createSelfHostedSession(
     body: JSON.stringify({
       agentId,
       environmentId,
-      initialPrompt: 'Run the first queued self-hosted task.',
+      prompt: 'Run the first queued self-hosted task.',
       runtime: 'ama',
       ...executionOverrides,
     }),

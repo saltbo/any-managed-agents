@@ -149,7 +149,7 @@ export function quickstartIntegrationExamples(input: QuickstartIntegrationInput)
     agentId: input.agentId,
     environmentId: input.environmentId,
     runtime: 'ama',
-    initialPrompt: SAFE_EXAMPLE_PROMPT,
+    prompt: SAFE_EXAMPLE_PROMPT,
   })
   const liveSessionUrl = input.runtimePath
     ? `${input.origin}${input.runtimePath}`

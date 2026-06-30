@@ -302,12 +302,11 @@ const CreateSessionSchema = z
       }),
     volumes: z.array(VolumeSchema).max(50).optional(),
     volumeMounts: z.array(VolumeMountSchema).max(50).optional(),
-    initialPrompt: z
+    prompt: z
       .string()
       .trim()
       .min(1)
       .max(16000)
-      .optional()
       .openapi({ example: 'Research Canadian banking bonus offers and summarize current opportunities.' }),
   })
   .strict()
@@ -1022,7 +1021,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
           ...(body.envFrom !== undefined ? { envFrom: body.envFrom } : {}),
           ...(body.volumes !== undefined ? { volumes: body.volumes } : {}),
           ...(body.volumeMounts !== undefined ? { volumeMounts: body.volumeMounts } : {}),
-          ...(body.initialPrompt !== undefined ? { initialPrompt: body.initialPrompt } : {}),
+          prompt: body.prompt,
         },
         requestId: requestId(c),
       })

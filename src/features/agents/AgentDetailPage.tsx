@@ -100,7 +100,7 @@ export function AgentDetailPage() {
         onOpenChange={(open) => setCreatingSession(open)}
       />
       <Sheet open={editing} onOpenChange={setEditing}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+        <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Edit Agent</SheetTitle>
             <SheetDescription>

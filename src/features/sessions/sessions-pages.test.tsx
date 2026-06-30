@@ -1436,6 +1436,8 @@ describe('CreateSessionSheet — formatCreateSessionError', () => {
     // Wait for agents/environments to load
     await waitFor(() => expect(screen.getByText('Create Session')).toBeTruthy())
 
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Create a test session' } })
+
     // Submit the form (find the submit button)
     const submitButton = await screen.findByRole('button', { name: /create/i })
     fireEvent.click(submitButton)
@@ -1492,6 +1494,8 @@ describe('CreateSessionSheet — formatCreateSessionError', () => {
     )
 
     await waitFor(() => expect(screen.getByText('Create Session')).toBeTruthy())
+
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Create a failing test session' } })
 
     const submitButton = await screen.findByRole('button', { name: /create/i })
     fireEvent.click(submitButton)

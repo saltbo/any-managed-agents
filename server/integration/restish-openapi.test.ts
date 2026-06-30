@@ -106,7 +106,7 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
 
     const sessionRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId, environmentId, runtime: 'ama' }),
+      body: JSON.stringify({ agentId, environmentId, runtime: 'ama', prompt: 'Run restish contract test' }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {

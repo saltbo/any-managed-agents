@@ -217,7 +217,7 @@ function newLease(state = 'active') {
 }
 
 function createWorkItem(runtime, gitConfig) {
-  const initialPrompt = [
+  const prompt = [
     'Run the AMA end-to-end smoke check.',
     `1. Confirm these workspace files do not exist: .ama/resources.json, .ama/agent.json, .ama/system-prompt.md.`,
     `2. Confirm .ama/memory-stores/${MEMORY_STORE_ID}/heartbeat.md exists.`,
@@ -301,7 +301,7 @@ function createWorkItem(runtime, gitConfig) {
         capabilityTags: ['smoke'],
         subagents: [],
       },
-      initialPrompt,
+      prompt,
     },
   }
 }
@@ -544,7 +544,7 @@ function createResumeControlPlane(runtime) {
       volumes: [],
       volumeMounts: [],
       agentSnapshot: { instructions: 'AMA resume smoke. Follow the user prompt exactly.' },
-      initialPrompt: resume
+      prompt: resume
         ? [
             'Continue the AMA resume smoke.',
             `Write exactly "${RESUMED_MARKER}\\n" to ama-smoke-resumed.txt in the workspace root.`,

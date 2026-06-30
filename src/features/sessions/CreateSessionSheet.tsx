@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { emptySession } from '@/console/defaults'
-import { isArchived, parseJsonObject, parseJsonObjectArray } from '@/console/format'
+import { isArchived } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import type { SessionFormState } from '@/console/types'
 import { ApiError, api, type Session, type SessionInput } from '@/lib/amarpc'
@@ -41,20 +41,27 @@ export function CreateSessionSheet({
     queryFn: () => api.listMemoryStores(),
     enabled: open,
   })
+  const vaultsQuery = useQuery({
+    queryKey: queryKeys.vaults.list(false),
+    queryFn: () => api.listVaults(),
+    enabled: open,
+  })
   const agents = agentsQuery.data?.data ?? EMPTY_RESOURCES
   const environments = environmentsQuery.data?.data ?? EMPTY_RESOURCES
   const memoryStores = memoryStoresQuery.data?.data ?? EMPTY_RESOURCES
+  const vaults = vaultsQuery.data?.data ?? EMPTY_RESOURCES
   const createSession = useMutation({
-    mutationFn: () =>
-      api.createSession({
+    mutationFn: () => {
+      const resources = sessionResourcesInput(form, memoryStores)
+      return api.createSession({
         agentId: form.agentId,
         environmentId: form.environmentId,
         runtime: form.runtime,
-        ...(form.name ? { name: form.name } : {}),
-        metadata: parseJsonObject(form.metadata, 'Metadata'),
-        volumes: parseJsonObjectArray(form.volumes, 'Volumes') as SessionInput['volumes'],
-        volumeMounts: parseJsonObjectArray(form.volumeMounts, 'Volume mounts') as SessionInput['volumeMounts'],
-      }),
+        prompt: form.prompt.trim(),
+        volumes: resources.volumes,
+        volumeMounts: resources.volumeMounts,
+      })
+    },
     onSuccess: (session: Session) => {
       onOpenChange(false)
       setForm(emptySession)
@@ -91,7 +98,7 @@ export function CreateSessionSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create Session</SheetTitle>
           <SheetDescription>Select the agent, environment, and runtime for this session.</SheetDescription>
@@ -103,6 +110,7 @@ export function CreateSessionSheet({
             agents={agents}
             environments={environments}
             memoryStores={memoryStores}
+            vaults={vaults}
             onSubmit={submit}
           />
           {createSession.error ? (
@@ -114,6 +122,71 @@ export function CreateSessionSheet({
       </SheetContent>
     </Sheet>
   )
+}
+
+function sessionResourcesInput(
+  form: SessionFormState,
+  memoryStores: Array<{ metadata: { uid: string; name: string; description?: string | null } }>,
+): Pick<SessionInput, 'volumes' | 'volumeMounts'> {
+  const volumes: NonNullable<SessionInput['volumes']> = []
+  const volumeMounts: NonNullable<SessionInput['volumeMounts']> = []
+  for (const vaultId of form.credentialVaultIds) {
+    const name = safeVolumeName('vault', vaultId)
+    volumes.push({ name, type: 'secret', secretRef: `ama://vaults/${encodeURIComponent(vaultId)}` })
+    volumeMounts.push({ name, mountPath: `/workspace/.ama/secrets/${vaultId}`, readOnly: true })
+  }
+  form.resources.forEach((resource, index) => {
+    if (resource.type === 'git_repository') {
+      const url = resource.url.trim()
+      if (!url) return
+      const name = safeVolumeName('repo', resource.id)
+      volumes.push({
+        name,
+        type: 'git_repository',
+        url,
+        ...(resource.ref.trim() ? { ref: resource.ref.trim() } : {}),
+      })
+      volumeMounts.push({ name, mountPath: gitRepositoryMountPath(url, index), readOnly: true })
+      return
+    }
+    if (!resource.memoryStoreId) return
+    const store = memoryStores.find((candidate) => candidate.metadata.uid === resource.memoryStoreId)
+    const name = safeVolumeName('memory', resource.memoryStoreId)
+    volumes.push({
+      name,
+      type: 'memory',
+      memoryRef: `ama://memories/${encodeURIComponent(resource.memoryStoreId)}`,
+      access: resource.access,
+      ...(store?.metadata.name ? { storeName: store.metadata.name } : {}),
+      ...(store?.metadata.description ? { description: store.metadata.description } : {}),
+    })
+    volumeMounts.push({
+      name,
+      mountPath: `/workspace/.ama/memory-stores/${resource.memoryStoreId}`,
+      readOnly: resource.access !== 'read_write',
+    })
+  })
+  return { volumes, volumeMounts }
+}
+
+function safeVolumeName(prefix: string, value: string) {
+  const safe = value.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^-+|-+$/g, '')
+  return `${prefix}-${safe || 'resource'}`.slice(0, 80)
+}
+
+function gitRepositoryMountPath(url: string, index: number) {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return `/workspace/repos/repository-${index + 1}`
+  }
+  const path = parsed.pathname
+    .replace(/\.git$/i, '')
+    .split('/')
+    .filter(Boolean)
+    .join('/')
+  return `/workspace/repos/${parsed.hostname}/${path || `repository-${index + 1}`}`
 }
 
 export function formatCreateSessionError(error: unknown) {

@@ -2809,9 +2809,9 @@ type CreateSessionRequest struct {
 	Env           *map[string]string      `json:"env,omitempty"`
 	EnvFrom       *[]EnvFromEntry         `json:"envFrom,omitempty"`
 	EnvironmentId *string                 `json:"environmentId,omitempty"`
-	InitialPrompt *string                 `json:"initialPrompt,omitempty"`
 	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
 	Name          *string                 `json:"name,omitempty"`
+	Prompt        string                  `json:"prompt"`
 	Runtime       Runtime                 `json:"runtime"`
 	RuntimeConfig *map[string]interface{} `json:"runtimeConfig,omitempty"`
 	VolumeMounts  *[]VolumeMount          `json:"volumeMounts,omitempty"`
@@ -3441,9 +3441,9 @@ type RunnerWorkPayload struct {
 	Env                      *map[string]string         `json:"env,omitempty"`
 	EnvironmentSnapshot      *map[string]*interface{}   `json:"environmentSnapshot,omitempty"`
 	HostingMode              *string                    `json:"hostingMode,omitempty"`
-	InitialPrompt            *string                    `json:"initialPrompt,omitempty"`
 	Input                    *map[string]*interface{}   `json:"input,omitempty"`
 	Model                    *string                    `json:"model,omitempty"`
+	Prompt                   *string                    `json:"prompt,omitempty"`
 	Protocol                 *RunnerWorkPayloadProtocol `json:"protocol,omitempty"`
 	Provider                 *string                    `json:"provider,omitempty"`
 	RequiredRunnerCapability *string                    `json:"requiredRunnerCapability,omitempty"`

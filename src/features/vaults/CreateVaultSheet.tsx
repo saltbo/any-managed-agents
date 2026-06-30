@@ -35,7 +35,7 @@ export function CreateVaultSheet({ open, onOpenChange }: { open: boolean; onOpen
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create Vault</SheetTitle>
           <SheetDescription>Create safe credential-reference metadata for runtime integrations.</SheetDescription>

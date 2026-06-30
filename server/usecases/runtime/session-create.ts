@@ -36,7 +36,7 @@ import {
 import { newId, now, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
 import { environmentHostingMode } from '@server/domain/runtime-session'
-import { composeInitialPrompt, hasSecretMaterial, sessionUserMetadata } from '@server/domain/session'
+import { composePrompt, hasSecretMaterial, sessionUserMetadata } from '@server/domain/session'
 import { normalizeWorkspaceSpec, workspaceSpec } from '@server/domain/workspace'
 import { safeRuntimeError } from '@server/runtime-error'
 import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
@@ -242,14 +242,17 @@ async function currentAgentVersion(store: SessionOrchestrationStore, agent: Agen
   return store.findAgentVersion(agent.id, agent.currentVersionId)
 }
 
-async function sessionInitialPrompt(
-  store: SessionOrchestrationStore,
-  projectId: string,
-  agent: AgentRow,
-  initialPrompt: string | undefined,
-) {
+async function sessionPrompt(store: SessionOrchestrationStore, projectId: string, agent: AgentRow, prompt: string) {
   const content = await store.agentMemoryContent(projectId, agent.id)
-  return composeInitialPrompt(content, initialPrompt)
+  return composePrompt(content, prompt)
+}
+
+function sessionTitleFromPrompt(prompt: string) {
+  const title = prompt.split(/\r?\n/, 1)[0]?.replace(/\s+/g, ' ').trim()
+  if (!title) {
+    return 'New session'
+  }
+  return title.length > 80 ? `${title.slice(0, 77).trimEnd()}...` : title
 }
 
 // ── Work item enqueue ───────────────────────────────────────────────────────
@@ -267,7 +270,7 @@ export async function enqueueSelfHostedSessionWork(
     envFrom?: EnvFromEntry[]
     volumes?: Volume[]
     volumeMounts?: VolumeMount[]
-    initialPrompt?: string
+    prompt?: string
     resume?: boolean
     resumeToken?: string | null
   },
@@ -333,7 +336,7 @@ function selfHostedSessionWorkItem(
     envFrom: values.envFrom ?? [],
     volumes: values.volumes ?? [],
     volumeMounts: values.volumeMounts ?? [],
-    initialPrompt: values.initialPrompt ?? null,
+    prompt: values.prompt ?? null,
     resume: values.resume ?? false,
     resumeToken: values.resumeToken ?? null,
     requiredRunnerCapability:
@@ -397,6 +400,18 @@ export async function createSessionForAgent(
   const store = deps.sessionOrchestration
   const audit = deps.audit
   const policy = deps.policy
+  const userPrompt = options.prompt.trim()
+  if (!userPrompt) {
+    return {
+      ok: false,
+      error: {
+        status: 400,
+        code: 'validation_error',
+        message: 'Prompt is required',
+        fields: { prompt: 'Prompt is required.' },
+      },
+    }
+  }
   if (
     hasSecretMaterial(options.metadata) ||
     hasSecretMaterial(options.volumes) ||
@@ -457,7 +472,7 @@ export async function createSessionForAgent(
     }
   }
   const providerId = agentVersion.providerId
-  const initialPrompt = await sessionInitialPrompt(store, auth.project.id, agent, options.initialPrompt)
+  const prompt = await sessionPrompt(store, auth.project.id, agent, userPrompt)
   const { decision: policyDecision, override: policyOverride } = await policy.evaluateProviderForSession(auth, {
     providerId,
     modelId: agentVersion.model,
@@ -678,7 +693,7 @@ export async function createSessionForAgent(
     environmentId,
     environmentVersionId: environmentVersion.id,
     environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
-    title: options.name ?? null,
+    title: options.name ?? sessionTitleFromPrompt(userPrompt),
     env: stringify(mergedEnv),
     envFrom: stringify(mergedEnvFrom),
     volumes: stringify(validatedVolumes.volumes),
@@ -749,7 +764,7 @@ export async function createSessionForAgent(
         envFrom: mergedEnvFrom,
         volumes: validatedVolumes.volumes,
         volumeMounts: validatedVolumes.volumeMounts,
-        ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+        prompt,
       })
       return { ok: true, session: pending }
     }
@@ -766,7 +781,7 @@ export async function createSessionForAgent(
         envFrom: mergedEnvFrom,
         volumes: validatedVolumes.volumes,
         volumeMounts: validatedVolumes.volumeMounts,
-        ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+        prompt,
       })
       return { ok: true, session: pending }
     }
@@ -781,7 +796,7 @@ export async function createSessionForAgent(
       envFrom: mergedEnvFrom,
       volumes: validatedVolumes.volumes,
       volumeMounts: validatedVolumes.volumeMounts,
-      ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+      prompt,
     })
     if (!deps.rereadStartedSession) {
       return { ok: true, session: pending }

@@ -5,7 +5,7 @@
 // turn with the approval/policy gate (executeCloudSessionTurn), the queue
 // consumer that dispatches start/step/turn messages (consumeCloudTurnMessage),
 // and the initial-prompt dispatch that seeds the first turn after startup
-// (dispatchInitialPrompt).
+// (dispatchPrompt).
 //
 // VERBATIM logic: the lease CAS, the continuation-depth cap, the soft-budget
 // pause, and the message-dispatch control flow are byte-for-byte the same as the
@@ -54,7 +54,7 @@ import type {
 } from '../ports'
 import type { ToolApprovalGate } from './approval-gate'
 import { isRuntimePolicyDenied, isRuntimeTurnCancelled } from './engine/errors'
-import { appendRuntimeEvent, appendUserPromptEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
+import { appendRuntimeEvent, appendUserPromptEvent, loadRuntimeMessages, markPromptFailed } from './events'
 import { mcpConnectorIds, resolveMcpServers } from './provisioning'
 import { buildSessionTurnCallbacks, type SessionTurnCallbacks } from './turn-callbacks'
 
@@ -95,11 +95,11 @@ export async function startSessionRuntimeForRow(
     envFrom?: EnvFromEntry[]
     volumes?: Volume[]
     volumeMounts?: VolumeMount[]
-    initialPrompt?: string
+    prompt?: string
   },
 ) {
   const store = deps.sessionOrchestration
-  const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, initialPrompt } = input
+  const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, prompt } = input
   const sessionEnv = input.env
   const sessionEnvFrom = input.envFrom ?? []
   const sessionVolumes = input.volumes ?? []
@@ -190,12 +190,12 @@ export async function startSessionRuntimeForRow(
       sessionId,
       metadata: { sandboxId: startedRuntime.sandboxId, runtimeEndpointPath: startedRuntime.runtimeEndpointPath },
     })
-    if (initialPrompt) {
-      await dispatchInitialPrompt(
+    if (prompt) {
+      await dispatchPrompt(
         deps,
         auth,
         { ...pending, ...started, stateReason: null, stoppedAt: null, archivedAt: null },
-        initialPrompt,
+        prompt,
       )
     }
   } catch (error) {
@@ -237,7 +237,7 @@ export async function executeCloudSessionTurn(
   auth: AuthScope,
   session: SessionRow,
   work: { prompt?: string; continuation?: boolean },
-  auditAction: 'session.initial_prompt' | 'session.command',
+  auditAction: 'session.prompt' | 'session.command',
 ): Promise<CloudTurnOutcome> {
   const store = deps.sessionOrchestration
   let callbacks: SessionTurnCallbacks | null = null
@@ -338,8 +338,7 @@ export async function executeCloudSessionTurn(
       resourceId: session.id,
       outcome: 'success',
       sessionId: session.id,
-      metadata:
-        auditAction === 'session.initial_prompt' ? { source: 'api', promptDispatched: true } : { type: 'prompt' },
+      metadata: auditAction === 'session.prompt' ? { source: 'api', promptDispatched: true } : { type: 'prompt' },
     })
     return { ok: true }
   } catch (error) {
@@ -358,7 +357,7 @@ export async function executeCloudSessionTurn(
       })
       return { ok: false, cancelled: false, error: safeError }
     }
-    await markInitialPromptFailed(deps, auth, session, safeError.message)
+    await markPromptFailed(deps, auth, session, safeError.message)
     return { ok: false, cancelled: false, error: safeError }
   }
 }
@@ -372,7 +371,7 @@ async function handleTurnOutcome(
   auth: AuthScope,
   session: SessionRow,
   turnId: string,
-  auditAction: 'session.initial_prompt' | 'session.command',
+  auditAction: 'session.prompt' | 'session.command',
   outcome: CloudTurnOutcome,
 ): Promise<void> {
   const store = deps.sessionOrchestration
@@ -410,7 +409,7 @@ async function runLeasedTurn(
   auth: AuthScope,
   session: SessionRow,
   work: { prompt?: string; continuation?: boolean },
-  auditAction: 'session.initial_prompt' | 'session.command',
+  auditAction: 'session.prompt' | 'session.command',
   deferMessage: CloudTurnMessage,
 ): Promise<void> {
   const store = deps.sessionOrchestration
@@ -463,7 +462,7 @@ export async function consumeCloudTurnMessage(deps: CloudTurnDeps, message: Clou
       envFrom: message.envFrom,
       volumes: message.volumes,
       volumeMounts: message.volumeMounts,
-      ...(message.initialPrompt !== undefined ? { initialPrompt: message.initialPrompt } : {}),
+      ...(message.prompt !== undefined ? { prompt: message.prompt } : {}),
     })
     return
   }
@@ -502,12 +501,7 @@ export async function consumeCloudTurnMessage(deps: CloudTurnDeps, message: Clou
   await runLeasedTurn(deps, auth, session, { prompt: message.prompt }, message.auditAction, message)
 }
 
-export async function dispatchInitialPrompt(
-  deps: CloudTurnDeps,
-  auth: AuthScope,
-  session: SessionRow,
-  initialPrompt: string,
-) {
+export async function dispatchPrompt(deps: CloudTurnDeps, auth: AuthScope, session: SessionRow, prompt: string) {
   const store = deps.sessionOrchestration
   const submittedAt = now()
   const started = await store.updateSessionWhenState(auth.project.id, session.id, ['idle', 'running'], {
@@ -520,7 +514,7 @@ export async function dispatchInitialPrompt(
   }
 
   if (deps.cloudTurnQueue.runsInline()) {
-    await executeCloudSessionTurn(deps, auth, session, { prompt: initialPrompt }, 'session.initial_prompt')
+    await executeCloudSessionTurn(deps, auth, session, { prompt: prompt }, 'session.prompt')
     return
   }
   await deps.cloudTurnQueue.enqueue({
@@ -528,8 +522,8 @@ export async function dispatchInitialPrompt(
     sessionId: session.id,
     organizationId: auth.organization.id,
     projectId: auth.project.id,
-    prompt: initialPrompt,
-    auditAction: 'session.initial_prompt',
+    prompt: prompt,
+    auditAction: 'session.prompt',
   })
 }
 

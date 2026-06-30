@@ -578,10 +578,15 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     })
   }
 
-  function renderSheet(extraHandlers: Parameters<typeof server.use>[0][] = []) {
+  function renderSheet(
+    extraHandlers: Parameters<typeof server.use>[0][] = [],
+    resources: { agents?: Agent[]; environments?: Environment[] } = {},
+  ) {
     server.use(
-      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([agent()]))),
-      http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([environment()]))),
+      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope(resources.agents ?? [agent()]))),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json(listEnvelope(resources.environments ?? [environment()])),
+      ),
       ...extraHandlers,
     )
     const client = makeQueryClient()
@@ -606,6 +611,68 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     fireEvent.change(screen.getByLabelText('Interval value'), { target: { value: '5' } })
     return waitForFormReady()
   }
+
+  it('opens and updates the agent and environment selects', async () => {
+    stubPointerEvents()
+    let postedBody: Record<string, unknown> | null = null
+    renderSheet(
+      [
+        http.post('*/api/v1/triggers', async ({ request }) => {
+          postedBody = (await request.json()) as Record<string, unknown>
+          return HttpResponse.json(trigger({ id: 'trigger_new' }), { status: 201 })
+        }),
+      ],
+      {
+        agents: [agent(), agent({ id: 'agent_2', name: 'Review agent' })],
+        environments: [environment(), environment({ id: 'env_2', name: 'Review environment' })],
+      },
+    )
+    const submitButton = await fillRequiredFields()
+
+    const agentSelect = screen.getByRole('combobox', { name: 'Agent' }) as HTMLElement
+    agentSelect.focus()
+    fireEvent.pointerDown(agentSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(agentSelect)
+    fireEvent.click(await screen.findByRole('option', { name: 'Review agent' }))
+
+    const environmentSelect = screen.getByRole('combobox', { name: 'Environment' }) as HTMLElement
+    environmentSelect.focus()
+    fireEvent.pointerDown(environmentSelect, { button: 0, ctrlKey: false, pointerId: 2, pointerType: 'mouse' })
+    fireEvent.mouseDown(environmentSelect)
+    fireEvent.click(await screen.findByRole('option', { name: 'Review environment' }))
+
+    fireEvent.click(submitButton)
+    await waitFor(() => expect(postedBody).not.toBeNull())
+    expect(postedBody).toMatchObject({
+      template: {
+        spec: {
+          agentId: 'agent_2',
+          environmentId: 'env_2',
+        },
+      },
+    })
+  })
+
+  it('shows empty agent and environment menu states when the current project has no resources', async () => {
+    stubPointerEvents()
+    renderSheet([], { agents: [], environments: [] })
+
+    expect(await screen.findByText('No active agents exist in the current project.')).toBeInTheDocument()
+    expect(await screen.findByText('No active environments exist in the current project.')).toBeInTheDocument()
+
+    const agentSelect = screen.getByRole('combobox', { name: 'Agent' }) as HTMLElement
+    agentSelect.focus()
+    fireEvent.pointerDown(agentSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(agentSelect)
+    expect(await screen.findByText('No options')).toBeInTheDocument()
+    fireEvent.keyDown(agentSelect, { key: 'Escape' })
+
+    const environmentSelect = screen.getByRole('combobox', { name: 'Environment' }) as HTMLElement
+    environmentSelect.focus()
+    fireEvent.pointerDown(environmentSelect, { button: 0, ctrlKey: false, pointerId: 2, pointerType: 'mouse' })
+    fireEvent.mouseDown(environmentSelect)
+    expect(await screen.findByText('No options')).toBeInTheDocument()
+  })
 
   it('toasts an error when the create mutation fails', async () => {
     const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'toast-id')

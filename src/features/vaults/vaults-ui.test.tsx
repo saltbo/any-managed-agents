@@ -695,7 +695,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     expect(screen.queryByText('Add credential')).toBeNull()
   })
 
-  it('disables the submit button when name, type, or String data is empty', () => {
+  it('disables the submit button when name or secret value is empty', () => {
     const client = makeQueryClient()
     render(
       <QueryClientProvider client={client}>
@@ -709,7 +709,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     expect(btn.hasAttribute('disabled')).toBe(true)
   })
 
-  it('enables the submit button when name, type, and String data are filled', () => {
+  it('enables the submit button when name and secret value are filled', () => {
     const client = makeQueryClient()
     render(
       <QueryClientProvider client={client}>
@@ -720,7 +720,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
-    fireEvent.change(screen.getByLabelText('String data'), { target: { value: '{"value":"sk-supersecret"}' } })
+    fireEvent.change(screen.getByLabelText('Data value 1'), { target: { value: 'sk-supersecret' } })
 
     const btn = screen.getByRole('button', { name: /Save credential/i })
     expect(btn.hasAttribute('disabled')).toBe(false)
@@ -791,13 +791,13 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
-    fireEvent.change(screen.getByLabelText('String data'), { target: { value: '{"value":"sk-supersecret"}' } })
+    fireEvent.change(screen.getByLabelText('Data value 1'), { target: { value: 'sk-supersecret' } })
     fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 
-  it('includes stringData in payload when filled', async () => {
+  it('includes opaque data fields in payload when filled', async () => {
     let capturedBody: Record<string, unknown> = {}
     server.use(
       http.post('*/api/v1/vaults/vault_1/credentials', async ({ request }) => {
@@ -820,13 +820,14 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
-    fireEvent.change(screen.getByLabelText('String data'), { target: { value: '{"token":"sk-secret"}' } })
+    fireEvent.change(screen.getByLabelText('Data key 1'), { target: { value: 'token' } })
+    fireEvent.change(screen.getByLabelText('Data value 1'), { target: { value: 'sk-secret' } })
     fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
 
     await waitFor(() => expect(capturedBody.secret).toEqual({ stringData: { token: 'sk-secret' } }))
   })
 
-  it('updates metadata field when changed', () => {
+  it('does not expose raw metadata or stringData fields', () => {
     const client = makeQueryClient()
     render(
       <QueryClientProvider client={client}>
@@ -836,9 +837,8 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
       </QueryClientProvider>,
     )
 
-    const metadataArea = screen.getByLabelText('Metadata')
-    fireEvent.change(metadataArea, { target: { value: '{"env":"prod"}' } })
-    expect((metadataArea as HTMLTextAreaElement).value).toBe('{"env":"prod"}')
+    expect(screen.queryByLabelText('Metadata')).toBeNull()
+    expect(screen.queryByLabelText('String data')).toBeNull()
   })
 
   it('shows saving state on button while mutation is pending', async () => {
@@ -862,7 +862,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
-    fireEvent.change(screen.getByLabelText('String data'), { target: { value: '{"value":"sk-secret"}' } })
+    fireEvent.change(screen.getByLabelText('Data value 1'), { target: { value: 'sk-secret' } })
     fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
 
     await waitFor(() => expect(screen.getByText('Saving credential')).toBeInTheDocument())
@@ -886,7 +886,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
-    fireEvent.change(screen.getByLabelText('String data'), { target: { value: '{"value":"sk-secret"}' } })
+    fireEvent.change(screen.getByLabelText('Data value 1'), { target: { value: 'sk-secret' } })
     fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
     // Wait for the button to return to its normal state after the error
     await waitFor(() => expect(screen.getByRole('button', { name: /Save credential/i })).toBeInTheDocument())
@@ -915,7 +915,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
-    fireEvent.change(screen.getByLabelText('String data'), { target: { value: '{"value":"sk-secret"}' } })
+    fireEvent.change(screen.getByLabelText('Data value 1'), { target: { value: 'sk-secret' } })
     fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
 
     await waitFor(() =>
@@ -924,6 +924,50 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
         type: 'opaque',
         metadata: {},
         secret: { stringData: { value: 'sk-secret' } },
+      }),
+    )
+  })
+
+  it('submits typed basic auth fields in the create payload', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(credential({ id: 'vaultcred_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Git credentials' } })
+    fireEvent.pointerDown(screen.getByRole('combobox', { name: 'Type' }), {
+      button: 0,
+      ctrlKey: false,
+      pointerId: 1,
+      pointerType: 'mouse',
+    })
+    fireEvent.click(await screen.findByRole('option', { name: 'Basic auth' }))
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'git-user' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'git-password' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+
+    await waitFor(() =>
+      expect(capturedBody).toEqual({
+        name: 'Git credentials',
+        type: 'ama.dev/basic-auth',
+        metadata: {},
+        secret: { stringData: { username: 'git-user', password: 'git-password' } },
       }),
     )
   })

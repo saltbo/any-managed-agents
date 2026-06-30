@@ -33,10 +33,9 @@ export const emptySession: SessionFormState = {
   agentId: '',
   environmentId: '',
   runtime: 'ama',
-  name: '',
-  metadata: '{}',
-  volumes: '[]',
-  volumeMounts: '[]',
+  prompt: '',
+  credentialVaultIds: [],
+  resources: [],
 }
 
 export const emptyVault: VaultFormState = {

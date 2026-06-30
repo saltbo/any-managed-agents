@@ -18,12 +18,12 @@ func TestParseWorkPayloadAcceptsSessionStart(t *testing.T) {
 		"provider":                 "openai",
 		"runtimeConfig":            ama.JSON{"model": "gpt-5"},
 		"requiredRunnerCapability": "runtime:codex",
-		"initialPrompt":            prompt,
+		"prompt":                   prompt,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if payload.SessionID != "session_1" || payload.Runtime != "codex" || payload.InitialPrompt == nil || *payload.InitialPrompt != prompt {
+	if payload.SessionID != "session_1" || payload.Runtime != "codex" || payload.Prompt == nil || *payload.Prompt != prompt {
 		t.Fatalf("unexpected parsed payload: %#v", payload)
 	}
 }

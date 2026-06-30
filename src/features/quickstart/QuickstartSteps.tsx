@@ -6,7 +6,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatusBadge } from '@/console/components'
 import { isArchived } from '@/console/format'
-import { TextAreaField, TextField } from '@/console/forms'
+import { AllowedToolsField, TextAreaField, TextField } from '@/console/forms'
 import { CoreStep, StartStep } from '@/features/agents/AgentBuilderSteps'
 import type { AgentBuilderDraft, AgentTemplate, BuilderFieldErrors } from '@/features/agents/agent-builder-model'
 import { JsonBlock } from '@/features/console/json-block'
@@ -225,9 +225,8 @@ export function QuickstartAgentStep({
         Review the drafted configuration. Everything stays editable until you create the agent.
       </p>
       <CoreStep draft={draft} errors={errors} setField={setField} />
-      <TextAreaField
+      <AllowedToolsField
         label="Allowed tools"
-        description="One runtime tool name per line. Policy-blocked tools are rejected when the agent is saved."
         value={draft.allowedTools}
         onChange={(value) => setField('allowedTools', value)}
         error={errors.allowedTools}

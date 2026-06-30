@@ -119,7 +119,7 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		SessionID:     request.SessionID,
 		Cwd:           request.WorkDir,
 		Env:           envMap(env),
-		Prompt:        request.InitialPrompt,
+		Prompt:        request.Prompt,
 		Provider:      request.Provider,
 		AgentSnapshot: request.AgentSnapshot,
 		RuntimeConfig: request.RuntimeConfig,

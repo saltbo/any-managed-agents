@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  composeInitialPrompt,
+  composePrompt,
   hasEmbeddedCredentialUrl,
   hasSecretMaterial,
   hostingModeFromSandbox,
@@ -100,21 +100,23 @@ describe('sessionEventVisibility', () => {
   })
 })
 
-describe('[spec: sessions/initial-prompt-compose] composeInitialPrompt', () => {
+describe('[spec: sessions/initial-prompt-compose] composePrompt', () => {
   it('returns the prompt unchanged when there is no memory', () => {
-    expect(composeInitialPrompt(null, 'do the task')).toBe('do the task')
-    expect(composeInitialPrompt('   ', 'do the task')).toBe('do the task')
+    expect(composePrompt(null, 'do the task')).toBe('do the task')
+    expect(composePrompt('   ', 'do the task')).toBe('do the task')
   })
 
   it('prepends a memory block when memory is present', () => {
-    const composed = composeInitialPrompt('remembered context', 'do the task')
+    const composed = composePrompt('remembered context', 'do the task')
     expect(composed).toContain('Agent memory for this agent:')
     expect(composed).toContain('remembered context')
     expect(composed).toContain('Current task:\ndo the task')
   })
 
-  it('returns just the memory block when there is no prompt', () => {
-    expect(composeInitialPrompt('remembered', undefined)).toBe('Agent memory for this agent:\nremembered')
+  it('keeps the required prompt when memory is present', () => {
+    expect(composePrompt('remembered', 'do it')).toBe(
+      'Agent memory for this agent:\nremembered\n\nCurrent task:\ndo it',
+    )
   })
 })
 

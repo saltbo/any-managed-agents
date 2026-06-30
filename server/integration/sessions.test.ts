@@ -285,7 +285,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, runtime: 'ama', name: 'Unpinned session' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        runtime: 'ama',
+        name: 'Unpinned session',
+        prompt: 'Resolve environment',
+      }),
     })
     expect(createRes.status).toBe(201)
     await expect(createRes.json()).resolves.toMatchObject({ spec: { environmentId: environment.id } })
@@ -299,7 +304,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, runtime: 'ama', name: 'Unpinned session' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        runtime: 'ama',
+        name: 'Unpinned session',
+        prompt: 'Resolve environment',
+      }),
     })
     expect(createRes.status).toBe(409)
     await expect(createRes.json()).resolves.toMatchObject({
@@ -321,6 +331,7 @@ describe('[CF] /api/v1/sessions', () => {
         environmentId: environment.id,
         runtime: 'ama',
         name: 'Ship the first task',
+        prompt: 'Ship the first task',
         metadata: { ticket: 'AMA-1' },
         volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
         volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban', readOnly: true }],
@@ -543,7 +554,7 @@ describe('[CF] /api/v1/sessions', () => {
       data: Array<{ sequence: number; type: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
     }
-    expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'agent_start' })])
+    expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1 })])
     expect(pagedEvents.pagination).toMatchObject({ hasMore: true, nextCursor: '1' })
 
     const cursorEventsRes = await jsonFetch(`/api/v1/sessions/${createdId}/events?cursor=1&limit=2`, authorization)
@@ -657,6 +668,7 @@ describe('[CF] /api/v1/sessions', () => {
         environmentId: environment.id,
         runtime: 'ama',
         name: 'Before rename',
+        prompt: 'Create a session for rename coverage',
         metadata: { ticket: 'AMA-1' },
       }),
     })
@@ -741,6 +753,7 @@ describe('[CF] /api/v1/sessions', () => {
             secretRef: credential.activeVersion.secretRef,
           },
         ],
+        prompt: 'Start self-hosted workspace setup.',
       }),
     })
     expect(createRes.status).toBe(201)
@@ -884,6 +897,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Prepare repository workspace',
         volumes: [
           {
             name: 'repo',
@@ -918,6 +932,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Reject unsafe workspace path',
         volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/any-managed-agents.git' }],
         volumeMounts: [{ name: 'repo', mountPath: '../escape' }],
       }),
@@ -936,6 +951,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Reject duplicate workspace mount',
         volumes: [
           { name: 'one', type: 'git_repository', url: 'https://github.com/saltbo/one.git' },
           { name: 'two', type: 'git_repository', url: 'https://gitlab.com/saltbo/two.git' },
@@ -990,6 +1006,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Prepare credential-backed workspace',
         envFrom: [
           {
             type: 'secret',
@@ -1087,6 +1104,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Resolve wrong env secret version',
         envFrom: [
           {
             type: 'secret',
@@ -1110,6 +1128,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Reject duplicate env secret names',
         envFrom: [
           {
             type: 'secret',
@@ -1133,6 +1152,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Reject duplicate env secret names',
         envFrom: [
           { type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.activeVersion.secretRef },
           { type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.activeVersion.secretRef },
@@ -1162,7 +1182,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Capture snapshot',
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { metadata: { uid: string } }
@@ -1198,7 +1223,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Record event contract',
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string; projectId: string }
@@ -1274,7 +1304,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Accept event ingest',
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
@@ -1313,7 +1348,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Archive event log',
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
@@ -1352,7 +1392,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Stream session events',
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
@@ -1436,7 +1481,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const queuedRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Queue self hosted work',
+      }),
     })
     expect(queuedRes.status).toBe(201)
     await expect(queuedRes.json()).resolves.toMatchObject({
@@ -1447,7 +1497,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Queue self hosted work',
+      }),
     })
     expect(createRes.status).toBe(201)
     await expect(createRes.json()).resolves.toMatchObject({
@@ -1473,6 +1528,7 @@ describe('[CF] /api/v1/sessions', () => {
         environmentId: environment.id,
         runtime: 'ama',
         name: 'Cancellation boundary',
+        prompt: 'Start cancellation boundary session',
       }),
     })
     expect(createRes.status).toBe(201)
@@ -1509,8 +1565,16 @@ describe('[CF] /api/v1/sessions', () => {
       data: Array<{ type: string; payload: Record<string, unknown> }>
     }
     const successfulAssistantCompletions = events.data.filter((event) => {
-      const message = (event.payload as { message?: { role?: string; stopReason?: string } }).message
-      return event.type === 'message_end' && message?.role === 'assistant' && message.stopReason === 'stop'
+      const message = (
+        event.payload as { message?: { content?: Array<{ text?: string }>; role?: string; stopReason?: string } }
+      ).message
+      const text = message?.content?.map((part) => part.text ?? '').join('\n') ?? ''
+      return (
+        event.type === 'message_end' &&
+        message?.role === 'assistant' &&
+        message.stopReason === 'stop' &&
+        text.includes('Wait for cancellation before completing')
+      )
     })
     expect(successfulAssistantCompletions).toEqual([])
     expect(JSON.stringify(events.data)).not.toContain('AMA runtime processed: Wait for cancellation before completing')
@@ -1533,7 +1597,7 @@ describe('[CF] /api/v1/sessions', () => {
           externalRunId: 'tftt-banking-bonus-2026-05-26',
           source: 'tftt-cron',
         },
-        initialPrompt: 'Research current Canadian banking bonus offers.',
+        prompt: 'Research current Canadian banking bonus offers.',
       }),
     })
     expect(createRes.status).toBe(201)
@@ -1587,13 +1651,13 @@ describe('[CF] /api/v1/sessions', () => {
       ]),
     )
 
-    const auditRes = await jsonFetch('/api/v1/audit-records?action=session.initial_prompt', authorization)
+    const auditRes = await jsonFetch('/api/v1/audit-records?action=session.prompt', authorization)
     expect(auditRes.status).toBe(200)
     const audit = (await auditRes.json()) as { data: Array<Record<string, unknown>> }
     expect(audit.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          action: 'session.initial_prompt',
+          action: 'session.prompt',
           outcome: 'success',
           sessionId: created.metadata.uid,
         }),
@@ -1621,7 +1685,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        initialPrompt: 'Run the maintainer heartbeat.',
+        prompt: 'Run the maintainer heartbeat.',
       }),
     })
     expect(createRes.status).toBe(201)
@@ -1636,7 +1700,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(serialized).toContain('Run the maintainer heartbeat')
   })
 
-  it('validates initial prompt input and redacts runtime failure reasons', async () => {
+  it('validates prompt input and redacts runtime failure reasons', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1648,7 +1712,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        initialPrompt: '',
+        prompt: '',
       }),
     })
     expect(invalidRes.status).toBe(400)
@@ -1669,12 +1733,22 @@ describe('[CF] /api/v1/sessions', () => {
 
     const firstRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'List first session',
+      }),
     })
     const first = (await firstRes.json()) as { metadata: { uid: string; createdAt: string } }
     const secondRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'List second session',
+      }),
     })
     const second = (await secondRes.json()) as { metadata: { uid: string; createdAt: string } }
 
@@ -1726,6 +1800,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Create maintainer A session',
         metadata: { labels: { maintainerId: 'maintainer_a' } },
       }),
     })
@@ -1736,6 +1811,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        prompt: 'Create maintainer B session',
         metadata: { labels: { maintainerId: 'maintainer_b' } },
       }),
     })
@@ -1761,7 +1837,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Check tenancy',
+      }),
     })
     const created = (await createRes.json()) as { id: string }
 
@@ -1803,7 +1884,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Check sandbox policy',
+      }),
     })
     expect(createRes.status).toBe(403)
     await expect(createRes.json()).resolves.toMatchObject({
@@ -1841,7 +1927,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Inspect repository status',
+      }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { metadata: { uid: string } }
@@ -1888,7 +1979,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Trigger failure',
+      }),
     })
     const created = (await createRes.json()) as { id: string }
 
@@ -1934,7 +2030,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Reread snapshots',
+      }),
     })
     const created = (await createRes.json()) as { metadata: { uid: string } }
 
@@ -1990,7 +2091,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Validate runtime catalog',
+      }),
     })
 
     expect(createRes.status).toBe(409)
@@ -2016,7 +2122,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'codex',
+        prompt: 'Check runner model routing.',
+      }),
     })
 
     expect(createRes.status).toBe(409)
@@ -2050,7 +2161,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'codex',
+        prompt: 'Check runner model routing.',
+      }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as {
@@ -2087,7 +2203,7 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'codex',
-        initialPrompt: 'Initial self-hosted task.',
+        prompt: 'Initial self-hosted task.',
       }),
     })
     expect(createRes.status).toBe(201)
@@ -2125,7 +2241,7 @@ describe('[CF] /api/v1/sessions', () => {
       expect.objectContaining({
         state: 'available',
         payload: expect.objectContaining({
-          initialPrompt: 'Fix the rejected review.',
+          prompt: 'Fix the rejected review.',
           resume: true,
           resumeToken: 'resume-token-1',
         }),
@@ -2145,7 +2261,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'codex',
+        prompt: 'Check legacy runner capability routing.',
+      }),
     })
     expect(createRes.status).toBe(403)
     await expect(createRes.json()).resolves.toMatchObject({
@@ -2169,7 +2290,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'Validate provider catalog',
+      }),
     })
     expect(createRes.status).toBe(409)
     await expect(createRes.json()).resolves.toMatchObject({
@@ -2196,7 +2322,12 @@ describe('[CF] /api/v1/sessions', () => {
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'codex',
+        prompt: 'Check legacy runner capability routing.',
+      }),
     })
     expect(createRes.status).toBe(201)
 
@@ -2215,7 +2346,12 @@ describe('[CF] /api/v1/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        prompt: 'List approvals',
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }

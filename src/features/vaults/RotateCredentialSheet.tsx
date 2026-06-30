@@ -49,7 +49,7 @@ export function RotateCredentialSheet({
 
   return (
     <Sheet open={credential !== null} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Rotate credential</SheetTitle>
           <SheetDescription>

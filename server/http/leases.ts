@@ -11,7 +11,7 @@ import {
 } from '../openapi'
 import { claimLease } from '../usecases/leases'
 import { type LeaseRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
-import { dispatchInitialPrompt } from '../usecases/runtime/cloud-turn'
+import { dispatchPrompt } from '../usecases/runtime/cloud-turn'
 import { runnerForbidden, runnerOperationAuthorized } from './runner-auth'
 
 type LeaseRoutes = OpenAPIHono<DepsEnv>
@@ -336,12 +336,12 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
         rawPayload?.type === 'session.start' &&
         rawPayload.runtime === 'ama' &&
         typeof rawPayload.sessionId === 'string' &&
-        typeof rawPayload.initialPrompt === 'string' &&
-        rawPayload.initialPrompt
+        typeof rawPayload.prompt === 'string' &&
+        rawPayload.prompt
       ) {
         const session = await deps.sessionOrchestration.findSession(auth.project.id, rawPayload.sessionId)
         if (session?.state === 'idle') {
-          await dispatchInitialPrompt(deps, auth, session, rawPayload.initialPrompt)
+          await dispatchPrompt(deps, auth, session, rawPayload.prompt)
         }
       }
       return c.json(serializeLease(updated), 200)

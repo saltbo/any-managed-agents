@@ -69,7 +69,7 @@ export function CreateEnvironmentSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+      <SheetContent className="overflow-hidden">
         <SheetHeader>
           <SheetTitle>Create Environment</SheetTitle>
           <SheetDescription>Define a reusable execution environment for future sessions.</SheetDescription>

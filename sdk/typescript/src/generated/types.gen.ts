@@ -170,7 +170,7 @@ export type RunnerWorkPayload = {
         [key: string]: string;
     };
     workspaceManifest?: RunnerWorkspaceManifest;
-    initialPrompt?: string | null;
+    prompt?: string | null;
     resume?: boolean;
     resumeToken?: string | null;
     approved?: boolean;
@@ -1357,7 +1357,7 @@ export type CreateSessionRequest = {
     envFrom?: Array<EnvFromEntry>;
     volumes?: Array<Volume>;
     volumeMounts?: Array<VolumeMount>;
-    initialPrompt?: string;
+    prompt: string;
 };
 
 export type SessionListResponse = {

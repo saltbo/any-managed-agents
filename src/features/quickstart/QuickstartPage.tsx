@@ -139,7 +139,7 @@ export function QuickstartPage() {
         environmentId: environment.metadata.uid,
         runtime: 'ama',
         name: 'Workers AI starter session',
-        initialPrompt: SAFE_EXAMPLE_PROMPT,
+        prompt: SAFE_EXAMPLE_PROMPT,
       })
       return session
     },

@@ -526,7 +526,12 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     it('createSession posts JSON', async () => {
       const fetchMock = makeJsonFetch(sessionFixture)
       vi.stubGlobal('fetch', fetchMock)
-      await api.createSession({ agentId: 'agent_1', environmentId: 'env_1', runtime: 'ama' })
+      await api.createSession({
+        agentId: 'agent_1',
+        environmentId: 'env_1',
+        runtime: 'ama',
+        prompt: 'Run AMA session',
+      })
       const [, init] = fetchMock.mock.calls[0]!
       expect(init?.method).toBe('POST')
     })

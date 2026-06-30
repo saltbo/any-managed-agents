@@ -1504,7 +1504,7 @@ export type CloudSessionTurnMessage = {
   organizationId: string
   projectId: string
   prompt: string
-  auditAction: 'session.initial_prompt' | 'session.command'
+  auditAction: 'session.prompt' | 'session.command'
 }
 
 // Continuation of a paused turn: the transcript is rebuilt from persisted
@@ -1521,7 +1521,7 @@ export type CloudSessionStepMessage = {
   // Present for a budget continuation (renew the held lease); absent for an
   // approval-resume step, which acquires a fresh lease in the consumer.
   turnId?: string
-  auditAction: 'session.initial_prompt' | 'session.command'
+  auditAction: 'session.prompt' | 'session.command'
 }
 
 export type CloudSessionStartMessage = {
@@ -1535,7 +1535,7 @@ export type CloudSessionStartMessage = {
   envFrom: EnvFromEntry[]
   volumes: Volume[]
   volumeMounts: VolumeMount[]
-  initialPrompt?: string
+  prompt?: string
 }
 
 export type CloudTurnMessage = CloudSessionTurnMessage | CloudSessionStepMessage | CloudSessionStartMessage
@@ -2080,7 +2080,7 @@ export interface SessionCreateOptions {
   runtimeConfig?: Record<string, unknown>
   env?: Record<string, string>
   envFrom?: EnvFromEntry[]
-  initialPrompt?: string
+  prompt: string
 }
 
 export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }

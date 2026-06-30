@@ -30,6 +30,7 @@ const {
   findEnvironmentMock,
   findEnvironmentVersionMock,
   resolveEnvironmentForRuntimeMock,
+  assignWorkMock,
 } = vi.hoisted(() => ({
   enqueueCloudTurnMock: vi.fn(),
   cloudTurnsRunInlineMock: vi.fn(() => false),
@@ -56,6 +57,7 @@ const {
   findEnvironmentMock: vi.fn(),
   findEnvironmentVersionMock: vi.fn(),
   resolveEnvironmentForRuntimeMock: vi.fn(),
+  assignWorkMock: vi.fn(async () => true),
 }))
 
 // Provider/runtime resolution + provider-config read live in the deps-first
@@ -127,7 +129,7 @@ const deps: CreateSessionDeps = {
     resolveWorkspaceManifest: async () => ({ root: '/workspace', mounts: [] }),
   } as never,
   runnerChannel: {
-    assignWork: async () => true,
+    assignWork: assignWorkMock,
   } as never,
   createApprovalGate: () => ({}) as never,
   rereadStartedSession: false,
@@ -160,12 +162,20 @@ describe('createSessionForAgent — launch dispatch failure (H5 FIX 2)', () => {
     findEnvironmentMock.mockResolvedValue({ id: 'env_1', currentVersionId: 'envver_1' })
     findEnvironmentVersionMock.mockResolvedValue({ id: 'envver_1', hostingMode: 'cloud' })
     resolveEnvironmentForRuntimeMock.mockReset()
+    assignWorkMock.mockClear()
   })
 
   it('reconciles the orphaned pending row to error and returns session_launch_failed when the cloud-turn enqueue throws', async () => {
     enqueueCloudTurnMock.mockRejectedValue(new Error('queue send failed'))
 
-    const result = await createSessionForAgent(deps, auth, 'agent_1', 'env_1', { runtime: 'ama' }, null)
+    const result = await createSessionForAgent(
+      deps,
+      auth,
+      'agent_1',
+      'env_1',
+      { runtime: 'ama', prompt: 'Start cloud session' },
+      null,
+    )
 
     expect(result).toEqual({
       ok: false,
@@ -191,14 +201,48 @@ describe('createSessionForAgent — launch dispatch failure (H5 FIX 2)', () => {
   it('keeps the happy path: returns ok and does not reconcile when the enqueue succeeds', async () => {
     enqueueCloudTurnMock.mockResolvedValue(undefined)
 
-    const result = await createSessionForAgent(deps, auth, 'agent_1', 'env_1', { runtime: 'ama' }, null)
+    const result = await createSessionForAgent(
+      deps,
+      auth,
+      'agent_1',
+      'env_1',
+      { runtime: 'ama', prompt: 'Start cloud session' },
+      null,
+    )
 
     expect(result.ok).toBe(true)
+    expect(insertSessionMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Start cloud session' }))
     expect(enqueueCloudTurnMock).toHaveBeenCalledTimes(1)
     const reconcile = updateSessionWhenStateMock.mock.calls.find(
       (call) => (call[3] as { state?: string }).state === 'error',
     )
     expect(reconcile).toBeUndefined()
+  })
+
+  it('rejects sessions without a prompt before creating any rows', async () => {
+    const result = await createSessionForAgent(
+      deps,
+      auth,
+      'agent_1',
+      'env_1',
+      {
+        runtime: 'codex',
+        prompt: '',
+      },
+      null,
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        status: 400,
+        code: 'validation_error',
+        message: 'Prompt is required',
+        fields: { prompt: 'Prompt is required.' },
+      },
+    })
+    expect(insertSessionMock).not.toHaveBeenCalled()
+    expect(assignWorkMock).not.toHaveBeenCalled()
   })
 })
 
@@ -228,7 +272,14 @@ describe('createSessionForAgent — environment resolution', () => {
   it('resolves an environment for the runtime/provider/model when none is pinned', async () => {
     resolveEnvironmentForRuntimeMock.mockResolvedValue('env_resolved')
 
-    const result = await createSessionForAgent(deps, auth, 'agent_1', null, { runtime: 'codex' }, null)
+    const result = await createSessionForAgent(
+      deps,
+      auth,
+      'agent_1',
+      null,
+      { runtime: 'codex', prompt: 'Run Codex' },
+      null,
+    )
 
     expect(result.ok).toBe(true)
     expect(resolveEnvironmentForRuntimeMock).toHaveBeenCalledWith('proj_1', 'codex', 'anthropic', '@cf/x')
@@ -237,7 +288,14 @@ describe('createSessionForAgent — environment resolution', () => {
   })
 
   it('does not resolve when an environment is pinned', async () => {
-    const result = await createSessionForAgent(deps, auth, 'agent_1', 'env_pinned', { runtime: 'codex' }, null)
+    const result = await createSessionForAgent(
+      deps,
+      auth,
+      'agent_1',
+      'env_pinned',
+      { runtime: 'codex', prompt: 'Run Codex' },
+      null,
+    )
 
     expect(result.ok).toBe(true)
     expect(resolveEnvironmentForRuntimeMock).not.toHaveBeenCalled()
@@ -247,7 +305,14 @@ describe('createSessionForAgent — environment resolution', () => {
   it('returns a 409 and creates no session when no environment can be resolved', async () => {
     resolveEnvironmentForRuntimeMock.mockResolvedValue(null)
 
-    const result = await createSessionForAgent(deps, auth, 'agent_1', null, { runtime: 'codex' }, null)
+    const result = await createSessionForAgent(
+      deps,
+      auth,
+      'agent_1',
+      null,
+      { runtime: 'codex', prompt: 'Run Codex' },
+      null,
+    )
 
     expect(result).toEqual({
       ok: false,

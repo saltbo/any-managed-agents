@@ -303,7 +303,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
       projectId: 'proj_1',
       runtime: 'totally-not-a-runtime',
       runtimeConfig: {},
-      auditAction: 'session.initial_prompt',
+      auditAction: 'session.prompt',
     } as unknown as Parameters<typeof consumeCloudTurnMessage>[1])
 
     // An unknown runtime is dead-lettered up front: the turn engine never runs.
@@ -424,7 +424,7 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
       runtimeConfig: {},
       env: {},
       envFrom: [],
-      initialPrompt: 'hello',
+      prompt: 'hello',
     })
 
     // The just-provisioned sandbox is torn down exactly once.
@@ -450,7 +450,7 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
       runtimeConfig: {},
       env: {},
       envFrom: [],
-      initialPrompt: 'hello',
+      prompt: 'hello',
     })
 
     // No teardown on the happy path.

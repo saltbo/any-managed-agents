@@ -188,7 +188,7 @@ describe('[CF] generated SDK contract', () => {
     const { created, session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {
       volumes,
       volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/any-managed-agents' }],
-      initialPrompt: `Start the external product work item for ${runId}.`,
+      prompt: `Start the external product work item for ${runId}.`,
     })
     const sessionId = String(obj(session.metadata).uid)
 
@@ -238,7 +238,9 @@ describe('[CF] generated SDK contract', () => {
     const refs = externalRefs(runId)
     const agent = await createAgentThroughSdk(ama, runId)
     const environment = await createEnvironmentThroughSdk(ama, runId)
-    const { session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {})
+    const { session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {
+      prompt: `Start the external control session for ${runId}.`,
+    })
     const sessionId = String(obj(session.metadata).uid)
 
     const command = (await ama.sessions.createMessage(sessionId, {

@@ -132,7 +132,7 @@ export function AgentBuilderPage() {
         environmentId,
         runtime: 'ama',
         name: `${agent.metadata.name} draft test`,
-        initialPrompt: testPrompt.trim(),
+        prompt: testPrompt.trim(),
       })
       return { agent, session }
     },

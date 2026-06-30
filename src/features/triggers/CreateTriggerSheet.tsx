@@ -75,6 +75,16 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
   const environments = (environmentsQuery.data?.data ?? EMPTY_RESOURCES).filter(
     (environment) => !isArchived(environment),
   )
+  const agentDescription = agentsQuery.isPending
+    ? 'Loading agents.'
+    : agents.length === 0
+      ? 'No active agents exist in the current project.'
+      : 'The trigger dispatches the current version of this agent.'
+  const environmentDescription = environmentsQuery.isPending
+    ? 'Loading environments.'
+    : environments.length === 0
+      ? 'No active environments exist in the current project.'
+      : 'Select the hosting and policy environment for dispatched sessions.'
   const createTrigger = useMutation({
     mutationFn: () =>
       api.createTrigger({
@@ -134,7 +144,7 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create Trigger</SheetTitle>
           <SheetDescription>Schedule an agent to dispatch on a recurring interval.</SheetDescription>
@@ -164,12 +174,12 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
                 </FieldDescription>
               </Field>
               <Field>
-                <FieldLabel>Agent</FieldLabel>
+                <FieldLabel htmlFor="trigger-agent">Agent</FieldLabel>
                 <Select value={form.agentId} onValueChange={(agentId) => setForm({ ...form, agentId })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="trigger-agent" className="w-full">
                     <SelectValue placeholder="Select an agent" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       {agents.map((agent) => (
                         <SelectItem key={agent.metadata.uid} value={agent.metadata.uid}>
@@ -179,18 +189,18 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <FieldDescription>The trigger dispatches the current version of this agent.</FieldDescription>
+                <FieldDescription>{agentDescription}</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel>Environment</FieldLabel>
+                <FieldLabel htmlFor="trigger-environment">Environment</FieldLabel>
                 <Select
                   value={form.environmentId}
                   onValueChange={(environmentId) => setForm({ ...form, environmentId })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="trigger-environment" className="w-full">
                     <SelectValue placeholder="Select an environment" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectGroup>
                       {environments.map((environment) => (
                         <SelectItem key={environment.metadata.uid} value={environment.metadata.uid}>
@@ -200,7 +210,7 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <FieldDescription>Select the hosting and policy environment for dispatched sessions.</FieldDescription>
+                <FieldDescription>{environmentDescription}</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel>Runtime</FieldLabel>

@@ -69,7 +69,7 @@ async function createAgent(authorization: string) {
 async function createCliRelaySession(authorization: string, agentId: string, environmentId: string) {
   const res = await jsonFetch('/api/v1/sessions', authorization, {
     method: 'POST',
-    body: JSON.stringify({ agentId, environmentId, runtime: 'claude-code' }),
+    body: JSON.stringify({ agentId, environmentId, runtime: 'claude-code', prompt: 'Run relay test' }),
   })
   if (res.status !== 201) throw new Error(`Session creation failed: ${res.status} ${await res.text()}`)
   const session = (await res.json()) as { metadata: { uid: string }; status: { phase: string } }

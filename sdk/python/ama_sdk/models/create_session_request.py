@@ -36,6 +36,7 @@ class CreateSessionRequest:
         Attributes:
             agent_id (str):  Example: agent_abc123.
             runtime (Runtime):  Example: codex.
+            prompt (str):  Example: Research Canadian banking bonus offers and summarize current opportunities..
             environment_id (str | Unset):  Example: env_abc123.
             runtime_config (CreateSessionRequestRuntimeConfig | Unset):  Example: {'sandboxMode': 'workspace-write'}.
             name (str | Unset):  Example: Implement billing export.
@@ -46,12 +47,11 @@ class CreateSessionRequest:
                 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
             volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset):
             volume_mounts (list[VolumeMount] | Unset):
-            initial_prompt (str | Unset):  Example: Research Canadian banking bonus offers and summarize current
-                opportunities..
      """
 
     agent_id: str
     runtime: Runtime
+    prompt: str
     environment_id: str | Unset = UNSET
     runtime_config: CreateSessionRequestRuntimeConfig | Unset = UNSET
     name: str | Unset = UNSET
@@ -60,7 +60,6 @@ class CreateSessionRequest:
     env_from: list[EnvFromEntry] | Unset = UNSET
     volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset = UNSET
     volume_mounts: list[VolumeMount] | Unset = UNSET
-    initial_prompt: str | Unset = UNSET
 
 
 
@@ -78,6 +77,8 @@ class CreateSessionRequest:
         agent_id = self.agent_id
 
         runtime = self.runtime.value
+
+        prompt = self.prompt
 
         environment_id = self.environment_id
 
@@ -129,14 +130,13 @@ class CreateSessionRequest:
 
 
 
-        initial_prompt = self.initial_prompt
-
 
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
             "agentId": agent_id,
             "runtime": runtime,
+            "prompt": prompt,
         })
         if environment_id is not UNSET:
             field_dict["environmentId"] = environment_id
@@ -154,8 +154,6 @@ class CreateSessionRequest:
             field_dict["volumes"] = volumes
         if volume_mounts is not UNSET:
             field_dict["volumeMounts"] = volume_mounts
-        if initial_prompt is not UNSET:
-            field_dict["initialPrompt"] = initial_prompt
 
         return field_dict
 
@@ -178,6 +176,8 @@ class CreateSessionRequest:
 
 
 
+
+        prompt = d.pop("prompt")
 
         environment_id = d.pop("environmentId", UNSET)
 
@@ -276,11 +276,10 @@ class CreateSessionRequest:
                 volume_mounts.append(volume_mounts_item)
 
 
-        initial_prompt = d.pop("initialPrompt", UNSET)
-
         create_session_request = cls(
             agent_id=agent_id,
             runtime=runtime,
+            prompt=prompt,
             environment_id=environment_id,
             runtime_config=runtime_config,
             name=name,
@@ -289,7 +288,6 @@ class CreateSessionRequest:
             env_from=env_from,
             volumes=volumes,
             volume_mounts=volume_mounts,
-            initial_prompt=initial_prompt,
         )
 
         return create_session_request

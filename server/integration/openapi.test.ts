@@ -388,8 +388,8 @@ describe('[CF] OpenAPI documentation', () => {
         properties?: Record<string, { maxLength?: number; minLength?: number; type?: string }>
       }
     )?.properties
-    expect(createSessionProperties).toHaveProperty('initialPrompt')
-    expect(createSessionProperties?.initialPrompt).toMatchObject({
+    expect(createSessionProperties).toHaveProperty('prompt')
+    expect(createSessionProperties?.prompt).toMatchObject({
       type: 'string',
       minLength: 1,
       maxLength: 16000,

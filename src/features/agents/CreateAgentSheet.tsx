@@ -41,7 +41,7 @@ export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpen
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create Agent</SheetTitle>
           <SheetDescription>

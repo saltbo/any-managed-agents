@@ -321,7 +321,7 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		}
 		return err
 	}
-	if prompt := initialPrompt(payload); prompt != "" {
+	if prompt := workPrompt(payload); prompt != "" {
 		if err := r.relayStoredEvent(leaseCtx, store, relayEvent, "message_end", userPromptEventPayload(prompt)); err != nil {
 			if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
 				return finishErr
@@ -361,7 +361,7 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		Provider:              payload.Provider,
 		Model:                 payload.Model,
 		AgentSnapshot:         payload.AgentSnapshot,
-		InitialPrompt:         initialPrompt(payload),
+		Prompt:                workPrompt(payload),
 		Resume:                payload.Resume,
 		ResumeToken:           payload.ResumeToken,
 		WorkDir:               workspace.Cwd,
@@ -492,11 +492,11 @@ func exitCodeValue(value any) int {
 	}
 }
 
-func initialPrompt(payload protocol.WorkPayload) string {
-	if payload.InitialPrompt == nil {
+func workPrompt(payload protocol.WorkPayload) string {
+	if payload.Prompt == nil {
 		return ""
 	}
-	return *payload.InitialPrompt
+	return *payload.Prompt
 }
 
 func (r LeaseWorker) renewLease(ctx context.Context, lease *ama.Lease, cancel context.CancelFunc, errors chan<- error, resumeTokens *resumeTokenBox) {

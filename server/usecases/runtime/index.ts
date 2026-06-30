@@ -11,12 +11,12 @@ export {
   type CloudTurnDeps,
   type CloudTurnOutcome,
   consumeCloudTurnMessage,
-  dispatchInitialPrompt,
+  dispatchPrompt as dispatchCloudPrompt,
   executeCloudSessionTurn,
   markCloudTurnDeadLettered,
   startSessionRuntimeForRow,
 } from './cloud-turn'
-export { appendRuntimeEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
+export { appendRuntimeEvent, loadRuntimeMessages, markPromptFailed } from './events'
 export { mcpConnectorIds, resolveMcpServers, validateRuntimeProviderModel } from './provisioning'
 export {
   denyRuntimePolicy,

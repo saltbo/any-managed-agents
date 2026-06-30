@@ -1,9 +1,14 @@
 import { AMA_SANDBOX_TOOL_NAMES } from '@ama/runtime-contracts/agent-tools'
 import { useQuery } from '@tanstack/react-query'
-import { Bot, Boxes, MessageSquare, Plus, Server, Trash2 } from 'lucide-react'
+import { Bot, Boxes, ChevronDown, MessageSquare, Plus, Server, Trash2 } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Field,
   FieldDescription,
@@ -17,15 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  type Agent,
-  api,
-  type Environment,
-  type MemoryStore,
-  type MemoryStoreAccess,
-  type Volume,
-  type VolumeMount,
-} from '@/lib/amarpc'
+import { type Agent, api, type Environment, type MemoryStore, type Vault } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 import { isArchived, parseTools } from './format'
 import {
@@ -299,53 +296,41 @@ export function AllowedToolsField({
 }) {
   const selectId = `field-${label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`
   const selected = parseTools(value)
-  const available = AMA_SANDBOX_TOOL_NAMES.filter((tool) => !selected.includes(tool))
-  const addTool = (tool: string) => {
-    if (!tool || selected.includes(tool)) {
-      return
-    }
-    onChange([...selected, tool].join('\n'))
-  }
-  const removeTool = (tool: string) => {
-    onChange(selected.filter((name) => name !== tool).join('\n'))
+  const selectedLabel =
+    selected.length === 0
+      ? 'Select allowed tools'
+      : selected.length === 1
+        ? selected[0]
+        : `${selected.length} tools selected`
+  const updateTool = (tool: string, checked: boolean | 'indeterminate') => {
+    const nextTools =
+      checked === true ? [...selected.filter((name) => name !== tool), tool] : selected.filter((name) => name !== tool)
+    onChange(nextTools.join('\n'))
   }
 
   return (
     <Field data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={selectId}>{label}</FieldLabel>
-      <Select value="__select_tool" onValueChange={addTool} disabled={available.length === 0}>
-        <SelectTrigger id={selectId}>
-          <SelectValue placeholder="Add tool" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectItem value="__select_tool" disabled>
-              Add tool
-            </SelectItem>
-            {available.map((tool) => (
-              <SelectItem key={tool} value={tool}>
-                {tool}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-      {selected.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {selected.map((tool) => (
-            <span
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button id={selectId} type="button" variant="outline" className="w-full justify-between">
+            <span className="truncate">{selectedLabel}</span>
+            <ChevronDown data-icon="inline-end" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+          {AMA_SANDBOX_TOOL_NAMES.map((tool) => (
+            <DropdownMenuCheckboxItem
               key={tool}
-              className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2 text-sm"
+              checked={selected.includes(tool)}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(checked) => updateTool(tool, checked)}
             >
               {tool}
-              <Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => removeTool(tool)}>
-                <Trash2 />
-                <span className="sr-only">Remove {tool}</span>
-              </Button>
-            </span>
+            </DropdownMenuCheckboxItem>
           ))}
-        </div>
-      ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {error ? <FieldError>{error}</FieldError> : null}
     </Field>
   )
@@ -409,6 +394,7 @@ export function SessionForm({
   agents,
   environments,
   memoryStores = [],
+  vaults = [],
   onSubmit,
 }: {
   value: SessionFormState
@@ -416,13 +402,14 @@ export function SessionForm({
   agents: Agent[]
   environments: Environment[]
   memoryStores?: MemoryStore[]
+  vaults?: Vault[]
   onSubmit: (event: FormEvent) => void
 }) {
   const activeAgents = agents.filter((agent) => !isArchived(agent))
   const activeEnvironments = environments.filter((environment) => !isArchived(environment))
   const selectedAgent = activeAgents.find((agent) => agent.metadata.uid === value.agentId)
   const selectedEnvironment = activeEnvironments.find((environment) => environment.metadata.uid === value.environmentId)
-  const canSubmit = Boolean(value.agentId && value.environmentId)
+  const canSubmit = Boolean(value.agentId && value.environmentId && value.prompt.trim())
 
   return (
     <form className="flex flex-col gap-4" onSubmit={onSubmit}>
@@ -491,33 +478,14 @@ export function SessionForm({
           </Select>
           <FieldDescription>Runtime is selected per session.</FieldDescription>
         </Field>
-        <TextField
-          label="Name"
-          description="Optional short name used in session lists and detail headers."
-          value={value.name}
-          onChange={(name) => setValue({ ...value, name })}
-        />
         <TextAreaField
-          label="Metadata"
-          description="JSON object for safe session metadata."
-          value={value.metadata}
-          onChange={(metadata) => setValue({ ...value, metadata })}
+          label="Prompt"
+          description="Task to run when the session starts. The session name is generated from this prompt."
+          value={value.prompt}
+          onChange={(prompt) => setValue({ ...value, prompt })}
         />
-        <TextAreaField
-          label="Volumes"
-          description='JSON array of mountable inputs, such as {"name":"source","type":"git_repository","url":"https://github.com/org/repo.git"}.'
-          value={value.volumes}
-          onChange={(volumes) => setValue({ ...value, volumes })}
-        />
-        <TextAreaField
-          label="Volume mounts"
-          description='JSON array of mounts, such as {"name":"source","mountPath":"/workspace/repos/org/repo","readOnly":true}.'
-          value={value.volumeMounts}
-          onChange={(volumeMounts) => setValue({ ...value, volumeMounts })}
-        />
-        {memoryStores.length > 0 ? (
-          <MemoryStoreAttachmentField memoryStores={memoryStores} value={value} setValue={setValue} />
-        ) : null}
+        <CredentialVaultsField vaults={vaults} value={value} setValue={setValue} />
+        <SessionResourcesField memoryStores={memoryStores} value={value} setValue={setValue} />
       </FieldGroup>
       <Button type="submit" disabled={!canSubmit}>
         <MessageSquare data-icon="inline-start" />
@@ -527,7 +495,70 @@ export function SessionForm({
   )
 }
 
-function MemoryStoreAttachmentField({
+function CredentialVaultsField({
+  vaults,
+  value,
+  setValue,
+}: {
+  vaults: Vault[]
+  value: SessionFormState
+  setValue: (value: SessionFormState) => void
+}) {
+  const activeVaults = vaults.filter((vault) => !isArchived(vault))
+  const selectedVaults = activeVaults.filter((vault) => value.credentialVaultIds.includes(vault.metadata.uid))
+  const triggerLabel =
+    selectedVaults.length === 0
+      ? 'Select credential vaults'
+      : selectedVaults.length === 1
+        ? selectedVaults[0]!.metadata.name
+        : `${selectedVaults.length} vaults selected`
+  function updateVault(vaultId: string, checked: boolean | 'indeterminate') {
+    const nextIds = value.credentialVaultIds.filter((id) => id !== vaultId)
+    if (checked === true) {
+      nextIds.push(vaultId)
+    }
+    setValue({ ...value, credentialVaultIds: nextIds })
+  }
+  return (
+    <Field>
+      <FieldLabel>Credential vaults</FieldLabel>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" className="w-full justify-between">
+            <span className="truncate">{triggerLabel}</span>
+            <ChevronDown className="size-4 text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="max-h-72">
+          {activeVaults.length > 0 ? (
+            activeVaults.map((vault) => (
+              <DropdownMenuCheckboxItem
+                key={vault.metadata.uid}
+                checked={value.credentialVaultIds.includes(vault.metadata.uid)}
+                onSelect={(event) => event.preventDefault()}
+                onCheckedChange={(checked) => updateVault(vault.metadata.uid, checked)}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{vault.metadata.name}</span>
+                  {vault.metadata.description ? (
+                    <span className="block truncate text-xs text-muted-foreground">{vault.metadata.description}</span>
+                  ) : null}
+                </span>
+              </DropdownMenuCheckboxItem>
+            ))
+          ) : (
+            <div className="px-2 py-1.5 text-sm text-muted-foreground">No credential vaults available.</div>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <FieldDescription>
+        Selected vaults are mounted into the session workspace as read-only secret resources.
+      </FieldDescription>
+    </Field>
+  )
+}
+
+function SessionResourcesField({
   memoryStores,
   value,
   setValue,
@@ -536,108 +567,167 @@ function MemoryStoreAttachmentField({
   value: SessionFormState
   setValue: (value: SessionFormState) => void
 }) {
-  const volumes = parseVolumes(value.volumes)
-  const volumeMounts = parseVolumeMounts(value.volumeMounts)
-  const memoryVolumes = volumes.filter((volume) => volume.type === 'memory')
-  function updateMemoryStore(storeId: string, checked: boolean | 'indeterminate') {
-    const name = memoryVolumeName(storeId)
-    const memoryRef = memoryRefForStore(storeId)
-    const nextVolumes = volumes.filter((volume) => !(volume.type === 'memory' && volume.memoryRef === memoryRef))
-    const nextMounts = volumeMounts.filter((mount) => mount.name !== name)
-    if (checked === true) {
-      nextVolumes.push({ name, type: 'memory', memoryRef, access: 'read_only' })
-      nextMounts.push({ name, mountPath: `/workspace/.ama/memory-stores/${storeId}`, readOnly: true })
+  function addResource() {
+    setValue({
+      ...value,
+      resources: [
+        ...value.resources,
+        {
+          id: `resource-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          type: 'git_repository',
+          url: '',
+          ref: '',
+        },
+      ],
+    })
+  }
+  function removeResource(resourceId: string) {
+    setValue({ ...value, resources: value.resources.filter((resource) => resource.id !== resourceId) })
+  }
+  function updateGitResource(resourceId: string, patch: { url?: string; ref?: string }) {
+    setValue({
+      ...value,
+      resources: value.resources.map((resource) =>
+        resource.id === resourceId && resource.type === 'git_repository' ? { ...resource, ...patch } : resource,
+      ),
+    })
+  }
+  function updateMemoryResource(
+    resourceId: string,
+    patch: { memoryStoreId?: string; access?: 'read_only' | 'read_write' },
+  ) {
+    setValue({
+      ...value,
+      resources: value.resources.map((resource) =>
+        resource.id === resourceId && resource.type === 'memory' ? { ...resource, ...patch } : resource,
+      ),
+    })
+  }
+  function updateResourceType(resourceId: string, type: SessionFormState['resources'][number]['type']) {
+    if (type === 'memory') {
+      setValue({
+        ...value,
+        resources: value.resources.map((resource) =>
+          resource.id === resourceId
+            ? {
+                id: resource.id,
+                type: 'memory',
+                memoryStoreId: memoryStores[0]?.metadata.uid ?? '',
+                access: 'read_only',
+              }
+            : resource,
+        ),
+      })
+      return
     }
     setValue({
       ...value,
-      volumes: JSON.stringify(nextVolumes, null, 2),
-      volumeMounts: JSON.stringify(nextMounts, null, 2),
-    })
-  }
-  function updateAccess(storeId: string, access: MemoryStoreAccess) {
-    const name = memoryVolumeName(storeId)
-    const memoryRef = memoryRefForStore(storeId)
-    const nextVolumes = volumes.map((volume) =>
-      volume.type === 'memory' && volume.memoryRef === memoryRef ? { ...volume, access } : volume,
-    )
-    const nextMounts = volumeMounts.map((mount) =>
-      mount.name === name ? { ...mount, readOnly: access !== 'read_write' } : mount,
-    )
-    setValue({
-      ...value,
-      volumes: JSON.stringify(nextVolumes, null, 2),
-      volumeMounts: JSON.stringify(nextMounts, null, 2),
+      resources: value.resources.map((resource) =>
+        resource.id === resourceId ? { id: resource.id, type: 'git_repository', url: '', ref: '' } : resource,
+      ),
     })
   }
   return (
     <Field>
-      <FieldLabel>Memory stores</FieldLabel>
-      <div className="space-y-2 rounded-md border p-3">
-        {memoryStores.map((store) => {
-          const attached = memoryVolumes.find((volume) => volume.memoryRef === memoryRefForStore(store.metadata.uid))
-          return (
-            <div key={store.metadata.uid} className="flex flex-wrap items-center gap-3">
-              <Checkbox
-                id={`memory-store-${store.metadata.uid}`}
-                checked={Boolean(attached)}
-                onCheckedChange={(checked) => updateMemoryStore(store.metadata.uid, checked)}
-              />
-              <label htmlFor={`memory-store-${store.metadata.uid}`} className="min-w-0 flex-1 text-sm font-medium">
-                <span className="block truncate">{store.metadata.name}</span>
-                {store.metadata.description ? (
-                  <span className="block truncate text-xs font-normal text-muted-foreground">
-                    {store.metadata.description}
-                  </span>
-                ) : null}
-              </label>
-              <Select
-                value={attached?.access === 'read_write' ? 'read_write' : 'read_only'}
-                disabled={!attached}
-                onValueChange={(access) => updateAccess(store.metadata.uid, access as MemoryStoreAccess)}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="read_only">Read only</SelectItem>
-                    <SelectItem value="read_write">Read write</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          )
-        })}
+      <div className="flex items-center justify-between gap-3">
+        <FieldLabel>Resources</FieldLabel>
+        <Button type="button" variant="outline" size="sm" onClick={addResource}>
+          <Plus data-icon="inline-start" />
+          Add resource
+        </Button>
       </div>
-      <FieldDescription>AMA manages the mount path for attached memory stores.</FieldDescription>
+      <div className="space-y-3 rounded-md border p-3">
+        {value.resources.length > 0 ? (
+          value.resources.map((resource) => (
+            <div key={resource.id} className="grid gap-3 rounded-md border bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
+                <Select
+                  value={resource.type}
+                  onValueChange={(type) =>
+                    updateResourceType(resource.id, type as SessionFormState['resources'][number]['type'])
+                  }
+                >
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="git_repository">Git repository</SelectItem>
+                      <SelectItem value="memory">Memory</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  onClick={() => removeResource(resource.id)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+              {resource.type === 'git_repository' ? (
+                <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
+                  <Input
+                    aria-label="Git repository URL"
+                    placeholder="https://github.com/org/repo.git"
+                    value={resource.url}
+                    onChange={(event) => updateGitResource(resource.id, { url: event.target.value })}
+                  />
+                  <Input
+                    aria-label="Git repository ref"
+                    placeholder="main"
+                    value={resource.ref}
+                    onChange={(event) => updateGitResource(resource.id, { ref: event.target.value })}
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
+                  <Select
+                    value={resource.memoryStoreId}
+                    onValueChange={(memoryStoreId) => updateMemoryResource(resource.id, { memoryStoreId })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select memory" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {memoryStores.map((store) => (
+                          <SelectItem key={store.metadata.uid} value={store.metadata.uid}>
+                            {store.metadata.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={resource.access}
+                    onValueChange={(access) =>
+                      updateMemoryResource(resource.id, { access: access as 'read_only' | 'read_write' })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="read_only">Read only</SelectItem>
+                        <SelectItem value="read_write">Read write</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No resources attached.</p>
+        )}
+      </div>
+      <FieldDescription>AMA manages mount paths for attached repositories and memory stores.</FieldDescription>
     </Field>
   )
-}
-
-function parseVolumes(value: string): Array<Volume & { memoryRef?: string; access?: string }> {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return Array.isArray(parsed) ? (parsed as Array<Volume & { memoryRef?: string; access?: string }>) : []
-  } catch {
-    return []
-  }
-}
-
-function parseVolumeMounts(value: string): VolumeMount[] {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return Array.isArray(parsed) ? (parsed as VolumeMount[]) : []
-  } catch {
-    return []
-  }
-}
-
-function memoryVolumeName(storeId: string) {
-  return `memory-${storeId}`
-}
-
-function memoryRefForStore(storeId: string) {
-  return `ama://memories/${encodeURIComponent(storeId)}`
 }
 
 function hostingModeLabel(value: Environment['spec']['type']) {

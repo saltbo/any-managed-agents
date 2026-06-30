@@ -176,7 +176,7 @@ export function SessionDetailView({
           /* v8 ignore stop */
         }}
       >
-        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+        <SheetContent className="overflow-y-auto">
           {activeSheet === 'agent' ? (
             <SnapshotSheet
               title={agentName}

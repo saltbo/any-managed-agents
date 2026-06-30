@@ -629,7 +629,7 @@
           "workspaceManifest": {
             "$ref": "#/components/schemas/RunnerWorkspaceManifest"
           },
-          "initialPrompt": {
+          "prompt": {
             "type": "string",
             "nullable": true
           },
@@ -5573,7 +5573,7 @@
             },
             "maxItems": 50
           },
-          "initialPrompt": {
+          "prompt": {
             "type": "string",
             "minLength": 1,
             "maxLength": 16000,
@@ -5582,7 +5582,8 @@
         },
         "required": [
           "agentId",
-          "runtime"
+          "runtime",
+          "prompt"
         ],
         "additionalProperties": false
       },

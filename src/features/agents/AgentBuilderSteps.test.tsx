@@ -584,13 +584,13 @@ describe('ToolsStep', () => {
         <ToolsStep draft={emptyBuilderDraft} errors={{}} setField={setField} connectors={[]} />
       </MemoryRouter>,
     )
-    fireEvent.pointerDown(screen.getByRole('combobox', { name: 'Allowed tools' }), {
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Allowed tools' }), {
       button: 0,
       ctrlKey: false,
       pointerId: 1,
       pointerType: 'mouse',
     })
-    fireEvent.click(await screen.findByRole('option', { name: 'read' }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'read' }))
     expect(setField).toHaveBeenCalledWith('allowedTools', 'read')
   })
 })

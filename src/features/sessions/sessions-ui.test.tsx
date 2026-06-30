@@ -109,10 +109,9 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           agentId: 'agent_1',
           environmentId: 'env_1',
           runtime: 'ama',
-          name: '',
-          metadata: '{}',
-          volumes: '[]',
-          volumeMounts: '[]',
+          prompt: 'Run session',
+          credentialVaultIds: [],
+          resources: [],
         }}
         setValue={vi.fn()}
         agents={[buildAgent()]}

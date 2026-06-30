@@ -318,16 +318,13 @@ function stringRecord(value: unknown): Record<string, string> {
   )
 }
 
-// Composes the initial prompt with the agent's persisted memory block when
+// Composes the session prompt with the agent's persisted memory block when
 // memory is enabled and present. Pure given the resolved memory content.
-export function composeInitialPrompt(
-  memoryContent: string | null,
-  initialPrompt: string | undefined,
-): string | undefined {
+export function composePrompt(memoryContent: string | null, prompt: string): string {
   const content = memoryContent?.trim()
   if (!content) {
-    return initialPrompt
+    return prompt
   }
   const memoryBlock = ['Agent memory for this agent:', content].join('\n')
-  return initialPrompt ? `${memoryBlock}\n\nCurrent task:\n${initialPrompt}` : memoryBlock
+  return `${memoryBlock}\n\nCurrent task:\n${prompt}`
 }

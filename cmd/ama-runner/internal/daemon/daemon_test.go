@@ -531,7 +531,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		t.Fatalf("expected codex run success, got %v", err)
 	}
 	if runtimeAdapter.request.Runtime != "codex" ||
-		runtimeAdapter.request.InitialPrompt != prompt ||
+		runtimeAdapter.request.Prompt != prompt ||
 		runtimeAdapter.request.Provider != "provider_codex" ||
 		runtimeAdapter.request.Model != "gpt-5.3-codex" {
 		t.Fatalf("expected runtime request metadata, got %#v", runtimeAdapter.request)
@@ -717,7 +717,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("expected claude runtime success, got %v", err)
 	}
-	if runtimeAdapter.request.InitialPrompt != "Run Claude Code" {
+	if runtimeAdapter.request.Prompt != "Run Claude Code" {
 		t.Fatalf("expected prompt to reach runtime adapter, got %#v", runtimeAdapter.request)
 	}
 	if runtimeAdapter.request.Provider != "anthropic" || runtimeAdapter.request.Model != "claude-sonnet-4-6" {
@@ -1158,7 +1158,7 @@ func codexSessionStartLease(prompt string) *fakeWork {
 	work.workItem.Payload["model"] = "gpt-5.3-codex"
 	work.workItem.Payload["runtimeDriver"] = "codex-self-hosted"
 	work.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:*:gpt-5.3-codex"
-	work.workItem.Payload["initialPrompt"] = prompt
+	work.workItem.Payload["prompt"] = prompt
 	return work
 }
 
@@ -1230,7 +1230,7 @@ func heartbeatInventory(request ama.PutRunnerHeartbeatRequest) []ama.RunnerRunti
 func claudeCodeSessionStartLease() *fakeWork {
 	work := externalRuntimeSessionStartLease("claude-code", "anthropic", "claude-sonnet-4-6", map[string]any{"permissionMode": "acceptEdits"})
 	work.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:claude-code:*:claude-sonnet-4-6"
-	work.workItem.Payload["initialPrompt"] = "Run Claude Code"
+	work.workItem.Payload["prompt"] = "Run Claude Code"
 	return work
 }
 
@@ -1245,7 +1245,7 @@ func externalRuntimeSessionStartLease(runtimeName string, provider string, model
 	work.workItem.Payload["provider"] = provider
 	work.workItem.Payload["model"] = model
 	work.workItem.Payload["runtimeDriver"] = runtimeName + "-self-hosted"
-	work.workItem.Payload["initialPrompt"] = "Run external runtime"
+	work.workItem.Payload["prompt"] = "Run external runtime"
 	work.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:" + runtimeName + ":" + provider + ":" + model
 	return work
 }
@@ -1486,7 +1486,7 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 		t.Fatalf("expected copilot run success, got %v", err)
 	}
 	if runtimeAdapter.request.Runtime != "copilot" ||
-		runtimeAdapter.request.InitialPrompt != "copilot prompt" ||
+		runtimeAdapter.request.Prompt != "copilot prompt" ||
 		runtimeAdapter.request.Provider != "provider_copilot" ||
 		runtimeAdapter.request.Model != "copilot-cli" {
 		t.Fatalf("expected copilot runtime request metadata, got %#v", runtimeAdapter.request)
@@ -1586,6 +1586,6 @@ func copilotSessionStartLease(prompt string) *fakeWork {
 	lease.workItem.Payload["model"] = "copilot-cli"
 	lease.workItem.Payload["runtimeDriver"] = "copilot-self-hosted"
 	lease.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:copilot:*:copilot-cli"
-	lease.workItem.Payload["initialPrompt"] = prompt
+	lease.workItem.Payload["prompt"] = prompt
 	return lease
 }

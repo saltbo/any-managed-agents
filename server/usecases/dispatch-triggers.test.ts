@@ -765,11 +765,11 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — outer excep
 
 describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
   it('creates a session with a prompt rendered from request fields', async () => {
-    let initialPrompt: string | undefined
+    let prompt: string | undefined
     const deps = fakeDeps({
       sessionRuntime: {
         createSession: async (_deps, _auth, input) => {
-          initialPrompt = input.options.initialPrompt
+          prompt = input.options.prompt
           return { ok: true, value: sessionRecord({ metadata: { ...sessionRecord().metadata, uid: 'sess_http' } }) }
         },
       },
@@ -784,7 +784,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     })
     expect(result.state).toBe('dispatched')
     expect(result.sessionId).toBe('sess_http')
-    expect(initialPrompt).toBe('Handle T-123 from portal')
+    expect(prompt).toBe('Handle T-123 from portal')
   })
 
   it('creates a run without a reusable session key when the body is not an object', async () => {

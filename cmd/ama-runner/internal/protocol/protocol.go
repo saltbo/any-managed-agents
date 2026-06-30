@@ -80,7 +80,7 @@ type WorkPayload struct {
 	RuntimeDriver            string            `json:"runtimeDriver"`
 	RequiredRunnerCapability string            `json:"requiredRunnerCapability"`
 	Env                      map[string]string `json:"env"`
-	InitialPrompt            *string           `json:"initialPrompt"`
+	Prompt                   *string           `json:"prompt"`
 	Resume                   bool              `json:"resume"`
 	ResumeToken              string            `json:"resumeToken"`
 	Approved                 bool              `json:"approved"`
@@ -162,7 +162,7 @@ func workPayloadFromSDK(payload ama.RunnerWorkPayload) WorkPayload {
 		RuntimeDriver:            stringValue(payload.RuntimeDriver),
 		RequiredRunnerCapability: stringValue(payload.RequiredRunnerCapability),
 		Env:                      stringMap(payload.Env),
-		InitialPrompt:            payload.InitialPrompt,
+		Prompt:                   payload.Prompt,
 		Resume:                   boolValue(payload.Resume),
 		ResumeToken:              stringValue(payload.ResumeToken),
 		Approved:                 boolValue(payload.Approved),
