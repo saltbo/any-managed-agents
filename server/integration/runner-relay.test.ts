@@ -39,10 +39,12 @@ async function createSelfHostedEnvironment(authorization: string) {
   const res = await jsonFetch('/api/v1/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      name: `CLI relay workspace ${crypto.randomUUID()}`,
-      type: 'self_hosted',
-      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
-      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+      metadata: { name: `CLI relay workspace ${crypto.randomUUID()}` },
+      spec: {
+        type: 'self_hosted',
+        networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+      },
     }),
   })
   if (res.status !== 201) throw new Error(`Environment creation failed: ${res.status} ${await res.text()}`)
@@ -54,11 +56,13 @@ async function createAgent(authorization: string) {
   const res = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      name: `CLI relay agent ${crypto.randomUUID()}`,
-      systemPrompt: 'Run via claude-code self-hosted.',
-      skills: [],
-      mcpConnectors: [],
-      provider: 'workers-ai',
+      metadata: { name: `CLI relay agent ${crypto.randomUUID()}` },
+      spec: {
+        systemPrompt: 'Run via claude-code self-hosted.',
+        skills: [],
+        mcpConnectors: [],
+        provider: 'workers-ai',
+      },
     }),
   })
   if (res.status !== 201) throw new Error(`Agent creation failed: ${res.status} ${await res.text()}`)
@@ -69,7 +73,10 @@ async function createAgent(authorization: string) {
 async function createCliRelaySession(authorization: string, agentId: string, environmentId: string) {
   const res = await jsonFetch('/api/v1/sessions', authorization, {
     method: 'POST',
-    body: JSON.stringify({ agentId, environmentId, runtime: 'claude-code', prompt: 'Run relay test' }),
+    body: JSON.stringify({
+      spec: { agentId, environmentId, runtime: 'claude-code' },
+      prompt: 'Run relay test',
+    }),
   })
   if (res.status !== 201) throw new Error(`Session creation failed: ${res.status} ${await res.text()}`)
   const session = (await res.json()) as { metadata: { uid: string }; status: { phase: string } }
@@ -223,10 +230,64 @@ describe('[CF] per-runner relay end-to-end', () => {
 
     // Browser must receive a fanned {type:'event'} frame with the canonical event.
     const live = await browser.waitForFrame(
-      (f) => f.type === 'event' && ((f.event as { event?: { type: string } }).event?.type ?? '') === 'message_end',
+      (f) =>
+        f.type === 'event' &&
+        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message_end',
       'event:message_end',
     )
-    expect((live.event as { event: { type: string } }).event.type).toBe('message_end')
+    expect((live.record as { event: { type: string } }).event.type).toBe('message_end')
+
+    runnerCh.ws.close()
+    browser.ws.close()
+  })
+
+  it('relays browser socket backfill requests to the runner local event log', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runner = await registerRunner(authorization, environment.id)
+
+    const session = await createCliRelaySession(authorization, agent.id, environment.id)
+    await heartbeatRunner(authorization, runner.id)
+    await claimSessionLease(authorization, session.id, runner.id)
+
+    const runnerCh = await openRunnerChannel(authorization, runner.id)
+    await runnerCh.waitForFrame((f) => f.type === 'runner.channel.accepted', 'runner.channel.accepted')
+
+    const browser = await openBrowserSocket(authorization, session.id)
+    const request = await runnerCh.waitForFrame(
+      (f) => f.type === 'session.backfill_request' && f.sessionId === session.id,
+      'session.backfill_request',
+    )
+    expect(request).toMatchObject({ type: 'session.backfill_request', sessionId: session.id, runnerId: runner.id })
+
+    runnerCh.ws.send(
+      JSON.stringify({
+        type: 'session.backfill_response',
+        eventId: request.eventId,
+        sessionId: session.id,
+        events: [
+          {
+            id: 'event_history',
+            sequence: 1,
+            createdAt: '2026-06-20T00:00:00.000Z',
+            event: {
+              type: 'message_end',
+              payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'history from runner' }] } },
+              metadata: {},
+            },
+          },
+        ],
+      }),
+    )
+
+    const backfill = await browser.waitForFrame(
+      (f) =>
+        f.type === 'backfill' &&
+        (f.events as Array<{ event?: { type?: string } }>).some((record) => record.event?.type === 'message_end'),
+      'browser backfill from runner',
+    )
+    expect((backfill.events as Array<{ id: string }>)[0].id).toBe('event_history')
 
     runnerCh.ws.close()
     browser.ws.close()
@@ -319,10 +380,12 @@ describe('[CF] per-runner relay end-to-end', () => {
     )
 
     const live = await browser.waitForFrame(
-      (f) => f.type === 'event' && ((f.event as { event?: { type: string } }).event?.type ?? '') === 'message_end',
+      (f) =>
+        f.type === 'event' &&
+        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message_end',
       'event:message_end after reconnect',
     )
-    expect((live.event as { event: { type: string } }).event.type).toBe('message_end')
+    expect((live.record as { event: { type: string } }).event.type).toBe('message_end')
 
     second.ws.close()
     browser.ws.close()

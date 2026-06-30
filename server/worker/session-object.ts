@@ -7,7 +7,7 @@ import { sessionSocketClientMessageFrom } from '@ama/runtime-contracts/session-s
 import type { AmaEvent } from '@shared/session-events'
 import { createDeps } from '../composition'
 import type { Env } from '../env'
-import type { AuthScope, EventQuery } from '../usecases/ports'
+import type { AuthScope, EventPage, EventQuery } from '../usecases/ports'
 import { dispatchSessionPrompt, stopSession } from '../usecases/runtime'
 import {
   appendCanonicalEventToSql,
@@ -184,25 +184,61 @@ export class SessionObject implements DurableObject {
   async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
 
   private async sendBackfill(ws: WebSocket, sessionId: string, frame: Record<string, unknown>): Promise<void> {
+    const scope = ws.deserializeAttachment() as BrowserScope | null
+    const requestId =
+      typeof frame.requestId === 'string' ? frame.requestId : typeof frame.id === 'string' ? frame.id : null
     const query: EventQuery = {
       order: 'asc',
       limit: typeof frame.limit === 'number' ? frame.limit : 200,
       ...(typeof frame.cursor === 'number' ? { cursor: frame.cursor } : {}),
       ...(typeof frame.eventType === 'string' ? { type: frame.eventType } : {}),
     }
-    const page = queryEventsFromSql(this.eventSql(), sessionId, query)
+    let page: EventPage & { runnerUnavailable?: boolean }
+    try {
+      page =
+        scope?.runnerEnvironmentId !== undefined
+          ? await this.requestRunnerBackfill(scope.runnerEnvironmentId, sessionId, query)
+          : queryEventsFromSql(this.eventSql(), sessionId, query)
+    } catch (error) {
+      this.sendSocketError(
+        ws,
+        requestId ?? undefined,
+        error instanceof Error ? error.message : 'Session backfill failed',
+      )
+      return
+    }
     if (ws.readyState !== WebSocket.OPEN) return
+    if (page.runnerUnavailable) {
+      ws.send(JSON.stringify({ type: 'runner_unavailable', message: 'Runner is unavailable for this session' }))
+      return
+    }
     const last = page.rows.at(-1)
     ws.send(
       JSON.stringify({
         type: 'backfill',
-        requestId:
-          typeof frame.requestId === 'string' ? frame.requestId : typeof frame.id === 'string' ? frame.id : null,
+        requestId,
         events: page.rows,
         nextCursor: page.hasMore && last ? last.sequence : null,
         hasMore: page.hasMore,
       }),
     )
+  }
+
+  private async requestRunnerBackfill(
+    environmentId: string,
+    sessionId: string,
+    query: EventQuery,
+  ): Promise<EventPage & { runnerUnavailable?: boolean }> {
+    const stub = this.env.RUNNER_POOL.get(this.env.RUNNER_POOL.idFromName(environmentId))
+    const response = await stub.fetch('https://runner-pool/backfill', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, query }),
+      headers: { 'content-type': 'application/json' },
+    })
+    if (!response.ok) {
+      throw new Error(`RunnerPool backfill failed with HTTP ${response.status}`)
+    }
+    return (await response.json()) as EventPage & { runnerUnavailable?: boolean }
   }
 
   private async handlePromptMessage(
@@ -270,6 +306,7 @@ type BrowserScope = {
   organizationId: string
   projectId: string
   userId: string
+  runnerEnvironmentId?: string
 }
 
 function browserScopeFromUrl(url: URL): BrowserScope {
@@ -278,6 +315,9 @@ function browserScopeFromUrl(url: URL): BrowserScope {
     organizationId: requiredParam(url, 'organizationId'),
     projectId: requiredParam(url, 'projectId'),
     userId: requiredParam(url, 'userId'),
+    ...(url.searchParams.get('runnerEnvironmentId')
+      ? { runnerEnvironmentId: url.searchParams.get('runnerEnvironmentId') as string }
+      : {}),
   }
 }
 

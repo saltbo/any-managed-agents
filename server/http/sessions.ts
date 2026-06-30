@@ -681,7 +681,13 @@ function upgradeSessionBrowserSocket(
   env: Env,
   request: Request,
   doName: string,
-  scope: { sessionId: string; organizationId: string; projectId: string; userId: string },
+  scope: {
+    sessionId: string
+    organizationId: string
+    projectId: string
+    userId: string
+    runnerEnvironmentId?: string
+  },
 ) {
   const stub = env.SESSION.get(env.SESSION.idFromName(doName))
   const url = new URL('https://session-object/browser')
@@ -689,6 +695,9 @@ function upgradeSessionBrowserSocket(
   url.searchParams.set('organizationId', scope.organizationId)
   url.searchParams.set('projectId', scope.projectId)
   url.searchParams.set('userId', scope.userId)
+  if (scope.runnerEnvironmentId) {
+    url.searchParams.set('runnerEnvironmentId', scope.runnerEnvironmentId)
+  }
   return stub.fetch(new Request(url, request))
 }
 
@@ -1263,6 +1272,9 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         organizationId: auth.organization.id,
         projectId: session.metadata.pid,
         userId: auth.user.id,
+        ...(session.status.placement?.hostingMode === 'self_hosted' && session.spec.environmentId
+          ? { runnerEnvironmentId: session.spec.environmentId }
+          : {}),
       })
     })
     .openapi(listSessionMessagesRoute, async (c) => {
