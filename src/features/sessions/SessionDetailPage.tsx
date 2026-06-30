@@ -2,13 +2,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 import { useParams } from 'react-router'
 import { EmptyState } from '@/console/components'
-import { api } from '@/lib/amarpc'
+import { api, type EventRecordListResponse } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 import { SessionDetailView } from './SessionDetailView'
 import { useSessionActions } from './use-session-actions'
 import { useSessionRuntimeSession } from './use-session-runtime'
 
 const EMPTY_EVENTS: never[] = []
+const SESSION_EVENT_PAGE_LIMIT = 200
 
 export function SessionDetailPage() {
   const { sessionId } = useParams()
@@ -40,7 +41,7 @@ export function SessionDetailPage() {
   })
   const eventsQuery = useQuery({
     queryKey: queryKeys.sessions.events(sessionId ?? ''),
-    queryFn: () => api.listSessionEvents(sessionId as string, { limit: 200, order: 'desc' }),
+    queryFn: () => listSessionEventHistory(sessionId as string),
     enabled: Boolean(sessionId),
   })
   const refreshEvents = useCallback(() => {
@@ -90,4 +91,38 @@ export function SessionDetailPage() {
       />
     </div>
   )
+}
+
+async function listSessionEventHistory(sessionId: string): Promise<EventRecordListResponse> {
+  const data: EventRecordListResponse['data'] = []
+  let cursor: number | undefined
+  let pagination: EventRecordListResponse['pagination'] = {
+    limit: SESSION_EVENT_PAGE_LIMIT,
+    nextCursor: null,
+    hasMore: false,
+  }
+
+  for (;;) {
+    const page = await api.listSessionEvents(sessionId, {
+      limit: SESSION_EVENT_PAGE_LIMIT,
+      order: 'asc',
+      ...(cursor === undefined ? {} : { cursor }),
+    })
+    data.push(...page.data)
+    pagination = page.pagination
+
+    if (!page.pagination.hasMore) {
+      return { data, pagination }
+    }
+
+    if (!page.pagination.nextCursor) {
+      throw new Error('Session events page is missing nextCursor')
+    }
+
+    const nextCursor = Number(page.pagination.nextCursor)
+    if (!Number.isSafeInteger(nextCursor)) {
+      throw new Error(`Session events page returned invalid nextCursor: ${page.pagination.nextCursor}`)
+    }
+    cursor = nextCursor
+  }
 }

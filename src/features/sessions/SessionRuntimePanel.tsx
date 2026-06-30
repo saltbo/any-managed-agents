@@ -57,7 +57,7 @@ export function SessionRuntimePanel({
   const selectedEventType = eventType === 'all' || debugEventTypes.includes(eventType) ? eventType : 'all'
   const filteredDebugEvents =
     selectedEventType === 'all' ? debugEvents : debugEvents.filter((event) => event.type === selectedEventType)
-  const eventExport = stringifyJson([...persistedEvents].sort((a, b) => a.sequence - b.sequence))
+  const eventExport = stringifyJson(exportableEvents(persistedEvents, debugEvents))
   const transcriptItems = useMemo(
     () =>
       [
@@ -267,4 +267,27 @@ export function transcriptFilter(value: string): TranscriptFilter {
 
 function runtimeTab(value: string): RuntimeTab {
   return value === 'debug' ? 'debug' : 'transcript'
+}
+
+function exportableEvents(
+  persistedEvents: EventRecord[],
+  debugEvents: Array<{ id: string; type: EventRecord['event']['type']; payload: unknown; createdAt: string }>,
+) {
+  const persistedById = new Map(persistedEvents.map((event) => [event.id, event]))
+  return debugEvents
+    .map((event, index) => {
+      const persisted = persistedById.get(event.id)
+      if (persisted) {
+        return persisted
+      }
+      return {
+        id: event.id,
+        projectId: '',
+        sessionId: '',
+        sequence: persistedEvents.length + index + 1,
+        event: { type: event.type, payload: event.payload as EventRecord['event']['payload'] },
+        createdAt: event.createdAt,
+      } satisfies EventRecord
+    })
+    .sort((left, right) => left.sequence - right.sequence || Date.parse(left.createdAt) - Date.parse(right.createdAt))
 }

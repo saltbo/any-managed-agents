@@ -56,6 +56,30 @@ async function* events() {
   yield { type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }
 }
 
+async function* commandEvents() {
+  yield {
+    type: 'item.started',
+    item: {
+      id: 'item_1',
+      type: 'command_execution',
+      command: "printf 'ok'",
+      aggregated_output: '',
+      status: 'in_progress',
+    },
+  }
+  yield {
+    type: 'item.completed',
+    item: {
+      id: 'item_1',
+      type: 'command_execution',
+      command: "printf 'ok'",
+      aggregated_output: 'ok',
+      exit_code: 0,
+      status: 'completed',
+    },
+  }
+}
+
 afterEach(() => {
   codexConstructorMock.mockClear()
   startThreadMock.mockClear()
@@ -109,5 +133,25 @@ describe('codexProvider', () => {
     expect(startThreadMock).toHaveBeenCalledTimes(1)
     expect(runStreamedMock).toHaveBeenNthCalledWith(1, 'USER_TASK', { signal: expect.any(AbortSignal) })
     expect(runStreamedMock).toHaveBeenNthCalledWith(2, 'FOLLOW_UP', { signal: expect.any(AbortSignal) })
+  })
+
+  it('preserves Codex command aggregated output in tool results', async () => {
+    runStreamedMock.mockResolvedValue({ events: commandEvents() })
+    startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
+
+    const handle = await codexProvider.execute(request())
+    const events = []
+    for await (const event of handle.events) {
+      events.push(event)
+    }
+
+    expect(events).toContainEqual({
+      type: 'tool_call.completed',
+      payload: {
+        toolCall: { id: 'item_1', name: 'bash', input: { command: "printf 'ok'" } },
+        result: { aggregated_output: 'ok', output: 'ok', exit_code: 0 },
+        isError: false,
+      },
+    })
   })
 })

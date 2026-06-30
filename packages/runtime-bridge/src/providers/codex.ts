@@ -80,8 +80,11 @@ function codexToolShape(item: Record<string, unknown>): { toolName: string; args
 
 function toolResult(item: Record<string, unknown>) {
   const result: Record<string, unknown> = {}
-  for (const key of ['stdout', 'stderr', 'output', 'result', 'exit_code', 'exitCode']) {
+  for (const key of ['stdout', 'stderr', 'output', 'aggregated_output', 'result', 'exit_code', 'exitCode']) {
     if (key in item) result[key] = item[key]
+  }
+  if (!('output' in result) && typeof result.aggregated_output === 'string') {
+    result.output = result.aggregated_output
   }
   return Object.keys(result).length ? result : { item }
 }

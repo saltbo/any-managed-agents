@@ -505,7 +505,16 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
 
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState({ debugEvents: [] })}
+        runtime={buildRuntimeState({
+          debugEvents: [
+            {
+              id: 'live_only_event',
+              type: 'runtime.output',
+              payload: { marker: 'live_only_payload' },
+              createdAt: '2026-05-23T00:00:01.000Z',
+            },
+          ],
+        })}
         persistedEvents={persistedEvents}
         message=""
         setMessage={vi.fn()}
@@ -518,6 +527,8 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy events' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"message.completed"')))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('live_only_event'))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('live_only_payload'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Download events' }))
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))

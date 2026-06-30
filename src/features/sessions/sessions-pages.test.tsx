@@ -78,6 +78,20 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
   }
 }
 
+function buildMessageEvent(sessionId: string, sequence: number, content: string): EventRecord {
+  return {
+    id: `event_${sequence}`,
+    projectId: 'project_1',
+    sessionId,
+    sequence,
+    event: {
+      type: 'message.completed',
+      payload: { message: { id: `message_${sequence}`, role: 'assistant', content } },
+    },
+    createdAt: new Date(sequence * 1000).toISOString(),
+  }
+}
+
 function buildPagination(sessions: Session[]) {
   return {
     items: sessions,
@@ -1925,6 +1939,49 @@ describe('SessionDetailPage', () => {
 
     await waitFor(() => expect(screen.getByText('Test session')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getAllByText('stopped').length).toBeGreaterThan(0)
+  })
+
+  it('loads complete session event history with ascending cursor pagination', async () => {
+    const stoppedSession = buildSession({ id: 'session_history', phase: 'stopped', stoppedAt: now })
+    const eventRequests: URL[] = []
+    server.use(
+      sessionDetail(stoppedSession),
+      agentDetail(buildAgent()),
+      environmentDetail(buildEnvironment()),
+      http.get('*/api/v1/sessions/session_history/events', ({ request }) => {
+        const url = new URL(request.url)
+        eventRequests.push(url)
+        if (url.searchParams.get('cursor') === '1') {
+          return HttpResponse.json({
+            data: [buildMessageEvent('session_history', 2, 'Second page reply')],
+            pagination: { limit: 200, hasMore: false, nextCursor: null },
+          })
+        }
+        return HttpResponse.json({
+          data: [buildMessageEvent('session_history', 1, 'First page reply')],
+          pagination: { limit: 200, hasMore: true, nextCursor: '1' },
+        })
+      }),
+    )
+
+    const queryClient = makeQueryClient()
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/sessions/session_history']}>
+          <Routes>
+            <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText('First page reply')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.getByText('Second page reply')).toBeTruthy()
+    expect(eventRequests).toHaveLength(2)
+    expect(eventRequests[0]?.searchParams.get('order')).toBe('asc')
+    expect(eventRequests[0]?.searchParams.get('limit')).toBe('200')
+    expect(eventRequests[0]?.searchParams.has('cursor')).toBe(false)
+    expect(eventRequests[1]?.searchParams.get('cursor')).toBe('1')
   })
 
   it('invokes refreshEvents when Refresh events button is clicked', async () => {
