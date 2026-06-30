@@ -208,7 +208,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]
       .map(({ stored, payload }) => {
         const type = sessionEventType(stored, payload)
         if (type === 'message_end') {
-          return messageFromSessionEvent(payload, stored.createdAt, 'complete')
+          return messageFromStoredSessionEvent(stored, payload, 'complete')
         }
         if (type === 'runtime.error') {
           return messageFromRuntimeError(payload, stored.createdAt, stored.id)
@@ -347,6 +347,15 @@ function messageFromSessionEvent(event: Record<string, unknown>, at: string, sta
     status,
     createdAt: at,
   }
+}
+
+function messageFromStoredSessionEvent(
+  stored: SessionEvent,
+  event: Record<string, unknown>,
+  status: SessionRuntimeMessage['status'],
+) {
+  const message = messageFromSessionEvent(event, stored.createdAt, status)
+  return message ? { ...message, id: stored.id } : null
 }
 
 function messageFromRuntimeError(

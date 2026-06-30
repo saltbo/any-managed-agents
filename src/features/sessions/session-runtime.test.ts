@@ -545,6 +545,38 @@ describe('sessionRuntimeReducer', () => {
     ])
   })
 
+  it('keeps persisted messages when a runtime reuses provider-local message ids', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [
+        event(1, 'message_end', {
+          type: 'message_end',
+          message: {
+            id: 'item_9',
+            role: 'assistant',
+            timestamp: 1782799218294,
+            content: [{ type: 'text', text: 'I am waiting for a task.' }],
+          },
+        }),
+        event(20, 'message_end', {
+          type: 'message_end',
+          message: {
+            id: 'item_9',
+            role: 'assistant',
+            timestamp: 1782800260407,
+            content: [{ type: 'text', text: 'Nothing active right now.' }],
+          },
+        }),
+      ],
+    })
+
+    expect(state.messages.map((message) => message.id)).toEqual(['event_1', 'event_20'])
+    expect(state.messages.map((message) => message.content)).toEqual([
+      'I am waiting for a task.',
+      'Nothing active right now.',
+    ])
+  })
+
   it('ignores live events that were already loaded from history', () => {
     const messagePayload = {
       type: 'message_end',
