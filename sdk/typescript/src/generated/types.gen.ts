@@ -14,10 +14,6 @@ export type EventRecord = {
     projectId: string;
     sessionId: string;
     sequence: number;
-    visibility: 'runtime' | 'transcript' | 'debug' | 'audit';
-    role: string | null;
-    parentEventId: string | null;
-    correlationId: string | null;
     event: AmaEvent;
     createdAt: string;
 };
@@ -352,7 +348,6 @@ export type SessionSocketBackfillRequestMessage = {
     cursor?: number;
     limit?: number;
     eventType?: string;
-    visibility?: string;
 };
 
 export type SessionSocketClientMessage = ({
@@ -4140,7 +4135,6 @@ export type ListSessionEventsData = {
         order?: 'asc' | 'desc';
         limit?: number;
         type?: 'agent_start' | 'agent_end' | 'turn_start' | 'turn_end' | 'session_stop' | 'session_checkpoint' | 'session_resume' | 'message_start' | 'message_update' | 'message_end' | 'tool_execution_start' | 'tool_execution_update' | 'tool_execution_end' | 'usage.recorded' | 'policy.decision' | 'permission.request' | 'runtime.error' | 'runtime.metadata' | 'runtime.output' | 'runner.metadata';
-        visibility?: 'runtime' | 'transcript' | 'debug' | 'audit';
         createdFrom?: string;
         createdTo?: string;
     };

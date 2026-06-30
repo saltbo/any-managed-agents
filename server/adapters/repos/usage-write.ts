@@ -1,7 +1,7 @@
 import { computeModelCostMicros, isProviderErrorCategory, providerFamily } from '@server/domain/provider-adapter'
 import { and, desc, eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import type { CanonicalAmaSessionEvent } from '../../../shared/session-events'
+import type { AmaEvent } from '../../../shared/session-events'
 import { providerModels, providers, sessions, usageRecords } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
@@ -17,11 +17,7 @@ export interface UsageRecordingScope {
 // Write-only: the read/report side is UsageRepo. Constructed by the session-
 // event-store infra, not wired into Deps (no usecase records usage directly).
 export interface UsageWriteRepo {
-  recordProviderSignals(
-    scope: UsageRecordingScope,
-    sessionEventId: string,
-    canonicalEvent: CanonicalAmaSessionEvent,
-  ): Promise<void>
+  recordProviderSignals(scope: UsageRecordingScope, sessionEventId: string, canonicalEvent: AmaEvent): Promise<void>
 }
 
 function newId(prefix: string) {

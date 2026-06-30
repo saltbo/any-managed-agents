@@ -10,7 +10,7 @@ import type {
   ListPageResult,
   WorkItemClaimCandidate,
 } from '@server/usecases/ports'
-import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
+import { amaEventFromRuntimeEvent } from '@shared/session-events'
 import { and, desc, eq, gt, inArray, isNull, lt, lte, max, or, sql } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import {
@@ -325,7 +325,7 @@ async function appendSessionRunnerEvent(
   sessionId: string,
   event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> },
 ) {
-  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
+  const canonicalEvent = amaEventFromRuntimeEvent(
     { type: event.type, ...event.payload },
     { source: 'self-hosted-runner', ...(event.metadata ?? {}) },
   )

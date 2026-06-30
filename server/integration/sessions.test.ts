@@ -509,10 +509,7 @@ describe('[CF] /api/v1/sessions', () => {
     const events = (await eventsRes.json()) as {
       data: Array<{
         sequence: number
-        visibility: string
         event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> }
-        parentEventId: string | null
-        correlationId: string | null
       }>
       pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
     }
@@ -527,7 +524,6 @@ describe('[CF] /api/v1/sessions', () => {
         'tool_execution_end',
       ]),
     )
-    expect(events.data.every((event) => event.visibility === 'runtime')).toBe(true)
     const toolCallEvent = events.data.find(
       (record) =>
         record.event.type === 'tool_execution_start' &&
@@ -538,9 +534,8 @@ describe('[CF] /api/v1/sessions', () => {
         record.event.type === 'tool_execution_end' &&
         (record.event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
     )
-    expect(toolCallEvent).toMatchObject({ correlationId: 'tool:call_git_status' })
-    expect(toolCallEvent?.parentEventId).toMatch(/^event_/)
-    expect(toolResultEvent?.parentEventId).toBe(toolCallEvent?.parentEventId)
+    expect(toolCallEvent?.event.payload).toMatchObject({ toolCall: { id: 'call_git_status' } })
+    expect(toolResultEvent?.event.payload).toMatchObject({ toolCall: { id: 'call_git_status' } })
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
     expect(JSON.stringify(events.data)).toContain('Previous user prompt: Inspect repository status')
     expect(JSON.stringify(events.data)).not.toContain('raw-github-token')
@@ -587,9 +582,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(csvRes.headers.get('content-disposition')).toContain(`session-${createdId}-events.csv`)
     const csvText = await csvRes.text()
     const csvLines = csvText.trim().split('\n')
-    expect(csvLines[0]).toBe(
-      'id,sessionId,sequence,type,visibility,role,correlationId,parentEventId,createdAt,payload,metadata',
-    )
+    expect(csvLines[0]).toBe('id,sessionId,sequence,type,createdAt,payload,metadata')
     expect(csvLines).toHaveLength(3)
     expect(csvText).not.toContain('raw-secret')
 

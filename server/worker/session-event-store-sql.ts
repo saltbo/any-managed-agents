@@ -1,7 +1,7 @@
 // The Session DO's in-object canonical event store, over the DO's embedded
 // SQLite (ctx.storage.sql). It is the cloud-loop (ama runtime) home for the
-// event firehose: the same canonical row, sequence threading, and query
-// contract as the D1 store (server/db/session-event-store.ts +
+// event firehose: the same event row and query contract as the D1 store
+// (server/db/session-event-store.ts +
 // server/adapters/repos/sessions.ts), one contract / two implementations. The
 // DO single-thread serialises appends, so sequence allocation is race-free
 // without the D1 store's UNIQUE-collision retry loop.
@@ -10,15 +10,14 @@
 // effects (usage accounting, browser fan-out, R2 archive); this module owns the
 // rows.
 
-import { type EventRecord, sessionEventVisibility } from '@server/domain/session'
+import type { EventRecord } from '@server/domain/session'
 import { redactSensitiveValue } from '@server/redaction'
 import type { EventPage, EventQuery } from '@server/usecases/ports'
 import {
   type AmaEvent,
-  type CanonicalAmaSessionEvent,
-  canonicalAmaSessionEventFromRuntimeEvent,
-  canonicalEventCorrelation,
+  amaEventFromRuntimeEvent,
   isAmaSessionEventType,
+  normalizeAmaEvent,
 } from '@shared/session-events'
 
 export interface EventWriteContext {
@@ -34,10 +33,6 @@ type EventRow = {
   session_id: string
   sequence: number
   type: string
-  visibility: string
-  role: string | null
-  parent_event_id: string | null
-  correlation_id: string | null
   payload: string
   metadata: string
   created_at: string
@@ -47,52 +42,6 @@ function newEventId() {
   return `event_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
-// Mirrors the D1 store: lifecycle boundaries are tree roots; everything else
-// nests under the enclosing open turn so consumers reconstruct turn → message/
-// tool trees.
-function enclosingTurnEventId(
-  sql: SqlStorage,
-  sessionId: string,
-  type: CanonicalAmaSessionEvent['type'],
-): string | null {
-  if (type === 'turn_start' || type === 'turn_end' || type.startsWith('session_') || type.startsWith('agent_')) {
-    return null
-  }
-  const boundary = sql
-    .exec<{ id: string; type: string }>(
-      "SELECT id, type FROM session_events WHERE session_id = ? AND type IN ('turn_start', 'turn_end') ORDER BY sequence DESC LIMIT 1",
-      sessionId,
-    )
-    .toArray()[0]
-  return boundary?.type === 'turn_start' ? boundary.id : null
-}
-
-const MESSAGE_EVENT_TYPES = ['message_start', 'message_update', 'message_end'] as const
-
-// Pi-loop transcript events carry no message id, so the store threads the
-// correlation statefully: message_start opens a correlation on its own event id,
-// later message events inherit it until message_end closes it.
-function transcriptCorrelation(
-  sql: SqlStorage,
-  sessionId: string,
-  type: CanonicalAmaSessionEvent['type'],
-  eventId: string,
-): string {
-  if (type === 'message_start') {
-    return `message:${eventId}`
-  }
-  const latest = sql
-    .exec<{ type: string; correlation_id: string | null }>(
-      "SELECT type, correlation_id FROM session_events WHERE session_id = ? AND type IN ('message_start', 'message_update', 'message_end') ORDER BY sequence DESC LIMIT 1",
-      sessionId,
-    )
-    .toArray()[0]
-  if (latest && latest.type !== 'message_end' && latest.correlation_id) {
-    return latest.correlation_id
-  }
-  return `message:${eventId}`
-}
-
 const CREATE_TABLE = `CREATE TABLE IF NOT EXISTS session_events (
   id TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL,
@@ -100,10 +49,6 @@ const CREATE_TABLE = `CREATE TABLE IF NOT EXISTS session_events (
   session_id TEXT NOT NULL,
   sequence INTEGER NOT NULL,
   type TEXT NOT NULL,
-  visibility TEXT NOT NULL,
-  role TEXT,
-  parent_event_id TEXT,
-  correlation_id TEXT,
   payload TEXT NOT NULL,
   metadata TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
@@ -113,54 +58,50 @@ const CREATE_INDEX = 'CREATE UNIQUE INDEX IF NOT EXISTS idx_session_events_seq O
 
 export function ensureSessionEventSchema(sql: SqlStorage): void {
   sql.exec(CREATE_TABLE)
+  dropLegacySessionEventColumns(sql)
   sql.exec(CREATE_INDEX)
 }
 
+function dropLegacySessionEventColumns(sql: SqlStorage): void {
+  const columns = new Set(
+    sql
+      .exec<{ name: string }>('PRAGMA table_info(session_events)')
+      .toArray()
+      .map((row) => row.name),
+  )
+  for (const column of ['visibility', 'role', 'parent_event_id', 'correlation_id']) {
+    if (columns.has(column)) {
+      sql.exec(`ALTER TABLE session_events DROP COLUMN ${column}`)
+    }
+  }
+}
+
 // Single insert path: allocates the next sequence (monotonic, no retry — the DO
-// thread serialises us), fills correlation/parent ids, redacts payload/metadata,
-// and returns the serialized record so the DO shell can fan it out to sockets.
+// thread serialises us), redacts payload/metadata, and returns the serialized
+// record so the DO shell can fan it out to sockets.
 export function appendCanonicalEventToSql(
   sql: SqlStorage,
   scope: EventWriteContext,
-  canonicalEvent: CanonicalAmaSessionEvent,
-  // Some producers thread their own parent/correlation ids and must not have
-  // them recomputed; when given, they win over the store's turn/transcript
-  // threading.
-  overrides?: { parentEventId?: string | null; correlationId?: string | null },
+  event: AmaEvent,
 ): { id: string; sequence: number; record: EventRecord } {
+  const normalized = normalizeAmaEvent(event)
   const eventId = newEventId()
-  const parentEventId =
-    overrides?.parentEventId !== undefined
-      ? overrides.parentEventId
-      : enclosingTurnEventId(sql, scope.sessionId, canonicalEvent.type)
-  const explicitCorrelation = canonicalEventCorrelation(canonicalEvent.type, canonicalEvent.payload)
-  const correlationId =
-    overrides?.correlationId !== undefined
-      ? overrides.correlationId
-      : (explicitCorrelation ??
-        (MESSAGE_EVENT_TYPES.includes(canonicalEvent.type as (typeof MESSAGE_EVENT_TYPES)[number])
-          ? transcriptCorrelation(sql, scope.sessionId, canonicalEvent.type, eventId)
-          : null))
   const maxSequence =
     sql
       .exec<{ m: number | null }>('SELECT max(sequence) AS m FROM session_events WHERE session_id = ?', scope.sessionId)
       .one().m ?? 0
   const sequence = maxSequence + 1
   const createdAt = new Date().toISOString()
-  const payload = JSON.stringify(redactSensitiveValue(canonicalEvent.payload))
-  const metadata = JSON.stringify(redactSensitiveValue(canonicalEvent.metadata))
+  const payload = JSON.stringify(redactSensitiveValue(normalized.payload))
+  const metadata = JSON.stringify(redactSensitiveValue(normalized.metadata))
   sql.exec(
-    'INSERT INTO session_events (id, organization_id, project_id, session_id, sequence, type, visibility, role, parent_event_id, correlation_id, payload, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO session_events (id, organization_id, project_id, session_id, sequence, type, payload, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     eventId,
     scope.organizationId,
     scope.projectId,
     scope.sessionId,
     sequence,
-    canonicalEvent.type,
-    canonicalEvent.visibility,
-    canonicalEvent.role,
-    parentEventId,
-    correlationId,
+    normalized.type,
     payload,
     metadata,
     createdAt,
@@ -171,11 +112,7 @@ export function appendCanonicalEventToSql(
     project_id: scope.projectId,
     session_id: scope.sessionId,
     sequence,
-    type: canonicalEvent.type,
-    visibility: canonicalEvent.visibility,
-    role: canonicalEvent.role,
-    parent_event_id: parentEventId,
-    correlation_id: correlationId,
+    type: normalized.type,
     payload,
     metadata,
     created_at: createdAt,
@@ -184,8 +121,8 @@ export function appendCanonicalEventToSql(
 }
 
 // Mirrors server/adapters/repos/sessions.ts eventFilters + cursor pagination:
-// session implied by the shard, optional type, visibility default 'runtime',
-// createdFrom/To window, sequence cursor, order, limit + 1 hasMore probe.
+// session implied by the shard, optional type, createdFrom/To window, sequence
+// cursor, order, limit + 1 hasMore probe.
 export function queryEventsFromSql(sql: SqlStorage, sessionId: string, query: EventQuery): EventPage {
   const filters = ['session_id = ?']
   const binds: (string | number)[] = [sessionId]
@@ -200,8 +137,6 @@ export function queryEventsFromSql(sql: SqlStorage, sessionId: string, query: Ev
     filters.push('type = ?')
     binds.push(query.type)
   }
-  filters.push('visibility = ?')
-  binds.push(query.visibility ?? 'runtime')
   if (query.createdFrom) {
     filters.push('created_at >= ?')
     binds.push(query.createdFrom)
@@ -231,58 +166,17 @@ export interface RelayedRunnerEvent {
   event: AmaEvent
 }
 
-// Per-session threading state for the relay canonicaliser: turn nesting + message
-// correlation carry across events.
-export interface RelayThreadState {
-  currentTurnId: string | null
-  lastMessageType: string | null
-  lastMessageCorrelation: string | null
-}
-
-export function newRelayThreadState(): RelayThreadState {
-  return { currentTurnId: null, lastMessageType: null, lastMessageCorrelation: null }
-}
-
-// Canonicalise + thread ONE raw runner event, advancing `state` in place.
-export function stepRelayEvent(raw: RelayedRunnerEvent, scope: EventWriteContext, state: RelayThreadState): EventRow {
-  const canonical = canonicalAmaSessionEventFromRuntimeEvent(
-    { type: raw.event.type, ...raw.event.payload },
-    raw.event.metadata,
-  )
-  const parentEventId = state.currentTurnId
-  const isMessage = MESSAGE_EVENT_TYPES.includes(canonical.type as (typeof MESSAGE_EVENT_TYPES)[number])
-  let correlationId = canonicalEventCorrelation(canonical.type, canonical.payload)
-  if (correlationId === null && isMessage) {
-    correlationId =
-      canonical.type !== 'message_start' &&
-      state.lastMessageType !== null &&
-      state.lastMessageType !== 'message_end' &&
-      state.lastMessageCorrelation
-        ? state.lastMessageCorrelation
-        : `message:${raw.id}`
-  }
-  if (canonical.type === 'turn_start') {
-    state.currentTurnId = raw.id
-  } else if (canonical.type === 'turn_end') {
-    state.currentTurnId = null
-  }
-  if (isMessage) {
-    state.lastMessageType = canonical.type
-    state.lastMessageCorrelation = correlationId
-  }
+export function stepRelayEvent(raw: RelayedRunnerEvent, scope: EventWriteContext): EventRow {
+  const event = normalizeAmaEvent(raw.event)
   return {
     id: raw.id,
     organization_id: scope.organizationId,
     project_id: scope.projectId,
     session_id: scope.sessionId,
     sequence: raw.sequence,
-    type: canonical.type,
-    visibility: canonical.visibility,
-    role: canonical.role,
-    parent_event_id: parentEventId,
-    correlation_id: correlationId,
-    payload: JSON.stringify(canonical.payload),
-    metadata: JSON.stringify(canonical.metadata),
+    type: event.type,
+    payload: JSON.stringify(event.payload),
+    metadata: JSON.stringify(event.metadata),
     created_at: raw.createdAt,
   }
 }
@@ -292,19 +186,16 @@ export function pageRelayedEvents(
   scope: EventWriteContext,
   query: EventQuery,
 ): EventPage {
-  const state = newRelayThreadState()
   const direction = query.order === 'desc' ? -1 : 1
-  const visibility = query.visibility ?? 'runtime'
   const records = [...rawEvents]
     .sort((left, right) => left.sequence - right.sequence)
-    .map((event) => serializeRow(stepRelayEvent(event, scope, state)))
+    .map((event) => serializeRow(stepRelayEvent(event, scope)))
     .filter((record) => {
       if (query.cursor !== undefined) {
         if (query.order === 'asc' && record.sequence <= query.cursor) return false
         if (query.order === 'desc' && record.sequence >= query.cursor) return false
       }
       if (query.type && record.event.type !== query.type) return false
-      if (record.visibility !== visibility) return false
       if (query.createdFrom && record.createdAt < query.createdFrom) return false
       if (query.createdTo && record.createdAt > query.createdTo) return false
       return true
@@ -317,8 +208,8 @@ export function countSessionEvents(sql: SqlStorage, sessionId: string): number {
   return sql.exec<{ c: number }>('SELECT count(*) AS c FROM session_events WHERE session_id = ?', sessionId).one().c
 }
 
-// The full {type, payload} stream in sequence order, every visibility — exact
-// mirror of the D1 sessionEventStream used to rebuild the continuation transcript.
+// The full {type, payload} stream in sequence order — exact mirror of the D1
+// sessionEventStream used to rebuild the continuation transcript.
 export function streamSessionEvents(sql: SqlStorage, sessionId: string): { type: string; payload: string }[] {
   return sql
     .exec<{ type: string; payload: string }>(
@@ -337,40 +228,31 @@ export function exportSessionEventsJsonl(sql: SqlStorage, sessionId: string): st
   return rows.map((row) => JSON.stringify(serializeRow(row))).join('\n')
 }
 
-// Row → EventRecord. Identical output to the D1 repo's serializeEvent:
-// canonicalises a non-canonical stored type, redacts payload/metadata on the way
-// out, and tags the raw type into metadata for non-canonical rows.
+// Row → EventRecord. Identical output to the D1 repo's serializeEvent: converts
+// legacy non-AMA stored types, redacts payload/metadata on the way out, and tags
+// the raw type into metadata for those legacy rows.
 export function serializeRow(row: EventRow): EventRecord {
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
-  const canonical: CanonicalAmaSessionEvent = isAmaSessionEventType(row.type)
+  const event: AmaEvent = isAmaSessionEventType(row.type)
     ? ({
         type: row.type,
-        visibility: sessionEventVisibility(row.visibility),
-        role: row.role,
         payload: rawPayload,
         metadata: rawMetadata,
-      } as CanonicalAmaSessionEvent)
-    : canonicalAmaSessionEventFromRuntimeEvent(
-        { ...rawPayload, type: row.type },
-        { source: 'stored-session-event', ...rawMetadata },
-      )
+      } as AmaEvent)
+    : amaEventFromRuntimeEvent({ ...rawPayload, type: row.type }, { source: 'stored-session-event', ...rawMetadata })
   if (!isAmaSessionEventType(row.type)) {
-    canonical.metadata = { ...canonical.metadata, rawSessionEventType: row.type }
+    event.metadata = { ...event.metadata, rawSessionEventType: row.type }
   }
   return {
     id: row.id,
     projectId: row.project_id,
     sessionId: row.session_id,
     sequence: row.sequence,
-    visibility: sessionEventVisibility(canonical.visibility),
-    role: canonical.role,
-    parentEventId: row.parent_event_id,
-    correlationId: row.correlation_id,
     event: {
-      type: canonical.type,
-      payload: redactSensitiveValue(canonical.payload) as typeof canonical.payload,
-      metadata: redactSensitiveValue(canonical.metadata) as typeof canonical.metadata,
+      type: event.type,
+      payload: redactSensitiveValue(event.payload) as typeof event.payload,
+      metadata: redactSensitiveValue(event.metadata ?? {}) as typeof event.metadata,
     } as AmaEvent,
     createdAt: row.created_at,
   }

@@ -98,7 +98,6 @@ function buildPagination(sessions: Session[]) {
 function buildTraceEntry(overrides: Partial<SessionToolTraceEntry> = {}): SessionToolTraceEntry {
   return {
     key: 'entry_1',
-    correlationId: 'tool:call_1',
     toolCallId: 'call_1',
     name: 'bash',
     status: 'completed',
@@ -461,8 +460,7 @@ describe('SessionsView', () => {
       </MemoryRouter>,
     )
 
-    // When the agent name is unavailable, falls back to agentId.
-    expect(screen.getByText(/agent_fallback_id · agent_fallback_id/)).toBeTruthy()
+    expect(screen.getByText(/Do the work\. · agent_fallback_id/)).toBeTruthy()
   })
 
   it('renders "None" for null environmentId in hosting column', () => {
@@ -549,7 +547,7 @@ describe('SessionDetailView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getAllByText(/agent_no_name/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Do the work\./).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/env_1/).length).toBeGreaterThan(0)
   })
 
@@ -1069,10 +1067,6 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        visibility: 'runtime',
-        role: null,
-        parentEventId: null,
-        correlationId: null,
         event: { type: 'message_end', payload: { type: 'message_end' } },
         createdAt: now,
       },
@@ -1101,7 +1095,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
     expect(screen.getByText('persisted_debug_1')).toBeTruthy()
   })
 
-  it('excludes transcript-visibility events from debug panel', async () => {
+  it('renders persisted AMA events in the debug panel', async () => {
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
       value: vi.fn(() => false),
       configurable: true,
@@ -1124,10 +1118,6 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        visibility: 'transcript',
-        role: null,
-        parentEventId: null,
-        correlationId: null,
         event: { type: 'message_end', payload: { type: 'message_end' } },
         createdAt: now,
       },
@@ -1153,8 +1143,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
     fireEvent.click(debugTab)
     await waitFor(() => expect(debugTab.getAttribute('aria-selected')).toBe('true'))
 
-    expect(screen.queryByText('transcript_only_ev')).toBeNull()
-    expect(screen.getByText('No debug events')).toBeTruthy()
+    expect(screen.getByText('transcript_only_ev')).toBeTruthy()
   })
 
   it('deduplicates runtime debug events that also appear in persisted events', async () => {
@@ -1180,10 +1169,6 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        visibility: 'runtime',
-        role: null,
-        parentEventId: null,
-        correlationId: null,
         event: { type: 'message_end', payload: { type: 'message_end' } },
         createdAt: now,
       },

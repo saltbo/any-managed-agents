@@ -5,7 +5,6 @@ export type SessionToolTraceApproval = 'approved' | 'denied' | 'approval require
 
 export interface SessionToolTraceEntry {
   key: string
-  correlationId: string | null
   toolCallId: string | null
   name: string
   status: SessionToolTraceStatus
@@ -23,19 +22,15 @@ const ERROR_SUMMARY_LIMIT = 240
 const VALUE_SUMMARY_LIMIT = 160
 
 interface TraceAccumulator extends SessionToolTraceEntry {
-  turnEventId: string | null
   startSequence: number | null
   endSequence: number | null
 }
 
-// Builds one trace entry per tool execution from canonical session events.
-// Pairing relies on the canonical `correlationId` (`tool:<tool call id>`)
-// assigned by the event store; results without a recorded call degrade into
-// explicit orphaned entries instead of being dropped.
+// Builds one trace entry per tool execution from canonical AMA events. Pairing
+// uses the tool call id inside the event payload; results without a recorded
+// call degrade into explicit orphaned entries instead of being dropped.
 export function buildSessionToolTrace(events: EventRecord[]): SessionToolTraceEntry[] {
-  const ordered = [...events]
-    .filter((record) => record.visibility === 'runtime')
-    .sort((left, right) => left.sequence - right.sequence)
+  const ordered = [...events].sort((left, right) => left.sequence - right.sequence)
   const entries: TraceAccumulator[] = []
   for (const record of ordered) {
     if (record.event.type === 'tool_execution_start') {
@@ -70,7 +65,6 @@ function entryFromStart(record: EventRecord): TraceAccumulator {
   const toolCall = objectValue(payload.toolCall)
   return {
     key: record.id,
-    correlationId: record.correlationId,
     toolCallId: stringField(toolCall, 'id'),
     name: stringField(toolCall, 'name') ?? 'tool',
     status: 'running',
@@ -82,7 +76,6 @@ function entryFromStart(record: EventRecord): TraceAccumulator {
     durationMs: null,
     startedAt: record.createdAt,
     completedAt: null,
-    turnEventId: record.parentEventId,
     startSequence: record.sequence,
     endSequence: null,
   }
@@ -107,7 +100,6 @@ function orphanedEntryFromEnd(record: EventRecord): TraceAccumulator {
   const failed = payload.isError === true || Boolean(payload.error)
   return {
     key: record.id,
-    correlationId: record.correlationId,
     toolCallId: stringField(toolCall, 'id'),
     name: stringField(toolCall, 'name') ?? 'tool',
     status: failed ? 'failed' : 'completed',
@@ -121,7 +113,6 @@ function orphanedEntryFromEnd(record: EventRecord): TraceAccumulator {
     durationMs: numberField(payload, 'durationMs'),
     startedAt: null,
     completedAt: record.createdAt,
-    turnEventId: record.parentEventId,
     startSequence: null,
     endSequence: record.sequence,
   }
@@ -129,13 +120,13 @@ function orphanedEntryFromEnd(record: EventRecord): TraceAccumulator {
 
 function pairingKey(record: EventRecord) {
   const toolCall = objectValue(objectValue(record.event.payload).toolCall)
-  return record.correlationId ?? `tool:${stringField(toolCall, 'id') ?? record.id}`
+  return stringField(toolCall, 'id') ?? record.id
 }
 
 function findOpenEntry(entries: TraceAccumulator[], key: string) {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index]
-    if (entry && entry.status === 'running' && (entry.correlationId ?? `tool:${entry.toolCallId ?? ''}`) === key) {
+    if (entry && entry.status === 'running' && (entry.toolCallId ?? entry.key) === key) {
       return entry
     }
   }
@@ -147,7 +138,7 @@ function findOpenEntry(entries: TraceAccumulator[], key: string) {
 function approvalState(entry: TraceAccumulator, denials: EventRecord[]): SessionToolTraceApproval {
   const command = stringField(objectValue(entry.input), 'command')
   const denial = denials.find((record) => {
-    if (record.parentEventId !== entry.turnEventId || entry.startSequence === null) {
+    if (entry.startSequence === null) {
       return false
     }
     if (record.sequence < entry.startSequence || (entry.endSequence !== null && record.sequence > entry.endSequence)) {

@@ -12,7 +12,6 @@ from ...models.error_response import ErrorResponse
 from ...models.event_record_list_response import EventRecordListResponse
 from ...models.list_session_events_order import ListSessionEventsOrder
 from ...models.list_session_events_type import ListSessionEventsType
-from ...models.list_session_events_visibility import ListSessionEventsVisibility
 from ...types import UNSET, Unset
 from typing import cast
 import datetime
@@ -26,7 +25,6 @@ def _get_kwargs(
     order: ListSessionEventsOrder | Unset = UNSET,
     limit: int | Unset = UNSET,
     type_: ListSessionEventsType | Unset = UNSET,
-    visibility: ListSessionEventsVisibility | Unset = UNSET,
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
@@ -57,12 +55,6 @@ def _get_kwargs(
         json_type_ = type_.value
 
     params["type"] = json_type_
-
-    json_visibility: str | Unset = UNSET
-    if not isinstance(visibility, Unset):
-        json_visibility = visibility.value
-
-    params["visibility"] = json_visibility
 
     json_created_from: str | Unset = UNSET
     if not isinstance(created_from, Unset):
@@ -141,7 +133,6 @@ def sync_detailed(
     order: ListSessionEventsOrder | Unset = UNSET,
     limit: int | Unset = UNSET,
     type_: ListSessionEventsType | Unset = UNSET,
-    visibility: ListSessionEventsVisibility | Unset = UNSET,
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
@@ -157,7 +148,6 @@ def sync_detailed(
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
         type_ (ListSessionEventsType | Unset):  Example: message_end.
-        visibility (ListSessionEventsVisibility | Unset):  Example: runtime.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 
@@ -176,7 +166,6 @@ cursor=cursor,
 order=order,
 limit=limit,
 type_=type_,
-visibility=visibility,
 created_from=created_from,
 created_to=created_to,
 
@@ -196,7 +185,6 @@ def sync(
     order: ListSessionEventsOrder | Unset = UNSET,
     limit: int | Unset = UNSET,
     type_: ListSessionEventsType | Unset = UNSET,
-    visibility: ListSessionEventsVisibility | Unset = UNSET,
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
@@ -212,7 +200,6 @@ def sync(
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
         type_ (ListSessionEventsType | Unset):  Example: message_end.
-        visibility (ListSessionEventsVisibility | Unset):  Example: runtime.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 
@@ -232,7 +219,6 @@ cursor=cursor,
 order=order,
 limit=limit,
 type_=type_,
-visibility=visibility,
 created_from=created_from,
 created_to=created_to,
 
@@ -246,7 +232,6 @@ async def asyncio_detailed(
     order: ListSessionEventsOrder | Unset = UNSET,
     limit: int | Unset = UNSET,
     type_: ListSessionEventsType | Unset = UNSET,
-    visibility: ListSessionEventsVisibility | Unset = UNSET,
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
@@ -262,7 +247,6 @@ async def asyncio_detailed(
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
         type_ (ListSessionEventsType | Unset):  Example: message_end.
-        visibility (ListSessionEventsVisibility | Unset):  Example: runtime.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 
@@ -281,7 +265,6 @@ cursor=cursor,
 order=order,
 limit=limit,
 type_=type_,
-visibility=visibility,
 created_from=created_from,
 created_to=created_to,
 
@@ -301,7 +284,6 @@ async def asyncio(
     order: ListSessionEventsOrder | Unset = UNSET,
     limit: int | Unset = UNSET,
     type_: ListSessionEventsType | Unset = UNSET,
-    visibility: ListSessionEventsVisibility | Unset = UNSET,
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
@@ -317,7 +299,6 @@ async def asyncio(
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
         type_ (ListSessionEventsType | Unset):  Example: message_end.
-        visibility (ListSessionEventsVisibility | Unset):  Example: runtime.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 
@@ -337,7 +318,6 @@ cursor=cursor,
 order=order,
 limit=limit,
 type_=type_,
-visibility=visibility,
 created_from=created_from,
 created_to=created_to,
 

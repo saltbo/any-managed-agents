@@ -14,12 +14,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, StatusBadge } from '@/console/components'
 import { formatTime, stringifyJson } from '@/console/format'
 import type { EventRecord } from '@/lib/amarpc'
-import { SessionToolTrace } from './SessionToolTrace'
 import type { SessionRuntimeState } from './session-runtime'
-import { buildSessionToolTrace } from './session-tool-trace'
 
 const EVENT_FILTERS = AMA_SESSION_EVENT_CATEGORIES
 type EventFilter = 'all' | (typeof EVENT_FILTERS)[number]
+type RuntimeTab = 'transcript' | 'debug'
+type TranscriptFilter = 'all' | 'messages' | 'tools'
 
 export function SessionRuntimePanel({
   runtime,
@@ -40,22 +40,21 @@ export function SessionRuntimePanel({
   onRefreshEvents: () => void
   canSend: boolean
 }) {
+  const [activeTab, setActiveTab] = useState<RuntimeTab>('transcript')
+  const [transcriptType, setTranscriptType] = useState<TranscriptFilter>('all')
   const [eventType, setEventType] = useState<EventFilter>('all')
   const debugEvents = useMemo(() => {
-    const persisted = persistedEvents
-      .filter((record) => record.visibility !== 'transcript')
-      .map((record) => ({
-        id: record.id,
-        type: record.event.type,
-        payload: record.event.payload,
-        createdAt: record.createdAt,
-      }))
+    const persisted = persistedEvents.map((record) => ({
+      id: record.id,
+      type: record.event.type,
+      payload: record.event.payload,
+      createdAt: record.createdAt,
+    }))
     return [...persisted, ...runtime.debugEvents.filter((record) => !persisted.some((item) => item.id === record.id))]
   }, [persistedEvents, runtime.debugEvents])
   const filteredDebugEvents =
     eventType === 'all' ? debugEvents : debugEvents.filter((event) => amaSessionEventCategory(event.type) === eventType)
   const eventExport = stringifyJson([...persistedEvents].sort((a, b) => a.sequence - b.sequence))
-  const toolTrace = useMemo(() => buildSessionToolTrace(persistedEvents), [persistedEvents])
   const transcriptItems = useMemo(
     () =>
       [
@@ -63,6 +62,15 @@ export function SessionRuntimePanel({
         ...runtime.tools.map((tool) => ({ type: 'tool' as const, at: tool.createdAt, tool })),
       ].sort((left, right) => Date.parse(left.at) - Date.parse(right.at)),
     [runtime.messages, runtime.tools],
+  )
+  const filteredTranscriptItems = useMemo(
+    () =>
+      transcriptItems.filter((item) => {
+        if (transcriptType === 'messages') return item.type === 'message'
+        if (transcriptType === 'tools') return item.type === 'tool'
+        return true
+      }),
+    [transcriptItems, transcriptType],
   )
   const sendMessage = () => {
     const trimmed = message.trim()
@@ -88,30 +96,48 @@ export function SessionRuntimePanel({
   }
 
   return (
-    <Tabs defaultValue="transcript" className="flex min-h-0 flex-1 flex-col">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => setActiveTab(runtimeTab(value))}
+      className="flex min-h-0 flex-1 flex-col"
+    >
       <div className="flex flex-col gap-3 border-b py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <TabsList className="h-9">
             <TabsTrigger value="transcript">Transcript</TabsTrigger>
-            <TabsTrigger value="tools">Tools</TabsTrigger>
             <TabsTrigger value="debug">Debug</TabsTrigger>
           </TabsList>
           <Separator orientation="vertical" className="hidden h-8 lg:block" />
-          <Select value={eventType} onValueChange={(value) => setEventType(eventFilter(value))}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">All events</SelectItem>
-                {EVENT_FILTERS.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          {activeTab === 'transcript' ? (
+            <Select value={transcriptType} onValueChange={(value) => setTranscriptType(transcriptFilter(value))}>
+              <SelectTrigger className="h-9 w-44" aria-label="Filter transcript">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All transcript</SelectItem>
+                  <SelectItem value="messages">Messages</SelectItem>
+                  <SelectItem value="tools">Tools</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          ) : (
+            <Select value={eventType} onValueChange={(value) => setEventType(eventFilter(value))}>
+              <SelectTrigger className="h-9 w-44" aria-label="Filter debug events">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All events</SelectItem>
+                  {EVENT_FILTERS.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
           <Button type="button" variant="ghost" size="icon" aria-label="Search events">
             <Search data-icon="inline-start" />
           </Button>
@@ -142,12 +168,12 @@ export function SessionRuntimePanel({
       <TabsContent value="transcript" className="mt-0 flex min-h-0 flex-1 flex-col">
         <Conversation className="bg-background">
           <ConversationContent className="pb-4">
-            {runtime.messages.length === 0 && runtime.tools.length === 0 ? (
+            {filteredTranscriptItems.length === 0 ? (
               <div className="pt-8">
                 <EmptyState title="No messages yet" body="Send a message to start the session transcript." />
               </div>
             ) : null}
-            {transcriptItems.map((item) =>
+            {filteredTranscriptItems.map((item) =>
               item.type === 'message' ? (
                 <Message
                   key={`message:${item.message.id}`}
@@ -187,12 +213,6 @@ export function SessionRuntimePanel({
         </div>
       </TabsContent>
 
-      <TabsContent value="tools" className="mt-0 min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-6">
-        <div className="mx-auto w-full max-w-5xl">
-          <SessionToolTrace entries={toolTrace} />
-        </div>
-      </TabsContent>
-
       <TabsContent value="debug" className="mt-0 min-h-0 flex-1 overflow-y-auto py-5">
         <div className="mx-auto w-full max-w-5xl">
           {filteredDebugEvents.length === 0 ? (
@@ -227,4 +247,12 @@ export function eventFilter(value: string): EventFilter {
   return value === 'all' || EVENT_FILTERS.includes(value as (typeof EVENT_FILTERS)[number])
     ? (value as EventFilter)
     : 'all'
+}
+
+export function transcriptFilter(value: string): TranscriptFilter {
+  return value === 'all' || value === 'messages' || value === 'tools' ? value : 'all'
+}
+
+function runtimeTab(value: string): RuntimeTab {
+  return value === 'debug' ? 'debug' : 'transcript'
 }

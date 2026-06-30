@@ -28,9 +28,6 @@ export type MessageState = (typeof MESSAGE_STATES)[number]
 export const APPROVAL_STATES = ['pending', 'approved', 'denied'] as const
 export type ApprovalState = (typeof APPROVAL_STATES)[number]
 
-export const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
-export type EventVisibility = (typeof EVENT_VISIBILITIES)[number]
-
 export type SessionHostingMode = 'cloud' | 'self_hosted'
 
 export interface Session {
@@ -149,10 +146,6 @@ export interface EventRecord {
   projectId: string
   sessionId: string
   sequence: number
-  visibility: EventVisibility
-  role: string | null
-  parentEventId: string | null
-  correlationId: string | null
   event: AmaEvent
   createdAt: string
 }
@@ -181,13 +174,6 @@ export function sessionAcceptsPrompts(state: SessionState): boolean {
 // A session is terminal once it has stopped or errored.
 export function sessionIsTerminal(state: SessionState): boolean {
   return state === 'stopped' || state === 'error'
-}
-
-export function sessionEventVisibility(value: string): EventVisibility {
-  if (value === 'runtime' || value === 'transcript' || value === 'debug' || value === 'audit') {
-    return value
-  }
-  throw new Error(`Invalid session event visibility: ${value}`)
 }
 
 // Self-hosted sessions never own a sandbox; cloud sessions always do. The

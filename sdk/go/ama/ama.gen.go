@@ -898,30 +898,6 @@ func (e EventMessageRole) Valid() bool {
 	}
 }
 
-// Defines values for EventRecordVisibility.
-const (
-	EventRecordVisibilityAudit      EventRecordVisibility = "audit"
-	EventRecordVisibilityDebug      EventRecordVisibility = "debug"
-	EventRecordVisibilityRuntime    EventRecordVisibility = "runtime"
-	EventRecordVisibilityTranscript EventRecordVisibility = "transcript"
-)
-
-// Valid indicates whether the value is a known member of the EventRecordVisibility enum.
-func (e EventRecordVisibility) Valid() bool {
-	switch e {
-	case EventRecordVisibilityAudit:
-		return true
-	case EventRecordVisibilityDebug:
-		return true
-	case EventRecordVisibilityRuntime:
-		return true
-	case EventRecordVisibilityTranscript:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for FileContentBlockType.
 const (
 	File FileContentBlockType = "file"
@@ -1152,13 +1128,13 @@ func (e PutRunnerHeartbeatRequestState) Valid() bool {
 
 // Defines values for ReasoningContentBlockType.
 const (
-	Reasoning ReasoningContentBlockType = "reasoning"
+	ReasoningContentBlockTypeReasoning ReasoningContentBlockType = "reasoning"
 )
 
 // Valid indicates whether the value is a known member of the ReasoningContentBlockType enum.
 func (e ReasoningContentBlockType) Valid() bool {
 	switch e {
-	case Reasoning:
+	case ReasoningContentBlockTypeReasoning:
 		return true
 	default:
 		return false
@@ -2515,30 +2491,6 @@ func (e ListSessionEventsParamsType) Valid() bool {
 	}
 }
 
-// Defines values for ListSessionEventsParamsVisibility.
-const (
-	Audit      ListSessionEventsParamsVisibility = "audit"
-	Debug      ListSessionEventsParamsVisibility = "debug"
-	Runtime    ListSessionEventsParamsVisibility = "runtime"
-	Transcript ListSessionEventsParamsVisibility = "transcript"
-)
-
-// Valid indicates whether the value is a known member of the ListSessionEventsParamsVisibility enum.
-func (e ListSessionEventsParamsVisibility) Valid() bool {
-	switch e {
-	case Audit:
-		return true
-	case Debug:
-		return true
-	case Runtime:
-		return true
-	case Transcript:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ListTriggersParamsArchived.
 const (
 	ListTriggersParamsArchivedFalse ListTriggersParamsArchived = "false"
@@ -3494,20 +3446,13 @@ type EventMetadata map[string]interface{}
 
 // EventRecord defines model for EventRecord.
 type EventRecord struct {
-	CorrelationId *string               `json:"correlationId"`
-	CreatedAt     time.Time             `json:"createdAt"`
-	Event         AmaEvent              `json:"event"`
-	Id            string                `json:"id"`
-	ParentEventId *string               `json:"parentEventId"`
-	ProjectId     string                `json:"projectId"`
-	Role          *string               `json:"role"`
-	Sequence      int                   `json:"sequence"`
-	SessionId     string                `json:"sessionId"`
-	Visibility    EventRecordVisibility `json:"visibility"`
+	CreatedAt time.Time `json:"createdAt"`
+	Event     AmaEvent  `json:"event"`
+	Id        string    `json:"id"`
+	ProjectId string    `json:"projectId"`
+	Sequence  int       `json:"sequence"`
+	SessionId string    `json:"sessionId"`
 }
-
-// EventRecordVisibility defines model for EventRecord.Visibility.
-type EventRecordVisibility string
 
 // EventRecordListResponse defines model for EventRecordListResponse.
 type EventRecordListResponse struct {
@@ -4355,13 +4300,12 @@ type SessionSocketBackfillMessageType string
 
 // SessionSocketBackfillRequestMessage defines model for SessionSocketBackfillRequestMessage.
 type SessionSocketBackfillRequestMessage struct {
-	Cursor     *int                                    `json:"cursor,omitempty"`
-	EventType  *string                                 `json:"eventType,omitempty"`
-	Id         string                                  `json:"id"`
-	Limit      *int                                    `json:"limit,omitempty"`
-	RequestId  *string                                 `json:"requestId,omitempty"`
-	Type       SessionSocketBackfillRequestMessageType `json:"type"`
-	Visibility *string                                 `json:"visibility,omitempty"`
+	Cursor    *int                                    `json:"cursor,omitempty"`
+	EventType *string                                 `json:"eventType,omitempty"`
+	Id        string                                  `json:"id"`
+	Limit     *int                                    `json:"limit,omitempty"`
+	RequestId *string                                 `json:"requestId,omitempty"`
+	Type      SessionSocketBackfillRequestMessageType `json:"type"`
 }
 
 // SessionSocketBackfillRequestMessageType defines model for SessionSocketBackfillRequestMessage.Type.
@@ -5215,13 +5159,12 @@ type ListSessionsParamsState string
 
 // ListSessionEventsParams defines parameters for ListSessionEvents.
 type ListSessionEventsParams struct {
-	Cursor      *int                               `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Order       *ListSessionEventsParamsOrder      `form:"order,omitempty" json:"order,omitempty"`
-	Limit       *int                               `form:"limit,omitempty" json:"limit,omitempty"`
-	Type        *ListSessionEventsParamsType       `form:"type,omitempty" json:"type,omitempty"`
-	Visibility  *ListSessionEventsParamsVisibility `form:"visibility,omitempty" json:"visibility,omitempty"`
-	CreatedFrom *time.Time                         `form:"createdFrom,omitempty" json:"createdFrom,omitempty"`
-	CreatedTo   *time.Time                         `form:"createdTo,omitempty" json:"createdTo,omitempty"`
+	Cursor      *int                          `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Order       *ListSessionEventsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Limit       *int                          `form:"limit,omitempty" json:"limit,omitempty"`
+	Type        *ListSessionEventsParamsType  `form:"type,omitempty" json:"type,omitempty"`
+	CreatedFrom *time.Time                    `form:"createdFrom,omitempty" json:"createdFrom,omitempty"`
+	CreatedTo   *time.Time                    `form:"createdTo,omitempty" json:"createdTo,omitempty"`
 }
 
 // ListSessionEventsParamsOrder defines parameters for ListSessionEvents.
@@ -5229,9 +5172,6 @@ type ListSessionEventsParamsOrder string
 
 // ListSessionEventsParamsType defines parameters for ListSessionEvents.
 type ListSessionEventsParamsType string
-
-// ListSessionEventsParamsVisibility defines parameters for ListSessionEvents.
-type ListSessionEventsParamsVisibility string
 
 // ListSessionMessagesParams defines parameters for ListSessionMessages.
 type ListSessionMessagesParams struct {
@@ -11943,18 +11883,6 @@ func NewListSessionEventsRequest(server string, sessionId string, params *ListSe
 		if params.Type != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Visibility != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "visibility", *params.Visibility, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {

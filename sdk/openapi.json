@@ -53,27 +53,6 @@
           "sequence": {
             "type": "integer"
           },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "runtime",
-              "transcript",
-              "debug",
-              "audit"
-            ]
-          },
-          "role": {
-            "type": "string",
-            "nullable": true
-          },
-          "parentEventId": {
-            "type": "string",
-            "nullable": true
-          },
-          "correlationId": {
-            "type": "string",
-            "nullable": true
-          },
           "event": {
             "$ref": "#/components/schemas/AmaEvent"
           },
@@ -87,10 +66,6 @@
           "projectId",
           "sessionId",
           "sequence",
-          "visibility",
-          "role",
-          "parentEventId",
-          "correlationId",
           "event",
           "createdAt"
         ]
@@ -1296,9 +1271,6 @@
             "type": "integer"
           },
           "eventType": {
-            "type": "string"
-          },
-          "visibility": {
             "type": "string"
           }
         },
@@ -12588,21 +12560,6 @@
             },
             "required": false,
             "name": "type",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "runtime",
-                "transcript",
-                "debug",
-                "audit"
-              ],
-              "example": "runtime"
-            },
-            "required": false,
-            "name": "visibility",
             "in": "query"
           },
           {

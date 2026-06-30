@@ -1,8 +1,9 @@
+import { type SessionSocketServerMessage, sessionSocketServerMessageFrom } from '@ama/runtime-contracts/session-socket'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { EventRecord, Session } from '@/lib/amarpc'
 import {
   initialSessionRuntimeState,
-  type SessionSocketClientMessage,
+  type SessionRuntimeCommand,
   type SessionSocketClientMessageType,
   sessionRuntimeReducer,
   sessionSocketUrl,
@@ -76,10 +77,14 @@ export function useSessionRuntimeSession({
         dispatch({ type: 'connection', state: 'error', error: socketMessage.message })
         return
       }
+      if (socketMessage.type === 'runner_unavailable') {
+        dispatch({ type: 'connection', state: 'error', error: socketMessage.message })
+        return
+      }
       if (socketMessage.type === 'backfill') {
-        dispatch({ type: 'persisted_events', events: socketMessage.events })
+        dispatch({ type: 'persisted_events', events: socketMessage.events as EventRecord[] })
       } else {
-        dispatch({ type: 'persisted_events', events: [socketMessage.record] })
+        dispatch({ type: 'persisted_events', events: [socketMessage.record as EventRecord] })
       }
       if (shouldRefreshAfterMessage(socketMessage)) {
         window.clearTimeout(refreshTimerRef.current ?? undefined)
@@ -130,19 +135,13 @@ export function useSessionRuntimeSession({
   }
 }
 
-function clientMessage(type: SessionSocketClientMessageType, content?: string): SessionSocketClientMessage {
-  return {
-    id: crypto.randomUUID(),
-    type,
-    ...(content ? { content } : {}),
+function clientMessage(type: SessionSocketClientMessageType, content?: string): SessionRuntimeCommand {
+  const id = crypto.randomUUID()
+  if (type === 'abort') {
+    return { id, type }
   }
+  return { id, type, content: content ?? '' }
 }
-
-type SessionSocketServerMessage =
-  | { type: 'backfill'; events: EventRecord[] }
-  | { type: 'event'; record: EventRecord }
-  | { type: 'ack'; id: string }
-  | { type: 'error'; id?: string; message: string }
 
 function parseSessionSocketServerMessage(data: unknown): SessionSocketServerMessage | Error {
   if (typeof data !== 'string') {
@@ -153,58 +152,12 @@ function parseSessionSocketServerMessage(data: unknown): SessionSocketServerMess
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return new Error('Session socket emitted a non-object JSON message')
     }
-    return sessionSocketServerMessageFrom(parsed as Record<string, unknown>)
+    return sessionSocketServerMessageFrom(parsed) ?? new Error('Session socket emitted an unsupported message')
   } catch (error) {
     /* v8 ignore start -- JSON.parse always throws SyntaxError (an Error); the non-Error branch is unreachable */
     return error instanceof Error ? error : new Error('Session socket emitted invalid JSON')
     /* v8 ignore stop */
   }
-}
-
-function sessionSocketServerMessageFrom(parsed: Record<string, unknown>): SessionSocketServerMessage | Error {
-  if (parsed.type === 'backfill') {
-    return Array.isArray(parsed.events)
-      ? { type: 'backfill', events: parsed.events.filter(isEventRecord) }
-      : new Error('Session socket emitted invalid backfill frame')
-  }
-  if (parsed.type === 'event') {
-    return isEventRecord(parsed.record)
-      ? { type: 'event', record: parsed.record }
-      : new Error('Session socket emitted invalid event frame')
-  }
-  if (parsed.type === 'ack') {
-    return typeof parsed.id === 'string'
-      ? { type: 'ack', id: parsed.id }
-      : new Error('Session socket emitted invalid ack message')
-  }
-  if (parsed.type === 'error') {
-    return typeof parsed.message === 'string'
-      ? { type: 'error', ...(typeof parsed.id === 'string' ? { id: parsed.id } : {}), message: parsed.message }
-      : new Error('Session socket emitted invalid error message')
-  }
-  return new Error('Session socket emitted an unsupported frame')
-}
-
-function isEventRecord(value: unknown): value is EventRecord {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-  const record = value as Partial<EventRecord>
-  const amaEvent =
-    record.event && typeof record.event === 'object' && !Array.isArray(record.event)
-      ? (record.event as { type?: unknown; payload?: unknown })
-      : null
-  return (
-    typeof record.id === 'string' &&
-    typeof record.sessionId === 'string' &&
-    typeof record.sequence === 'number' &&
-    typeof record.createdAt === 'string' &&
-    amaEvent !== null &&
-    typeof amaEvent.type === 'string' &&
-    Boolean(amaEvent.payload) &&
-    typeof amaEvent.payload === 'object' &&
-    !Array.isArray(amaEvent.payload)
-  )
 }
 
 function shouldRefreshAfterMessage(message: SessionSocketServerMessage) {

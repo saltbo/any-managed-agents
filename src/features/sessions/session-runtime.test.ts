@@ -24,10 +24,6 @@ function event(sequence: number, type: AmaSessionEventType, payload: Record<stri
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence,
-    visibility: 'runtime',
-    role: null,
-    parentEventId: null,
-    correlationId: null,
     event: { type, payload } as EventRecord['event'],
     createdAt: new Date(sequence * 1000).toISOString(),
   }
@@ -600,10 +596,10 @@ describe('sessionRuntimeReducer', () => {
     expect(state.messages).toHaveLength(0)
   })
 
-  it('handles command_sent with no content by returning unchanged state', () => {
+  it('handles command_sent with empty content by returning unchanged state', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'command_sent',
-      command: { id: 'cmd_1', type: 'prompt' },
+      command: { id: 'cmd_1', type: 'prompt', content: '' },
       at: new Date(1000).toISOString(),
     })
 
@@ -698,10 +694,6 @@ describe('sessionRuntimeReducer', () => {
             projectId: 'project_1',
             sessionId: 'session_1',
             sequence: 1,
-            visibility: 'runtime',
-            role: null,
-            parentEventId: null,
-            correlationId: null,
             event: {
               type: 'session_checkpoint',
               payload: { type: 'session_checkpoint', resumeTokenRef: 'ref_1', scope: 'runtime-resume-token' },

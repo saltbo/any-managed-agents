@@ -46,7 +46,6 @@ import { requestId } from './request-context'
 type SessionRoutes = OpenAPIHono<DepsEnv>
 
 const SESSION_STATES = ['pending', 'running', 'idle', 'stopped', 'error'] as const
-const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const MESSAGE_DELIVERIES = ['live', 'queued'] as const
 const MESSAGE_STATES = ['accepted', 'delivered', 'failed'] as const
 const APPROVAL_STATES = ['pending', 'approved', 'denied'] as const
@@ -367,10 +366,6 @@ const EventRecordSchema = z
     projectId: z.string(),
     sessionId: z.string(),
     sequence: z.number().int(),
-    visibility: z.enum(EVENT_VISIBILITIES),
-    role: z.string().nullable(),
-    parentEventId: z.string().nullable(),
-    correlationId: z.string().nullable(),
     event: AmaEventSchema,
     createdAt: z.string().datetime(),
   })
@@ -432,7 +427,6 @@ const SessionSocketBackfillRequestMessageSchema = z
     cursor: z.number().int().optional(),
     limit: z.number().int().optional(),
     eventType: z.string().optional(),
-    visibility: z.string().optional(),
   })
   .openapi('SessionSocketBackfillRequestMessage')
 const SessionSocketClientMessageSchema = z
@@ -599,10 +593,6 @@ const EventsQuerySchema = eventListQuerySchema().extend({
     .enum(AMA_SESSION_EVENT_TYPES)
     .optional()
     .openapi({ param: { name: 'type', in: 'query' }, example: 'message_end' }),
-  visibility: z
-    .enum(EVENT_VISIBILITIES)
-    .optional()
-    .openapi({ param: { name: 'visibility', in: 'query' }, example: 'runtime' }),
   createdFrom: z
     .string()
     .datetime()
@@ -753,7 +743,6 @@ type EventsQuery = z.infer<typeof EventsQuerySchema>
 function eventsQueryFor(query: EventsQuery, limit: number) {
   return {
     ...(query.type ? { type: query.type } : {}),
-    visibility: query.visibility ?? 'runtime',
     ...(query.createdFrom ? { createdFrom: query.createdFrom } : {}),
     ...(query.createdTo ? { createdTo: query.createdTo } : {}),
     order: (query.order ?? 'asc') as 'asc' | 'desc',
@@ -779,28 +768,12 @@ async function eventsCsvResponse(c: Context<DepsEnv>, sessionId: string, query: 
   const limit = query.limit ?? 200
   const page = await deps.sessionEventStore.queryEvents(sessionId, eventsQueryFor(query, limit + 1))
   const rows = page.rows.slice(0, limit)
-  const header = [
-    'id',
-    'sessionId',
-    'sequence',
-    'type',
-    'visibility',
-    'role',
-    'correlationId',
-    'parentEventId',
-    'createdAt',
-    'payload',
-    'metadata',
-  ]
+  const header = ['id', 'sessionId', 'sequence', 'type', 'createdAt', 'payload', 'metadata']
   const csvRows = rows.map((record) => [
     record.id,
     record.sessionId,
     String(record.sequence),
     record.event.type,
-    record.visibility,
-    record.role ?? '',
-    record.correlationId ?? '',
-    record.parentEventId ?? '',
     record.createdAt,
     JSON.stringify(record.event.payload),
     JSON.stringify(record.event.metadata ?? {}),
@@ -836,7 +809,6 @@ function eventsSseResponse(c: Context<DepsEnv>, sessionId: string, query: Events
         while (Date.now() <= deadline && !signal.aborted) {
           const page = await deps.sessionEventStore.queryEvents(sessionId, {
             ...(query.type ? { type: query.type } : {}),
-            visibility: query.visibility ?? 'runtime',
             ...(query.createdFrom ? { createdFrom: query.createdFrom } : {}),
             ...(query.createdTo ? { createdTo: query.createdTo } : {}),
             order: 'asc',

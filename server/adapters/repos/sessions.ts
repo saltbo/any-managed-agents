@@ -11,8 +11,7 @@ import {
   AMA_SESSION_EVENT_TYPES,
   type AmaEvent,
   type AmaSessionEventType,
-  type CanonicalAmaSessionEvent,
-  canonicalAmaSessionEventFromRuntimeEvent,
+  amaEventFromRuntimeEvent,
   isAmaSessionEventType,
 } from '@shared/session-events'
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, or, sql } from 'drizzle-orm'
@@ -33,7 +32,6 @@ import {
   type SessionEnvironmentSnapshot,
   type SessionMessage,
   type SessionState,
-  sessionEventVisibility,
 } from '../../domain/session'
 import { redactSensitiveValue } from '../../redaction'
 
@@ -218,18 +216,13 @@ function serializeApproval(row: SessionApprovalRow): SessionApproval {
 function serializeEvent(row: SessionEventRow): EventRecord {
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
-  const canonical: CanonicalAmaSessionEvent = isAmaSessionEventType(row.type)
+  const canonical: AmaEvent = isAmaSessionEventType(row.type)
     ? ({
         type: row.type,
-        visibility: sessionEventVisibility(row.visibility),
-        role: row.role,
         payload: rawPayload,
         metadata: rawMetadata,
-      } as CanonicalAmaSessionEvent)
-    : canonicalAmaSessionEventFromRuntimeEvent(
-        { ...rawPayload, type: row.type },
-        { source: 'stored-session-event', ...rawMetadata },
-      )
+      } as AmaEvent)
+    : amaEventFromRuntimeEvent({ ...rawPayload, type: row.type }, { source: 'stored-session-event', ...rawMetadata })
   if (!isAmaSessionEventType(row.type)) {
     canonical.metadata = { ...canonical.metadata, rawSessionEventType: row.type }
   }
@@ -238,10 +231,6 @@ function serializeEvent(row: SessionEventRow): EventRecord {
     projectId: row.projectId,
     sessionId: row.sessionId,
     sequence: row.sequence,
-    visibility: sessionEventVisibility(canonical.visibility),
-    role: canonical.role,
-    parentEventId: row.parentEventId,
-    correlationId: row.correlationId,
     event: {
       type: canonical.type,
       payload: redactSensitiveValue(canonical.payload) as typeof canonical.payload,
@@ -304,7 +293,6 @@ function eventFilters(sessionId: string, query: EventQuery) {
     eq(sessionEvents.sessionId, sessionId),
     eventCursorFilter(query.cursor, query.order),
     eventTypeFilter(query.type),
-    eq(sessionEvents.visibility, query.visibility ?? 'runtime'),
     query.createdFrom ? gte(sessionEvents.createdAt, query.createdFrom) : undefined,
     query.createdTo ? lte(sessionEvents.createdAt, query.createdTo) : undefined,
   ].filter((filter) => filter !== undefined)
@@ -491,10 +479,7 @@ export function createSessionRepo(db: Db): SessionRepo {
 
     async insertEvents(scope, events) {
       for (const event of events) {
-        const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
-          { type: event.type, ...event.payload },
-          event.metadata,
-        )
+        const canonicalEvent = amaEventFromRuntimeEvent({ type: event.type, ...event.payload }, event.metadata)
         await insertCanonicalSessionEvent(db, scope, canonicalEvent)
       }
       return events.length

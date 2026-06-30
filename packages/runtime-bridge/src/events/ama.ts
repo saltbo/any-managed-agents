@@ -54,13 +54,8 @@ export function usageEvent(payload: Record<string, unknown>) {
   return runtimeEvent('usage.recorded', payload)
 }
 
-// The canonical end-of-turn marker every SDK provider emits after its result
-// event. The empty message/toolResults shape is the contract the protocol pins.
 export function turnEnd() {
-  return runtimeEvent('turn_end', {
-    message: { role: 'assistant', content: [], timestamp: Date.now() },
-    toolResults: [],
-  })
+  return runtimeEvent('turn_end')
 }
 
 export function reasoning(content: string) {

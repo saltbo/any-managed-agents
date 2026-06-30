@@ -8,7 +8,6 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.event_record_visibility import EventRecordVisibility
 from typing import cast
 import datetime
 
@@ -50,10 +49,6 @@ class EventRecord:
             project_id (str):
             session_id (str):
             sequence (int):
-            visibility (EventRecordVisibility):
-            role (None | str):
-            parent_event_id (None | str):
-            correlation_id (None | str):
             event (AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 |
                 AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 |
                 AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 |
@@ -65,10 +60,6 @@ class EventRecord:
     project_id: str
     session_id: str
     sequence: int
-    visibility: EventRecordVisibility
-    role: None | str
-    parent_event_id: None | str
-    correlation_id: None | str
     event: AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9
     created_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -105,17 +96,6 @@ class EventRecord:
         session_id = self.session_id
 
         sequence = self.sequence
-
-        visibility = self.visibility.value
-
-        role: None | str
-        role = self.role
-
-        parent_event_id: None | str
-        parent_event_id = self.parent_event_id
-
-        correlation_id: None | str
-        correlation_id = self.correlation_id
 
         event: dict[str, Any]
         if isinstance(self.event, AmaEventType0):
@@ -170,10 +150,6 @@ class EventRecord:
             "projectId": project_id,
             "sessionId": session_id,
             "sequence": sequence,
-            "visibility": visibility,
-            "role": role,
-            "parentEventId": parent_event_id,
-            "correlationId": correlation_id,
             "event": event,
             "createdAt": created_at,
         })
@@ -212,35 +188,6 @@ class EventRecord:
         session_id = d.pop("sessionId")
 
         sequence = d.pop("sequence")
-
-        visibility = EventRecordVisibility(d.pop("visibility"))
-
-
-
-
-        def _parse_role(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        role = _parse_role(d.pop("role"))
-
-
-        def _parse_parent_event_id(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        parent_event_id = _parse_parent_event_id(d.pop("parentEventId"))
-
-
-        def _parse_correlation_id(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        correlation_id = _parse_correlation_id(d.pop("correlationId"))
-
 
         def _parse_event(data: object) -> AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9:
             try:
@@ -454,10 +401,6 @@ class EventRecord:
             project_id=project_id,
             session_id=session_id,
             sequence=sequence,
-            visibility=visibility,
-            role=role,
-            parent_event_id=parent_event_id,
-            correlation_id=correlation_id,
             event=event,
             created_at=created_at,
         )

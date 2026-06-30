@@ -44,8 +44,6 @@ export const AMA_SESSION_EVENT_CATEGORIES = [
 
 export type AmaSessionEventFilterCategory = AmaSessionEventCategory | 'unknown'
 
-export type EventVisibility = 'runtime' | 'transcript' | 'debug' | 'audit'
-
 export type EventMetadata = {
   sourceEventType?: string
   runtimeSource?: string
@@ -106,26 +104,26 @@ export type EventError = {
   details?: unknown
 }
 
-export type MessageEventPayload = { message: Message }
-export type ToolStartedPayload = { toolCall: ToolCall }
-export type ToolUpdatedPayload = { toolCall: ToolCall; partialResult?: unknown }
+export type MessageEventPayload = { message: Message; [key: string]: unknown }
+export type ToolStartedPayload = { toolCall: ToolCall; [key: string]: unknown }
+export type ToolUpdatedPayload = { toolCall: ToolCall; partialResult?: unknown; [key: string]: unknown }
 export type ToolCompletedPayload = {
   toolCall: ToolCall
   result?: unknown
   error?: EventError
   isError?: boolean
   durationMs?: number
+  [key: string]: unknown
 }
 export type TurnPayload = {
   marker?: string
   stage?: string
   status?: string
-  message?: Message
-  toolResults?: unknown[]
+  [key: string]: unknown
 }
 export type SessionStopPayload = { reason?: string }
-export type SessionCheckpointPayload = { resumeTokenRef?: string; scope?: string }
-export type SessionResumePayload = { fromCheckpoint?: string; reason?: string }
+export type SessionCheckpointPayload = { resumeTokenRef?: string; scope?: string; [key: string]: unknown }
+export type SessionResumePayload = { fromCheckpoint?: string; reason?: string; [key: string]: unknown }
 export type UsageRecordedPayload = {
   provider?: string
   model?: string
@@ -200,51 +198,15 @@ export type AmaEvent<TType extends AmaSessionEventType = AmaSessionEventType> = 
 
 export type EventRecord = {
   id: string
-  projectId?: string
-  sessionId?: string
+  projectId: string
+  sessionId: string
   sequence: number
   createdAt: string
-  parentEventId?: string | null
-  correlationId?: string | null
-  visibility?: EventVisibility
-  role?: string | null
   event: AmaEvent
 }
 
-export type CanonicalAmaSessionEvent<TType extends AmaSessionEventType = AmaSessionEventType> = {
-  [K in TType]: {
-    type: K
-    payload: AmaEventPayloadByType[K]
-    visibility: EventVisibility
-    role: string | null
-    metadata: EventMetadata
-  }
-}[TType]
-
 export function isAmaSessionEventType(value: string): value is AmaSessionEventType {
   return Object.hasOwn(AMA_SESSION_EVENT_DEFINITIONS, value)
-}
-
-// Stable correlation identifier shared by related canonical events: the
-// message_* trio shares `message:<id>` and tool_execution_* pairs share
-// `tool:<tool call id>`, so product consumers can pair calls with results
-// and reconstruct transcript threads without raw runtime events.
-export function canonicalEventCorrelation(
-  type: AmaSessionEventType,
-  payload: AmaEventPayloadByType[AmaSessionEventType],
-): string | null {
-  const category = AMA_SESSION_EVENT_DEFINITIONS[type].category
-  if (category === 'tool') {
-    const toolCall = objectValue((payload as Record<string, unknown>).toolCall)
-    const id = stringField(toolCall, 'id')
-    return id ? `tool:${id}` : null
-  }
-  if (category === 'transcript') {
-    const message = objectValue((payload as Record<string, unknown>).message)
-    const id = stringField(message, 'id')
-    return id ? `message:${id}` : null
-  }
-  return null
 }
 
 export function amaSessionEventCategory(type: string): AmaSessionEventFilterCategory {
@@ -276,14 +238,6 @@ export function isPiAgentSessionEventType(value: string): value is AmaSessionEve
   return PI_AGENT_EVENT_TYPES.has(value)
 }
 
-export function canonicalAmaSessionEventFromRuntimeEvent(
-  event: Record<string, unknown>,
-  metadata: EventMetadata = {},
-): CanonicalAmaSessionEvent {
-  const amaEvent = amaEventFromRuntimeEvent(event, metadata)
-  return canonicalAmaSessionEventFromAmaEvent(amaEvent)
-}
-
 export function amaEventFromRuntimeEvent(event: Record<string, unknown>, metadata: EventMetadata = {}): AmaEvent {
   const sourceEventType = sourceEventTypeFromRuntimeEvent(event)
   const type = canonicalType(sourceEventType)
@@ -299,14 +253,8 @@ export function amaEventFromRuntimeEvent(event: Record<string, unknown>, metadat
   } as AmaEvent
 }
 
-export function canonicalAmaSessionEventFromAmaEvent(event: AmaEvent): CanonicalAmaSessionEvent {
-  return {
-    type: event.type,
-    payload: event.payload,
-    visibility: 'runtime',
-    role: canonicalRole(event.type, event.payload),
-    metadata: event.metadata ?? {},
-  } as CanonicalAmaSessionEvent
+export function normalizeAmaEvent(event: AmaEvent): AmaEvent {
+  return { type: event.type, payload: event.payload, metadata: event.metadata ?? {} } as AmaEvent
 }
 
 function sourceEventTypeFromRuntimeEvent(event: Record<string, unknown>) {
@@ -409,7 +357,7 @@ function canonicalPayload(
 
   if (type === 'runtime.metadata' || type === 'runner.metadata') {
     const { type: _type, ...data } = event
-    return { data }
+    return { data: objectValue(data.data ?? data) }
   }
 
   return normalizeKnownPayload(type, withoutType(event))
@@ -420,13 +368,27 @@ function normalizeKnownPayload(
   payload: Record<string, unknown>,
 ): AmaEventPayloadByType[AmaSessionEventType] {
   if (type === 'message_start' || type === 'message_update' || type === 'message_end') {
-    return { message: normalizeMessage(payload.message ?? payload) }
+    return { ...restObject(payload, ['message']), message: normalizeMessage(payload.message ?? payload) }
   }
   if (type === 'tool_execution_start') {
-    return { toolCall: normalizeToolCall(payload) }
+    return {
+      ...restObject(payload, ['toolCall', 'toolCallId', 'toolName', 'input', 'arguments', 'args']),
+      toolCall: normalizeToolCall(payload),
+    }
   }
   if (type === 'tool_execution_update') {
     return compactObject({
+      ...restObject(payload, [
+        'toolCall',
+        'toolCallId',
+        'toolName',
+        'input',
+        'arguments',
+        'args',
+        'partialResult',
+        'result',
+        'output',
+      ]),
       toolCall: normalizeToolCall(payload),
       partialResult: payload.partialResult ?? payload.result ?? payload.output,
     }) as ToolUpdatedPayload
@@ -434,6 +396,19 @@ function normalizeKnownPayload(
   if (type === 'tool_execution_end') {
     const isError = payload.isError === true || Boolean(payload.error)
     return compactObject({
+      ...restObject(payload, [
+        'toolCall',
+        'toolCallId',
+        'toolName',
+        'input',
+        'arguments',
+        'args',
+        'result',
+        'output',
+        'error',
+        'isError',
+        'durationMs',
+      ]),
       toolCall: normalizeToolCall(payload),
       result: payload.result ?? payload.output,
       error: payload.error ? normalizeError(payload.error) : undefined,
@@ -443,19 +418,27 @@ function normalizeKnownPayload(
   }
   if (type === 'turn_start' || type === 'turn_end') {
     return compactObject({
+      ...restObject(payload, ['marker', 'stage', 'status']),
       marker: payload.marker,
       stage: payload.stage,
       status: payload.status,
-      message: payload.message ? normalizeMessage(payload.message) : undefined,
-      toolResults: Array.isArray(payload.toolResults) ? payload.toolResults : undefined,
     }) as TurnPayload
   }
-  if (type === 'session_stop') return compactObject({ reason: payload.reason }) as SessionStopPayload
+  if (type === 'session_stop')
+    return compactObject({ ...restObject(payload, ['reason']), reason: payload.reason }) as SessionStopPayload
   if (type === 'session_checkpoint') {
-    return compactObject({ resumeTokenRef: payload.resumeTokenRef, scope: payload.scope }) as SessionCheckpointPayload
+    return compactObject({
+      ...restObject(payload, ['resumeTokenRef', 'scope']),
+      resumeTokenRef: payload.resumeTokenRef,
+      scope: payload.scope,
+    }) as SessionCheckpointPayload
   }
   if (type === 'session_resume') {
-    return compactObject({ fromCheckpoint: payload.fromCheckpoint, reason: payload.reason }) as SessionResumePayload
+    return compactObject({
+      ...restObject(payload, ['fromCheckpoint', 'reason']),
+      fromCheckpoint: payload.fromCheckpoint,
+      reason: payload.reason,
+    }) as SessionResumePayload
   }
   if (type === 'usage.recorded') return usagePayload(payload)
   if (type === 'permission.request') {
@@ -473,7 +456,7 @@ function normalizeKnownPayload(
       content: payload.content ?? payload.message ?? payload.data ?? '',
     }
   }
-  if (type === 'runtime.metadata' || type === 'runner.metadata') return { data: payload }
+  if (type === 'runtime.metadata' || type === 'runner.metadata') return { data: objectValue(payload.data ?? payload) }
   return payload
 }
 
@@ -604,14 +587,6 @@ function normalizeError(value: unknown): RuntimeErrorPayload {
       error.details ??
       restObject(error, ['message', 'code', 'category', 'retryable', 'retryAfterSeconds', 'provider', 'model']),
   }) as RuntimeErrorPayload
-}
-
-function canonicalRole(type: AmaSessionEventType, payload: AmaEventPayloadByType[AmaSessionEventType]) {
-  if (type !== 'message_start' && type !== 'message_update' && type !== 'message_end') {
-    return null
-  }
-  const message = objectValue((payload as Record<string, unknown>).message)
-  return stringField(message, 'role') ?? 'assistant'
 }
 
 function runtimeErrorMessage(event: Record<string, unknown>, sourceEventType: string) {

@@ -30,7 +30,6 @@ class SessionSocketBackfillRequestMessage:
             cursor (int | Unset):
             limit (int | Unset):
             event_type (str | Unset):
-            visibility (str | Unset):
      """
 
     id: str
@@ -39,7 +38,6 @@ class SessionSocketBackfillRequestMessage:
     cursor: int | Unset = UNSET
     limit: int | Unset = UNSET
     event_type: str | Unset = UNSET
-    visibility: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -59,8 +57,6 @@ class SessionSocketBackfillRequestMessage:
 
         event_type = self.event_type
 
-        visibility = self.visibility
-
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -76,8 +72,6 @@ class SessionSocketBackfillRequestMessage:
             field_dict["limit"] = limit
         if event_type is not UNSET:
             field_dict["eventType"] = event_type
-        if visibility is not UNSET:
-            field_dict["visibility"] = visibility
 
         return field_dict
 
@@ -101,8 +95,6 @@ class SessionSocketBackfillRequestMessage:
 
         event_type = d.pop("eventType", UNSET)
 
-        visibility = d.pop("visibility", UNSET)
-
         session_socket_backfill_request_message = cls(
             id=id,
             type_=type_,
@@ -110,7 +102,6 @@ class SessionSocketBackfillRequestMessage:
             cursor=cursor,
             limit=limit,
             event_type=event_type,
-            visibility=visibility,
         )
 
 

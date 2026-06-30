@@ -25,10 +25,6 @@ function buildEvent(overrides: EventRecordOverrides): EventRecord {
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence,
-    visibility: 'runtime',
-    role: null,
-    parentEventId: 'event_turn_1',
-    correlationId: null,
     event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
     createdAt: '2026-05-23T00:00:00.000Z',
     ...recordOverrides,
@@ -38,7 +34,6 @@ function buildEvent(overrides: EventRecordOverrides): EventRecord {
 function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
   return buildEvent({
     type: 'tool_execution_start',
-    correlationId: `tool:${toolCallId}`,
     payload: { toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } } },
     ...overrides,
   })
@@ -47,7 +42,6 @@ function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
 function toolEnd(toolCallId: string, overrides: EventRecordOverrides = {}) {
   return buildEvent({
     type: 'tool_execution_end',
-    correlationId: `tool:${toolCallId}`,
     payload: {
       toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } },
       result: { content: [{ type: 'text', text: 'clean tree' }], details: {} },
@@ -84,7 +78,12 @@ describe('buildSessionToolTrace', () => {
       toolStart('call_1', { createdAt: '2026-05-23T00:00:00.000Z' }),
       toolEnd('call_1', {
         createdAt: '2026-05-23T00:00:09.000Z',
-        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: false, durationMs: 1250 },
+        payload: {
+          toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
+          result: {},
+          isError: false,
+          durationMs: 1250,
+        },
       }),
     ])
 
@@ -98,8 +97,7 @@ describe('buildSessionToolTrace', () => {
       toolStart('call_1'),
       toolEnd('call_1', {
         payload: {
-          toolCallId: 'call_1',
-          toolName: 'bash',
+          toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
           result: { content: [{ type: 'text', text: 'Sandbox command is blocked by policy.' }] },
           isError: true,
         },
@@ -118,8 +116,7 @@ describe('buildSessionToolTrace', () => {
       toolStart('call_1'),
       toolEnd('call_1', {
         payload: {
-          toolCallId: 'call_1',
-          toolName: 'bash',
+          toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
           result: { content: [{ type: 'text', text: longError }] },
           isError: true,
         },
@@ -180,11 +177,6 @@ describe('buildSessionToolTrace', () => {
       toolStart('call_1'),
       buildEvent({
         type: 'policy.decision',
-        parentEventId: 'event_other_turn',
-        payload: { allowed: false, category: 'sandbox_command', command: 'git status' },
-      }),
-      buildEvent({
-        type: 'policy.decision',
         payload: { allowed: false, category: 'sandbox_command', command: 'rm -rf /' },
       }),
       toolEnd('call_1'),
@@ -193,14 +185,13 @@ describe('buildSessionToolTrace', () => {
     expect(trace[0]?.approval).toBe('approved')
   })
 
-  it('keeps redacted values intact and only renders canonical runtime events', () => {
+  it('keeps redacted values intact and ignores non-tool events', () => {
     const trace = buildSessionToolTrace([
       buildEvent({ type: 'message_end', payload: { message: { role: 'assistant', content: 'hi' } } }),
       toolStart('call_1', {
         payload: { toolCall: { id: 'call_1', name: 'bash', input: { command: 'deploy', apiKey: '[REDACTED]' } } },
       }),
       toolEnd('call_1'),
-      buildEvent({ type: 'tool_execution_start', visibility: 'audit', payload: { toolCallId: 'call_hidden' } }),
     ])
 
     expect(trace).toHaveLength(1)
@@ -287,7 +278,6 @@ describe('buildSessionToolTrace — approval edge cases', () => {
     // Tool input has no command field, denial has no command field — both match
     const startNoCommand = buildEvent({
       type: 'tool_execution_start',
-      correlationId: 'tool:call_nocmd',
       payload: { toolCallId: 'call_nocmd', toolName: 'bash', args: { path: '/tmp' } },
     })
     const trace = buildSessionToolTrace([

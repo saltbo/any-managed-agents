@@ -8,9 +8,9 @@
 // router owns the routing + the D1 usage accounting that the DO path would
 // otherwise skip (the D1 insert records it inline).
 
-import type { EventStore, EventWriteOptions } from '@server/usecases/ports'
-import type { CanonicalAmaSessionEvent } from '@shared/session-events'
-import { canonicalAmaSessionEventFromAmaEvent, SESSION_DO_EVENT_STORE } from '@shared/session-events'
+import type { EventStore } from '@server/usecases/ports'
+import type { AmaEvent } from '@shared/session-events'
+import { normalizeAmaEvent, SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import { eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { sessions } from '../../db/schema'
@@ -52,11 +52,10 @@ export function createEventStore(db: Db, isCloudLoop: CloudLoopChecker, doStore:
 
   const appendStoredEvent = async (
     scope: { organizationId: string; projectId: string; sessionId: string },
-    canonicalEvent: CanonicalAmaSessionEvent,
-    overrides?: EventWriteOptions,
+    canonicalEvent: AmaEvent,
   ) => {
     if (await isCloudLoop(scope.sessionId)) {
-      const { id } = await doStore.append(scope, canonicalEvent, overrides)
+      const { id } = await doStore.append(scope, canonicalEvent)
       // The D1 insert records usage inline; the DO path does not, so the router
       // keeps the "every ingest path records usage exactly once" invariant.
       await usage.recordProviderSignals(scope, id, canonicalEvent)
@@ -66,8 +65,8 @@ export function createEventStore(db: Db, isCloudLoop: CloudLoopChecker, doStore:
     // store-and-serves the event; the cloud keeps no copy.
     return 'relay'
   }
-  const appendEvent: EventStore['appendEvent'] = async (scope, event, overrides) => {
-    return await appendStoredEvent(scope, canonicalAmaSessionEventFromAmaEvent(event), overrides)
+  const appendEvent: EventStore['appendEvent'] = async (scope, event) => {
+    return await appendStoredEvent(scope, normalizeAmaEvent(event))
   }
 
   return {

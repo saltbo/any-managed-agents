@@ -2,32 +2,30 @@ import { describe, expect, it } from 'vitest'
 import {
   AMA_SESSION_EVENT_CATEGORIES,
   AMA_SESSION_EVENT_TYPES,
+  amaEventFromRuntimeEvent,
   amaSessionEventCategory,
   amaSessionEventLabel,
   amaSessionEventTypeFromPayload,
-  canonicalAmaSessionEventFromRuntimeEvent,
-  canonicalEventCorrelation,
   isAmaSessionEventType,
   isPiAgentSessionEventType,
 } from './session-events'
 
-describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeEvent', () => {
+describe('[spec: sessions/events-hierarchy] amaEventFromRuntimeEvent', () => {
   it('preserves Pi agent lifecycle, message, and tool events as canonical AMA events', () => {
-    expect(canonicalAmaSessionEventFromRuntimeEvent({ type: 'turn_start' })).toMatchObject({
+    expect(amaEventFromRuntimeEvent({ type: 'turn_start' })).toMatchObject({
       type: 'turn_start',
       payload: {},
       metadata: { sourceEventType: 'turn_start' },
     })
 
     expect(
-      canonicalAmaSessionEventFromRuntimeEvent({
+      amaEventFromRuntimeEvent({
         type: 'message_update',
         message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
         assistantMessageEvent: { type: 'text_delta', delta: 'hello' },
       }),
     ).toMatchObject({
       type: 'message_update',
-      role: 'assistant',
       payload: {
         message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
         assistantMessageEvent: { type: 'text_delta', delta: 'hello' },
@@ -36,7 +34,7 @@ describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeE
     })
 
     expect(
-      canonicalAmaSessionEventFromRuntimeEvent({
+      amaEventFromRuntimeEvent({
         type: 'tool_execution_end',
         toolCallId: 'call_1',
         toolName: 'bash',
@@ -47,9 +45,7 @@ describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeE
     ).toMatchObject({
       type: 'tool_execution_end',
       payload: {
-        toolCallId: 'call_1',
-        toolName: 'bash',
-        args: { command: 'npm test' },
+        toolCall: { id: 'call_1', name: 'bash', input: { command: 'npm test' } },
         result: { content: [{ type: 'text', text: 'done' }], details: { exitCode: 0 } },
         isError: false,
       },
@@ -58,7 +54,7 @@ describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeE
 
   it('keeps AMA operational events without flattening Pi events into legacy transcript/tool types', () => {
     expect(
-      canonicalAmaSessionEventFromRuntimeEvent({
+      amaEventFromRuntimeEvent({
         type: 'usage',
         provider: 'workers-ai',
         model: '@cf/model',
@@ -71,13 +67,13 @@ describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeE
       payload: { provider: 'workers-ai', model: '@cf/model', promptTokens: 3, completionTokens: 5, totalTokens: 8 },
     })
 
-    expect(canonicalAmaSessionEventFromRuntimeEvent({ type: 'bridge_stderr', data: 'warn' })).toMatchObject({
+    expect(amaEventFromRuntimeEvent({ type: 'bridge_stderr', data: 'warn' })).toMatchObject({
       type: 'runtime.output',
       payload: { stream: 'stderr', content: 'warn' },
     })
 
     expect(
-      canonicalAmaSessionEventFromRuntimeEvent({
+      amaEventFromRuntimeEvent({
         type: 'copilot.error',
         error: { message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 2 } },
       }),
@@ -87,7 +83,7 @@ describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeE
     })
 
     expect(
-      canonicalAmaSessionEventFromRuntimeEvent({
+      amaEventFromRuntimeEvent({
         type: 'runner.session.started',
         sessionId: 'session_1',
         runtime: 'codex',
@@ -198,65 +194,12 @@ describe('amaSessionEventTypeFromPayload', () => {
   })
 })
 
-// ── canonicalEventCorrelation ─────────────────────────────────────────────────
+// ── amaEventFromRuntimeEvent — additional branches ────────────
 
-describe('canonicalEventCorrelation', () => {
-  it('returns tool:<id> for tool category events using toolCall.id', () => {
-    const result = canonicalEventCorrelation('tool_execution_start', {
-      toolCall: { id: 'call_abc' },
-    })
-    expect(result).toBe('tool:call_abc')
-  })
-
-  it('returns tool:<id> for tool category events using payload.toolCallId as fallback', () => {
-    const result = canonicalEventCorrelation('tool_execution_end', {
-      toolCallId: 'call_xyz',
-    })
-    expect(result).toBe('tool:call_xyz')
-  })
-
-  it('returns tool:<id> for tool category events using payload.id as last fallback', () => {
-    const result = canonicalEventCorrelation('tool_execution_update', {
-      id: 'call_direct',
-    })
-    expect(result).toBe('tool:call_direct')
-  })
-
-  it('returns null for tool category events with no id fields', () => {
-    const result = canonicalEventCorrelation('tool_execution_start', {})
-    expect(result).toBeNull()
-  })
-
-  it('returns message:<id> for transcript category events using payload.id', () => {
-    const result = canonicalEventCorrelation('message_start', { id: 'msg_1' })
-    expect(result).toBe('message:msg_1')
-  })
-
-  it('returns message:<id> for transcript category events using message.id as fallback', () => {
-    const result = canonicalEventCorrelation('message_update', {
-      message: { id: 'msg_nested' },
-    })
-    expect(result).toBe('message:msg_nested')
-  })
-
-  it('returns null for transcript category events with no id fields', () => {
-    const result = canonicalEventCorrelation('message_end', {})
-    expect(result).toBeNull()
-  })
-
-  it('returns null for non-tool non-transcript category events', () => {
-    expect(canonicalEventCorrelation('agent_start', {})).toBeNull()
-    expect(canonicalEventCorrelation('usage.recorded', {})).toBeNull()
-    expect(canonicalEventCorrelation('runtime.error', {})).toBeNull()
-  })
-})
-
-// ── canonicalAmaSessionEventFromRuntimeEvent — additional branches ────────────
-
-describe('canonicalAmaSessionEventFromRuntimeEvent — policy.decision branch', () => {
+describe('amaEventFromRuntimeEvent — policy.decision branch', () => {
   it('maps policy_denied source event to policy.decision type', () => {
     expect(
-      canonicalAmaSessionEventFromRuntimeEvent({
+      amaEventFromRuntimeEvent({
         type: 'policy_denied',
         allowed: false,
         category: 'sandbox',
@@ -269,7 +212,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — policy.decision branch', 
   })
 
   it('sets allowed to false when event.allowed is not strictly true', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'policy_denied',
       allowed: 'yes',
     })
@@ -278,9 +221,9 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — policy.decision branch', 
   })
 })
 
-describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.error additional branches', () => {
+describe('amaEventFromRuntimeEvent — runtime.error additional branches', () => {
   it('uses bridge_exit message for bridge_exit source events', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'bridge_exit',
       signal: 'SIGKILL',
     })
@@ -291,7 +234,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.error additional 
   })
 
   it('uses event.error string directly when error is a string', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'error',
       error: 'plain string error',
     })
@@ -300,7 +243,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.error additional 
   })
 
   it('falls back to event.message when error object has no message field', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'error',
       error: { code: 'E_FAIL' },
       message: 'top-level message',
@@ -309,7 +252,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.error additional 
   })
 
   it('falls back to event.data string when no message is available', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'error',
       error: {},
       data: 'some data',
@@ -318,14 +261,14 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.error additional 
   })
 
   it('falls back to Runtime error when no error message source exists', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'error',
     })
     expect((result.payload as Record<string, unknown>).message).toBe('Runtime error')
   })
 
   it('includes optional fields when present on runtime.error event', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'error',
       error: { message: 'fail', code: 'E1', details: { x: 1 } },
       category: 'rate_limit',
@@ -343,7 +286,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.error additional 
   })
 
   it('omits optional fields when not present on runtime.error event', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'error',
       error: { message: 'fail' },
     })
@@ -356,9 +299,9 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.error additional 
   })
 })
 
-describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.output stream branches', () => {
+describe('amaEventFromRuntimeEvent — runtime.output stream branches', () => {
   it('returns stdout stream when event.stream is stdout', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'runner.output',
       stream: 'stdout',
       data: 'hello',
@@ -368,7 +311,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.output stream bra
   })
 
   it('returns stderr stream when event.stream is stderr (non-bridge_stderr source)', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'runner.output',
       stream: 'stderr',
       data: 'err line',
@@ -377,7 +320,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.output stream bra
   })
 
   it('returns runtime stream when event.stream is an unrecognized value', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'runner.output',
       stream: 'unknown_stream',
       data: 'out',
@@ -386,7 +329,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.output stream bra
   })
 
   it('returns runtime stream when event.stream is absent', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'runner.output',
       data: 'out',
     })
@@ -395,84 +338,84 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — runtime.output stream bra
 
   it('prefers event.data for content, then event.message, then event.output, then event.content', () => {
     expect(
-      (canonicalAmaSessionEventFromRuntimeEvent({ type: 'runner.output', data: 'd', message: 'm', output: 'o', content: 'c' }).payload as Record<string, unknown>).content,
+      (amaEventFromRuntimeEvent({ type: 'runner.output', data: 'd', message: 'm', output: 'o', content: 'c' }).payload as Record<string, unknown>).content,
     ).toBe('d')
     expect(
-      (canonicalAmaSessionEventFromRuntimeEvent({ type: 'runner.output', message: 'm', output: 'o', content: 'c' }).payload as Record<string, unknown>).content,
+      (amaEventFromRuntimeEvent({ type: 'runner.output', message: 'm', output: 'o', content: 'c' }).payload as Record<string, unknown>).content,
     ).toBe('m')
     expect(
-      (canonicalAmaSessionEventFromRuntimeEvent({ type: 'runner.output', output: 'o', content: 'c' }).payload as Record<string, unknown>).content,
+      (amaEventFromRuntimeEvent({ type: 'runner.output', output: 'o', content: 'c' }).payload as Record<string, unknown>).content,
     ).toBe('o')
     expect(
-      (canonicalAmaSessionEventFromRuntimeEvent({ type: 'runner.output', content: 'c' }).payload as Record<string, unknown>).content,
+      (amaEventFromRuntimeEvent({ type: 'runner.output', content: 'c' }).payload as Record<string, unknown>).content,
     ).toBe('c')
     expect(
-      (canonicalAmaSessionEventFromRuntimeEvent({ type: 'runner.output' }).payload as Record<string, unknown>).content,
+      (amaEventFromRuntimeEvent({ type: 'runner.output' }).payload as Record<string, unknown>).content,
     ).toBe('')
   })
 })
 
-describe('canonicalAmaSessionEventFromRuntimeEvent — runner.metadata branch', () => {
+describe('amaEventFromRuntimeEvent — runner.metadata branch', () => {
   it('maps runner_heartbeat to runner.metadata', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({ type: 'runner_heartbeat', runnerId: 'r1' })
+    const result = amaEventFromRuntimeEvent({ type: 'runner_heartbeat', runnerId: 'r1' })
     expect(result.type).toBe('runner.metadata')
     expect((result.payload as Record<string, unknown>).data).toMatchObject({ runnerId: 'r1' })
   })
 
   it('maps runner_status to runner.metadata', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({ type: 'runner_status', status: 'ready' })
+    const result = amaEventFromRuntimeEvent({ type: 'runner_status', status: 'ready' })
     expect(result.type).toBe('runner.metadata')
   })
 })
 
-describe('canonicalAmaSessionEventFromRuntimeEvent — canonicalRole branches', () => {
-  it('returns role from event.message.role for message events', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+describe('amaEventFromRuntimeEvent — message payload role branches', () => {
+  it('keeps role inside event.message for message events', () => {
+    const result = amaEventFromRuntimeEvent({
       type: 'message_start',
       message: { role: 'user', content: [] },
     })
-    expect(result.role).toBe('user')
+    expect(result.payload).toMatchObject({ message: { role: 'user' } })
   })
 
-  it('falls back to event.role when message.role is absent for message events', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+  it('uses event.role when message.role is absent for message events', () => {
+    const result = amaEventFromRuntimeEvent({
       type: 'message_end',
       role: 'assistant',
     })
-    expect(result.role).toBe('assistant')
+    expect(result.payload).toMatchObject({ message: { role: 'assistant' } })
   })
 
-  it('defaults role to assistant when neither message.role nor event.role is present', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({ type: 'message_start' })
-    expect(result.role).toBe('assistant')
+  it('defaults message role to assistant when neither message.role nor event.role is present', () => {
+    const result = amaEventFromRuntimeEvent({ type: 'message_start' })
+    expect(result.payload).toMatchObject({ message: { role: 'assistant' } })
   })
 
-  it('returns null role for non-message event types', () => {
-    expect(canonicalAmaSessionEventFromRuntimeEvent({ type: 'agent_start' }).role).toBeNull()
-    expect(canonicalAmaSessionEventFromRuntimeEvent({ type: 'turn_end' }).role).toBeNull()
-    expect(canonicalAmaSessionEventFromRuntimeEvent({ type: 'usage.recorded' }).role).toBeNull()
+  it('does not add an outer role for non-message event types', () => {
+    expect(amaEventFromRuntimeEvent({ type: 'agent_start' })).not.toHaveProperty('role')
+    expect(amaEventFromRuntimeEvent({ type: 'turn_end' })).not.toHaveProperty('role')
+    expect(amaEventFromRuntimeEvent({ type: 'usage.recorded' })).not.toHaveProperty('role')
   })
 })
 
-describe('canonicalAmaSessionEventFromRuntimeEvent — canonicalType catchall and source branches', () => {
+describe('amaEventFromRuntimeEvent — canonicalType catchall and source branches', () => {
   it('maps no-type event to runtime.metadata (message fallback → metadata default)', () => {
     // event without type → sourceEventType = 'message' → not a pi type, not in map → runtime.metadata
-    const result = canonicalAmaSessionEventFromRuntimeEvent({ data: 'x' })
+    const result = amaEventFromRuntimeEvent({ data: 'x' })
     expect(result.type).toBe('runtime.metadata')
   })
 
   it('maps queue_update to runtime.metadata', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({ type: 'queue_update', queueDepth: 5 })
+    const result = amaEventFromRuntimeEvent({ type: 'queue_update', queueDepth: 5 })
     expect(result.type).toBe('runtime.metadata')
   })
 
   it('maps session_info_changed to runtime.metadata', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({ type: 'session_info_changed', title: 'New' })
+    const result = amaEventFromRuntimeEvent({ type: 'session_info_changed', title: 'New' })
     expect(result.type).toBe('runtime.metadata')
   })
 
   it('maps runner.usage to usage.recorded via matchesRuntimeEvent', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'runner.usage',
       promptTokens: 10,
     })
@@ -480,7 +423,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — canonicalType catchall an
   })
 
   it('maps ama.usage to usage.recorded via matchesRuntimeEvent', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'ama.usage',
       promptTokens: 5,
     })
@@ -488,7 +431,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — canonicalType catchall an
   })
 
   it('maps claude-code.error to runtime.error via matchesRuntimeEvent', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'claude-code.error',
       error: { message: 'fail' },
     })
@@ -496,7 +439,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — canonicalType catchall an
   })
 
   it('maps codex.output to runtime.output via matchesRuntimeEvent', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'codex.output',
       data: 'hello',
     })
@@ -504,33 +447,33 @@ describe('canonicalAmaSessionEventFromRuntimeEvent — canonicalType catchall an
   })
 })
 
-describe('canonicalAmaSessionEventFromRuntimeEvent — metadata runtimeSource', () => {
+describe('amaEventFromRuntimeEvent — metadata runtimeSource', () => {
   it('uses metadata.runtimeSource when provided', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent(
+    const result = amaEventFromRuntimeEvent(
       { type: 'agent_start' },
       { runtimeSource: 'my-runner', source: 'ignored' },
     )
-    expect(result.metadata.runtimeSource).toBe('my-runner')
+    expect(result.metadata?.runtimeSource).toBe('my-runner')
   })
 
   it('falls back to metadata.source when runtimeSource is absent', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent(
+    const result = amaEventFromRuntimeEvent(
       { type: 'agent_start' },
       { source: 'my-source' },
     )
-    expect(result.metadata.runtimeSource).toBe('my-source')
+    expect(result.metadata?.runtimeSource).toBe('my-source')
   })
 
   it('defaults runtimeSource to runtime when neither runtimeSource nor source is in metadata', () => {
-    const result = canonicalAmaSessionEventFromRuntimeEvent({ type: 'agent_start' }, {})
-    expect(result.metadata.runtimeSource).toBe('runtime')
+    const result = amaEventFromRuntimeEvent({ type: 'agent_start' }, {})
+    expect(result.metadata?.runtimeSource).toBe('runtime')
   })
 })
 
-describe('canonicalAmaSessionEventFromRuntimeEvent — withoutType fallback branch (line 219)', () => {
+describe('amaEventFromRuntimeEvent — withoutType fallback branch (line 219)', () => {
   it('strips type from payload for AMA event types not handled by specific branches', () => {
     // session_checkpoint is a lifecycle AMA type — goes through the final withoutType()
-    const result = canonicalAmaSessionEventFromRuntimeEvent({
+    const result = amaEventFromRuntimeEvent({
       type: 'session_checkpoint',
       checkpointId: 'cp_1',
     })

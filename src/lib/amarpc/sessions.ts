@@ -44,7 +44,6 @@ export interface SessionEventListOptions {
   order?: 'asc' | 'desc'
   limit?: number
   type?: EventRecord['event']['type']
-  visibility?: EventRecord['visibility']
   createdFrom?: string
   createdTo?: string
 }

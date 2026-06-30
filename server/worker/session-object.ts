@@ -2,7 +2,9 @@
 // runner events are written into this DO's SQLite store, then fanned out to the
 // browser sockets watching the same session.
 
-import type { CanonicalAmaSessionEvent } from '@shared/session-events'
+import type { SessionSocketClientMessage } from '@ama/runtime-contracts/session-socket'
+import { sessionSocketClientMessageFrom } from '@ama/runtime-contracts/session-socket'
+import type { AmaEvent } from '@shared/session-events'
 import { createDeps } from '../composition'
 import type { Env } from '../env'
 import type { AuthScope, EventQuery } from '../usecases/ports'
@@ -13,10 +15,8 @@ import {
   type EventWriteContext,
   ensureSessionEventSchema,
   exportSessionEventsJsonl,
-  newRelayThreadState,
   queryEventsFromSql,
   type RelayedRunnerEvent,
-  type RelayThreadState,
   serializeRow,
   stepRelayEvent,
   streamSessionEvents,
@@ -24,8 +24,7 @@ import {
 
 type AppendBody = {
   scope: EventWriteContext
-  canonicalEvent: CanonicalAmaSessionEvent
-  overrides?: { parentEventId?: string | null; correlationId?: string | null }
+  canonicalEvent: AmaEvent
 }
 
 type RelayAppendBody = {
@@ -33,23 +32,8 @@ type RelayAppendBody = {
   raw: RelayedRunnerEvent
 }
 
-type SessionSocketClientMessage =
-  | { id: string; type: 'prompt'; content: string }
-  | { id: string; type: 'steer'; content: string }
-  | { id: string; type: 'abort'; reason?: string }
-  | {
-      id: string
-      type: 'backfill'
-      requestId?: string
-      cursor?: number
-      limit?: number
-      eventType?: string
-      visibility?: string
-    }
-
 export class SessionObject implements DurableObject {
   private eventSchemaReady = false
-  private readonly relayThreads = new Map<string, RelayThreadState>()
 
   constructor(
     private readonly durableState: DurableObjectState,
@@ -73,8 +57,8 @@ export class SessionObject implements DurableObject {
   private handleEvents(pathname: string, body: unknown): Response | Promise<Response> {
     if (pathname === '/events/append') {
       const sql = this.eventSql()
-      const { scope, canonicalEvent, overrides } = body as AppendBody
-      const appended = appendCanonicalEventToSql(sql, scope, canonicalEvent, overrides)
+      const { scope, canonicalEvent } = body as AppendBody
+      const appended = appendCanonicalEventToSql(sql, scope, canonicalEvent)
       // Fan the freshly-appended event out to every connected browser socket so
       // live chat updates without polling. Backfill (history) is served on request.
       this.fanOutToBrowsers({ type: 'event', record: appended.record }, scope.sessionId)
@@ -82,12 +66,7 @@ export class SessionObject implements DurableObject {
     }
     if (pathname === '/events/relay-live') {
       const { scope, raw } = body as RelayAppendBody
-      let thread = this.relayThreads.get(scope.sessionId)
-      if (!thread) {
-        thread = newRelayThreadState()
-        this.relayThreads.set(scope.sessionId, thread)
-      }
-      const record = serializeRow(stepRelayEvent(raw, scope, thread))
+      const record = serializeRow(stepRelayEvent(raw, scope))
       this.fanOutToBrowsers({ type: 'event', record }, scope.sessionId)
       return Response.json({ ok: true, record })
     }
@@ -210,7 +189,6 @@ export class SessionObject implements DurableObject {
       limit: typeof frame.limit === 'number' ? frame.limit : 200,
       ...(typeof frame.cursor === 'number' ? { cursor: frame.cursor } : {}),
       ...(typeof frame.eventType === 'string' ? { type: frame.eventType } : {}),
-      visibility: typeof frame.visibility === 'string' ? frame.visibility : 'runtime',
     }
     const page = queryEventsFromSql(this.eventSql(), sessionId, query)
     if (ws.readyState !== WebSocket.OPEN) return
@@ -311,32 +289,4 @@ function browserAuthScope(scope: BrowserScope): AuthScope {
     roles: [],
     permissions: [],
   }
-}
-
-function sessionSocketClientMessageFrom(value: unknown): SessionSocketClientMessage | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null
-  }
-  const message = value as Record<string, unknown>
-  if (typeof message.id !== 'string' || typeof message.type !== 'string') {
-    return null
-  }
-  if (message.type === 'prompt' || message.type === 'steer') {
-    return typeof message.content === 'string' ? { id: message.id, type: message.type, content: message.content } : null
-  }
-  if (message.type === 'abort') {
-    return { id: message.id, type: 'abort', ...(typeof message.reason === 'string' ? { reason: message.reason } : {}) }
-  }
-  if (message.type === 'backfill') {
-    return {
-      id: message.id,
-      type: 'backfill',
-      requestId: typeof message.requestId === 'string' ? message.requestId : message.id,
-      ...(typeof message.cursor === 'number' ? { cursor: message.cursor } : {}),
-      ...(typeof message.limit === 'number' ? { limit: message.limit } : {}),
-      ...(typeof message.eventType === 'string' ? { eventType: message.eventType } : {}),
-      ...(typeof message.visibility === 'string' ? { visibility: message.visibility } : {}),
-    }
-  }
-  return null
 }

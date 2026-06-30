@@ -307,7 +307,7 @@ export const vaultCredentials = sqliteTable(
     organizationId: text('organization_id').notNull(),
     // NULL = organization-scoped (shared across the org); project-scoped rows pin
     // a projectId. organization_id is always present. By design — do not force
-    // NOT NULL (visibility queries use OR(projectId=?, projectId IS NULL)).
+    // NOT NULL (scope queries use OR(projectId=?, projectId IS NULL)).
     projectId: text('project_id').references(() => projects.id),
     name: text('name').notNull(),
     type: text('type', {
@@ -458,21 +458,12 @@ export const sessionEvents = sqliteTable(
       .references(() => sessions.id),
     sequence: integer('sequence').notNull(),
     type: text('type').notNull(),
-    visibility: text('visibility').notNull(),
-    role: text('role'),
-    parentEventId: text('parent_event_id'),
-    correlationId: text('correlation_id'),
     payload: text('payload').notNull(),
     metadata: text('metadata').notNull().default('{}'),
     createdAt: text('created_at').notNull(),
   },
   (table) => [
-    index('idx_session_events_session_type_visibility_created').on(
-      table.sessionId,
-      table.type,
-      table.visibility,
-      table.createdAt,
-    ),
+    index('idx_session_events_session_type_created').on(table.sessionId, table.type, table.createdAt),
     index('idx_session_events_session_sequence').on(table.sessionId, table.sequence),
     uniqueIndex('idx_session_events_unique_sequence').on(table.sessionId, table.sequence),
   ],

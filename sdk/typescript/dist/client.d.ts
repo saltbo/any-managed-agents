@@ -18,7 +18,6 @@ export interface SessionStream {
         cursor?: number;
         limit?: number;
         eventType?: string;
-        visibility?: string;
     }): Promise<types.SessionSocketBackfillMessage>;
     close(): void;
 }

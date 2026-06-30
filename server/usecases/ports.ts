@@ -1867,7 +1867,6 @@ export interface SessionListQuery {
 
 export interface EventQuery {
   type?: string
-  visibility?: string
   createdFrom?: string
   createdTo?: string
   order: 'asc' | 'desc'
@@ -1880,23 +1879,12 @@ export interface EventPage {
   hasMore: boolean
 }
 
-// Explicit parent/correlation ids producers may thread themselves; when given
-// they override the store's turn/transcript threading.
-export interface EventWriteOptions {
-  parentEventId?: string | null
-  correlationId?: string | null
-}
-
 // "Storage follows the loop": the canonical event store that routes cloud-loop
 // (ama) sessions to the per-session Session DO (SQLite hot + R2 cold) and leaves
 // pre-migration cloud + self-hosted CLI sessions on D1. One contract over both
 // backends; the read shape (EventRecord/Page) is identical either way.
 export interface EventStore {
-  appendEvent(
-    scope: { organizationId: string; projectId: string; sessionId: string },
-    event: AmaEvent,
-    overrides?: EventWriteOptions,
-  ): Promise<string>
+  appendEvent(scope: { organizationId: string; projectId: string; sessionId: string }, event: AmaEvent): Promise<string>
   // Batch ingest (the POST /events endpoint). Returns the count.
   insertEvents(
     scope: { organizationId: string; projectId: string; sessionId: string },

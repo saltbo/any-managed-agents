@@ -4,18 +4,13 @@
 
 import type { EventRecord } from '@server/domain/session'
 import type { EventPage, EventQuery } from '@server/usecases/ports'
-import type { CanonicalAmaSessionEvent } from '@shared/session-events'
+import type { AmaEvent } from '@shared/session-events'
 import type { Env } from '../../env'
 
 export interface EventWriteContext {
   organizationId: string
   projectId: string
   sessionId: string
-}
-
-export interface EventWriteOptions {
-  parentEventId?: string | null
-  correlationId?: string | null
 }
 
 async function callSessionObject<T>(env: Env, doName: string, path: string, body: unknown): Promise<T> {
@@ -47,8 +42,7 @@ async function callRunnerPool<T>(env: Env, environmentId: string, path: string, 
 export interface SessionDoEventStore {
   append(
     scope: EventWriteContext,
-    canonicalEvent: CanonicalAmaSessionEvent,
-    overrides?: EventWriteOptions,
+    canonicalEvent: AmaEvent,
   ): Promise<{ id: string; sequence: number; record: EventRecord }>
   query(sessionId: string, query: EventQuery): Promise<EventPage>
   relayQuery(
@@ -63,8 +57,8 @@ export interface SessionDoEventStore {
 
 export function createSessionDoEventStore(env: Env): SessionDoEventStore {
   return {
-    async append(scope, canonicalEvent, overrides) {
-      return await callSessionObject(env, scope.sessionId, '/events/append', { scope, canonicalEvent, overrides })
+    async append(scope, canonicalEvent) {
+      return await callSessionObject(env, scope.sessionId, '/events/append', { scope, canonicalEvent })
     },
     async query(sessionId, query) {
       return await callSessionObject<EventPage>(env, sessionId, '/events/query', { sessionId, query })

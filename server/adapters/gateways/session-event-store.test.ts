@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 const recordProviderSignals = vi.fn()
 vi.mock('../repos/usage-write', () => ({ createUsageWriteRepo: () => ({ recordProviderSignals }) }))
 
-import type { AmaEvent, CanonicalAmaSessionEvent } from '@shared/session-events'
+import type { AmaEvent } from '@shared/session-events'
 import { createCloudLoopChecker, createEventStore } from './session-event-store'
 
 function fakeStampDb(row: { metadata: string | null; environmentId?: string | null } | undefined) {
@@ -45,13 +45,6 @@ function fakeDoStore() {
 }
 
 const scope = { organizationId: 'org_1', projectId: 'project_1', sessionId: 'sess_1' }
-const canonical: CanonicalAmaSessionEvent = {
-  type: 'turn_end',
-  payload: {},
-  visibility: 'runtime',
-  role: null,
-  metadata: {},
-}
 const event: AmaEvent = { type: 'turn_end', payload: {}, metadata: {} }
 const query = { order: 'asc' as const, limit: 50 }
 
@@ -68,9 +61,9 @@ describe('createEventStore — storage follows the loop', () => {
   it('cloud-loop append goes to the DO and records usage exactly once', async () => {
     recordProviderSignals.mockClear()
     const { store, doStore } = makeStore(true)
-    const id = await store.appendEvent(scope, event, { parentEventId: 'p', correlationId: 'c' })
+    const id = await store.appendEvent(scope, event)
     expect(id).toBe('do_event')
-    expect(doStore.append).toHaveBeenCalledWith(scope, canonical, { parentEventId: 'p', correlationId: 'c' })
+    expect(doStore.append).toHaveBeenCalledWith(scope, event)
     expect(recordProviderSignals).toHaveBeenCalledTimes(1)
   })
 

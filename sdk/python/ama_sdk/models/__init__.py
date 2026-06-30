@@ -164,7 +164,6 @@ from .event_message_role import EventMessageRole
 from .event_metadata import EventMetadata
 from .event_record import EventRecord
 from .event_record_list_response import EventRecordListResponse
-from .event_record_visibility import EventRecordVisibility
 from .event_tool_call import EventToolCall
 from .execution_env import ExecutionEnv
 from .execution_spec_input import ExecutionSpecInput
@@ -191,7 +190,6 @@ from .list_runners_archived import ListRunnersArchived
 from .list_runners_state import ListRunnersState
 from .list_session_events_order import ListSessionEventsOrder
 from .list_session_events_type import ListSessionEventsType
-from .list_session_events_visibility import ListSessionEventsVisibility
 from .list_sessions_archived import ListSessionsArchived
 from .list_sessions_state import ListSessionsState
 from .list_trigger_runs_state import ListTriggerRunsState
@@ -637,7 +635,6 @@ __all__ = (
     "EventMetadata",
     "EventRecord",
     "EventRecordListResponse",
-    "EventRecordVisibility",
     "EventToolCall",
     "ExecutionEnv",
     "ExecutionSpecInput",
@@ -664,7 +661,6 @@ __all__ = (
     "ListRunnersState",
     "ListSessionEventsOrder",
     "ListSessionEventsType",
-    "ListSessionEventsVisibility",
     "ListSessionsArchived",
     "ListSessionsState",
     "ListTriggerRunsState",

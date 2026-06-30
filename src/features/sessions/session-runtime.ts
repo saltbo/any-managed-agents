@@ -1,3 +1,4 @@
+import type { SessionSocketClientMessage } from '@ama/runtime-contracts/session-socket'
 import { type AmaSessionEventType, amaSessionEventCategory } from '@shared/session-events'
 import type { EventRecord } from '@/lib/amarpc'
 import { getStoredAccessToken } from '@/lib/oidc'
@@ -6,13 +7,8 @@ export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | '
 export type SessionRuntimeRunState = 'idle' | 'running' | 'error'
 type AmaEvent = EventRecord['event']
 
-export type SessionSocketClientMessageType = 'prompt' | 'steer' | 'abort'
-
-export interface SessionSocketClientMessage {
-  id: string
-  type: SessionSocketClientMessageType
-  content?: string
-}
+export type SessionRuntimeCommand = Extract<SessionSocketClientMessage, { type: 'prompt' | 'steer' | 'abort' }>
+export type SessionSocketClientMessageType = SessionRuntimeCommand['type']
 
 export interface SessionRuntimeMessage {
   id: string
@@ -56,7 +52,7 @@ export interface SessionRuntimeState {
 export type SessionRuntimeAction =
   | { type: 'reset' }
   | { type: 'connection'; state: SessionRuntimeConnectionState; error?: string | null }
-  | { type: 'command_sent'; command: SessionSocketClientMessage; at: string }
+  | { type: 'command_sent'; command: SessionRuntimeCommand; at: string }
   | { type: 'event'; item: AmaEvent | EventRecord; at: string }
   | { type: 'persisted_events'; events: EventRecord[] }
 
@@ -88,12 +84,12 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
     return mergePersistedEvents(state, [eventRecordFromAction(action.item, action.at, state)])
   }
   if (action.type === 'command_sent') {
-    if (!action.command.content) {
+    if (action.command.type === 'abort' || !action.command.content) {
       return state
     }
     return {
       ...state,
-      runState: action.command.type === 'abort' ? state.runState : 'running',
+      runState: 'running',
       messages: upsertMessage(state.messages, {
         id: action.command.id,
         role: 'user',
@@ -125,10 +121,6 @@ function eventRecordFromAction(event: AmaEvent | EventRecord, at: string, state:
     projectId: '',
     sessionId: '',
     sequence: state.eventKeys.length + 1,
-    visibility: 'runtime',
-    role: null,
-    parentEventId: null,
-    correlationId: null,
     event,
     createdAt: at,
   }
@@ -170,9 +162,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
   )
   const tools = runtimeEvents
     .filter(({ stored, payload }) => isToolEvent(sessionEventType(stored, payload)))
-    .map(({ stored, payload }) =>
-      toolFromSessionEvent(payload, stored.createdAt, sessionEventType(stored, payload), stored.correlationId),
-    )
+    .map(({ stored, payload }) => toolFromSessionEvent(payload, stored.createdAt, sessionEventType(stored, payload)))
     .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
     .reduce<SessionRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
   const debugEvents = runtimeEvents.map(
@@ -218,7 +208,6 @@ function uniquePersistedRuntimeEvents(events: EventRecord[]): StoredRuntimeEvent
   let turnKey: string | null = null
   const uniqueEvents: StoredRuntimeEvent[] = []
   events
-    .filter((event) => event.visibility === 'runtime')
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((stored) => {
       const payload = objectValue(stored.event.payload)
@@ -324,13 +313,9 @@ function toolFromSessionEvent(
   event: Record<string, unknown>,
   at: string,
   eventType: string,
-  correlationId?: string | null,
 ): SessionRuntimeToolTrace | null {
   const toolCall = objectValue(event.toolCall ?? event)
-  // Persisted events carry the canonical `tool:<tool call id>` correlation;
-  // payload fields only back live socket events that have no stored id yet.
   const callId =
-    (correlationId?.startsWith('tool:') ? correlationId.slice('tool:'.length) : null) ??
     stringField(toolCall, 'id') ??
     stringField(toolCall, 'toolCallId') ??
     stringField(event, 'toolCallId') ??
