@@ -1962,6 +1962,7 @@ export interface RuntimeSessionHandle {
 export interface SessionRepo {
   list(query: SessionListQuery): Promise<SessionListPage>
   find(projectId: string, sessionId: string): Promise<Session | null>
+  findByOrganization(organizationId: string, sessionId: string): Promise<Session | null>
   findActiveHttpTriggerSession(projectId: string, triggerId: string, key: string): Promise<RuntimeSessionHandle | null>
   // The raw row (with internal columns) for runtime operations. Used by write
   // paths that hand the session to the runtime gateway.

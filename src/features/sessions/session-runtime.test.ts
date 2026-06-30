@@ -905,14 +905,6 @@ describe('sessionSocketUrl', () => {
     expect(url).toContain('access_token=test_token_xyz')
   })
 
-  it('appends selected project query param for browser WebSocket auth scope', () => {
-    stubWindowLocation('https://example.com/')
-    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
-    window.localStorage.setItem('ama:selected-project-id', 'project_socket')
-
-    const url = new URL(sessionSocketUrl('/api/v1/sessions/s1/socket'))
-    expect(url.searchParams.get('x-ama-project-id')).toBe('project_socket')
-  })
 })
 
 describe('sessionRuntimeReducer — extractText edge cases (line 594)', () => {

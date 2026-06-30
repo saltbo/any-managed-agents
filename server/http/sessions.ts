@@ -1,7 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { AMA_SESSION_EVENT_TYPES } from '@shared/session-events'
 import type { Context } from 'hono'
-import { isRunnerOidcAuth, requireAuth, requireSessionEventsAuth } from '../auth/session'
+import { isRunnerOidcAuth, requireAuth, requireAuthIdentity, requireSessionEventsAuth } from '../auth/session'
 import {
   EnvironmentHostingModeSchema,
   EnvironmentNetworkingSchema,
@@ -1079,11 +1079,11 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       // not a discovery resource; non-upgrade callers get an explicit 426.
       const { sessionId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c)
+      const auth = await requireAuthIdentity(c)
       if (auth instanceof Response) {
         return auth
       }
-      const session = await deps.sessions.find(auth.project.id, sessionId)
+      const session = await deps.sessions.findByOrganization(auth.organization.id, sessionId)
       if (!session) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
@@ -1093,7 +1093,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       return upgradeSessionBrowserSocket(c.env, c.req.raw, sessionId, {
         sessionId,
         organizationId: auth.organization.id,
-        projectId: auth.project.id,
+        projectId: session.metadata.pid,
         userId: auth.user.id,
       })
     })

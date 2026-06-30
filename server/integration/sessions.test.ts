@@ -31,8 +31,22 @@ async function waitForSessionState(sessionId: string, authorization: string, sta
   throw new Error(`Session ${sessionId} did not reach ${state}`)
 }
 
-async function createEnvironment(authorization: string, data: Record<string, unknown> = {}) {
-  const { hostingMode, networkPolicy, packages, mcpPolicy, packageManagerPolicy, runtimeConfig, ...rest } = data
+async function createProject(authorization: string) {
+  const res = await jsonFetch('/api/v1/projects', authorization, {
+    method: 'POST',
+    body: JSON.stringify({ name: `Socket project ${crypto.randomUUID()}` }),
+  })
+  expect(res.status).toBe(201)
+  const project = (await res.json()) as { id: string }
+  return project.id
+}
+
+function projectHeaders(projectId?: string): HeadersInit {
+  return projectId ? { 'x-ama-project-id': projectId } : {}
+}
+
+async function createEnvironment(authorization: string, data: Record<string, unknown> = {}, projectId?: string) {
+  const { hostingMode, networkPolicy, packages, mcpPolicy, packageManagerPolicy, runtimeConfig, name, ...rest } = data
   const environmentPackages =
     packages && !Array.isArray(packages)
       ? packages
@@ -68,12 +82,15 @@ async function createEnvironment(authorization: string, data: Record<string, unk
         : { type: 'open', allowMcpServers: true, allowPackageManagers: true }
   const res = await jsonFetch('/api/v1/environments', authorization, {
     method: 'POST',
+    headers: projectHeaders(projectId),
     body: JSON.stringify({
-      name: `AMA workspace ${crypto.randomUUID()}`,
-      type: hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
-      networking,
-      packages: environmentPackages,
-      ...rest,
+      metadata: { name: typeof name === 'string' ? name : `AMA workspace ${crypto.randomUUID()}` },
+      spec: {
+        type: hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
+        networking,
+        packages: environmentPackages,
+        ...rest,
+      },
     }),
   })
   if (res.status !== 201) {
@@ -86,10 +103,11 @@ async function createEnvironment(authorization: string, data: Record<string, unk
   return { id: environment.metadata.uid, hostingMode: environment.spec.type }
 }
 
-async function createAgent(authorization: string, data: Record<string, unknown> = {}) {
+async function createAgent(authorization: string, data: Record<string, unknown> = {}, projectId?: string) {
   const { systemPrompt, provider, skills, mcpConnectors, ...rest } = data
   const res = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
+    headers: projectHeaders(projectId),
     body: JSON.stringify({
       metadata: { name: 'Cloud session agent' },
       spec: {
@@ -1419,6 +1437,36 @@ describe('[CF] /api/v1/sessions', () => {
     )
     expect((live.event as { type: string }).type).toBe('message_end')
 
+    ws.close()
+  })
+
+  it('opens the browser WebSocket from session ownership without project scope', async () => {
+    const authorization = await signIn()
+    const projectId = await createProject(authorization)
+    const environment = await createEnvironment(authorization, {}, projectId)
+    const agent = await createAgent(authorization, { mcpConnectors: [] }, projectId)
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      headers: projectHeaders(projectId),
+      body: JSON.stringify({
+        spec: {
+          agentId: agent.id,
+          environmentId: environment.id,
+          runtime: 'ama',
+        },
+        prompt: 'Open socket without project scope',
+      }),
+    })
+    const createdText = await createRes.text()
+    expect(createRes.status, createdText).toBe(201)
+    const created = JSON.parse(createdText) as { metadata: { uid: string } }
+
+    const socketRes = await SELF.fetch(`https://example.com/api/v1/sessions/${created.metadata.uid}/socket`, {
+      headers: { authorization, Upgrade: 'websocket' },
+    })
+    expect(socketRes.status).toBe(101)
+    const ws = socketRes.webSocket as WebSocket
+    ws.accept()
     ws.close()
   })
 

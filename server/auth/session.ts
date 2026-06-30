@@ -179,9 +179,9 @@ export async function resolveAuthContext<E extends HonoEnv>(
   c: AppContext<E>,
   db: DrizzleD1Database,
 ): Promise<AuthContext | null> {
-  // The browser session socket can't set request headers, so the project also
-  // rides as a query param on that upgrade; both feed the same org-scoped project
-  // resolution (upsertProjectForClaims only honors a project within the user's org).
+  // Project-scoped resource collections use this request project hint; endpoints
+  // addressed by a globally unique resource id should derive project ownership
+  // from the resource after authenticating the caller.
   const requestedProjectId =
     c.req.raw.headers.get('x-ama-project-id') ?? new URL(c.req.url).searchParams.get('x-ama-project-id') ?? undefined
 

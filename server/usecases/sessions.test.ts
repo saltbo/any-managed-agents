@@ -139,6 +139,7 @@ function fakeDeps(
   const sessions: Deps['sessions'] = {
     list: async () => ({ rows: [], hasMore: false }),
     find: async () => sessionRecord(),
+    findByOrganization: async () => sessionRecord(),
     findActiveHttpTriggerSession: async () => null,
     findRuntimeRow: async () => sessionRow(),
     updateFields: async () => sessionRecord(),
