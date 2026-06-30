@@ -24,7 +24,7 @@ const {
   enqueueCloudTurnMock,
   cloudTurnsRunInlineMock,
   recordAuditMock,
-  appendCanonicalEventMock,
+  appendEventMock,
   findSessionMock,
   sessionEventStreamMock,
   updateSessionWhenStateMock,
@@ -37,7 +37,7 @@ const {
   enqueueCloudTurnMock: vi.fn(),
   cloudTurnsRunInlineMock: vi.fn(() => false),
   recordAuditMock: vi.fn(),
-  appendCanonicalEventMock: vi.fn(async () => 'event_test'),
+  appendEventMock: vi.fn(async () => 'event_test'),
   findSessionMock: vi.fn(),
   sessionEventStreamMock: vi.fn(() => [] as unknown[]),
   updateSessionWhenStateMock: vi.fn<
@@ -75,7 +75,7 @@ const deps: CloudTurnDeps = {
   sessionOrchestration: store as never,
   sessionEventStore: {
     eventStream: sessionEventStreamMock,
-    appendCanonicalEvent: appendCanonicalEventMock,
+    appendEvent: appendEventMock,
     queryEvents: vi.fn(),
     archive: vi.fn(),
   } as never,
@@ -134,7 +134,7 @@ describe('consumeCloudTurnQueueMessage — cloud-command turn path [spec: runtim
     runSessionTurnMock.mockReset()
     enqueueCloudTurnMock.mockReset()
     recordAuditMock.mockReset()
-    appendCanonicalEventMock.mockClear()
+    appendEventMock.mockClear()
     updateSessionWhenStateMock.mockClear()
     updateSessionWhenStateMock.mockReturnValue(true)
     sessionEventStreamMock.mockReturnValue([])
@@ -221,11 +221,10 @@ describe('consumeCloudTurnQueueMessage — cloud-command turn path [spec: runtim
       auditAction: 'session.command',
     })
 
-    expect(appendCanonicalEventMock).toHaveBeenCalledWith(
+    expect(appendEventMock).toHaveBeenCalledWith(
       { organizationId: 'org_1', projectId: 'proj_1', sessionId: 'session_1' },
       expect.objectContaining({
-        type: 'message_end',
-        role: 'user',
+        type: 'message.completed',
         payload: expect.objectContaining({
           message: expect.objectContaining({
             role: 'user',
@@ -343,7 +342,7 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     sessionOrchestration: store as never,
     sessionEventStore: {
       eventStream: sessionEventStreamMock,
-      appendCanonicalEvent: appendCanonicalEventMock,
+      appendEvent: appendEventMock,
       queryEvents: vi.fn(),
       archive: vi.fn(),
     } as never,

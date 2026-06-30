@@ -142,7 +142,9 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
     queryKey: queryKeys.sessions.events(sessionId),
     queryFn: () => api.listSessionEvents(sessionId, { limit: 200, order: 'asc' }),
     refetchInterval: (query) => {
-      const hasAssistantMessage = (query.state.data?.data ?? []).some((record) => record.event.type === 'message_end')
+      const hasAssistantMessage = (query.state.data?.data ?? []).some(
+        (record) => record.event.type === 'message.completed',
+      )
       const state = sessionQuery.data?.status.phase
       const terminal = state !== undefined && !['pending', 'running'].includes(state)
       return terminal && hasAssistantMessage ? false : 1000

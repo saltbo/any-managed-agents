@@ -65,15 +65,15 @@ function normalizeTool(name: string, args: Record<string, unknown>) {
 
 function* mapCopilotEvent(event: CopilotEvent, state: CopilotState): Generator<AmaRuntimeEvent> {
   switch (event.type) {
-    case 'assistant.turn_start':
-      yield runtimeEvent('turn_start')
+    case 'assistant.turn.started':
+      yield runtimeEvent('turn.started')
       return
     case 'assistant.reasoning':
       if (event.data.content) yield reasoning(event.data.content)
       return
     case 'assistant.message':
       if (event.data.content)
-        yield runtimeEvent('message_end', { message: textMessage('assistant', event.data.content) })
+        yield runtimeEvent('message.completed', { message: textMessage('assistant', event.data.content) })
       for (const request of event.data.toolRequests ?? []) {
         const normalized = normalizeTool(request.name, objectValue(request.arguments))
         state.pendingTools.set(request.toolCallId, normalized)
@@ -100,7 +100,7 @@ function* mapCopilotEvent(event: CopilotEvent, state: CopilotState): Generator<A
       yield runtimeError(String(event.data.message ?? 'Copilot session error'), 'copilot_error', event.data)
       return
     default:
-      yield runtimeEvent('runtime.metadata', { data: event as unknown as Record<string, unknown> })
+      yield runtimeEvent('runtime.status', { data: event as unknown as Record<string, unknown> })
   }
 }
 

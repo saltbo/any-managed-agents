@@ -5,26 +5,27 @@
 export const SESSION_DO_EVENT_STORE = 'session-do'
 
 export const AMA_SESSION_EVENT_TYPES = [
-  'agent_start',
-  'agent_end',
-  'turn_start',
-  'turn_end',
-  'session_stop',
-  'session_checkpoint',
-  'session_resume',
-  'message_start',
-  'message_update',
-  'message_end',
-  'tool_execution_start',
-  'tool_execution_update',
-  'tool_execution_end',
+  'agent.started',
+  'agent.completed',
+  'turn.started',
+  'turn.completed',
+  'session.stopped',
+  'session.checkpointed',
+  'session.resumed',
+  'message.started',
+  'message.updated',
+  'message.completed',
+  'tool_call.started',
+  'tool_call.updated',
+  'tool_call.completed',
   'usage.recorded',
-  'policy.decision',
-  'permission.request',
+  'permission.requested',
+  'permission.resolved',
+  'permission.denied',
   'runtime.error',
-  'runtime.metadata',
+  'runtime.status',
   'runtime.output',
-  'runner.metadata',
+  'runner.status',
 ] as const
 
 export type AmaSessionEventType = (typeof AMA_SESSION_EVENT_TYPES)[number]
@@ -58,7 +59,7 @@ export type MessageContentBlock =
   | FileContentBlock
   | UnknownContentBlock
 
-export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
+export type MessageRole = 'user' | 'assistant' | 'system' | 'tool' | 'toolResult'
 
 export type Message = {
   id?: string
@@ -124,10 +125,8 @@ export type UsageRecordedPayload = {
   costMicros?: number
   details?: Record<string, unknown>
 }
-export type PolicyDecisionPayload = {
-  allowed: boolean
-  category?: string
-  ruleId?: string
+export type PermissionDeniedPayload = {
+  reason?: string
   resourceType?: string
   resourceId?: string
   operation?: string
@@ -135,7 +134,6 @@ export type PolicyDecisionPayload = {
   host?: string | null
   connectorId?: string
   toolName?: string
-  decision?: string
   details?: Record<string, unknown>
 }
 export type PermissionRequestPayload = {
@@ -144,34 +142,42 @@ export type PermissionRequestPayload = {
   toolCall?: ToolCall
   details?: Record<string, unknown>
 }
+export type PermissionResolvedPayload = {
+  permissionId?: string
+  allowed: boolean
+  reason?: string
+  toolCall?: ToolCall
+  details?: Record<string, unknown>
+}
 export type RuntimeErrorPayload = EventError
 export type RuntimeOutputPayload = {
   stream: 'stdout' | 'stderr' | 'runtime' | 'reasoning' | 'bridge'
   content: unknown
 }
-export type MetadataPayload = { data: Record<string, unknown> }
+export type StatusPayload = { data: Record<string, unknown> }
 
 export type AmaEventPayloadByType = {
-  agent_start: Record<string, unknown>
-  agent_end: Record<string, unknown>
-  turn_start: TurnPayload
-  turn_end: TurnPayload
-  session_stop: SessionStopPayload
-  session_checkpoint: SessionCheckpointPayload
-  session_resume: SessionResumePayload
-  message_start: MessageEventPayload
-  message_update: MessageEventPayload
-  message_end: MessageEventPayload
-  tool_execution_start: ToolStartedPayload
-  tool_execution_update: ToolUpdatedPayload
-  tool_execution_end: ToolCompletedPayload
+  'agent.started': Record<string, unknown>
+  'agent.completed': Record<string, unknown>
+  'turn.started': TurnPayload
+  'turn.completed': TurnPayload
+  'session.stopped': SessionStopPayload
+  'session.checkpointed': SessionCheckpointPayload
+  'session.resumed': SessionResumePayload
+  'message.started': MessageEventPayload
+  'message.updated': MessageEventPayload
+  'message.completed': MessageEventPayload
+  'tool_call.started': ToolStartedPayload
+  'tool_call.updated': ToolUpdatedPayload
+  'tool_call.completed': ToolCompletedPayload
   'usage.recorded': UsageRecordedPayload
-  'policy.decision': PolicyDecisionPayload
-  'permission.request': PermissionRequestPayload
+  'permission.requested': PermissionRequestPayload
+  'permission.resolved': PermissionResolvedPayload
+  'permission.denied': PermissionDeniedPayload
   'runtime.error': RuntimeErrorPayload
-  'runtime.metadata': MetadataPayload
+  'runtime.status': StatusPayload
   'runtime.output': RuntimeOutputPayload
-  'runner.metadata': MetadataPayload
+  'runner.status': StatusPayload
 }
 
 export type AmaEvent<TType extends AmaSessionEventType = AmaSessionEventType> = {
@@ -199,21 +205,21 @@ export function amaSessionEventTypeFromPayload(event: Record<string, unknown>): 
   return typeof event.type === 'string' && event.type ? event.type : 'unknown'
 }
 
-const PI_AGENT_EVENT_TYPES = new Set<string>([
-  'agent_start',
-  'agent_end',
-  'turn_start',
-  'turn_end',
-  'message_start',
-  'message_update',
-  'message_end',
-  'tool_execution_start',
-  'tool_execution_update',
-  'tool_execution_end',
+const PI_CORE_TO_AMA_EVENT_TYPE = new Map<string, AmaSessionEventType>([
+  ['agent_start', 'agent.started'],
+  ['agent_end', 'agent.completed'],
+  ['turn_start', 'turn.started'],
+  ['turn_end', 'turn.completed'],
+  ['message_start', 'message.started'],
+  ['message_update', 'message.updated'],
+  ['message_end', 'message.completed'],
+  ['tool_execution_start', 'tool_call.started'],
+  ['tool_execution_update', 'tool_call.updated'],
+  ['tool_execution_end', 'tool_call.completed'],
 ])
 
-export function isPiAgentSessionEventType(value: string): value is AmaSessionEventType {
-  return PI_AGENT_EVENT_TYPES.has(value)
+export function isPiCoreSourceEventType(value: string) {
+  return PI_CORE_TO_AMA_EVENT_TYPE.has(value)
 }
 
 export function amaEventFromRuntimeEvent(event: Record<string, unknown>, metadata: EventMetadata = {}): AmaEvent {
@@ -240,18 +246,20 @@ function sourceEventTypeFromRuntimeEvent(event: Record<string, unknown>) {
 }
 
 function canonicalType(sourceEventType: string): AmaSessionEventType {
+  const piEventType = PI_CORE_TO_AMA_EVENT_TYPE.get(sourceEventType)
+  if (piEventType) return piEventType
   if (isAmaSessionEventType(sourceEventType)) return sourceEventType
   if (matchesRuntimeEvent(sourceEventType, 'usage')) return 'usage.recorded'
   if (matchesRuntimeEvent(sourceEventType, 'error')) return 'runtime.error'
   if (matchesRuntimeEvent(sourceEventType, 'output')) return 'runtime.output'
   if (sourceEventType === 'usage') return 'usage.recorded'
-  if (sourceEventType === 'policy_denied') return 'policy.decision'
+  if (sourceEventType === 'permission_denied' || sourceEventType === 'policy_denied') return 'permission.denied'
   if (sourceEventType === 'error') return 'runtime.error'
   if (sourceEventType === 'bridge_stderr') return 'runtime.output'
   if (sourceEventType === 'bridge_exit') return 'runtime.error'
-  if (sourceEventType === 'queue_update' || sourceEventType === 'session_info_changed') return 'runtime.metadata'
-  if (sourceEventType === 'runner_heartbeat' || sourceEventType === 'runner_status') return 'runner.metadata'
-  return 'runtime.metadata'
+  if (sourceEventType === 'queue_update' || sourceEventType === 'session_info_changed') return 'runtime.status'
+  if (sourceEventType === 'runner_heartbeat' || sourceEventType === 'runner_status') return 'runner.status'
+  return 'runtime.status'
 }
 
 function matchesRuntimeEvent(sourceEventType: string, suffix: string) {
@@ -269,7 +277,7 @@ function canonicalPayload(
   sourceEventType: string,
   event: Record<string, unknown>,
 ): AmaEventPayloadByType[AmaSessionEventType] {
-  if (isPiAgentSessionEventType(sourceEventType)) {
+  if (PI_CORE_TO_AMA_EVENT_TYPE.has(sourceEventType)) {
     return normalizeKnownPayload(type, withoutType(event))
   }
 
@@ -277,36 +285,38 @@ function canonicalPayload(
     return usagePayload(event)
   }
 
-  if (type === 'policy.decision') {
+  if (type === 'permission.denied') {
     return compactObject({
-      allowed: event.allowed === true,
-      category: event.category,
-      ruleId: event.ruleId,
+      reason: event.reason ?? event.message ?? (event.category === 'approval' ? 'approval_required' : undefined),
       resourceType: event.resourceType,
       resourceId: event.resourceId,
       operation: event.operation,
       command: event.command,
       host: event.host,
-      // MCP denials identify the connector and tool the same way sandbox
-      // denials identify the command or host.
       connectorId: event.connectorId,
       toolName: event.toolName,
-      decision: event.decision,
-      details: restObject(event, [
-        'type',
-        'allowed',
-        'category',
-        'ruleId',
-        'resourceType',
-        'resourceId',
-        'operation',
-        'command',
-        'host',
-        'connectorId',
-        'toolName',
-        'decision',
-      ]),
-    }) as PolicyDecisionPayload
+      details: compactObject({
+        category: event.category,
+        ruleId: event.ruleId,
+        decision: event.decision,
+        ...restObject(event, [
+          'type',
+          'allowed',
+          'reason',
+          'message',
+          'category',
+          'ruleId',
+          'resourceType',
+          'resourceId',
+          'operation',
+          'command',
+          'host',
+          'connectorId',
+          'toolName',
+          'decision',
+        ]),
+      }),
+    }) as PermissionDeniedPayload
   }
 
   if (type === 'runtime.error') {
@@ -333,7 +343,7 @@ function canonicalPayload(
     }
   }
 
-  if (type === 'runtime.metadata' || type === 'runner.metadata') {
+  if (type === 'runtime.status' || type === 'runner.status') {
     const { type: _type, ...data } = event
     return { data: objectValue(data.data ?? data) }
   }
@@ -345,16 +355,16 @@ function normalizeKnownPayload(
   type: AmaSessionEventType,
   payload: Record<string, unknown>,
 ): AmaEventPayloadByType[AmaSessionEventType] {
-  if (type === 'message_start' || type === 'message_update' || type === 'message_end') {
+  if (type === 'message.started' || type === 'message.updated' || type === 'message.completed') {
     return { ...restObject(payload, ['message']), message: normalizeMessage(payload.message ?? payload) }
   }
-  if (type === 'tool_execution_start') {
+  if (type === 'tool_call.started') {
     return {
       ...restObject(payload, ['toolCall', 'toolCallId', 'toolName', 'input', 'arguments', 'args']),
       toolCall: normalizeToolCall(payload),
     }
   }
-  if (type === 'tool_execution_update') {
+  if (type === 'tool_call.updated') {
     return compactObject({
       ...restObject(payload, [
         'toolCall',
@@ -371,7 +381,7 @@ function normalizeKnownPayload(
       partialResult: payload.partialResult ?? payload.result ?? payload.output,
     }) as ToolUpdatedPayload
   }
-  if (type === 'tool_execution_end') {
+  if (type === 'tool_call.completed') {
     const isError = payload.isError === true || Boolean(payload.error)
     return compactObject({
       ...restObject(payload, [
@@ -394,7 +404,7 @@ function normalizeKnownPayload(
       durationMs: numberField(payload, 'durationMs') ?? undefined,
     }) as ToolCompletedPayload
   }
-  if (type === 'turn_start' || type === 'turn_end') {
+  if (type === 'turn.started' || type === 'turn.completed') {
     return compactObject({
       ...restObject(payload, ['marker', 'stage', 'status']),
       marker: payload.marker,
@@ -402,16 +412,16 @@ function normalizeKnownPayload(
       status: payload.status,
     }) as TurnPayload
   }
-  if (type === 'session_stop')
+  if (type === 'session.stopped')
     return compactObject({ ...restObject(payload, ['reason']), reason: payload.reason }) as SessionStopPayload
-  if (type === 'session_checkpoint') {
+  if (type === 'session.checkpointed') {
     return compactObject({
       ...restObject(payload, ['resumeTokenRef', 'scope']),
       resumeTokenRef: payload.resumeTokenRef,
       scope: payload.scope,
     }) as SessionCheckpointPayload
   }
-  if (type === 'session_resume') {
+  if (type === 'session.resumed') {
     return compactObject({
       ...restObject(payload, ['fromCheckpoint', 'reason']),
       fromCheckpoint: payload.fromCheckpoint,
@@ -419,13 +429,22 @@ function normalizeKnownPayload(
     }) as SessionResumePayload
   }
   if (type === 'usage.recorded') return usagePayload(payload)
-  if (type === 'permission.request') {
+  if (type === 'permission.requested') {
     return compactObject({
       permissionId: payload.permissionId,
       command: payload.command,
       toolCall: payload.toolCall ? normalizeToolCall(objectValue(payload.toolCall)) : undefined,
       details: restObject(payload, ['permissionId', 'command', 'toolCall']),
     }) as PermissionRequestPayload
+  }
+  if (type === 'permission.resolved') {
+    return compactObject({
+      permissionId: payload.permissionId,
+      allowed: payload.allowed === true,
+      reason: payload.reason,
+      toolCall: payload.toolCall ? normalizeToolCall(objectValue(payload.toolCall)) : undefined,
+      details: restObject(payload, ['permissionId', 'allowed', 'reason', 'toolCall']),
+    }) as PermissionResolvedPayload
   }
   if (type === 'runtime.error') return normalizeError(payload)
   if (type === 'runtime.output') {
@@ -434,7 +453,7 @@ function normalizeKnownPayload(
       content: payload.content ?? payload.message ?? payload.data ?? '',
     }
   }
-  if (type === 'runtime.metadata' || type === 'runner.metadata') return { data: objectValue(payload.data ?? payload) }
+  if (type === 'runtime.status' || type === 'runner.status') return { data: objectValue(payload.data ?? payload) }
   return payload
 }
 
@@ -604,7 +623,9 @@ function numberField(record: Record<string, unknown>, key: string) {
 }
 
 function messageRole(value: string | null): MessageRole {
-  return value === 'user' || value === 'assistant' || value === 'system' || value === 'tool' ? value : 'assistant'
+  return value === 'user' || value === 'assistant' || value === 'system' || value === 'tool' || value === 'toolResult'
+    ? value
+    : 'assistant'
 }
 
 function withoutType(event: Record<string, unknown>) {

@@ -113,14 +113,17 @@ export function createToolApprovalGate(
       const approvalId = `approval_${crypto.randomUUID().replaceAll('-', '')}`
       const requestEventId = await values.appendEvent(
         {
-          type: 'policy.decision',
-          allowed: false,
-          category: 'approval',
-          ruleId: 'toolPolicy.requireApprovalTools',
-          resourceType: 'tool',
-          resourceId: toolName,
-          operation: 'tool_approval_request',
-          decision: { approvalId, toolCallId, status: 'pending' },
+          type: 'permission.requested',
+          permissionId: approvalId,
+          toolCall: { id: toolCallId, name: toolName, input },
+          details: {
+            reason: 'approval_required',
+            resourceType: 'tool',
+            resourceId: toolName,
+            operation: 'tool_approval_request',
+            ruleId: 'toolPolicy.requireApprovalTools',
+            status: 'pending',
+          },
         },
         { source: 'policy' },
       )

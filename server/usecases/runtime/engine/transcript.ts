@@ -28,7 +28,23 @@ function parseEventPayload(payload: string | Record<string, unknown>): Record<st
   }
 }
 
-// Prefers the latest agent_end snapshot, else the accumulated message_end
+function eventCore(event: {
+  type?: string
+  payload: string | Record<string, unknown>
+}): { type?: string; payload: Record<string, unknown> } | null {
+  const record = parseEventPayload(event.payload)
+  if (!record) {
+    return null
+  }
+  const type = typeof event.type === 'string' ? event.type : typeof record.type === 'string' ? record.type : undefined
+  const innerPayload = record.payload && typeof record.payload === 'object' ? record.payload : record
+  return {
+    ...(type ? { type } : {}),
+    payload: innerPayload as Record<string, unknown>,
+  }
+}
+
+// Prefers the latest agent.completed snapshot, else the accumulated message.completed
 // messages. Malformed event payloads are skipped rather than throwing.
 export function runtimeMessagesFromEvents(
   events: Array<{ type?: string; payload: string | Record<string, unknown> }>,
@@ -36,23 +52,21 @@ export function runtimeMessagesFromEvents(
   let latestAgentEndMessages: AgentMessage[] | null = null
   const messageEndMessages: AgentMessage[] = []
   for (const event of events) {
-    const record = parseEventPayload(event.payload)
-    if (!record) {
+    const core = eventCore(event)
+    if (!core) {
       continue
     }
-    const sourceType =
-      typeof event.type === 'string' ? event.type : typeof record.type === 'string' ? record.type : undefined
-    if (sourceType === 'agent_end' && Array.isArray(record.messages)) {
-      const messages = record.messages.filter(isPersistedMessage)
+    if (core.type === 'agent.completed' && Array.isArray(core.payload.messages)) {
+      const messages = core.payload.messages.filter(isPersistedMessage)
       if (messages.length > 0) {
         latestAgentEndMessages = messages
       }
       continue
     }
-    if (sourceType !== 'message_end' || !isPersistedMessage(record.message)) {
+    if (core.type !== 'message.completed' || !isPersistedMessage(core.payload.message)) {
       continue
     }
-    messageEndMessages.push(record.message)
+    messageEndMessages.push(core.payload.message)
   }
   return latestAgentEndMessages ?? messageEndMessages
 }

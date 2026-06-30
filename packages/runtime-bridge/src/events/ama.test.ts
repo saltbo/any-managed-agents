@@ -5,7 +5,7 @@ describe('turnEnd', () => {
   it('emits the canonical empty end-of-turn payload', () => {
     const event = turnEnd()
     expect(event).toEqual({
-      type: 'turn_end',
+      type: 'turn.completed',
       payload: {},
     })
   })

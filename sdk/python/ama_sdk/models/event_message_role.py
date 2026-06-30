@@ -4,6 +4,7 @@ class EventMessageRole(str, Enum):
     ASSISTANT = "assistant"
     SYSTEM = "system"
     TOOL = "tool"
+    TOOLRESULT = "toolResult"
     USER = "user"
 
     def __str__(self) -> str:

@@ -24,13 +24,13 @@ const (
 
 // Defines values for AmaEvent0Type.
 const (
-	AmaEvent0TypeAgentStart AmaEvent0Type = "agent_start"
+	AmaEvent0TypeAgentStarted AmaEvent0Type = "agent.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent0Type enum.
 func (e AmaEvent0Type) Valid() bool {
 	switch e {
-	case AmaEvent0TypeAgentStart:
+	case AmaEvent0TypeAgentStarted:
 		return true
 	default:
 		return false
@@ -39,13 +39,13 @@ func (e AmaEvent0Type) Valid() bool {
 
 // Defines values for AmaEvent1Type.
 const (
-	AgentEnd AmaEvent1Type = "agent_end"
+	AgentCompleted AmaEvent1Type = "agent.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent1Type enum.
 func (e AmaEvent1Type) Valid() bool {
 	switch e {
-	case AgentEnd:
+	case AgentCompleted:
 		return true
 	default:
 		return false
@@ -54,13 +54,13 @@ func (e AmaEvent1Type) Valid() bool {
 
 // Defines values for AmaEvent2Type.
 const (
-	TurnStart AmaEvent2Type = "turn_start"
+	TurnStarted AmaEvent2Type = "turn.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent2Type enum.
 func (e AmaEvent2Type) Valid() bool {
 	switch e {
-	case TurnStart:
+	case TurnStarted:
 		return true
 	default:
 		return false
@@ -69,13 +69,13 @@ func (e AmaEvent2Type) Valid() bool {
 
 // Defines values for AmaEvent3Type.
 const (
-	TurnEnd AmaEvent3Type = "turn_end"
+	TurnCompleted AmaEvent3Type = "turn.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent3Type enum.
 func (e AmaEvent3Type) Valid() bool {
 	switch e {
-	case TurnEnd:
+	case TurnCompleted:
 		return true
 	default:
 		return false
@@ -84,13 +84,13 @@ func (e AmaEvent3Type) Valid() bool {
 
 // Defines values for AmaEvent4Type.
 const (
-	SessionStop AmaEvent4Type = "session_stop"
+	SessionStopped AmaEvent4Type = "session.stopped"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent4Type enum.
 func (e AmaEvent4Type) Valid() bool {
 	switch e {
-	case SessionStop:
+	case SessionStopped:
 		return true
 	default:
 		return false
@@ -99,13 +99,13 @@ func (e AmaEvent4Type) Valid() bool {
 
 // Defines values for AmaEvent5Type.
 const (
-	SessionCheckpoint AmaEvent5Type = "session_checkpoint"
+	SessionCheckpointed AmaEvent5Type = "session.checkpointed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent5Type enum.
 func (e AmaEvent5Type) Valid() bool {
 	switch e {
-	case SessionCheckpoint:
+	case SessionCheckpointed:
 		return true
 	default:
 		return false
@@ -114,13 +114,13 @@ func (e AmaEvent5Type) Valid() bool {
 
 // Defines values for AmaEvent6Type.
 const (
-	SessionResume AmaEvent6Type = "session_resume"
+	SessionResumed AmaEvent6Type = "session.resumed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent6Type enum.
 func (e AmaEvent6Type) Valid() bool {
 	switch e {
-	case SessionResume:
+	case SessionResumed:
 		return true
 	default:
 		return false
@@ -129,13 +129,13 @@ func (e AmaEvent6Type) Valid() bool {
 
 // Defines values for AmaEvent7Type.
 const (
-	MessageStart AmaEvent7Type = "message_start"
+	MessageStarted AmaEvent7Type = "message.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent7Type enum.
 func (e AmaEvent7Type) Valid() bool {
 	switch e {
-	case MessageStart:
+	case MessageStarted:
 		return true
 	default:
 		return false
@@ -144,13 +144,13 @@ func (e AmaEvent7Type) Valid() bool {
 
 // Defines values for AmaEvent8Type.
 const (
-	MessageUpdate AmaEvent8Type = "message_update"
+	MessageUpdated AmaEvent8Type = "message.updated"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent8Type enum.
 func (e AmaEvent8Type) Valid() bool {
 	switch e {
-	case MessageUpdate:
+	case MessageUpdated:
 		return true
 	default:
 		return false
@@ -159,13 +159,13 @@ func (e AmaEvent8Type) Valid() bool {
 
 // Defines values for AmaEvent9Type.
 const (
-	MessageEnd AmaEvent9Type = "message_end"
+	MessageCompleted AmaEvent9Type = "message.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent9Type enum.
 func (e AmaEvent9Type) Valid() bool {
 	switch e {
-	case MessageEnd:
+	case MessageCompleted:
 		return true
 	default:
 		return false
@@ -174,13 +174,13 @@ func (e AmaEvent9Type) Valid() bool {
 
 // Defines values for AmaEvent10Type.
 const (
-	ToolExecutionStart AmaEvent10Type = "tool_execution_start"
+	ToolCallStarted AmaEvent10Type = "tool_call.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent10Type enum.
 func (e AmaEvent10Type) Valid() bool {
 	switch e {
-	case ToolExecutionStart:
+	case ToolCallStarted:
 		return true
 	default:
 		return false
@@ -189,13 +189,13 @@ func (e AmaEvent10Type) Valid() bool {
 
 // Defines values for AmaEvent11Type.
 const (
-	ToolExecutionUpdate AmaEvent11Type = "tool_execution_update"
+	ToolCallUpdated AmaEvent11Type = "tool_call.updated"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent11Type enum.
 func (e AmaEvent11Type) Valid() bool {
 	switch e {
-	case ToolExecutionUpdate:
+	case ToolCallUpdated:
 		return true
 	default:
 		return false
@@ -204,13 +204,13 @@ func (e AmaEvent11Type) Valid() bool {
 
 // Defines values for AmaEvent12Type.
 const (
-	ToolExecutionEnd AmaEvent12Type = "tool_execution_end"
+	ToolCallCompleted AmaEvent12Type = "tool_call.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent12Type enum.
 func (e AmaEvent12Type) Valid() bool {
 	switch e {
-	case ToolExecutionEnd:
+	case ToolCallCompleted:
 		return true
 	default:
 		return false
@@ -234,13 +234,13 @@ func (e AmaEvent13Type) Valid() bool {
 
 // Defines values for AmaEvent14Type.
 const (
-	PolicyDecision AmaEvent14Type = "policy.decision"
+	PermissionRequested AmaEvent14Type = "permission.requested"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent14Type enum.
 func (e AmaEvent14Type) Valid() bool {
 	switch e {
-	case PolicyDecision:
+	case PermissionRequested:
 		return true
 	default:
 		return false
@@ -249,13 +249,13 @@ func (e AmaEvent14Type) Valid() bool {
 
 // Defines values for AmaEvent15Type.
 const (
-	PermissionRequest AmaEvent15Type = "permission.request"
+	PermissionResolved AmaEvent15Type = "permission.resolved"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent15Type enum.
 func (e AmaEvent15Type) Valid() bool {
 	switch e {
-	case PermissionRequest:
+	case PermissionResolved:
 		return true
 	default:
 		return false
@@ -264,13 +264,13 @@ func (e AmaEvent15Type) Valid() bool {
 
 // Defines values for AmaEvent16Type.
 const (
-	RuntimeError AmaEvent16Type = "runtime.error"
+	PermissionDenied AmaEvent16Type = "permission.denied"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent16Type enum.
 func (e AmaEvent16Type) Valid() bool {
 	switch e {
-	case RuntimeError:
+	case PermissionDenied:
 		return true
 	default:
 		return false
@@ -279,13 +279,13 @@ func (e AmaEvent16Type) Valid() bool {
 
 // Defines values for AmaEvent17Type.
 const (
-	RuntimeMetadata AmaEvent17Type = "runtime.metadata"
+	RuntimeError AmaEvent17Type = "runtime.error"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent17Type enum.
 func (e AmaEvent17Type) Valid() bool {
 	switch e {
-	case RuntimeMetadata:
+	case RuntimeError:
 		return true
 	default:
 		return false
@@ -294,13 +294,13 @@ func (e AmaEvent17Type) Valid() bool {
 
 // Defines values for AmaEvent18Type.
 const (
-	RuntimeOutput AmaEvent18Type = "runtime.output"
+	RuntimeStatus AmaEvent18Type = "runtime.status"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent18Type enum.
 func (e AmaEvent18Type) Valid() bool {
 	switch e {
-	case RuntimeOutput:
+	case RuntimeStatus:
 		return true
 	default:
 		return false
@@ -309,13 +309,28 @@ func (e AmaEvent18Type) Valid() bool {
 
 // Defines values for AmaEvent19Type.
 const (
-	RunnerMetadata AmaEvent19Type = "runner.metadata"
+	RuntimeOutput AmaEvent19Type = "runtime.output"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent19Type enum.
 func (e AmaEvent19Type) Valid() bool {
 	switch e {
-	case RunnerMetadata:
+	case RuntimeOutput:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AmaEvent20Type.
+const (
+	RunnerStatus AmaEvent20Type = "runner.status"
+)
+
+// Valid indicates whether the value is a known member of the AmaEvent20Type enum.
+func (e AmaEvent20Type) Valid() bool {
+	switch e {
+	case RunnerStatus:
 		return true
 	default:
 		return false
@@ -876,10 +891,11 @@ func (e EnvironmentType) Valid() bool {
 
 // Defines values for EventMessageRole.
 const (
-	EventMessageRoleAssistant EventMessageRole = "assistant"
-	EventMessageRoleSystem    EventMessageRole = "system"
-	EventMessageRoleTool      EventMessageRole = "tool"
-	EventMessageRoleUser      EventMessageRole = "user"
+	EventMessageRoleAssistant  EventMessageRole = "assistant"
+	EventMessageRoleSystem     EventMessageRole = "system"
+	EventMessageRoleTool       EventMessageRole = "tool"
+	EventMessageRoleToolResult EventMessageRole = "toolResult"
+	EventMessageRoleUser       EventMessageRole = "user"
 )
 
 // Valid indicates whether the value is a known member of the EventMessageRole enum.
@@ -890,6 +906,8 @@ func (e EventMessageRole) Valid() bool {
 	case EventMessageRoleSystem:
 		return true
 	case EventMessageRoleTool:
+		return true
+	case EventMessageRoleToolResult:
 		return true
 	case EventMessageRoleUser:
 		return true
@@ -2421,68 +2439,71 @@ func (e ListSessionEventsParamsOrder) Valid() bool {
 
 // Defines values for ListSessionEventsParamsType.
 const (
-	ListSessionEventsParamsTypeAgentEnd            ListSessionEventsParamsType = "agent_end"
-	ListSessionEventsParamsTypeAgentStart          ListSessionEventsParamsType = "agent_start"
-	ListSessionEventsParamsTypeMessageEnd          ListSessionEventsParamsType = "message_end"
-	ListSessionEventsParamsTypeMessageStart        ListSessionEventsParamsType = "message_start"
-	ListSessionEventsParamsTypeMessageUpdate       ListSessionEventsParamsType = "message_update"
-	ListSessionEventsParamsTypePermissionRequest   ListSessionEventsParamsType = "permission.request"
-	ListSessionEventsParamsTypePolicyDecision      ListSessionEventsParamsType = "policy.decision"
-	ListSessionEventsParamsTypeRunnerMetadata      ListSessionEventsParamsType = "runner.metadata"
+	ListSessionEventsParamsTypeAgentCompleted      ListSessionEventsParamsType = "agent.completed"
+	ListSessionEventsParamsTypeAgentStarted        ListSessionEventsParamsType = "agent.started"
+	ListSessionEventsParamsTypeMessageCompleted    ListSessionEventsParamsType = "message.completed"
+	ListSessionEventsParamsTypeMessageStarted      ListSessionEventsParamsType = "message.started"
+	ListSessionEventsParamsTypeMessageUpdated      ListSessionEventsParamsType = "message.updated"
+	ListSessionEventsParamsTypePermissionDenied    ListSessionEventsParamsType = "permission.denied"
+	ListSessionEventsParamsTypePermissionRequested ListSessionEventsParamsType = "permission.requested"
+	ListSessionEventsParamsTypePermissionResolved  ListSessionEventsParamsType = "permission.resolved"
+	ListSessionEventsParamsTypeRunnerStatus        ListSessionEventsParamsType = "runner.status"
 	ListSessionEventsParamsTypeRuntimeError        ListSessionEventsParamsType = "runtime.error"
-	ListSessionEventsParamsTypeRuntimeMetadata     ListSessionEventsParamsType = "runtime.metadata"
 	ListSessionEventsParamsTypeRuntimeOutput       ListSessionEventsParamsType = "runtime.output"
-	ListSessionEventsParamsTypeSessionCheckpoint   ListSessionEventsParamsType = "session_checkpoint"
-	ListSessionEventsParamsTypeSessionResume       ListSessionEventsParamsType = "session_resume"
-	ListSessionEventsParamsTypeSessionStop         ListSessionEventsParamsType = "session_stop"
-	ListSessionEventsParamsTypeToolExecutionEnd    ListSessionEventsParamsType = "tool_execution_end"
-	ListSessionEventsParamsTypeToolExecutionStart  ListSessionEventsParamsType = "tool_execution_start"
-	ListSessionEventsParamsTypeToolExecutionUpdate ListSessionEventsParamsType = "tool_execution_update"
-	ListSessionEventsParamsTypeTurnEnd             ListSessionEventsParamsType = "turn_end"
-	ListSessionEventsParamsTypeTurnStart           ListSessionEventsParamsType = "turn_start"
+	ListSessionEventsParamsTypeRuntimeStatus       ListSessionEventsParamsType = "runtime.status"
+	ListSessionEventsParamsTypeSessionCheckpointed ListSessionEventsParamsType = "session.checkpointed"
+	ListSessionEventsParamsTypeSessionResumed      ListSessionEventsParamsType = "session.resumed"
+	ListSessionEventsParamsTypeSessionStopped      ListSessionEventsParamsType = "session.stopped"
+	ListSessionEventsParamsTypeToolCallCompleted   ListSessionEventsParamsType = "tool_call.completed"
+	ListSessionEventsParamsTypeToolCallStarted     ListSessionEventsParamsType = "tool_call.started"
+	ListSessionEventsParamsTypeToolCallUpdated     ListSessionEventsParamsType = "tool_call.updated"
+	ListSessionEventsParamsTypeTurnCompleted       ListSessionEventsParamsType = "turn.completed"
+	ListSessionEventsParamsTypeTurnStarted         ListSessionEventsParamsType = "turn.started"
 	ListSessionEventsParamsTypeUsageRecorded       ListSessionEventsParamsType = "usage.recorded"
 )
 
 // Valid indicates whether the value is a known member of the ListSessionEventsParamsType enum.
 func (e ListSessionEventsParamsType) Valid() bool {
 	switch e {
-	case ListSessionEventsParamsTypeAgentEnd:
+	case ListSessionEventsParamsTypeAgentCompleted:
 		return true
-	case ListSessionEventsParamsTypeAgentStart:
+	case ListSessionEventsParamsTypeAgentStarted:
 		return true
-	case ListSessionEventsParamsTypeMessageEnd:
+	case ListSessionEventsParamsTypeMessageCompleted:
 		return true
-	case ListSessionEventsParamsTypeMessageStart:
+	case ListSessionEventsParamsTypeMessageStarted:
 		return true
-	case ListSessionEventsParamsTypeMessageUpdate:
+	case ListSessionEventsParamsTypeMessageUpdated:
 		return true
-	case ListSessionEventsParamsTypePermissionRequest:
+	case ListSessionEventsParamsTypePermissionDenied:
 		return true
-	case ListSessionEventsParamsTypePolicyDecision:
+	case ListSessionEventsParamsTypePermissionRequested:
 		return true
-	case ListSessionEventsParamsTypeRunnerMetadata:
+	case ListSessionEventsParamsTypePermissionResolved:
+		return true
+	case ListSessionEventsParamsTypeRunnerStatus:
 		return true
 	case ListSessionEventsParamsTypeRuntimeError:
 		return true
-	case ListSessionEventsParamsTypeRuntimeMetadata:
-		return true
 	case ListSessionEventsParamsTypeRuntimeOutput:
 		return true
-	case ListSessionEventsParamsTypeSessionCheckpoint:
+	case ListSessionEventsParamsTypeRuntimeStatus:
 		return true
-	case ListSessionEventsParamsTypeSessionResume:
+	case ListSessionEventsParamsTypeSessionCheckpointed:
 		return true
-	case ListSessionEventsParamsTypeSessionStop:
+	case ListSessionEventsParamsTypeSessionResumed:
 		return true
-	case ListSessionEventsParamsTypeToolExecutionEnd:
+	case ListSessionEventsParamsTypeSessionStopped:
 		return true
-	case ListSessionEventsParamsTypeToolExecutionStart:
+	case ListSessionEventsParamsTypeToolCallCompleted:
 		return true
-	case ListSessionEventsParamsTypeToolExecutionUpdate:
+	case ListSessionEventsParamsTypeToolCallStarted:
 		return true
-	case ListSessionEventsParamsTypeTurnEnd:
+	case ListSessionEventsParamsTypeToolCallUpdated:
 		return true
-	case ListSessionEventsParamsTypeTurnStart:
+	case ListSessionEventsParamsTypeTurnCompleted:
+		return true
+	case ListSessionEventsParamsTypeTurnStarted:
 		return true
 	case ListSessionEventsParamsTypeUsageRecorded:
 		return true
@@ -2872,9 +2893,9 @@ type AmaEvent13Type string
 
 // AmaEvent14 defines model for .
 type AmaEvent14 struct {
-	Metadata *EventMetadata        `json:"metadata,omitempty"`
-	Payload  PolicyDecisionPayload `json:"payload"`
-	Type     AmaEvent14Type        `json:"type"`
+	Metadata *EventMetadata           `json:"metadata,omitempty"`
+	Payload  PermissionRequestPayload `json:"payload"`
+	Type     AmaEvent14Type           `json:"type"`
 }
 
 // AmaEvent14Type defines model for AmaEvent.14.Type.
@@ -2882,9 +2903,9 @@ type AmaEvent14Type string
 
 // AmaEvent15 defines model for .
 type AmaEvent15 struct {
-	Metadata *EventMetadata           `json:"metadata,omitempty"`
-	Payload  PermissionRequestPayload `json:"payload"`
-	Type     AmaEvent15Type           `json:"type"`
+	Metadata *EventMetadata            `json:"metadata,omitempty"`
+	Payload  PermissionResolvedPayload `json:"payload"`
+	Type     AmaEvent15Type            `json:"type"`
 }
 
 // AmaEvent15Type defines model for AmaEvent.15.Type.
@@ -2892,9 +2913,9 @@ type AmaEvent15Type string
 
 // AmaEvent16 defines model for .
 type AmaEvent16 struct {
-	Metadata *EventMetadata `json:"metadata,omitempty"`
-	Payload  EventError     `json:"payload"`
-	Type     AmaEvent16Type `json:"type"`
+	Metadata *EventMetadata          `json:"metadata,omitempty"`
+	Payload  PermissionDeniedPayload `json:"payload"`
+	Type     AmaEvent16Type          `json:"type"`
 }
 
 // AmaEvent16Type defines model for AmaEvent.16.Type.
@@ -2902,9 +2923,9 @@ type AmaEvent16Type string
 
 // AmaEvent17 defines model for .
 type AmaEvent17 struct {
-	Metadata *EventMetadata  `json:"metadata,omitempty"`
-	Payload  MetadataPayload `json:"payload"`
-	Type     AmaEvent17Type  `json:"type"`
+	Metadata *EventMetadata `json:"metadata,omitempty"`
+	Payload  EventError     `json:"payload"`
+	Type     AmaEvent17Type `json:"type"`
 }
 
 // AmaEvent17Type defines model for AmaEvent.17.Type.
@@ -2912,9 +2933,9 @@ type AmaEvent17Type string
 
 // AmaEvent18 defines model for .
 type AmaEvent18 struct {
-	Metadata *EventMetadata       `json:"metadata,omitempty"`
-	Payload  RuntimeOutputPayload `json:"payload"`
-	Type     AmaEvent18Type       `json:"type"`
+	Metadata *EventMetadata `json:"metadata,omitempty"`
+	Payload  StatusPayload  `json:"payload"`
+	Type     AmaEvent18Type `json:"type"`
 }
 
 // AmaEvent18Type defines model for AmaEvent.18.Type.
@@ -2922,13 +2943,23 @@ type AmaEvent18Type string
 
 // AmaEvent19 defines model for .
 type AmaEvent19 struct {
-	Metadata *EventMetadata  `json:"metadata,omitempty"`
-	Payload  MetadataPayload `json:"payload"`
-	Type     AmaEvent19Type  `json:"type"`
+	Metadata *EventMetadata       `json:"metadata,omitempty"`
+	Payload  RuntimeOutputPayload `json:"payload"`
+	Type     AmaEvent19Type       `json:"type"`
 }
 
 // AmaEvent19Type defines model for AmaEvent.19.Type.
 type AmaEvent19Type string
+
+// AmaEvent20 defines model for .
+type AmaEvent20 struct {
+	Metadata *EventMetadata `json:"metadata,omitempty"`
+	Payload  StatusPayload  `json:"payload"`
+	Type     AmaEvent20Type `json:"type"`
+}
+
+// AmaEvent20Type defines model for AmaEvent.20.Type.
+type AmaEvent20Type string
 
 // AuditRecord defines model for AuditRecord.
 type AuditRecord struct {
@@ -3638,13 +3669,21 @@ type MessageEventPayload struct {
 	Message EventMessage `json:"message"`
 }
 
-// MetadataPayload defines model for MetadataPayload.
-type MetadataPayload struct {
-	Data map[string]interface{} `json:"data"`
-}
-
 // NullableSecretRef defines model for NullableSecretRef.
 type NullableSecretRef = string
+
+// PermissionDeniedPayload defines model for PermissionDeniedPayload.
+type PermissionDeniedPayload struct {
+	Command      *string                 `json:"command,omitempty"`
+	ConnectorId  *string                 `json:"connectorId,omitempty"`
+	Details      *map[string]interface{} `json:"details,omitempty"`
+	Host         *string                 `json:"host,omitempty"`
+	Operation    *string                 `json:"operation,omitempty"`
+	Reason       *string                 `json:"reason,omitempty"`
+	ResourceId   *string                 `json:"resourceId,omitempty"`
+	ResourceType *string                 `json:"resourceType,omitempty"`
+	ToolName     *string                 `json:"toolName,omitempty"`
+}
 
 // PermissionRequestPayload defines model for PermissionRequestPayload.
 type PermissionRequestPayload struct {
@@ -3654,20 +3693,13 @@ type PermissionRequestPayload struct {
 	ToolCall     *EventToolCall          `json:"toolCall,omitempty"`
 }
 
-// PolicyDecisionPayload defines model for PolicyDecisionPayload.
-type PolicyDecisionPayload struct {
+// PermissionResolvedPayload defines model for PermissionResolvedPayload.
+type PermissionResolvedPayload struct {
 	Allowed      bool                    `json:"allowed"`
-	Category     *string                 `json:"category,omitempty"`
-	Command      *string                 `json:"command,omitempty"`
-	ConnectorId  *string                 `json:"connectorId,omitempty"`
-	Decision     *string                 `json:"decision,omitempty"`
 	Details      *map[string]interface{} `json:"details,omitempty"`
-	Host         *string                 `json:"host,omitempty"`
-	Operation    *string                 `json:"operation,omitempty"`
-	ResourceId   *string                 `json:"resourceId,omitempty"`
-	ResourceType *string                 `json:"resourceType,omitempty"`
-	RuleId       *string                 `json:"ruleId,omitempty"`
-	ToolName     *string                 `json:"toolName,omitempty"`
+	PermissionId *string                 `json:"permissionId,omitempty"`
+	Reason       *string                 `json:"reason,omitempty"`
+	ToolCall     *EventToolCall          `json:"toolCall,omitempty"`
 }
 
 // Project defines model for Project.
@@ -4415,6 +4447,11 @@ type SessionUpdateMetadata struct {
 	Annotations *map[string]string `json:"annotations,omitempty"`
 	Labels      *map[string]string `json:"labels,omitempty"`
 	Name        *string            `json:"name,omitempty"`
+}
+
+// StatusPayload defines model for StatusPayload.
+type StatusPayload struct {
+	Data map[string]interface{} `json:"data"`
 }
 
 // TextContentBlock defines model for TextContentBlock.
@@ -5971,6 +6008,32 @@ func (t *AmaEvent) FromAmaEvent19(v AmaEvent19) error {
 
 // MergeAmaEvent19 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent19
 func (t *AmaEvent) MergeAmaEvent19(v AmaEvent19) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsAmaEvent20 returns the union data inside the AmaEvent as a AmaEvent20
+func (t AmaEvent) AsAmaEvent20() (AmaEvent20, error) {
+	var body AmaEvent20
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAmaEvent20 overwrites any union data inside the AmaEvent as the provided AmaEvent20
+func (t *AmaEvent) FromAmaEvent20(v AmaEvent20) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAmaEvent20 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent20
+func (t *AmaEvent) MergeAmaEvent20(v AmaEvent20) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

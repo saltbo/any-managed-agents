@@ -25,7 +25,7 @@ type Bridge struct {
 }
 
 const (
-	eventTypeRuntimeMetadata = "runtime.metadata"
+	eventTypeRuntimeMetadata = "runtime.status"
 	eventTypeRuntimeOutput   = "runtime.output"
 
 	runtimeInventoryTimeout = 30 * time.Second

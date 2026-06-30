@@ -70,11 +70,13 @@ actions:
     remove: true
   - target: $.components.schemas['UsageRecordedPayload']['properties']['details'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['PolicyDecisionPayload']['properties']['details'].additionalProperties.nullable
+  - target: $.components.schemas['PermissionDeniedPayload']['properties']['details'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['PermissionRequestPayload']['properties']['details'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['MetadataPayload']['properties']['data'].additionalProperties.nullable
+  - target: $.components.schemas['PermissionResolvedPayload']['properties']['details'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['StatusPayload']['properties']['data'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['RunnerToolCall']['properties']['arguments'].additionalProperties.nullable
     remove: true

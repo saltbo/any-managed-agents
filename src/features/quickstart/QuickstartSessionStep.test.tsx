@@ -78,7 +78,7 @@ type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
 
 function buildEventRecord(overrides: EventRecordOverrides = {}): EventRecord {
   const {
-    type = overrides.event?.type ?? 'message_end',
+    type = overrides.event?.type ?? 'message.completed',
     payload = overrides.event?.payload ?? {
       message: { role: 'assistant', content: 'Hello from the agent' },
     },
@@ -656,7 +656,7 @@ describe('QuickstartSessionStep — session preview with messages', () => {
           durationMs: null,
           createdAt: now,
           updatedAt: now,
-          eventType: 'tool_execution_end',
+          eventType: 'tool_call.completed',
         },
       ],
     })
@@ -703,7 +703,7 @@ describe('QuickstartSessionStep — debug tab', () => {
 
   it('renders debug events list when runtime has debug events', async () => {
     mockRuntime({
-      debugEvents: [{ id: 'dbg_1', type: 'agent_start', payload: { test: true }, createdAt: now }],
+      debugEvents: [{ id: 'dbg_1', type: 'agent.started', payload: { test: true }, createdAt: now }],
     })
     server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
@@ -782,7 +782,7 @@ describe('QuickstartSessionStep — session preview with mixed transcript', () =
           durationMs: null,
           createdAt: '2026-05-23T00:00:01.000Z',
           updatedAt: '2026-05-23T00:00:01.000Z',
-          eventType: 'tool_execution_end',
+          eventType: 'tool_call.completed',
         },
       ],
     })

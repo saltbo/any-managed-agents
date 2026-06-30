@@ -231,12 +231,12 @@ describe('session-runtime', () => {
     )
     expect(events.map((event) => event.type)).toEqual(
       expect.arrayContaining([
-        'agent_start',
-        'message_end',
-        'tool_execution_start',
-        'tool_execution_end',
-        'usage',
-        'agent_end',
+        'agent.started',
+        'message.completed',
+        'tool_call.started',
+        'tool_call.completed',
+        'usage.recorded',
+        'agent.completed',
       ]),
     )
     expect(JSON.stringify(events)).toContain('Tool result observed: clean')
@@ -301,7 +301,7 @@ describe('session-runtime', () => {
     // The tool-call turn completed and persisted, then the run paused instead
     // of starting the next model turn.
     expect(first).toEqual({ status: 'paused' })
-    expect(JSON.stringify(firstEvents)).toContain('tool_execution_end')
+    expect(JSON.stringify(firstEvents)).toContain('tool_call.completed')
     expect(JSON.stringify(firstEvents)).not.toContain('Tool result observed')
 
     const secondEvents: Record<string, unknown>[] = []
@@ -322,17 +322,17 @@ describe('session-runtime', () => {
     expect(JSON.stringify(secondEvents)).toContain('Tool result observed')
   })
 
-  it('uses latest agent_end messages as canonical persisted context', () => {
+  it('uses latest agent.completed messages as canonical persisted context', () => {
     const messages = runtimeMessagesFromEvents([
       {
         payload: {
-          type: 'message_end',
+          type: 'message.completed',
           message: { role: 'user', content: 'stale fallback', timestamp: 1 },
         },
       },
       {
         payload: {
-          type: 'agent_end',
+          type: 'agent.completed',
           messages: [
             { role: 'user', content: 'canonical user', timestamp: 2 },
             {
@@ -364,13 +364,13 @@ describe('session-runtime', () => {
   it('ignores canonical transcript deltas when rebuilding persisted context', () => {
     const messages = runtimeMessagesFromEvents([
       {
-        type: 'message_update',
+        type: 'message.updated',
         payload: {
           message: { role: 'assistant', content: 'partial assistant text' },
         },
       },
       {
-        type: 'message_end',
+        type: 'message.completed',
         payload: {
           message: { role: 'assistant', content: 'completed assistant text' },
         },
@@ -391,7 +391,7 @@ describe('session-runtime', () => {
       model: '@cf/moonshotai/kimi-k2.6',
       agentSnapshot: { systemPrompt: 'Continue from history.', allowedTools: [] },
       messages: runtimeMessagesFromEvents([
-        { type: 'message_end', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
+        { type: 'message.completed', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
       ]),
       prompt: 'Continue',
       onEvent: async (event) => {
@@ -426,7 +426,7 @@ describe('session-runtime', () => {
         }
       },
       onEvent: async (event) => {
-        if (event.type === 'turn_start') {
+        if (event.type === 'turn.started') {
           active = false
         }
         events.push(event)
@@ -434,7 +434,7 @@ describe('session-runtime', () => {
     })
 
     expect(result).toEqual({ status: 'aborted' })
-    expect(events.map((event) => event.type)).not.toContain('message_end')
+    expect(events.map((event) => event.type)).not.toContain('message.completed')
     expect(JSON.stringify(events)).not.toContain('AMA runtime processed: Alpha durable prompt')
   })
 
@@ -459,8 +459,8 @@ describe('session-runtime', () => {
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'tool_execution_end',
-          isError: true,
+          type: 'tool_call.completed',
+          payload: expect.objectContaining({ isError: true }),
         }),
       ]),
     )

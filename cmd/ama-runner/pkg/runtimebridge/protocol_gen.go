@@ -5,68 +5,71 @@ package runtimebridge
 
 // Defines values for AmaSessionEventType.
 const (
-	EventTypeAgentEnd            AmaSessionEventType = "agent_end"
-	EventTypeAgentStart          AmaSessionEventType = "agent_start"
-	EventTypeMessageEnd          AmaSessionEventType = "message_end"
-	EventTypeMessageStart        AmaSessionEventType = "message_start"
-	EventTypeMessageUpdate       AmaSessionEventType = "message_update"
-	EventTypePermissionRequest   AmaSessionEventType = "permission.request"
-	EventTypePolicyDecision      AmaSessionEventType = "policy.decision"
-	EventTypeRunnerMetadata      AmaSessionEventType = "runner.metadata"
+	EventTypeAgentCompleted      AmaSessionEventType = "agent.completed"
+	EventTypeAgentStarted        AmaSessionEventType = "agent.started"
+	EventTypeMessageCompleted    AmaSessionEventType = "message.completed"
+	EventTypeMessageStarted      AmaSessionEventType = "message.started"
+	EventTypeMessageUpdated      AmaSessionEventType = "message.updated"
+	EventTypePermissionDenied    AmaSessionEventType = "permission.denied"
+	EventTypePermissionRequested AmaSessionEventType = "permission.requested"
+	EventTypePermissionResolved  AmaSessionEventType = "permission.resolved"
+	EventTypeRunnerStatus        AmaSessionEventType = "runner.status"
 	EventTypeRuntimeError        AmaSessionEventType = "runtime.error"
-	EventTypeRuntimeMetadata     AmaSessionEventType = "runtime.metadata"
 	EventTypeRuntimeOutput       AmaSessionEventType = "runtime.output"
-	EventTypeSessionCheckpoint   AmaSessionEventType = "session_checkpoint"
-	EventTypeSessionResume       AmaSessionEventType = "session_resume"
-	EventTypeSessionStop         AmaSessionEventType = "session_stop"
-	EventTypeToolExecutionEnd    AmaSessionEventType = "tool_execution_end"
-	EventTypeToolExecutionStart  AmaSessionEventType = "tool_execution_start"
-	EventTypeToolExecutionUpdate AmaSessionEventType = "tool_execution_update"
-	EventTypeTurnEnd             AmaSessionEventType = "turn_end"
-	EventTypeTurnStart           AmaSessionEventType = "turn_start"
+	EventTypeRuntimeStatus       AmaSessionEventType = "runtime.status"
+	EventTypeSessionCheckpointed AmaSessionEventType = "session.checkpointed"
+	EventTypeSessionResumed      AmaSessionEventType = "session.resumed"
+	EventTypeSessionStopped      AmaSessionEventType = "session.stopped"
+	EventTypeToolCallCompleted   AmaSessionEventType = "tool_call.completed"
+	EventTypeToolCallStarted     AmaSessionEventType = "tool_call.started"
+	EventTypeToolCallUpdated     AmaSessionEventType = "tool_call.updated"
+	EventTypeTurnCompleted       AmaSessionEventType = "turn.completed"
+	EventTypeTurnStarted         AmaSessionEventType = "turn.started"
 	EventTypeUsageRecorded       AmaSessionEventType = "usage.recorded"
 )
 
 // Valid indicates whether the value is a known member of the AmaSessionEventType enum.
 func (e AmaSessionEventType) Valid() bool {
 	switch e {
-	case EventTypeAgentEnd:
+	case EventTypeAgentCompleted:
 		return true
-	case EventTypeAgentStart:
+	case EventTypeAgentStarted:
 		return true
-	case EventTypeMessageEnd:
+	case EventTypeMessageCompleted:
 		return true
-	case EventTypeMessageStart:
+	case EventTypeMessageStarted:
 		return true
-	case EventTypeMessageUpdate:
+	case EventTypeMessageUpdated:
 		return true
-	case EventTypePermissionRequest:
+	case EventTypePermissionDenied:
 		return true
-	case EventTypePolicyDecision:
+	case EventTypePermissionRequested:
 		return true
-	case EventTypeRunnerMetadata:
+	case EventTypePermissionResolved:
+		return true
+	case EventTypeRunnerStatus:
 		return true
 	case EventTypeRuntimeError:
 		return true
-	case EventTypeRuntimeMetadata:
-		return true
 	case EventTypeRuntimeOutput:
 		return true
-	case EventTypeSessionCheckpoint:
+	case EventTypeRuntimeStatus:
 		return true
-	case EventTypeSessionResume:
+	case EventTypeSessionCheckpointed:
 		return true
-	case EventTypeSessionStop:
+	case EventTypeSessionResumed:
 		return true
-	case EventTypeToolExecutionEnd:
+	case EventTypeSessionStopped:
 		return true
-	case EventTypeToolExecutionStart:
+	case EventTypeToolCallCompleted:
 		return true
-	case EventTypeToolExecutionUpdate:
+	case EventTypeToolCallStarted:
 		return true
-	case EventTypeTurnEnd:
+	case EventTypeToolCallUpdated:
 		return true
-	case EventTypeTurnStart:
+	case EventTypeTurnCompleted:
+		return true
+	case EventTypeTurnStarted:
 		return true
 	case EventTypeUsageRecorded:
 		return true

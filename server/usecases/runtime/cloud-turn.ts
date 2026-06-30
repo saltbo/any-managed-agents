@@ -276,7 +276,7 @@ export async function executeCloudSessionTurn(
           auth,
           sessionId: session.id,
           event: {
-            type: 'policy_denied',
+            type: 'permission_denied',
             category: blocked.decision.category,
             ruleId: blocked.decision.rule,
             resourceType: blocked.operation.resourceType,

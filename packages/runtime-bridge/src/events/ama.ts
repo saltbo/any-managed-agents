@@ -27,7 +27,7 @@ export function textMessage(role: 'assistant' | 'user', text: string, id?: strin
 }
 
 export function toolStart(toolCallId: string, toolName: string, args: Record<string, unknown> = {}) {
-  return runtimeEvent('tool_execution_start', { toolCall: { id: toolCallId, name: toolName, input: args } })
+  return runtimeEvent('tool_call.started', { toolCall: { id: toolCallId, name: toolName, input: args } })
 }
 
 export function toolEnd(
@@ -37,7 +37,7 @@ export function toolEnd(
   result: unknown,
   isError = false,
 ) {
-  return runtimeEvent('tool_execution_end', {
+  return runtimeEvent('tool_call.completed', {
     toolCall: { id: toolCallId, name: toolName, input: args },
     result,
     isError,
@@ -55,7 +55,7 @@ export function usageEvent(payload: Record<string, unknown>) {
 }
 
 export function turnEnd() {
-  return runtimeEvent('turn_end')
+  return runtimeEvent('turn.completed')
 }
 
 export function reasoning(content: string) {

@@ -11,10 +11,10 @@ func TestCanonicalEventTypeEnum(t *testing.T) {
 		t.Error("IsCanonicalEventType accepted an unknown type")
 	}
 	for _, emitted := range []string{
-		string(EventTypeToolExecutionStart),
-		string(EventTypeToolExecutionEnd),
+		string(EventTypeToolCallStarted),
+		string(EventTypeToolCallCompleted),
 		string(EventTypeRuntimeError),
-		string(EventTypeRuntimeMetadata),
+		string(EventTypeRuntimeStatus),
 		string(EventTypeRuntimeOutput),
 	} {
 		if !IsCanonicalEventType(emitted) {

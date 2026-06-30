@@ -219,7 +219,7 @@ export function createUsageWriteRepo(db: Db): UsageWriteRepo {
         await recordModelUsage(db, scope, sessionEventId, canonicalEvent.payload)
         return
       }
-      if (canonicalEvent.type === 'tool_execution_end') {
+      if (canonicalEvent.type === 'tool_call.completed') {
         await recordToolUsage(db, scope, sessionEventId, canonicalEvent.payload)
         return
       }

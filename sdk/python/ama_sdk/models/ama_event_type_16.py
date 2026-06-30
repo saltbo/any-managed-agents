@@ -13,8 +13,8 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.event_error import EventError
   from ..models.event_metadata import EventMetadata
+  from ..models.permission_denied_payload import PermissionDeniedPayload
 
 
 
@@ -29,12 +29,12 @@ class AmaEventType16:
     """ 
         Attributes:
             type_ (AmaEventType16Type):
-            payload (EventError):
+            payload (PermissionDeniedPayload):
             metadata (EventMetadata | Unset):
      """
 
     type_: AmaEventType16Type
-    payload: EventError
+    payload: PermissionDeniedPayload
     metadata: EventMetadata | Unset = UNSET
 
 
@@ -42,8 +42,8 @@ class AmaEventType16:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.event_error import EventError
         from ..models.event_metadata import EventMetadata
+        from ..models.permission_denied_payload import PermissionDeniedPayload
         type_ = self.type_.value
 
         payload = self.payload.to_dict()
@@ -68,15 +68,15 @@ class AmaEventType16:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.event_error import EventError
         from ..models.event_metadata import EventMetadata
+        from ..models.permission_denied_payload import PermissionDeniedPayload
         d = dict(src_dict)
         type_ = AmaEventType16Type(d.pop("type"))
 
 
 
 
-        payload = EventError.from_dict(d.pop("payload"))
+        payload = PermissionDeniedPayload.from_dict(d.pop("payload"))
 
 
 

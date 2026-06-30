@@ -78,7 +78,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "agent_start"
+                  "agent.started"
                 ]
               },
               "payload": {
@@ -100,7 +100,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "agent_end"
+                  "agent.completed"
                 ]
               },
               "payload": {
@@ -122,7 +122,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "turn_start"
+                  "turn.started"
                 ]
               },
               "payload": {
@@ -144,7 +144,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "turn_end"
+                  "turn.completed"
                 ]
               },
               "payload": {
@@ -166,7 +166,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "session_stop"
+                  "session.stopped"
                 ]
               },
               "payload": {
@@ -188,7 +188,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "session_checkpoint"
+                  "session.checkpointed"
                 ]
               },
               "payload": {
@@ -210,7 +210,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "session_resume"
+                  "session.resumed"
                 ]
               },
               "payload": {
@@ -232,7 +232,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "message_start"
+                  "message.started"
                 ]
               },
               "payload": {
@@ -254,7 +254,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "message_update"
+                  "message.updated"
                 ]
               },
               "payload": {
@@ -276,7 +276,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "message_end"
+                  "message.completed"
                 ]
               },
               "payload": {
@@ -298,7 +298,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "tool_execution_start"
+                  "tool_call.started"
                 ]
               },
               "payload": {
@@ -320,7 +320,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "tool_execution_update"
+                  "tool_call.updated"
                 ]
               },
               "payload": {
@@ -342,7 +342,7 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "tool_execution_end"
+                  "tool_call.completed"
                 ]
               },
               "payload": {
@@ -386,11 +386,11 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "policy.decision"
+                  "permission.requested"
                 ]
               },
               "payload": {
-                "$ref": "#/components/schemas/PolicyDecisionPayload"
+                "$ref": "#/components/schemas/PermissionRequestPayload"
               },
               "metadata": {
                 "$ref": "#/components/schemas/EventMetadata"
@@ -408,11 +408,33 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "permission.request"
+                  "permission.resolved"
                 ]
               },
               "payload": {
-                "$ref": "#/components/schemas/PermissionRequestPayload"
+                "$ref": "#/components/schemas/PermissionResolvedPayload"
+              },
+              "metadata": {
+                "$ref": "#/components/schemas/EventMetadata"
+              }
+            },
+            "required": [
+              "type",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "permission.denied"
+                ]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/PermissionDeniedPayload"
               },
               "metadata": {
                 "$ref": "#/components/schemas/EventMetadata"
@@ -452,11 +474,11 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "runtime.metadata"
+                  "runtime.status"
                 ]
               },
               "payload": {
-                "$ref": "#/components/schemas/MetadataPayload"
+                "$ref": "#/components/schemas/StatusPayload"
               },
               "metadata": {
                 "$ref": "#/components/schemas/EventMetadata"
@@ -496,11 +518,11 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "runner.metadata"
+                  "runner.status"
                 ]
               },
               "payload": {
-                "$ref": "#/components/schemas/MetadataPayload"
+                "$ref": "#/components/schemas/StatusPayload"
               },
               "metadata": {
                 "$ref": "#/components/schemas/EventMetadata"
@@ -562,7 +584,8 @@
               "user",
               "assistant",
               "system",
-              "tool"
+              "tool",
+              "toolResult"
             ]
           },
           "content": {
@@ -958,16 +981,58 @@
         },
         "additionalProperties": false
       },
-      "PolicyDecisionPayload": {
+      "PermissionRequestPayload": {
         "type": "object",
         "properties": {
+          "permissionId": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/EventToolCall"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PermissionResolvedPayload": {
+        "type": "object",
+        "properties": {
+          "permissionId": {
+            "type": "string"
+          },
           "allowed": {
             "type": "boolean"
           },
-          "category": {
+          "reason": {
             "type": "string"
           },
-          "ruleId": {
+          "toolCall": {
+            "$ref": "#/components/schemas/EventToolCall"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "required": [
+          "allowed"
+        ],
+        "additionalProperties": false
+      },
+      "PermissionDeniedPayload": {
+        "type": "object",
+        "properties": {
+          "reason": {
             "type": "string"
           },
           "resourceType": {
@@ -993,33 +1058,6 @@
           "toolName": {
             "type": "string"
           },
-          "decision": {
-            "type": "string"
-          },
-          "details": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          }
-        },
-        "required": [
-          "allowed"
-        ],
-        "additionalProperties": false
-      },
-      "PermissionRequestPayload": {
-        "type": "object",
-        "properties": {
-          "permissionId": {
-            "type": "string"
-          },
-          "command": {
-            "type": "string"
-          },
-          "toolCall": {
-            "$ref": "#/components/schemas/EventToolCall"
-          },
           "details": {
             "type": "object",
             "additionalProperties": {
@@ -1029,7 +1067,7 @@
         },
         "additionalProperties": false
       },
-      "MetadataPayload": {
+      "StatusPayload": {
         "type": "object",
         "properties": {
           "data": {
@@ -12535,28 +12573,29 @@
             "schema": {
               "type": "string",
               "enum": [
-                "agent_start",
-                "agent_end",
-                "turn_start",
-                "turn_end",
-                "session_stop",
-                "session_checkpoint",
-                "session_resume",
-                "message_start",
-                "message_update",
-                "message_end",
-                "tool_execution_start",
-                "tool_execution_update",
-                "tool_execution_end",
+                "agent.started",
+                "agent.completed",
+                "turn.started",
+                "turn.completed",
+                "session.stopped",
+                "session.checkpointed",
+                "session.resumed",
+                "message.started",
+                "message.updated",
+                "message.completed",
+                "tool_call.started",
+                "tool_call.updated",
+                "tool_call.completed",
                 "usage.recorded",
-                "policy.decision",
-                "permission.request",
+                "permission.requested",
+                "permission.resolved",
+                "permission.denied",
                 "runtime.error",
-                "runtime.metadata",
+                "runtime.status",
                 "runtime.output",
-                "runner.metadata"
+                "runner.status"
               ],
-              "example": "message_end"
+              "example": "message.completed"
             },
             "required": false,
             "name": "type",

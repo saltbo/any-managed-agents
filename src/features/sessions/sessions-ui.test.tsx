@@ -60,7 +60,7 @@ type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
 
 function buildPersistedEvent(overrides: EventRecordOverrides = {}): EventRecord {
   const {
-    type = overrides.event?.type ?? 'message_end',
+    type = overrides.event?.type ?? 'message.completed',
     payload = overrides.event?.payload ?? {
       message: { role: 'assistant', content: 'Runtime failed to start' },
     },
@@ -413,7 +413,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           durationMs: 12,
           createdAt: '2026-05-23T00:00:01.000Z',
           updatedAt: '2026-05-23T00:00:01.000Z',
-          eventType: 'tool_execution_end',
+          eventType: 'tool_call.completed',
         },
       ],
       debugEvents: [
@@ -517,7 +517,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy events' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"message_end"')))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"message.completed"')))
 
     fireEvent.click(screen.getByRole('button', { name: 'Download events' }))
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
@@ -537,8 +537,8 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           debugEvents: [
             {
               id: 'debug_message',
-              type: 'message_end',
-              payload: { type: 'message_end', marker: 'payload_message' },
+              type: 'message.completed',
+              payload: { type: 'message.completed', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
             },
           ],
@@ -558,7 +558,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     expect(setMessage).toHaveBeenCalledWith('')
 
     expect(eventFilter('runtime.error')).toBe('runtime.error')
-    expect(eventFilter('message_end')).toBe('message_end')
+    expect(eventFilter('message.completed')).toBe('message.completed')
     expect(eventFilter('')).toBe('all')
     expect(transcriptFilter('user')).toBe('user')
     expect(transcriptFilter('agent')).toBe('agent')
@@ -631,7 +631,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
               durationMs: 5,
               createdAt: '2026-05-23T00:00:04.000Z',
               updatedAt: '2026-05-23T00:00:04.000Z',
-              eventType: 'tool_execution_end',
+              eventType: 'tool_call.completed',
             },
           ],
           debugEvents: [],
@@ -704,8 +704,8 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           debugEvents: [
             {
               id: 'debug_message',
-              type: 'message_end',
-              payload: { type: 'message_end', marker: 'payload_message' },
+              type: 'message.completed',
+              payload: { type: 'message.completed', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
             },
             {

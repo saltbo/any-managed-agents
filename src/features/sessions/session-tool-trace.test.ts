@@ -14,7 +14,7 @@ type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
 function buildEvent(overrides: EventRecordOverrides): EventRecord {
   sequence += 1
   const {
-    type = overrides.event?.type ?? 'tool_execution_start',
+    type = overrides.event?.type ?? 'tool_call.started',
     payload = overrides.event?.payload ?? {},
     metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
@@ -33,7 +33,7 @@ function buildEvent(overrides: EventRecordOverrides): EventRecord {
 
 function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
   return buildEvent({
-    type: 'tool_execution_start',
+    type: 'tool_call.started',
     payload: { toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } } },
     ...overrides,
   })
@@ -41,7 +41,7 @@ function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
 
 function toolEnd(toolCallId: string, overrides: EventRecordOverrides = {}) {
   return buildEvent({
-    type: 'tool_execution_end',
+    type: 'tool_call.completed',
     payload: {
       toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } },
       result: { content: [{ type: 'text', text: 'clean tree' }], details: {} },
@@ -146,8 +146,8 @@ describe('buildSessionToolTrace', () => {
     const trace = buildSessionToolTrace([
       toolStart('call_1'),
       buildEvent({
-        type: 'policy.decision',
-        payload: { allowed: false, category: 'sandbox_command', command: 'git status' },
+        type: 'permission.denied',
+        payload: { reason: 'sandbox_command_denied', command: 'git status' },
       }),
       toolEnd('call_1', {
         payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
@@ -161,8 +161,8 @@ describe('buildSessionToolTrace', () => {
     const trace = buildSessionToolTrace([
       toolStart('call_1'),
       buildEvent({
-        type: 'policy.decision',
-        payload: { allowed: false, category: 'approval', command: 'git status' },
+        type: 'permission.requested',
+        payload: { permissionId: 'approval_1', command: 'git status' },
       }),
       toolEnd('call_1', {
         payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
@@ -172,12 +172,29 @@ describe('buildSessionToolTrace', () => {
     expect(trace[0]?.approval).toBe('approval required')
   })
 
+  it('uses permission resolution as the final approval state', () => {
+    const trace = buildSessionToolTrace([
+      toolStart('call_1'),
+      buildEvent({
+        type: 'permission.requested',
+        payload: { permissionId: 'approval_1', command: 'git status' },
+      }),
+      buildEvent({
+        type: 'permission.resolved',
+        payload: { permissionId: 'approval_1', allowed: true, command: 'git status' },
+      }),
+      toolEnd('call_1'),
+    ])
+
+    expect(trace[0]?.approval).toBe('approved')
+  })
+
   it('ignores denials from other turns and denials for other commands', () => {
     const trace = buildSessionToolTrace([
       toolStart('call_1'),
       buildEvent({
-        type: 'policy.decision',
-        payload: { allowed: false, category: 'sandbox_command', command: 'rm -rf /' },
+        type: 'permission.denied',
+        payload: { reason: 'sandbox_command_denied', command: 'rm -rf /' },
       }),
       toolEnd('call_1'),
     ])
@@ -187,7 +204,7 @@ describe('buildSessionToolTrace', () => {
 
   it('keeps redacted values intact and ignores non-tool events', () => {
     const trace = buildSessionToolTrace([
-      buildEvent({ type: 'message_end', payload: { message: { role: 'assistant', content: 'hi' } } }),
+      buildEvent({ type: 'message.completed', payload: { message: { role: 'assistant', content: 'hi' } } }),
       toolStart('call_1', {
         payload: { toolCall: { id: 'call_1', name: 'bash', input: { command: 'deploy', apiKey: '[REDACTED]' } } },
       }),
@@ -249,9 +266,9 @@ describe('buildSessionToolTrace — approval edge cases', () => {
     const end = toolEnd('call_in_range')
     // Build a denial with sequence after the tool end event
     const afterEndDenial = buildEvent({
-      type: 'policy.decision',
+      type: 'permission.denied',
       sequence: end.sequence + 10,
-      payload: { allowed: false, category: 'sandbox_command', command: 'git status' },
+      payload: { reason: 'sandbox_command_denied', command: 'git status' },
     })
     const trace = buildSessionToolTrace([start, end, afterEndDenial])
 
@@ -263,8 +280,8 @@ describe('buildSessionToolTrace — approval edge cases', () => {
     const trace = buildSessionToolTrace([
       toolStart('call_1'),
       buildEvent({
-        type: 'policy.decision',
-        payload: { allowed: false, category: 'sandbox_command' }, // no command field
+        type: 'permission.denied',
+        payload: { reason: 'sandbox_command_denied' }, // no command field
       }),
       toolEnd('call_1', {
         payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
@@ -277,14 +294,14 @@ describe('buildSessionToolTrace — approval edge cases', () => {
   it('pairs tool with start having no command against denial with no command', () => {
     // Tool input has no command field, denial has no command field — both match
     const startNoCommand = buildEvent({
-      type: 'tool_execution_start',
+      type: 'tool_call.started',
       payload: { toolCallId: 'call_nocmd', toolName: 'bash', args: { path: '/tmp' } },
     })
     const trace = buildSessionToolTrace([
       startNoCommand,
       buildEvent({
-        type: 'policy.decision',
-        payload: { allowed: false, category: 'sandbox_command' },
+        type: 'permission.denied',
+        payload: { reason: 'sandbox_command_denied' },
       }),
       toolEnd('call_nocmd', {
         payload: { toolCallId: 'call_nocmd', toolName: 'bash', result: {}, isError: true },

@@ -15,13 +15,13 @@ function raw(id: string, sequence: number, type: string, payload: Record<string,
 describe('stepRelayEvent', () => {
   it('preserves runner event identity and payload without adding transport-only threading fields', () => {
     const events = [
-      raw('ts', 1, 'turn_start'),
-      raw('ms', 2, 'message_start', { message: { role: 'assistant', content: [] } }),
-      raw('mu', 3, 'message_update', { message: { id: 'msg_1', role: 'assistant', content: [] } }),
-      raw('me', 4, 'message_end', { message: { id: 'msg_1', role: 'assistant', content: [] } }),
-      raw('t1s', 5, 'tool_execution_start', { toolCall: { id: 'call-1', name: 'bash', input: {} } }),
-      raw('t1e', 6, 'tool_execution_end', { toolCall: { id: 'call-1', name: 'bash', input: {} } }),
-      raw('te', 7, 'turn_end'),
+      raw('ts', 1, 'turn.started'),
+      raw('ms', 2, 'message.started', { message: { role: 'assistant', content: [] } }),
+      raw('mu', 3, 'message.updated', { message: { id: 'msg_1', role: 'assistant', content: [] } }),
+      raw('me', 4, 'message.completed', { message: { id: 'msg_1', role: 'assistant', content: [] } }),
+      raw('t1s', 5, 'tool_call.started', { toolCall: { id: 'call-1', name: 'bash', input: {} } }),
+      raw('t1e', 6, 'tool_call.completed', { toolCall: { id: 'call-1', name: 'bash', input: {} } }),
+      raw('te', 7, 'turn.completed'),
     ]
     const rows = events.map((event) => serializeRow(stepRelayEvent(event, scope)))
     const byId = new Map(rows.map((row) => [row.id, row]))
@@ -32,7 +32,7 @@ describe('stepRelayEvent', () => {
   })
 
   it("carries the runner's own id + sequence straight onto the fanned row", () => {
-    const row = serializeRow(stepRelayEvent(raw('evt-9', 9, 'message_start'), scope))
+    const row = serializeRow(stepRelayEvent(raw('evt-9', 9, 'message.started'), scope))
     expect(row.id).toBe('evt-9')
     expect(row.sequence).toBe(9)
   })

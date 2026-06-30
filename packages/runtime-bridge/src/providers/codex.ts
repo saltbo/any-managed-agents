@@ -89,12 +89,12 @@ function toolResult(item: Record<string, unknown>) {
 function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
   switch (event.type) {
     case 'thread.started':
-      yield runtimeEvent('runtime.metadata', {
+      yield runtimeEvent('runtime.status', {
         data: { stage: 'thread_started', status: 'running', threadId: event.thread_id },
       })
       return
     case 'turn.started':
-      yield runtimeEvent('turn_start')
+      yield runtimeEvent('turn.started')
       return
     case 'item.started': {
       const item = objectValue(event.item)
@@ -105,7 +105,7 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
     case 'item.completed': {
       const item = objectValue(event.item)
       if (item.type === 'agent_message' && typeof item.text === 'string' && item.text) {
-        yield runtimeEvent('message_end', {
+        yield runtimeEvent('message.completed', {
           message: textMessage('assistant', item.text, typeof item.id === 'string' ? item.id : undefined),
         })
         return
@@ -133,7 +133,7 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
       yield runtimeError(String(event.message ?? JSON.stringify(event)), 'codex_error', event)
       return
     default:
-      yield runtimeEvent('runtime.metadata', { data: { unmappedEvent: event } })
+      yield runtimeEvent('runtime.status', { data: { unmappedEvent: event } })
   }
 }
 

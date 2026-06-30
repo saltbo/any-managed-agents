@@ -1,7 +1,7 @@
 from enum import Enum
 
 class AmaEventType1Type(str, Enum):
-    AGENT_END = "agent_end"
+    AGENT_COMPLETED = "agent.completed"
 
     def __str__(self) -> str:
         return str(self.value)

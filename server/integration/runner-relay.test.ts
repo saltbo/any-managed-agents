@@ -228,7 +228,7 @@ describe('[CF] per-runner relay end-to-end', () => {
           sequence: 1,
           createdAt: '2026-06-20T00:00:00.000Z',
           event: {
-            type: 'message_end',
+            type: 'message.completed',
             payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
             metadata: {},
           },
@@ -240,10 +240,10 @@ describe('[CF] per-runner relay end-to-end', () => {
     const live = await browser.waitForFrame(
       (f) =>
         f.type === 'event' &&
-        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message_end',
-      'event:message_end',
+        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message.completed',
+      'event:message.completed',
     )
-    expect((live.record as { event: { type: string } }).event.type).toBe('message_end')
+    expect((live.record as { event: { type: string } }).event.type).toBe('message.completed')
 
     runnerCh.ws.close()
     browser.ws.close()
@@ -288,7 +288,7 @@ describe('[CF] per-runner relay end-to-end', () => {
             sequence: 1,
             createdAt: '2026-06-20T00:00:00.000Z',
             event: {
-              type: 'message_end',
+              type: 'message.completed',
               payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'history from runner' }] } },
               metadata: {},
             },
@@ -300,7 +300,7 @@ describe('[CF] per-runner relay end-to-end', () => {
     const backfill = await browser.waitForFrame(
       (f) =>
         f.type === 'backfill' &&
-        (f.events as Array<{ event?: { type?: string } }>).some((record) => record.event?.type === 'message_end'),
+        (f.events as Array<{ event?: { type?: string } }>).some((record) => record.event?.type === 'message.completed'),
       'browser backfill from runner',
     )
     expect((backfill.events as Array<{ id: string }>)[0].id).toBe('event_history')
@@ -387,7 +387,7 @@ describe('[CF] per-runner relay end-to-end', () => {
           sequence: 1,
           createdAt: '2026-06-20T00:00:00.000Z',
           event: {
-            type: 'message_end',
+            type: 'message.completed',
             payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'reconnect works' }] } },
             metadata: {},
           },
@@ -398,10 +398,10 @@ describe('[CF] per-runner relay end-to-end', () => {
     const live = await browser.waitForFrame(
       (f) =>
         f.type === 'event' &&
-        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message_end',
-      'event:message_end after reconnect',
+        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message.completed',
+      'event:message.completed after reconnect',
     )
-    expect((live.record as { event: { type: string } }).event.type).toBe('message_end')
+    expect((live.record as { event: { type: string } }).event.type).toBe('message.completed')
 
     second.ws.close()
     browser.ws.close()

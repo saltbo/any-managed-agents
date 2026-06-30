@@ -1067,7 +1067,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        event: { type: 'message_end', payload: { type: 'message_end' } },
+        event: { type: 'message.completed', payload: { type: 'message.completed' } },
         createdAt: now,
       },
     ]
@@ -1118,7 +1118,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        event: { type: 'message_end', payload: { type: 'message_end' } },
+        event: { type: 'message.completed', payload: { type: 'message.completed' } },
         createdAt: now,
       },
     ]
@@ -1169,7 +1169,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        event: { type: 'message_end', payload: { type: 'message_end' } },
+        event: { type: 'message.completed', payload: { type: 'message.completed' } },
         createdAt: now,
       },
     ]
@@ -1177,8 +1177,8 @@ describe('SessionRuntimePanel — connection and state badges', () => {
       debugEvents: [
         {
           id: 'shared_event_1',
-          type: 'message_end',
-          payload: { type: 'message_end' },
+          type: 'message.completed',
+          payload: { type: 'message.completed' },
           createdAt: now,
         },
       ],

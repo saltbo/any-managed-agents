@@ -1,7 +1,7 @@
 from enum import Enum
 
 class AmaEventType16Type(str, Enum):
-    RUNTIME_ERROR = "runtime.error"
+    PERMISSION_DENIED = "permission.denied"
 
     def __str__(self) -> str:
         return str(self.value)

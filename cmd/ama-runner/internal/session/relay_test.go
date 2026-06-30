@@ -91,7 +91,7 @@ func (ch *fakeChannel) Close(int, string) error {
 func TestRelayEventDropsWhenNotConnected(t *testing.T) {
 	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
 	// conn is nil; relayEvent must not panic and must return without writing
-	hub.RelayEvent(context.Background(), "session_1", ama.JSON{"type": "message_end", "payload": ama.JSON{"text": "hi"}}, nil)
+	hub.RelayEvent(context.Background(), "session_1", ama.JSON{"type": "message.completed", "payload": ama.JSON{"text": "hi"}}, nil)
 	// No assertions needed beyond "did not panic"
 }
 
@@ -100,7 +100,7 @@ func TestRelayEventWritesSessionTaggedFrame(t *testing.T) {
 	hub := NewRelay(&fakeOpener{channel: ch}, "runner_1", "process-unsafe", t.TempDir())
 	hub.setConn(ch)
 
-	hub.RelayEvent(context.Background(), "session_42", ama.JSON{"type": "message_end", "payload": ama.JSON{"text": "ok"}}, &RelayStamp{
+	hub.RelayEvent(context.Background(), "session_42", ama.JSON{"type": "message.completed", "payload": ama.JSON{"text": "ok"}}, &RelayStamp{
 		Sequence:  7,
 		ID:        "evt-7",
 		CreatedAt: "2026-01-01T00:00:07Z",
@@ -132,8 +132,8 @@ func TestRelayEventWritesSessionTaggedFrame(t *testing.T) {
 	if event == nil {
 		t.Fatal("expected record event field in frame")
 	}
-	if event["type"] != "message_end" {
-		t.Fatalf("expected event type message_end, got %v", event["type"])
+	if event["type"] != "message.completed" {
+		t.Fatalf("expected event type message.completed, got %v", event["type"])
 	}
 }
 
@@ -263,7 +263,7 @@ func TestRelayHandlesBackfillForCompletedSession(t *testing.T) {
 	}
 	logPath := EventLogPath(sessionDir)
 	events := []Event{
-		{ID: "evt_1", Sequence: 1, Event: ama.JSON{"type": "message_end", "payload": ama.JSON{"text": "hi"}}, CreatedAt: "2026-01-01T00:00:01Z"},
+		{ID: "evt_1", Sequence: 1, Event: ama.JSON{"type": "message.completed", "payload": ama.JSON{"text": "hi"}}, CreatedAt: "2026-01-01T00:00:01Z"},
 		{ID: "evt_2", Sequence: 2, Event: ama.JSON{"type": "usage", "payload": ama.JSON{"tokens": 42}}, CreatedAt: "2026-01-01T00:00:02Z"},
 	}
 	f, err := os.Create(logPath)
@@ -393,7 +393,7 @@ func TestRelayEventLogsWhenWriteFails(t *testing.T) {
 	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
 	hub.setConn(ch)
 	// Must not panic.
-	hub.RelayEvent(context.Background(), "session_1", ama.JSON{"type": "message_end", "payload": ama.JSON{}}, nil)
+	hub.RelayEvent(context.Background(), "session_1", ama.JSON{"type": "message.completed", "payload": ama.JSON{}}, nil)
 }
 
 // errWriteChannel is a Channel whose WriteJSON always errors.

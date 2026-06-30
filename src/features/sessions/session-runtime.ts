@@ -139,17 +139,17 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
     runtimeEvents
       .map(({ stored, payload }) => {
         const type = sessionEventType(stored, payload)
-        if (type === 'message_start') {
+        if (type === 'message.started') {
           return messageFromStoredSessionEvent(stored, payload, 'streaming')
         }
-        if (type === 'message_update') {
+        if (type === 'message.updated') {
           const message = objectValue(payload.message)
           if (!stringField(message, 'id') && !scalarField(message, 'timestamp') && !scalarField(payload, 'timestamp')) {
             return null
           }
           return messageFromStoredSessionEvent(stored, payload, 'streaming')
         }
-        if (type === 'message_end') {
+        if (type === 'message.completed') {
           return messageFromStoredSessionEvent(stored, payload, 'complete')
         }
         if (type === 'runtime.error') {
@@ -178,7 +178,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
     .filter((key): key is string => Boolean(key))
   const hasTerminalEvent = runtimeEvents.some(({ stored, payload }) => {
     const type = sessionEventType(stored, payload)
-    return type === 'agent_end' || type === 'turn_end'
+    return type === 'agent.completed' || type === 'turn.completed'
   })
   const hasErrorEvent = runtimeEvents.some(({ stored }) => {
     return stored.event.type === 'runtime.error'
@@ -332,7 +332,7 @@ function toolFromSessionEvent(
     callId,
     name:
       stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? stringField(event, 'toolName') ?? 'tool',
-    status: eventType === 'tool_execution_end' ? (failed ? 'error' : 'success') : 'running',
+    status: eventType === 'tool_call.completed' ? (failed ? 'error' : 'success') : 'running',
     input,
     output: readableToolValue(output),
     error: failed ? readableContent(toolCall.error ?? event.error) : null,
@@ -380,7 +380,7 @@ function normalizeMessageContent(value: string) {
 function upsertTool(tools: SessionRuntimeToolTrace[], tool: SessionRuntimeToolTrace) {
   const runningIndex = findLastToolIndex(tools, (item) => item.callId === tool.callId && item.status === 'running')
   const index =
-    tool.eventType === 'tool_execution_start'
+    tool.eventType === 'tool_call.started'
       ? runningIndex
       : runningIndex !== -1
         ? runningIndex
@@ -402,7 +402,7 @@ function upsertTool(tools: SessionRuntimeToolTrace[], tool: SessionRuntimeToolTr
     durationMs:
       tool.durationMs ??
       existing.durationMs ??
-      (tool.eventType === 'tool_execution_end' ? elapsedMs(existing.createdAt, tool.updatedAt) : null),
+      (tool.eventType === 'tool_call.completed' ? elapsedMs(existing.createdAt, tool.updatedAt) : null),
     createdAt: existing.createdAt,
   }
   return next
@@ -442,19 +442,19 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
     }
     return `${eventType}:${turnKey}:${toolCallId ?? ''}:${stableStringify(toolCall)}`
   }
-  if (eventType === 'message_update') {
+  if (eventType === 'message.updated') {
     if (!timestamp) {
       return null
     }
     return `${eventType}:${timestamp ?? ''}:${stableStringify(message.content ?? event.delta)}`
   }
   if (
-    eventType === 'message_start' ||
-    eventType === 'message_end' ||
-    eventType === 'agent_start' ||
-    eventType === 'agent_end' ||
-    eventType === 'turn_start' ||
-    eventType === 'turn_end'
+    eventType === 'message.started' ||
+    eventType === 'message.completed' ||
+    eventType === 'agent.started' ||
+    eventType === 'agent.completed' ||
+    eventType === 'turn.started' ||
+    eventType === 'turn.completed'
   ) {
     if (!timestamp) {
       return null
@@ -465,13 +465,11 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
 }
 
 function isToolEvent(eventType: string) {
-  return (
-    eventType === 'tool_execution_start' || eventType === 'tool_execution_update' || eventType === 'tool_execution_end'
-  )
+  return eventType === 'tool_call.started' || eventType === 'tool_call.updated' || eventType === 'tool_call.completed'
 }
 
 function isTranscriptEvent(eventType: string) {
-  return eventType === 'message_start' || eventType === 'message_update' || eventType === 'message_end'
+  return eventType === 'message.started' || eventType === 'message.updated' || eventType === 'message.completed'
 }
 
 function mergeEventKeys(left: string[], right: string[]) {

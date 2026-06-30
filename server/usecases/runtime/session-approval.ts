@@ -86,18 +86,19 @@ export async function decideSessionApproval(
     auth,
     sessionId: session.id,
     event: {
-      type: 'policy.decision',
+      type: 'permission.resolved',
+      permissionId: pending.id,
       allowed: approved,
-      category: 'approval',
-      ruleId: 'toolPolicy.requireApprovalTools',
-      resourceType: 'tool',
-      resourceId: pending.toolName,
-      operation: 'tool_approval_decision',
-      decision: {
+      reason: body.reason,
+      toolCall: { id: pending.toolCallId, name: pending.toolName, input: pending.input },
+      details: {
         approvalId: pending.id,
         toolCallId: pending.toolCallId,
+        resourceType: 'tool',
+        resourceId: pending.toolName,
+        operation: 'tool_approval_decision',
+        ruleId: 'toolPolicy.requireApprovalTools',
         state: approved ? 'approved' : 'denied',
-        ...(body.reason ? { reason: body.reason } : {}),
         ...(body.result ? { customResult: true } : {}),
       },
     },
@@ -183,7 +184,7 @@ export async function decideSessionApproval(
     auth,
     sessionId: session.id,
     event: {
-      type: 'tool_execution_end',
+      type: 'tool_call.completed',
       toolCallId: pending.toolCallId,
       toolName: pending.toolName,
       result: { content: [{ type: 'text', text: resultText }], details: resultOutput },
@@ -196,7 +197,7 @@ export async function decideSessionApproval(
     auth,
     sessionId: session.id,
     event: {
-      type: 'message_end',
+      type: 'message.completed',
       message: {
         role: 'toolResult',
         toolCallId: pending.toolCallId,

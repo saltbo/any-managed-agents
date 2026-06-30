@@ -259,7 +259,7 @@ describe('[CF] generated SDK contract', () => {
     expect(['accepted', 'delivered'].includes(String(command.state))).toBe(true)
     expect(JSON.stringify(command).includes('://')).toBe(false)
 
-    // The command result is persisted as canonical session events, including session_stop.
+    // The command result is persisted as canonical session events, including session.stopped.
     const events = await listEvents(ama, sessionId)
     expect(JSON.stringify(events.data).includes(`external product follow-up ${runId}`)).toBe(true)
     for (const record of events.data) {
@@ -267,7 +267,7 @@ describe('[CF] generated SDK contract', () => {
         true,
       )
     }
-    expect(events.data.some((record) => record.event.type === 'session_stop')).toBe(true)
+    expect(events.data.some((record) => record.event.type === 'session.stopped')).toBe(true)
     expect(obj(await readSession(ama, sessionId)).status).toMatchObject({ phase: 'stopped' })
 
     // The SDK inventory only targets AMA control-plane endpoints; nothing leaks a local endpoint.

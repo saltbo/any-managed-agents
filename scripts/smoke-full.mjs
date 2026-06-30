@@ -503,9 +503,9 @@ async function main() {
     await socket.waitFor(
       (frame) =>
         frame.type === 'event' &&
-        frame.record?.event?.type === 'runner.metadata' &&
+        frame.record?.event?.type === 'runner.status' &&
         frame.record.event.payload?.data?.stage === 'session_started',
-      'runner.metadata/session_started',
+      'runner.status/session_started',
     )
     await socket.waitFor((frame) => frame.type === 'event' && frameContains(frame, DONE_MARKER), DONE_MARKER)
 

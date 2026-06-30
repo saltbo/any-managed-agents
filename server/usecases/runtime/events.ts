@@ -4,7 +4,12 @@
 
 import { now } from '@server/domain/runtime/util'
 import type { SessionRow } from '@shared/runtime-rows'
-import { type AmaEvent, amaEventFromRuntimeEvent } from '@shared/session-events'
+import {
+  type AmaEvent,
+  amaEventFromRuntimeEvent,
+  isAmaSessionEventType,
+  normalizeAmaEvent,
+} from '@shared/session-events'
 import type { AuditPort, AuthScope, EventStore, SessionOrchestrationStore } from '../ports'
 import { runtimeMessagesFromEvents } from './engine/transcript'
 
@@ -22,6 +27,13 @@ export async function appendRuntimeEvent(
   deps: { sessionEventStore: EventStore },
   values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
 ) {
+  if (typeof values.event.type === 'string' && isAmaSessionEventType(values.event.type) && 'payload' in values.event) {
+    return appendAmaEvent(deps, {
+      auth: values.auth,
+      sessionId: values.sessionId,
+      event: normalizeAmaEvent(values.event as AmaEvent),
+    })
+  }
   return appendAmaEvent(deps, {
     auth: values.auth,
     sessionId: values.sessionId,
@@ -37,7 +49,7 @@ export async function appendUserPromptEvent(
     auth: values.auth,
     sessionId: values.sessionId,
     event: {
-      type: 'message_end',
+      type: 'message.completed',
       payload: {
         message: {
           role: 'user',

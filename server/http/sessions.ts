@@ -227,7 +227,7 @@ const MessageContentBlockSchema = z
 const MessageSchema = z
   .object({
     id: z.string().optional(),
-    role: z.enum(['user', 'assistant', 'system', 'tool']),
+    role: z.enum(['user', 'assistant', 'system', 'tool', 'toolResult']),
     content: z.array(MessageContentBlockSchema),
     timestamp: z.number().optional(),
     stopReason: z.string().optional(),
@@ -299,11 +299,9 @@ const UsageRecordedPayloadSchema = z
   })
   .strict()
   .openapi('UsageRecordedPayload')
-const PolicyDecisionPayloadSchema = z
+const PermissionDeniedPayloadSchema = z
   .object({
-    allowed: z.boolean(),
-    category: z.string().optional(),
-    ruleId: z.string().optional(),
+    reason: z.string().optional(),
     resourceType: z.string().optional(),
     resourceId: z.string().optional(),
     operation: z.string().optional(),
@@ -311,11 +309,10 @@ const PolicyDecisionPayloadSchema = z
     host: z.string().nullable().optional(),
     connectorId: z.string().optional(),
     toolName: z.string().optional(),
-    decision: z.string().optional(),
     details: JsonObjectSchema.optional(),
   })
   .strict()
-  .openapi('PolicyDecisionPayload')
+  .openapi('PermissionDeniedPayload')
 const PermissionRequestPayloadSchema = z
   .object({
     permissionId: z.string().optional(),
@@ -325,11 +322,21 @@ const PermissionRequestPayloadSchema = z
   })
   .strict()
   .openapi('PermissionRequestPayload')
+const PermissionResolvedPayloadSchema = z
+  .object({
+    permissionId: z.string().optional(),
+    allowed: z.boolean(),
+    reason: z.string().optional(),
+    toolCall: ToolCallSchema.optional(),
+    details: JsonObjectSchema.optional(),
+  })
+  .strict()
+  .openapi('PermissionResolvedPayload')
 const RuntimeOutputPayloadSchema = z
   .object({ stream: z.enum(['stdout', 'stderr', 'runtime', 'reasoning', 'bridge']), content: z.unknown() })
   .strict()
   .openapi('RuntimeOutputPayload')
-const MetadataPayloadSchema = z.object({ data: JsonObjectSchema }).strict().openapi('MetadataPayload')
+const StatusPayloadSchema = z.object({ data: JsonObjectSchema }).strict().openapi('StatusPayload')
 
 function eventSchema<TType extends (typeof AMA_SESSION_EVENT_TYPES)[number]>(type: TType, payload: z.ZodTypeAny) {
   return z.object({ type: z.literal(type), payload, metadata: EventMetadataSchema.optional() }).strict()
@@ -337,26 +344,27 @@ function eventSchema<TType extends (typeof AMA_SESSION_EVENT_TYPES)[number]>(typ
 
 const AmaEventSchema = z
   .discriminatedUnion('type', [
-    eventSchema('agent_start', LifecyclePayloadSchema),
-    eventSchema('agent_end', LifecyclePayloadSchema),
-    eventSchema('turn_start', TurnPayloadSchema),
-    eventSchema('turn_end', TurnPayloadSchema),
-    eventSchema('session_stop', SessionStopPayloadSchema),
-    eventSchema('session_checkpoint', SessionCheckpointPayloadSchema),
-    eventSchema('session_resume', SessionResumePayloadSchema),
-    eventSchema('message_start', MessageEventPayloadSchema),
-    eventSchema('message_update', MessageEventPayloadSchema),
-    eventSchema('message_end', MessageEventPayloadSchema),
-    eventSchema('tool_execution_start', ToolStartedPayloadSchema),
-    eventSchema('tool_execution_update', ToolUpdatedPayloadSchema),
-    eventSchema('tool_execution_end', ToolCompletedPayloadSchema),
+    eventSchema('agent.started', LifecyclePayloadSchema),
+    eventSchema('agent.completed', LifecyclePayloadSchema),
+    eventSchema('turn.started', TurnPayloadSchema),
+    eventSchema('turn.completed', TurnPayloadSchema),
+    eventSchema('session.stopped', SessionStopPayloadSchema),
+    eventSchema('session.checkpointed', SessionCheckpointPayloadSchema),
+    eventSchema('session.resumed', SessionResumePayloadSchema),
+    eventSchema('message.started', MessageEventPayloadSchema),
+    eventSchema('message.updated', MessageEventPayloadSchema),
+    eventSchema('message.completed', MessageEventPayloadSchema),
+    eventSchema('tool_call.started', ToolStartedPayloadSchema),
+    eventSchema('tool_call.updated', ToolUpdatedPayloadSchema),
+    eventSchema('tool_call.completed', ToolCompletedPayloadSchema),
     eventSchema('usage.recorded', UsageRecordedPayloadSchema),
-    eventSchema('policy.decision', PolicyDecisionPayloadSchema),
-    eventSchema('permission.request', PermissionRequestPayloadSchema),
+    eventSchema('permission.requested', PermissionRequestPayloadSchema),
+    eventSchema('permission.resolved', PermissionResolvedPayloadSchema),
+    eventSchema('permission.denied', PermissionDeniedPayloadSchema),
     eventSchema('runtime.error', EventErrorSchema),
-    eventSchema('runtime.metadata', MetadataPayloadSchema),
+    eventSchema('runtime.status', StatusPayloadSchema),
     eventSchema('runtime.output', RuntimeOutputPayloadSchema),
-    eventSchema('runner.metadata', MetadataPayloadSchema),
+    eventSchema('runner.status', StatusPayloadSchema),
   ])
   .openapi('AmaEvent')
 
@@ -592,7 +600,7 @@ const EventsQuerySchema = eventListQuerySchema().extend({
   type: z
     .enum(AMA_SESSION_EVENT_TYPES)
     .optional()
-    .openapi({ param: { name: 'type', in: 'query' }, example: 'message_end' }),
+    .openapi({ param: { name: 'type', in: 'query' }, example: 'message.completed' }),
   createdFrom: z
     .string()
     .datetime()

@@ -147,7 +147,7 @@ def sync_detailed(
         cursor (int | None | Unset):  Example: 42.
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
-        type_ (ListSessionEventsType | Unset):  Example: message_end.
+        type_ (ListSessionEventsType | Unset):  Example: message.completed.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 
@@ -199,7 +199,7 @@ def sync(
         cursor (int | None | Unset):  Example: 42.
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
-        type_ (ListSessionEventsType | Unset):  Example: message_end.
+        type_ (ListSessionEventsType | Unset):  Example: message.completed.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 
@@ -246,7 +246,7 @@ async def asyncio_detailed(
         cursor (int | None | Unset):  Example: 42.
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
-        type_ (ListSessionEventsType | Unset):  Example: message_end.
+        type_ (ListSessionEventsType | Unset):  Example: message.completed.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 
@@ -298,7 +298,7 @@ async def asyncio(
         cursor (int | None | Unset):  Example: 42.
         order (ListSessionEventsOrder | Unset):  Example: asc.
         limit (int | Unset):  Example: 100.
-        type_ (ListSessionEventsType | Unset):  Example: message_end.
+        type_ (ListSessionEventsType | Unset):  Example: message.completed.
         created_from (datetime.datetime | Unset):  Example: 2026-05-01T00:00:00.000Z.
         created_to (datetime.datetime | Unset):  Example: 2026-05-31T23:59:59.999Z.
 

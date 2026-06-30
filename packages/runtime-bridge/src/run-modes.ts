@@ -73,13 +73,13 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
     ? `${marker} resumed-with-token:${request.resumeToken ? 'yes' : 'none'}`
     : `${marker} received:${request.prompt}`
   const queue: AmaRuntimeEvent[] = [
-    runtimeEvent('turn_start', { marker, stage: `${marker}-started`, status: 'running' }),
-    runtimeEvent('message_end', { message: textMessage('assistant', initialMessage) }),
+    runtimeEvent('turn.started', { marker, stage: `${marker}-started`, status: 'running' }),
+    runtimeEvent('message.completed', { message: textMessage('assistant', initialMessage) }),
   ]
   const permission = request.runtimeConfig?.e2eBridgePermission as { action?: string; command?: string } | undefined
   if (permission && typeof permission === 'object') {
     queue.push(
-      runtimeEvent('permission.request', {
+      runtimeEvent('permission.requested', {
         permissionId: `perm_${request.sessionId}`,
         action: permission.action ?? 'shell',
         command: permission.command ?? 'printf permission-ok',
@@ -112,16 +112,18 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
       }
     })(),
     async send(message: string) {
-      push(runtimeEvent('message_end', { message: textMessage('assistant', `${marker} live-received:${message}`) }))
+      push(
+        runtimeEvent('message.completed', { message: textMessage('assistant', `${marker} live-received:${message}`) }),
+      )
     },
     async abort() {
-      push(runtimeEvent('turn_end', { marker, stage: `${marker}-aborted`, status: 'aborted' }))
+      push(runtimeEvent('turn.completed', { marker, stage: `${marker}-aborted`, status: 'aborted' }))
       end()
     },
     async resolvePermission(permissionId: string, allowed: boolean, reason?: string) {
       if (!allowed) {
         push(
-          runtimeEvent('message_end', {
+          runtimeEvent('message.completed', {
             message: textMessage('assistant', `${marker} permission-denied:${reason ?? 'denied'}`),
           }),
         )
@@ -137,7 +139,7 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
           { stdout: 'permission-ok', stderr: '', exitCode: 0 },
           false,
         ),
-        runtimeEvent('message_end', { message: textMessage('assistant', `${marker} permission-approved`) }),
+        runtimeEvent('message.completed', { message: textMessage('assistant', `${marker} permission-approved`) }),
       )
     },
     getResumeToken: () => `e2e-live-${request.sessionId}`,
@@ -164,8 +166,8 @@ export function deterministicBridgeTestEvents(request: RunRequest): AmaRuntimeEv
     tmpdir: request.env.TMPDIR,
   }
   return [
-    runtimeEvent('turn_start', { ...receipt, stage: `${marker}-started`, status: 'running' }),
-    runtimeEvent('message_end', { message: textMessage('assistant', `${marker} received:${request.prompt}`) }),
+    runtimeEvent('turn.started', { ...receipt, stage: `${marker}-started`, status: 'running' }),
+    runtimeEvent('message.completed', { message: textMessage('assistant', `${marker} received:${request.prompt}`) }),
     toolStart(toolCallId, 'bash', { command: `printf ${request.runtime}-tool-ok` }),
     toolEnd(
       toolCallId,
@@ -185,7 +187,7 @@ export function deterministicBridgeTestEvents(request: RunRequest): AmaRuntimeEv
     runtimeEvent('runtime.output', { stream: 'stdout', content: `${marker}-stdout` }),
     runtimeEvent('runtime.output', { stream: 'stderr', content: `${marker}-stderr` }),
     runtimeError(`${marker} safe diagnostic`, 'bridge_test_diagnostic'),
-    runtimeEvent('turn_end', { ...receipt, stage: `${marker}-completed`, status: 'completed' }),
+    runtimeEvent('turn.completed', { ...receipt, stage: `${marker}-completed`, status: 'completed' }),
   ]
 }
 

@@ -166,9 +166,9 @@ function shouldRefreshAfterMessage(message: SessionSocketServerMessage) {
   }
   const eventType = message.record.event.type
   return (
-    eventType === 'agent_end' ||
-    eventType === 'turn_end' ||
-    eventType === 'tool_execution_end' ||
+    eventType === 'agent.completed' ||
+    eventType === 'turn.completed' ||
+    eventType === 'tool_call.completed' ||
     eventType === 'runtime.error'
   )
 }

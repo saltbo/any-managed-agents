@@ -14,7 +14,7 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.event_metadata import EventMetadata
-  from ..models.metadata_payload import MetadataPayload
+  from ..models.runtime_output_payload import RuntimeOutputPayload
 
 
 
@@ -29,12 +29,12 @@ class AmaEventType19:
     """ 
         Attributes:
             type_ (AmaEventType19Type):
-            payload (MetadataPayload):
+            payload (RuntimeOutputPayload):
             metadata (EventMetadata | Unset):
      """
 
     type_: AmaEventType19Type
-    payload: MetadataPayload
+    payload: RuntimeOutputPayload
     metadata: EventMetadata | Unset = UNSET
 
 
@@ -43,7 +43,7 @@ class AmaEventType19:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.event_metadata import EventMetadata
-        from ..models.metadata_payload import MetadataPayload
+        from ..models.runtime_output_payload import RuntimeOutputPayload
         type_ = self.type_.value
 
         payload = self.payload.to_dict()
@@ -69,14 +69,14 @@ class AmaEventType19:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.event_metadata import EventMetadata
-        from ..models.metadata_payload import MetadataPayload
+        from ..models.runtime_output_payload import RuntimeOutputPayload
         d = dict(src_dict)
         type_ = AmaEventType19Type(d.pop("type"))
 
 
 
 
-        payload = MetadataPayload.from_dict(d.pop("payload"))
+        payload = RuntimeOutputPayload.from_dict(d.pop("payload"))
 
 
 

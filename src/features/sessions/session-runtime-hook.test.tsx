@@ -106,8 +106,11 @@ type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
 
 function buildEvent(overrides: EventRecordOverrides = {}): EventRecord {
   const {
-    type = overrides.event?.type ?? 'message_end',
-    payload = overrides.event?.payload ?? { type: 'message_end', message: { role: 'assistant', content: 'Hello' } },
+    type = overrides.event?.type ?? 'message.completed',
+    payload = overrides.event?.payload ?? {
+      type: 'message.completed',
+      message: { role: 'assistant', content: 'Hello' },
+    },
     metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
     ...recordOverrides
@@ -222,11 +225,11 @@ describe('useSessionRuntimeSession — null/stopped session', () => {
     await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('closed'), { timeout: 5000 })
   })
 
-  it('dispatches persisted message_end events for a stopped session', async () => {
+  it('dispatches persisted message.completed events for a stopped session', async () => {
     // Define events OUTSIDE render — stable reference
     const events: EventRecord[] = [
       buildEvent(),
-      buildEvent({ id: 'event_2', sequence: 2, type: 'turn_end', payload: { type: 'turn_end' } }),
+      buildEvent({ id: 'event_2', sequence: 2, type: 'turn.completed', payload: { type: 'turn.completed' } }),
     ]
     const cbRef = makeCallbackRef()
     const queryClient = makeQueryClient()
@@ -265,7 +268,7 @@ describe('useSessionRuntimeSession — live session open', () => {
       record: buildEvent({
         id: 'event_live',
         sequence: 2,
-        payload: { type: 'message_end', message: { role: 'assistant', content: 'Live frame', id: 'msg_live' } },
+        payload: { type: 'message.completed', message: { role: 'assistant', content: 'Live frame', id: 'msg_live' } },
       }),
     })
 
@@ -282,7 +285,10 @@ describe('useSessionRuntimeSession — live session open', () => {
         buildEvent({
           id: 'event_backfill',
           sequence: 2,
-          payload: { type: 'message_end', message: { role: 'assistant', content: 'Backfill', id: 'msg_backfill' } },
+          payload: {
+            type: 'message.completed',
+            message: { role: 'assistant', content: 'Backfill', id: 'msg_backfill' },
+          },
         }),
       ],
       nextCursor: null,
@@ -404,11 +410,14 @@ describe('useSessionRuntimeSession — send commands', () => {
 })
 
 describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
-  it('calls onEventsChanged after turn_end (150ms debounce)', async () => {
+  it('calls onEventsChanged after turn.completed (150ms debounce)', async () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'event', record: buildEvent({ type: 'turn_end', payload: { type: 'turn_end' } }) })
+    lastSocket!.emit({
+      type: 'event',
+      record: buildEvent({ type: 'turn.completed', payload: { type: 'turn.completed' } }),
+    })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
@@ -425,26 +434,29 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
 
-  it('calls onEventsChanged after tool_execution_end', async () => {
+  it('calls onEventsChanged after tool_call.completed', async () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
     lastSocket!.emit({
       type: 'event',
       record: buildEvent({
-        type: 'tool_execution_end',
-        payload: { type: 'tool_execution_end', toolCallId: 'tc_1', toolName: 'exec', result: {}, isError: false },
+        type: 'tool_call.completed',
+        payload: { type: 'tool_call.completed', toolCallId: 'tc_1', toolName: 'exec', result: {}, isError: false },
       }),
     })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
 
-  it('calls onEventsChanged after agent_end', async () => {
+  it('calls onEventsChanged after agent.completed', async () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'event', record: buildEvent({ type: 'agent_end', payload: { type: 'agent_end' } }) })
+    lastSocket!.emit({
+      type: 'event',
+      record: buildEvent({ type: 'agent.completed', payload: { type: 'agent.completed' } }),
+    })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })

@@ -517,21 +517,21 @@ describe('[CF] /api/v1/sessions', () => {
     expect(events.pagination).toMatchObject({ limit: 100, hasMore: false, nextCursor: null })
     expect(events.data.map((record) => record.event.type)).toEqual(
       expect.arrayContaining([
-        'turn_end',
-        'message_update',
-        'message_end',
-        'tool_execution_start',
-        'tool_execution_end',
+        'turn.completed',
+        'message.updated',
+        'message.completed',
+        'tool_call.started',
+        'tool_call.completed',
       ]),
     )
     const toolCallEvent = events.data.find(
       (record) =>
-        record.event.type === 'tool_execution_start' &&
+        record.event.type === 'tool_call.started' &&
         (record.event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
     )
     const toolResultEvent = events.data.find(
       (record) =>
-        record.event.type === 'tool_execution_end' &&
+        record.event.type === 'tool_call.completed' &&
         (record.event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
     )
     expect(toolCallEvent?.event.payload).toMatchObject({ toolCall: { id: 'call_git_status' } })
@@ -565,12 +565,12 @@ describe('[CF] /api/v1/sessions', () => {
     expect(descendingEvents.data.map((event) => event.sequence)).toEqual([5, 4])
 
     const filteredEventsRes = await jsonFetch(
-      `/api/v1/sessions/${createdId}/events?cursor=1&type=tool_execution_end`,
+      `/api/v1/sessions/${createdId}/events?cursor=1&type=tool_call.completed`,
       authorization,
     )
     const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(filteredEvents.data).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'tool_execution_end' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'tool_call.completed' })]),
     )
 
     // CSV export via content negotiation replaces /events/export (§1.2.6).
@@ -1224,7 +1224,7 @@ describe('[CF] /api/v1/sessions', () => {
         events: [
           {
             event: {
-              type: 'tool_execution_start',
+              type: 'tool_call.started',
               payload: { toolCall: { id: 'call_pi', name: 'bash', input: { command: 'npm test' } } },
             },
           },
@@ -1234,7 +1234,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(ingestStartRes.status).toBe(201)
 
     const eventsRes = await jsonFetch(
-      `/api/v1/sessions/${created.metadata.uid}/events?type=tool_execution_start`,
+      `/api/v1/sessions/${created.metadata.uid}/events?type=tool_call.started`,
       authorization,
     )
     expect(eventsRes.status).toBe(200)
@@ -1245,7 +1245,7 @@ describe('[CF] /api/v1/sessions', () => {
       expect.arrayContaining([
         expect.objectContaining({
           event: expect.objectContaining({
-            type: 'tool_execution_start',
+            type: 'tool_call.started',
             payload: expect.objectContaining({
               toolCall: { id: 'call_pi', name: 'bash', input: { command: 'npm test' } },
             }),
@@ -1310,7 +1310,10 @@ describe('[CF] /api/v1/sessions', () => {
       body: JSON.stringify({
         events: [
           {
-            event: { type: 'turn_end', payload: { message: { role: 'assistant', content: 'done' }, toolResults: [] } },
+            event: {
+              type: 'turn.completed',
+              payload: { message: { role: 'assistant', content: 'done' }, toolResults: [] },
+            },
           },
           { event: { type: 'runtime.error', payload: { message: 'Bridge failed', code: 'runtime_exit' } } },
         ],
@@ -1319,14 +1322,20 @@ describe('[CF] /api/v1/sessions', () => {
     expect(ingestRes.status).toBe(201)
     await expect(ingestRes.json()).resolves.toEqual({ accepted: 2 })
 
-    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events?type=turn_end`, authorization)
+    const eventsRes = await jsonFetch(
+      `/api/v1/sessions/${created.metadata.uid}/events?type=turn.completed`,
+      authorization,
+    )
     const events = (await eventsRes.json()) as {
       data: Array<{ event: { type: string; metadata?: Record<string, unknown> } }>
     }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          event: expect.objectContaining({ type: 'turn_end', metadata: expect.objectContaining({ source: 'api' }) }),
+          event: expect.objectContaining({
+            type: 'turn.completed',
+            metadata: expect.objectContaining({ source: 'api' }),
+          }),
         }),
       ]),
     )
@@ -1361,7 +1370,7 @@ describe('[CF] /api/v1/sessions', () => {
         events: [
           {
             event: {
-              type: 'turn_end',
+              type: 'turn.completed',
               payload: { message: { role: 'assistant', content: 'archived run' }, toolResults: [] },
             },
           },
@@ -1383,8 +1392,8 @@ describe('[CF] /api/v1/sessions', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as { event: { type: string } })
-    expect(events.some((record) => record.event.type === 'turn_end')).toBe(true)
-    expect(events.some((record) => record.event.type === 'session_stop')).toBe(true)
+    expect(events.some((record) => record.event.type === 'turn.completed')).toBe(true)
+    expect(events.some((record) => record.event.type === 'session.stopped')).toBe(true)
   })
 
   it('streams backfill history and live events over the browser WebSocket', async () => {
@@ -1408,7 +1417,7 @@ describe('[CF] /api/v1/sessions', () => {
     await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, authorization, {
       method: 'POST',
       body: JSON.stringify({
-        events: [{ event: { type: 'message_start', payload: { message: { role: 'assistant' } } } }],
+        events: [{ event: { type: 'message.started', payload: { message: { role: 'assistant' } } } }],
       }),
     })
 
@@ -1442,21 +1451,22 @@ describe('[CF] /api/v1/sessions', () => {
     ws.send(JSON.stringify({ id: 'r1', type: 'backfill', requestId: 'r1', limit: 100 }))
     const backfill = await waitForFrame((frame) => frame.type === 'backfill')
     expect(
-      (backfill.events as Array<{ event: { type: string } }>).some((record) => record.event.type === 'message_start'),
+      (backfill.events as Array<{ event: { type: string } }>).some((record) => record.event.type === 'message.started'),
     ).toBe(true)
 
     // A live append fans out to the open socket without polling.
     await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, authorization, {
       method: 'POST',
       body: JSON.stringify({
-        events: [{ type: 'message_end', payload: { message: { role: 'assistant', content: 'live frame' } } }],
+        events: [{ type: 'message.completed', payload: { message: { role: 'assistant', content: 'live frame' } } }],
       }),
     })
     const live = await waitForFrame(
       (frame) =>
-        frame.type === 'event' && ((frame.record as { event?: { type: string } }).event?.type ?? '') === 'message_end',
+        frame.type === 'event' &&
+        ((frame.record as { event?: { type: string } }).event?.type ?? '') === 'message.completed',
     )
-    expect((live.record as { event: { type: string } }).event.type).toBe('message_end')
+    expect((live.record as { event: { type: string } }).event.type).toBe('message.completed')
 
     ws.close()
   })
@@ -1597,7 +1607,7 @@ describe('[CF] /api/v1/sessions', () => {
       ).message
       const text = message?.content?.map((part) => part.text ?? '').join('\n') ?? ''
       return (
-        record.event.type === 'message_end' &&
+        record.event.type === 'message.completed' &&
         message?.role === 'assistant' &&
         message.stopReason === 'stop' &&
         text.includes('Wait for cancellation before completing')
@@ -1652,7 +1662,7 @@ describe('[CF] /api/v1/sessions', () => {
       expect.arrayContaining([
         expect.objectContaining({
           event: expect.objectContaining({
-            type: 'message_end',
+            type: 'message.completed',
             payload: expect.objectContaining({
               message: expect.objectContaining({
                 role: 'user',
@@ -1665,7 +1675,7 @@ describe('[CF] /api/v1/sessions', () => {
         }),
         expect.objectContaining({
           event: expect.objectContaining({
-            type: 'message_end',
+            type: 'message.completed',
             payload: expect.objectContaining({
               message: expect.objectContaining({ role: 'assistant' }),
             }),
@@ -1866,7 +1876,7 @@ describe('[CF] /api/v1/sessions', () => {
       }),
       jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, otherCookie, {
         method: 'POST',
-        body: JSON.stringify({ events: [{ event: { type: 'turn_end', payload: {} } }] }),
+        body: JSON.stringify({ events: [{ event: { type: 'turn.completed', payload: {} } }] }),
       }),
     ])
     expect(crossProjectReads.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404, 404])
@@ -1892,7 +1902,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(createRes.status).toBe(403)
     await expect(createRes.json()).resolves.toMatchObject({
       error: {
-        type: 'policy_denied',
+        type: 'permission_denied',
         message: 'Sandbox runtime is disabled by governance policy.',
         details: { category: 'sandbox', resourceType: 'sandbox', ruleId: 'sandboxPolicy.enabled' },
       },
@@ -1956,7 +1966,7 @@ describe('[CF] /api/v1/sessions', () => {
       expect.arrayContaining([
         expect.objectContaining({
           event: expect.objectContaining({
-            type: 'policy.decision',
+            type: 'permission.denied',
             payload: expect.objectContaining({
               category: 'sandbox_command',
               ruleId: 'sandboxPolicy.blockedCommands',
@@ -2225,7 +2235,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(createRes.status).toBe(403)
     await expect(createRes.json()).resolves.toMatchObject({
       error: {
-        type: 'policy_denied',
+        type: 'permission_denied',
         message: 'Provider is disabled for this project.',
       },
     })

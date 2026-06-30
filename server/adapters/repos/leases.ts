@@ -573,7 +573,7 @@ export function createLeaseRepo(db: Db): LeaseRepo {
           // a canonical lifecycle event carrying only the safe work-item
           // reference — the raw provider token stays inside the work payload.
           await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-            type: 'session_checkpoint',
+            type: 'session.checkpointed',
             payload: { resumeTokenRef: `work-item:${workItem.id}`, scope: 'runtime-resume-token' },
             metadata: workItemRuntimeMetadata(workItem),
           })
@@ -598,7 +598,7 @@ export function createLeaseRepo(db: Db): LeaseRepo {
         const interruptedPayload = payloadWithResumeToken(workItem, input.resumeToken)
         if (interruptedPayload !== null && workItem.sessionId) {
           await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-            type: 'session_checkpoint',
+            type: 'session.checkpointed',
             payload: { resumeTokenRef: `work-item:${workItem.id}`, scope: 'runtime-resume-token' },
             metadata: workItemRuntimeMetadata(workItem),
           })
@@ -612,7 +612,7 @@ export function createLeaseRepo(db: Db): LeaseRepo {
         if (recovery === 'requeued' && workItem.sessionId) {
           const recoveredPayload = parseJson<Record<string, unknown>>(interruptedPayload ?? workItem.payload)
           await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-            type: 'session_resume',
+            type: 'session.resumed',
             payload: {
               fromCheckpoint: recoveredPayload?.resumeToken ? `work-item:${workItem.id}` : null,
               reason: 'runner-recovery',
@@ -804,8 +804,8 @@ export function createLeaseRepo(db: Db): LeaseRepo {
       }
       await db.insert(sessionChannels).values(channel)
       await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-        type: 'runner.channel.accepted',
-        payload: { runnerId, leaseId, workItemId: workItem.id },
+        type: 'runner.status',
+        payload: { status: 'channel_accepted', runnerId, leaseId, workItemId: workItem.id },
         metadata: {
           source: 'self-hosted-runner-channel',
           ...workItemRuntimeMetadata(workItem),

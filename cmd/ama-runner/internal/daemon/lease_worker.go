@@ -179,7 +179,7 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 		return err
 	}
 	sessionID := workItemSessionID(workItem)
-	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionStart), toolCallPayload(payload))); err != nil {
+	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolCallStarted), toolCallPayload(payload))); err != nil {
 		return err
 	}
 
@@ -207,7 +207,7 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 		endPayload["error"] = ama.JSON{"message": execErr.Error()}
 		endPayload["result"] = result.Output
 		endPayload["isError"] = true
-		_ = r.uploadSessionEvent(context.Background(), sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionEnd), endPayload))
+		_ = r.uploadSessionEvent(context.Background(), sessionID, runnerEvent(string(sessionevent.EventTypeToolCallCompleted), endPayload))
 		if finishErr := r.failLease(context.Background(), lease, execErr, result.Output); finishErr != nil {
 			return finishErr
 		}
@@ -216,7 +216,7 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 	endPayload := toolCallPayload(payload)
 	endPayload["result"] = result.Output
 	endPayload["isError"] = false
-	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionEnd), endPayload)); err != nil {
+	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolCallCompleted), endPayload)); err != nil {
 		return err
 	}
 	return r.completeLease(ctx, lease, ama.JSON{
@@ -323,7 +323,7 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		return nil
 	}
 	handle := runnersession.NewHostHandle(payload.SessionID, func(message string) {
-		if err := r.relayStoredEvent(context.Background(), store, relayEvent, runnerEvent("message_end", userPromptEventPayload(message))); err != nil {
+		if err := r.relayStoredEvent(context.Background(), store, relayEvent, runnerEvent("message.completed", userPromptEventPayload(message))); err != nil {
 			slog.Warn("runner failed to record delivered prompt event", "sessionId", payload.SessionID, "error", err)
 		}
 	})
@@ -336,14 +336,14 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 	renewErrors := make(chan error, 1)
 	go r.renewLease(leaseCtx, lease, cancel, renewErrors, resumeTokens)
 
-	if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("runner.metadata", r.sessionStartedPayload(payload))); err != nil {
+	if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("runner.status", r.sessionStartedPayload(payload))); err != nil {
 		if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
 			return finishErr
 		}
 		return err
 	}
 	if prompt := workPrompt(payload); prompt != "" {
-		if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("message_end", userPromptEventPayload(prompt))); err != nil {
+		if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("message.completed", userPromptEventPayload(prompt))); err != nil {
 			if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
 				return finishErr
 			}

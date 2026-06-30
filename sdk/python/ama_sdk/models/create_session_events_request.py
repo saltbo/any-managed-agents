@@ -24,6 +24,7 @@ if TYPE_CHECKING:
   from ..models.ama_event_type_18 import AmaEventType18
   from ..models.ama_event_type_19 import AmaEventType19
   from ..models.ama_event_type_2 import AmaEventType2
+  from ..models.ama_event_type_20 import AmaEventType20
   from ..models.ama_event_type_3 import AmaEventType3
   from ..models.ama_event_type_4 import AmaEventType4
   from ..models.ama_event_type_5 import AmaEventType5
@@ -46,11 +47,11 @@ class CreateSessionEventsRequest:
         Attributes:
             events (list[AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 |
                 AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 |
-                AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 |
-                AmaEventType9]):
+                AmaEventType2 | AmaEventType20 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 |
+                AmaEventType8 | AmaEventType9]):
      """
 
-    events: list[AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9]
+    events: list[AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType20 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9]
 
 
 
@@ -70,6 +71,7 @@ class CreateSessionEventsRequest:
         from ..models.ama_event_type_18 import AmaEventType18
         from ..models.ama_event_type_19 import AmaEventType19
         from ..models.ama_event_type_2 import AmaEventType2
+        from ..models.ama_event_type_20 import AmaEventType20
         from ..models.ama_event_type_3 import AmaEventType3
         from ..models.ama_event_type_4 import AmaEventType4
         from ..models.ama_event_type_5 import AmaEventType5
@@ -118,6 +120,8 @@ class CreateSessionEventsRequest:
                 events_item = events_item_data.to_dict()
             elif isinstance(events_item_data, AmaEventType18):
                 events_item = events_item_data.to_dict()
+            elif isinstance(events_item_data, AmaEventType19):
+                events_item = events_item_data.to_dict()
             else:
                 events_item = events_item_data.to_dict()
 
@@ -151,6 +155,7 @@ class CreateSessionEventsRequest:
         from ..models.ama_event_type_18 import AmaEventType18
         from ..models.ama_event_type_19 import AmaEventType19
         from ..models.ama_event_type_2 import AmaEventType2
+        from ..models.ama_event_type_20 import AmaEventType20
         from ..models.ama_event_type_3 import AmaEventType3
         from ..models.ama_event_type_4 import AmaEventType4
         from ..models.ama_event_type_5 import AmaEventType5
@@ -162,7 +167,7 @@ class CreateSessionEventsRequest:
         events = []
         _events = d.pop("events")
         for events_item_data in (_events):
-            def _parse_events_item(data: object) -> AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9:
+            def _parse_events_item(data: object) -> AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType20 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9:
                 try:
                     if not isinstance(data, dict):
                         raise TypeError()
@@ -353,13 +358,23 @@ class CreateSessionEventsRequest:
                     return componentsschemas_ama_event_type_18
                 except (TypeError, ValueError, AttributeError, KeyError):
                     pass
+                try:
+                    if not isinstance(data, dict):
+                        raise TypeError()
+                    componentsschemas_ama_event_type_19 = AmaEventType19.from_dict(data)
+
+
+
+                    return componentsschemas_ama_event_type_19
+                except (TypeError, ValueError, AttributeError, KeyError):
+                    pass
                 if not isinstance(data, dict):
                     raise TypeError()
-                componentsschemas_ama_event_type_19 = AmaEventType19.from_dict(data)
+                componentsschemas_ama_event_type_20 = AmaEventType20.from_dict(data)
 
 
 
-                return componentsschemas_ama_event_type_19
+                return componentsschemas_ama_event_type_20
 
             events_item = _parse_events_item(events_item_data)
 

@@ -126,7 +126,7 @@ async function stopSessionRow(
   await appendRuntimeEvent(deps, {
     auth,
     sessionId: session.id,
-    event: { type: 'session_stop', reason },
+    event: { type: 'session.stopped', reason },
     metadata: { source: 'control-plane', sandboxId: session.sandboxId },
   })
   await archiveTerminalSession(deps, auth, session.id)
@@ -244,7 +244,7 @@ async function stopSelfHostedSession(
   await appendRuntimeEvent(deps, {
     auth,
     sessionId: session.id,
-    event: { type: 'session_stop', reason },
+    event: { type: 'session.stopped', reason },
     metadata: { source: 'control-plane', hostingMode: 'self_hosted' },
   })
   await archiveTerminalSession(deps, auth, session.id)

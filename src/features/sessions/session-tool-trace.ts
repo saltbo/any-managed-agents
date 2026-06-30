@@ -33,11 +33,11 @@ export function buildSessionToolTrace(events: EventRecord[]): SessionToolTraceEn
   const ordered = [...events].sort((left, right) => left.sequence - right.sequence)
   const entries: TraceAccumulator[] = []
   for (const record of ordered) {
-    if (record.event.type === 'tool_execution_start') {
+    if (record.event.type === 'tool_call.started') {
       entries.push(entryFromStart(record))
       continue
     }
-    if (record.event.type === 'tool_execution_end') {
+    if (record.event.type === 'tool_call.completed') {
       const open = findOpenEntry(entries, pairingKey(record))
       if (open) {
         completeEntry(open, record)
@@ -46,10 +46,13 @@ export function buildSessionToolTrace(events: EventRecord[]): SessionToolTraceEn
       }
     }
   }
-  const denials = ordered.filter(
-    (record) => record.event.type === 'policy.decision' && objectValue(record.event.payload).allowed === false,
+  const permissionEvents = ordered.filter(
+    (record) =>
+      record.event.type === 'permission.requested' ||
+      record.event.type === 'permission.resolved' ||
+      record.event.type === 'permission.denied',
   )
-  return entries.map((entry) => ({ ...entry, approval: approvalState(entry, denials) }))
+  return entries.map((entry) => ({ ...entry, approval: approvalState(entry, permissionEvents) }))
 }
 
 export function summarizeToolValue(value: unknown): string {
@@ -133,24 +136,36 @@ function findOpenEntry(entries: TraceAccumulator[], key: string) {
   return null
 }
 
-// A denial recorded inside the same turn while the tool call was in flight is
-// the canonical approval outcome for that call.
-function approvalState(entry: TraceAccumulator, denials: EventRecord[]): SessionToolTraceApproval {
+// Permission events recorded inside the same turn while the tool call was in
+// flight are the canonical approval outcome for that call.
+function approvalState(entry: TraceAccumulator, permissionEvents: EventRecord[]): SessionToolTraceApproval {
   const command = stringField(objectValue(entry.input), 'command')
-  const denial = denials.find((record) => {
+  const relatedEvents = permissionEvents.filter((record) => {
     if (entry.startSequence === null) {
       return false
     }
     if (record.sequence < entry.startSequence || (entry.endSequence !== null && record.sequence > entry.endSequence)) {
       return false
     }
-    const denialCommand = stringField(objectValue(record.event.payload), 'command')
-    return !command || !denialCommand || denialCommand === command
+    const payload = objectValue(record.event.payload)
+    const toolCall = objectValue(payload.toolCall)
+    const permissionCommand = stringField(payload, 'command') ?? stringField(objectValue(toolCall.input), 'command')
+    return !command || !permissionCommand || permissionCommand === command
   })
-  if (!denial) {
+  const resolved = [...relatedEvents].reverse().find((record) => record.event.type === 'permission.resolved')
+  if (resolved) {
+    return objectValue(resolved.event.payload).allowed === false ? 'denied' : 'approved'
+  }
+  if (relatedEvents.some((record) => record.event.type === 'permission.denied')) {
+    return 'denied'
+  }
+  if (relatedEvents.some((record) => record.event.type === 'permission.requested')) {
+    return 'approval required'
+  }
+  if (relatedEvents.length === 0) {
     return 'approved'
   }
-  return objectValue(denial.event.payload).category === 'approval' ? 'approval required' : 'denied'
+  return 'approved'
 }
 
 function toolValueText(value: unknown): string {

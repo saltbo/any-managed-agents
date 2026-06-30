@@ -12,10 +12,10 @@ func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
 	output := strings.Join([]string{
 		`{"type":"ready"}`,
 		`{"type":"resumeToken","requestId":"run_session_1","resumeToken":"thread_1"}`,
-		`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ok"}}}}`,
+		`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"message.completed","payload":{"message":{"role":"assistant","content":"ok"}}}}`,
 		`{"type":"resumeToken","requestId":"other","resumeToken":"ignored"}`,
 		`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"runtime.output","payload":{"stream":"bridge","content":"bridge diagnostic"}}}`,
-		`{"type":"runtime.event","requestId":"other","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ignored"}}}}`,
+		`{"type":"runtime.event","requestId":"other","event":{"type":"message.completed","payload":{"message":{"role":"assistant","content":"ignored"}}}}`,
 		`{"type":"result","requestId":"run_session_1","result":{"exitCode":0,"providerThreadId":"thread_1"}}`,
 	}, "\n")
 	scanner := protocol.scanner(strings.NewReader(output))
@@ -33,7 +33,7 @@ func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected bridge messages, got %v", err)
 	}
-	if len(events) != 2 || !strings.Contains(events[0], "message_end") || !strings.Contains(events[1], "bridge diagnostic") {
+	if len(events) != 2 || !strings.Contains(events[0], "message.completed") || !strings.Contains(events[1], "bridge diagnostic") {
 		t.Fatalf("expected forwarded event and log, got %v", events)
 	}
 	if len(resumeTokens) != 1 || resumeTokens[0] != "thread_1" {
@@ -68,7 +68,7 @@ func TestBridgeProtocolErrorBranches(t *testing.T) {
 	if _, err := protocol.readResult(scanner, "run_session_1", func(JSON) error { return writeErr }, nil); !errors.Is(err, writeErr) {
 		t.Fatalf("expected writer error, got %v", err)
 	}
-	scanner = protocol.scanner(strings.NewReader(`{"type":"runtime.event","requestId":"other","event":{"type":"message_end","payload":{}}}` + "\n"))
+	scanner = protocol.scanner(strings.NewReader(`{"type":"runtime.event","requestId":"other","event":{"type":"message.completed","payload":{}}}` + "\n"))
 	if _, err := protocol.readResult(scanner, "run_session_1", func(JSON) error { return nil }, nil); err == nil || !strings.Contains(err.Error(), "exited before result") {
 		t.Fatalf("expected missing result error, got %v", err)
 	}

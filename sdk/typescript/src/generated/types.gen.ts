@@ -19,55 +19,55 @@ export type EventRecord = {
 };
 
 export type AmaEvent = {
-    type: 'agent_start';
+    type: 'agent.started';
     payload: LifecyclePayload;
     metadata?: EventMetadata;
 } | {
-    type: 'agent_end';
+    type: 'agent.completed';
     payload: LifecyclePayload;
     metadata?: EventMetadata;
 } | {
-    type: 'turn_start';
+    type: 'turn.started';
     payload: TurnPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'turn_end';
+    type: 'turn.completed';
     payload: TurnPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'session_stop';
+    type: 'session.stopped';
     payload: SessionStopPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'session_checkpoint';
+    type: 'session.checkpointed';
     payload: SessionCheckpointPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'session_resume';
+    type: 'session.resumed';
     payload: SessionResumePayload;
     metadata?: EventMetadata;
 } | {
-    type: 'message_start';
+    type: 'message.started';
     payload: MessageEventPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'message_update';
+    type: 'message.updated';
     payload: MessageEventPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'message_end';
+    type: 'message.completed';
     payload: MessageEventPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'tool_execution_start';
+    type: 'tool_call.started';
     payload: ToolStartedPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'tool_execution_update';
+    type: 'tool_call.updated';
     payload: ToolUpdatedPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'tool_execution_end';
+    type: 'tool_call.completed';
     payload: ToolCompletedPayload;
     metadata?: EventMetadata;
 } | {
@@ -75,28 +75,32 @@ export type AmaEvent = {
     payload: UsageRecordedPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'policy.decision';
-    payload: PolicyDecisionPayload;
+    type: 'permission.requested';
+    payload: PermissionRequestPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'permission.request';
-    payload: PermissionRequestPayload;
+    type: 'permission.resolved';
+    payload: PermissionResolvedPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'permission.denied';
+    payload: PermissionDeniedPayload;
     metadata?: EventMetadata;
 } | {
     type: 'runtime.error';
     payload: EventError;
     metadata?: EventMetadata;
 } | {
-    type: 'runtime.metadata';
-    payload: MetadataPayload;
+    type: 'runtime.status';
+    payload: StatusPayload;
     metadata?: EventMetadata;
 } | {
     type: 'runtime.output';
     payload: RuntimeOutputPayload;
     metadata?: EventMetadata;
 } | {
-    type: 'runner.metadata';
-    payload: MetadataPayload;
+    type: 'runner.status';
+    payload: StatusPayload;
     metadata?: EventMetadata;
 };
 
@@ -118,7 +122,7 @@ export type TurnPayload = {
 
 export type EventMessage = {
     id?: string;
-    role: 'user' | 'assistant' | 'system' | 'tool';
+    role: 'user' | 'assistant' | 'system' | 'tool' | 'toolResult';
     content: Array<MessageContentBlock>;
     timestamp?: number;
     stopReason?: string;
@@ -251,23 +255,6 @@ export type UsageRecordedPayload = {
     };
 };
 
-export type PolicyDecisionPayload = {
-    allowed: boolean;
-    category?: string;
-    ruleId?: string;
-    resourceType?: string;
-    resourceId?: string;
-    operation?: string;
-    command?: string | null;
-    host?: string | null;
-    connectorId?: string;
-    toolName?: string;
-    decision?: string;
-    details?: {
-        [key: string]: unknown;
-    };
-};
-
 export type PermissionRequestPayload = {
     permissionId?: string;
     command?: string;
@@ -277,7 +264,31 @@ export type PermissionRequestPayload = {
     };
 };
 
-export type MetadataPayload = {
+export type PermissionResolvedPayload = {
+    permissionId?: string;
+    allowed: boolean;
+    reason?: string;
+    toolCall?: EventToolCall;
+    details?: {
+        [key: string]: unknown;
+    };
+};
+
+export type PermissionDeniedPayload = {
+    reason?: string;
+    resourceType?: string;
+    resourceId?: string;
+    operation?: string;
+    command?: string | null;
+    host?: string | null;
+    connectorId?: string;
+    toolName?: string;
+    details?: {
+        [key: string]: unknown;
+    };
+};
+
+export type StatusPayload = {
     data: {
         [key: string]: unknown;
     };
@@ -4134,7 +4145,7 @@ export type ListSessionEventsData = {
         cursor?: number | null;
         order?: 'asc' | 'desc';
         limit?: number;
-        type?: 'agent_start' | 'agent_end' | 'turn_start' | 'turn_end' | 'session_stop' | 'session_checkpoint' | 'session_resume' | 'message_start' | 'message_update' | 'message_end' | 'tool_execution_start' | 'tool_execution_update' | 'tool_execution_end' | 'usage.recorded' | 'policy.decision' | 'permission.request' | 'runtime.error' | 'runtime.metadata' | 'runtime.output' | 'runner.metadata';
+        type?: 'agent.started' | 'agent.completed' | 'turn.started' | 'turn.completed' | 'session.stopped' | 'session.checkpointed' | 'session.resumed' | 'message.started' | 'message.updated' | 'message.completed' | 'tool_call.started' | 'tool_call.updated' | 'tool_call.completed' | 'usage.recorded' | 'permission.requested' | 'permission.resolved' | 'permission.denied' | 'runtime.error' | 'runtime.status' | 'runtime.output' | 'runner.status';
         createdFrom?: string;
         createdTo?: string;
     };

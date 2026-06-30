@@ -38,14 +38,14 @@ function fakeDoStore() {
     append: vi.fn().mockResolvedValue({ id: 'do_event', sequence: 1, record: { id: 'do_event' } }),
     query: vi.fn().mockResolvedValue({ rows: [{ id: 'do_event' }], hasMore: false }),
     relayQuery: vi.fn().mockResolvedValue({ rows: [{ id: 'relay_event' }], hasMore: false }),
-    stream: vi.fn().mockResolvedValue([{ type: 'turn_end', payload: '{}' }]),
+    stream: vi.fn().mockResolvedValue([{ type: 'turn.completed', payload: '{}' }]),
     count: vi.fn().mockResolvedValue(1),
     archive: vi.fn().mockResolvedValue(undefined),
   }
 }
 
 const scope = { organizationId: 'org_1', projectId: 'project_1', sessionId: 'sess_1' }
-const event: AmaEvent = { type: 'turn_end', payload: {}, metadata: {} }
+const event: AmaEvent = { type: 'turn.completed', payload: {}, metadata: {} }
 const query = { order: 'asc' as const, limit: 50 }
 
 // Every non-cloud session now relays over the per-runner channel. The isCloudLoop
@@ -98,7 +98,7 @@ describe('createEventStore — storage follows the loop', () => {
 
   it('routes eventStream to the DO for cloud-loop and returns no cloud transcript for relay sessions', async () => {
     const cloud = makeStore(true)
-    expect(await cloud.store.eventStream('sess_1')).toEqual([{ type: 'turn_end', payload: '{}' }])
+    expect(await cloud.store.eventStream('sess_1')).toEqual([{ type: 'turn.completed', payload: '{}' }])
     expect(cloud.doStore.stream).toHaveBeenCalledWith('sess_1')
 
     const local = makeStore(false)
@@ -118,7 +118,7 @@ describe('createEventStore — storage follows the loop', () => {
   it('insertEvents canonicalises each event and routes it through append', async () => {
     const { store, doStore } = makeStore(true)
     const count = await store.insertEvents(scope, [
-      { type: 'turn_end', payload: {}, metadata: { source: 'api' } },
+      { type: 'turn.completed', payload: {}, metadata: { source: 'api' } },
       { type: 'runtime.error', payload: { message: 'x' }, metadata: { source: 'api' } },
     ])
     expect(count).toBe(2)

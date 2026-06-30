@@ -34,6 +34,8 @@ from .ama_event_type_19 import AmaEventType19
 from .ama_event_type_19_type import AmaEventType19Type
 from .ama_event_type_1_type import AmaEventType1Type
 from .ama_event_type_2 import AmaEventType2
+from .ama_event_type_20 import AmaEventType20
+from .ama_event_type_20_type import AmaEventType20Type
 from .ama_event_type_2_type import AmaEventType2Type
 from .ama_event_type_3 import AmaEventType3
 from .ama_event_type_3_type import AmaEventType3Type
@@ -212,12 +214,12 @@ from .memory_volume import MemoryVolume
 from .memory_volume_access import MemoryVolumeAccess
 from .memory_volume_type import MemoryVolumeType
 from .message_event_payload import MessageEventPayload
-from .metadata_payload import MetadataPayload
-from .metadata_payload_data import MetadataPayloadData
+from .permission_denied_payload import PermissionDeniedPayload
+from .permission_denied_payload_details import PermissionDeniedPayloadDetails
 from .permission_request_payload import PermissionRequestPayload
 from .permission_request_payload_details import PermissionRequestPayloadDetails
-from .policy_decision_payload import PolicyDecisionPayload
-from .policy_decision_payload_details import PolicyDecisionPayloadDetails
+from .permission_resolved_payload import PermissionResolvedPayload
+from .permission_resolved_payload_details import PermissionResolvedPayloadDetails
 from .project import Project
 from .project_list_response import ProjectListResponse
 from .provider import Provider
@@ -354,6 +356,8 @@ from .session_subagent import SessionSubagent
 from .session_update_metadata import SessionUpdateMetadata
 from .session_update_metadata_annotations import SessionUpdateMetadataAnnotations
 from .session_update_metadata_labels import SessionUpdateMetadataLabels
+from .status_payload import StatusPayload
+from .status_payload_data import StatusPayloadData
 from .text_content_block import TextContentBlock
 from .text_content_block_type import TextContentBlockType
 from .tool_call_content_block import ToolCallContentBlock
@@ -505,6 +509,8 @@ __all__ = (
     "AmaEventType19Type",
     "AmaEventType1Type",
     "AmaEventType2",
+    "AmaEventType20",
+    "AmaEventType20Type",
     "AmaEventType2Type",
     "AmaEventType3",
     "AmaEventType3Type",
@@ -683,12 +689,12 @@ __all__ = (
     "MemoryVolumeAccess",
     "MemoryVolumeType",
     "MessageEventPayload",
-    "MetadataPayload",
-    "MetadataPayloadData",
+    "PermissionDeniedPayload",
+    "PermissionDeniedPayloadDetails",
     "PermissionRequestPayload",
     "PermissionRequestPayloadDetails",
-    "PolicyDecisionPayload",
-    "PolicyDecisionPayloadDetails",
+    "PermissionResolvedPayload",
+    "PermissionResolvedPayloadDetails",
     "Project",
     "ProjectListResponse",
     "Provider",
@@ -825,6 +831,8 @@ __all__ = (
     "SessionUpdateMetadata",
     "SessionUpdateMetadataAnnotations",
     "SessionUpdateMetadataLabels",
+    "StatusPayload",
+    "StatusPayloadData",
     "TextContentBlock",
     "TextContentBlockType",
     "ToolCallContentBlock",

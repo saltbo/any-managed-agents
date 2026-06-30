@@ -16,7 +16,7 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
     metadata: null,
   } as never
 
-  let store: { db: object; sessionState: ReturnType<typeof vi.fn>; appendCanonicalEvent: ReturnType<typeof vi.fn> }
+  let store: { db: object; sessionState: ReturnType<typeof vi.fn>; appendEvent: ReturnType<typeof vi.fn> }
   let policyBlocksSandboxOperation: ReturnType<typeof vi.fn>
   let createToolApprovalGate: ReturnType<typeof vi.fn>
   let gate: {
@@ -31,7 +31,7 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
     store = {
       db: {},
       sessionState: vi.fn().mockResolvedValue({ state: 'running' }),
-      appendCanonicalEvent: vi.fn().mockResolvedValue(undefined),
+      appendEvent: vi.fn().mockResolvedValue(undefined),
     }
     gate = {
       shouldSuppressEvent: vi.fn().mockReturnValue(false),
@@ -94,12 +94,12 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
     const callbacks = build()
 
     gate.shouldSuppressEvent.mockReturnValueOnce(true)
-    await callbacks.onEvent({ type: 'message_update' })
-    expect(store.appendCanonicalEvent).not.toHaveBeenCalled()
+    await callbacks.onEvent({ type: 'message.updated' })
+    expect(store.appendEvent).not.toHaveBeenCalled()
 
-    await callbacks.onEvent({ type: 'message_end' })
+    await callbacks.onEvent({ type: 'message.completed' })
     expect(store.sessionState).toHaveBeenCalledWith('project_1', 'session_1')
-    expect(store.appendCanonicalEvent).toHaveBeenCalledTimes(1)
+    expect(store.appendEvent).toHaveBeenCalledTimes(1)
   })
 
   it('throws RuntimeTurnCancelled from ensureActive when the session is no longer running', async () => {

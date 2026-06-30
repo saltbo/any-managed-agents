@@ -140,10 +140,10 @@ function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
         yield runtimeError(String(anyMsg.error), 'claude_error', anyMsg)
         return
       }
-      yield runtimeEvent('turn_start')
+      yield runtimeEvent('turn.started')
       for (const block of Array.isArray(msg.message.content) ? msg.message.content : []) {
         if (block.type === 'text' && block.text) {
-          yield runtimeEvent('message_end', { message: textMessage('assistant', block.text) })
+          yield runtimeEvent('message.completed', { message: textMessage('assistant', block.text) })
         }
         if (block.type === 'thinking' && block.thinking) {
           yield reasoning(block.thinking)
@@ -171,11 +171,11 @@ function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
       return
     }
     case 'system': {
-      yield runtimeEvent('runtime.metadata', { data: msg as unknown as Record<string, unknown> })
+      yield runtimeEvent('runtime.status', { data: msg as unknown as Record<string, unknown> })
       return
     }
     default:
-      yield runtimeEvent('runtime.metadata', { data: msg as unknown as Record<string, unknown> })
+      yield runtimeEvent('runtime.status', { data: msg as unknown as Record<string, unknown> })
   }
 }
 

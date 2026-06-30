@@ -13,8 +13,8 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
+  from ..models.event_error import EventError
   from ..models.event_metadata import EventMetadata
-  from ..models.metadata_payload import MetadataPayload
 
 
 
@@ -29,12 +29,12 @@ class AmaEventType17:
     """ 
         Attributes:
             type_ (AmaEventType17Type):
-            payload (MetadataPayload):
+            payload (EventError):
             metadata (EventMetadata | Unset):
      """
 
     type_: AmaEventType17Type
-    payload: MetadataPayload
+    payload: EventError
     metadata: EventMetadata | Unset = UNSET
 
 
@@ -42,8 +42,8 @@ class AmaEventType17:
 
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.event_error import EventError
         from ..models.event_metadata import EventMetadata
-        from ..models.metadata_payload import MetadataPayload
         type_ = self.type_.value
 
         payload = self.payload.to_dict()
@@ -68,15 +68,15 @@ class AmaEventType17:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.event_error import EventError
         from ..models.event_metadata import EventMetadata
-        from ..models.metadata_payload import MetadataPayload
         d = dict(src_dict)
         type_ = AmaEventType17Type(d.pop("type"))
 
 
 
 
-        payload = MetadataPayload.from_dict(d.pop("payload"))
+        payload = EventError.from_dict(d.pop("payload"))
 
 
 

@@ -75,17 +75,17 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
           event({
             id: `${command.id}_assistant`,
             sequence: ++sequence,
-            type: 'message_end',
-            payload: { type: 'message_end', message: { role: 'assistant', content } },
+            type: 'message.completed',
+            payload: { type: 'message.completed', message: { role: 'assistant', content } },
           }),
         )
         this.emitEvent(
           event({
             id: `${command.id}_tool`,
             sequence: ++sequence,
-            type: 'tool_execution_end',
+            type: 'tool_call.completed',
             payload: {
-              type: 'tool_execution_end',
+              type: 'tool_call.completed',
               toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
             },
           }),
@@ -94,8 +94,8 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
           event({
             id: `${command.id}_end`,
             sequence: ++sequence,
-            type: 'turn_end',
-            payload: { type: 'turn_end', id: `${command.id}_end`, stage: 'agent_completed', willRetry: false },
+            type: 'turn.completed',
+            payload: { type: 'turn.completed', id: `${command.id}_end`, stage: 'agent_completed', willRetry: false },
           }),
         )
         if (options.closeAfterAgentEnd) {
@@ -165,9 +165,9 @@ type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
 
 function event(overrides: EventRecordOverrides = {}): EventRecord {
   const {
-    type = overrides.event?.type ?? 'message_end',
+    type = overrides.event?.type ?? 'message.completed',
     payload = overrides.event?.payload ?? {
-      type: 'message_end',
+      type: 'message.completed',
       message: { role: 'assistant', content: 'AMA message completed' },
     },
     metadata = overrides.event?.metadata ?? {},
@@ -575,11 +575,11 @@ describe('App', () => {
       agents: [agent()],
       sessions: [session()],
       events: [
-        event({ payload: { type: 'message_end', message: { role: 'assistant', content: 'hello' } } }),
+        event({ payload: { type: 'message.completed', message: { role: 'assistant', content: 'hello' } } }),
         event({
           id: 'event_2',
-          type: 'tool_execution_end',
-          payload: { type: 'tool_execution_end', toolCall: { id: 'tool_1', name: 'read' } },
+          type: 'tool_call.completed',
+          payload: { type: 'tool_call.completed', toolCall: { id: 'tool_1', name: 'read' } },
         }),
       ],
     })
@@ -653,11 +653,11 @@ describe('App', () => {
         }),
       ],
       events: [
-        event({ payload: { type: 'message_end', message: { role: 'assistant', content: 'hello' } } }),
+        event({ payload: { type: 'message.completed', message: { role: 'assistant', content: 'hello' } } }),
         event({
           id: 'event_2',
-          type: 'tool_execution_end',
-          payload: { type: 'tool_execution_end', toolCall: { id: 'tool_1', name: 'read' } },
+          type: 'tool_call.completed',
+          payload: { type: 'tool_call.completed', toolCall: { id: 'tool_1', name: 'read' } },
         }),
       ],
     })
@@ -810,7 +810,7 @@ describe('App', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        event: { type: 'turn_end', payload: { status: 'idle', reason: 'runtime_ready' } },
+        event: { type: 'turn.completed', payload: { status: 'idle', reason: 'runtime_ready' } },
         createdAt: '2026-05-23T00:00:00.000Z',
       },
     ]

@@ -14,7 +14,7 @@ from typing import cast
 
 if TYPE_CHECKING:
   from ..models.event_metadata import EventMetadata
-  from ..models.policy_decision_payload import PolicyDecisionPayload
+  from ..models.permission_request_payload import PermissionRequestPayload
 
 
 
@@ -29,12 +29,12 @@ class AmaEventType14:
     """ 
         Attributes:
             type_ (AmaEventType14Type):
-            payload (PolicyDecisionPayload):
+            payload (PermissionRequestPayload):
             metadata (EventMetadata | Unset):
      """
 
     type_: AmaEventType14Type
-    payload: PolicyDecisionPayload
+    payload: PermissionRequestPayload
     metadata: EventMetadata | Unset = UNSET
 
 
@@ -43,7 +43,7 @@ class AmaEventType14:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.event_metadata import EventMetadata
-        from ..models.policy_decision_payload import PolicyDecisionPayload
+        from ..models.permission_request_payload import PermissionRequestPayload
         type_ = self.type_.value
 
         payload = self.payload.to_dict()
@@ -69,14 +69,14 @@ class AmaEventType14:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.event_metadata import EventMetadata
-        from ..models.policy_decision_payload import PolicyDecisionPayload
+        from ..models.permission_request_payload import PermissionRequestPayload
         d = dict(src_dict)
         type_ = AmaEventType14Type(d.pop("type"))
 
 
 
 
-        payload = PolicyDecisionPayload.from_dict(d.pop("payload"))
+        payload = PermissionRequestPayload.from_dict(d.pop("payload"))
 
 
 

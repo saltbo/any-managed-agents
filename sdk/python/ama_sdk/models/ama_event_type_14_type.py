@@ -1,7 +1,7 @@
 from enum import Enum
 
 class AmaEventType14Type(str, Enum):
-    POLICY_DECISION = "policy.decision"
+    PERMISSION_REQUESTED = "permission.requested"
 
     def __str__(self) -> str:
         return str(self.value)

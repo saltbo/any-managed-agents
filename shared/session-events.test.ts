@@ -4,35 +4,56 @@ import {
   amaEventFromRuntimeEvent,
   amaSessionEventTypeFromPayload,
   isAmaSessionEventType,
-  isPiAgentSessionEventType,
+  isPiCoreSourceEventType,
 } from './session-events'
 
 describe('[spec: sessions/events-hierarchy] amaEventFromRuntimeEvent', () => {
-  it('preserves Pi agent lifecycle, message, and tool events as canonical AMA events', () => {
-    expect(amaEventFromRuntimeEvent({ type: 'turn_start' })).toMatchObject({
-      type: 'turn_start',
+  it('maps Pi core source events to canonical AMA events', () => {
+    expect(
+      amaEventFromRuntimeEvent({
+        type: 'tool_execution_end',
+        toolCallId: 'call_1',
+        toolName: 'bash',
+        args: { command: 'npm test' },
+        result: { content: [{ type: 'text', text: 'done' }] },
+        isError: false,
+      }),
+    ).toMatchObject({
+      type: 'tool_call.completed',
+      payload: {
+        toolCall: { id: 'call_1', name: 'bash', input: { command: 'npm test' } },
+        result: { content: [{ type: 'text', text: 'done' }] },
+        isError: false,
+      },
+      metadata: { sourceEventType: 'tool_execution_end' },
+    })
+  })
+
+  it('preserves canonical AMA lifecycle, message, and tool events', () => {
+    expect(amaEventFromRuntimeEvent({ type: 'turn.started' })).toMatchObject({
+      type: 'turn.started',
       payload: {},
-      metadata: { sourceEventType: 'turn_start' },
+      metadata: { sourceEventType: 'turn.started' },
     })
 
     expect(
       amaEventFromRuntimeEvent({
-        type: 'message_update',
+        type: 'message.updated',
         message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
         assistantMessageEvent: { type: 'text_delta', delta: 'hello' },
       }),
     ).toMatchObject({
-      type: 'message_update',
+      type: 'message.updated',
       payload: {
         message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
         assistantMessageEvent: { type: 'text_delta', delta: 'hello' },
       },
-      metadata: { sourceEventType: 'message_update' },
+      metadata: { sourceEventType: 'message.updated' },
     })
 
     expect(
       amaEventFromRuntimeEvent({
-        type: 'tool_execution_end',
+        type: 'tool_call.completed',
         toolCallId: 'call_1',
         toolName: 'bash',
         args: { command: 'npm test' },
@@ -40,7 +61,7 @@ describe('[spec: sessions/events-hierarchy] amaEventFromRuntimeEvent', () => {
         isError: false,
       }),
     ).toMatchObject({
-      type: 'tool_execution_end',
+      type: 'tool_call.completed',
       payload: {
         toolCall: { id: 'call_1', name: 'bash', input: { command: 'npm test' } },
         result: { content: [{ type: 'text', text: 'done' }], details: { exitCode: 0 } },
@@ -80,7 +101,7 @@ describe('[spec: sessions/events-hierarchy] amaEventFromRuntimeEvent', () => {
     })
 
     expect(amaEventFromRuntimeEvent({ type: 'queue_update', queueDepth: 1 })).toMatchObject({
-      type: 'runtime.metadata',
+      type: 'runtime.status',
       payload: { data: { queueDepth: 1 } },
     })
   })
@@ -104,23 +125,23 @@ describe('isAmaSessionEventType', () => {
   })
 })
 
-// ── isPiAgentSessionEventType ─────────────────────────────────────────────────
+// ── isPiCoreSourceEventType ───────────────────────────────────────────────────
 
-describe('isPiAgentSessionEventType', () => {
-  it('returns true for Pi agent event types', () => {
-    expect(isPiAgentSessionEventType('agent_start')).toBe(true)
-    expect(isPiAgentSessionEventType('tool_execution_end')).toBe(true)
-    expect(isPiAgentSessionEventType('message_update')).toBe(true)
+describe('isPiCoreSourceEventType', () => {
+  it('returns true for Pi core source event types', () => {
+    expect(isPiCoreSourceEventType('agent_start')).toBe(true)
+    expect(isPiCoreSourceEventType('tool_execution_end')).toBe(true)
+    expect(isPiCoreSourceEventType('message_update')).toBe(true)
   })
 
-  it('returns false for AMA operational event types not in the Pi set', () => {
-    expect(isPiAgentSessionEventType('usage.recorded')).toBe(false)
-    expect(isPiAgentSessionEventType('runtime.error')).toBe(false)
-    expect(isPiAgentSessionEventType('policy.decision')).toBe(false)
+  it('returns false for AMA canonical event types', () => {
+    expect(isPiCoreSourceEventType('agent.started')).toBe(false)
+    expect(isPiCoreSourceEventType('tool_call.completed')).toBe(false)
+    expect(isPiCoreSourceEventType('message.updated')).toBe(false)
   })
 
   it('returns false for unknown strings', () => {
-    expect(isPiAgentSessionEventType('unknown_event')).toBe(false)
+    expect(isPiCoreSourceEventType('unknown_event')).toBe(false)
   })
 })
 
@@ -128,7 +149,7 @@ describe('isPiAgentSessionEventType', () => {
 
 describe('amaSessionEventTypeFromPayload', () => {
   it('returns the type field when it is a non-empty string', () => {
-    expect(amaSessionEventTypeFromPayload({ type: 'agent_start' })).toBe('agent_start')
+    expect(amaSessionEventTypeFromPayload({ type: 'agent.started' })).toBe('agent.started')
   })
 
   it('returns unknown when type is missing', () => {
@@ -147,28 +168,33 @@ describe('amaSessionEventTypeFromPayload', () => {
 
 // ── amaEventFromRuntimeEvent — additional branches ────────────
 
-describe('amaEventFromRuntimeEvent — policy.decision branch', () => {
-  it('maps policy_denied source event to policy.decision type', () => {
+describe('amaEventFromRuntimeEvent — permission.denied branch', () => {
+  it('maps permission_denied source event to permission.denied type', () => {
     expect(
       amaEventFromRuntimeEvent({
-        type: 'policy_denied',
+        type: 'permission_denied',
         allowed: false,
         category: 'sandbox',
         command: 'rm -rf /',
       }),
     ).toMatchObject({
-      type: 'policy.decision',
-      payload: { allowed: false, category: 'sandbox', command: 'rm -rf /' },
+      type: 'permission.denied',
+      payload: { command: 'rm -rf /', details: { category: 'sandbox' } },
     })
   })
 
-  it('sets allowed to false when event.allowed is not strictly true', () => {
+  it('keeps policy source details below the permission denial payload', () => {
     const result = amaEventFromRuntimeEvent({
-      type: 'policy_denied',
-      allowed: 'yes',
+      type: 'permission_denied',
+      category: 'approval',
+      ruleId: 'rule_1',
+      decision: 'requires approval',
     })
-    expect(result.type).toBe('policy.decision')
-    expect((result.payload as Record<string, unknown>).allowed).toBe(false)
+    expect(result.type).toBe('permission.denied')
+    expect(result.payload).toMatchObject({
+      reason: 'approval_required',
+      details: { category: 'approval', ruleId: 'rule_1', decision: 'requires approval' },
+    })
   })
 })
 
@@ -306,23 +332,23 @@ describe('amaEventFromRuntimeEvent — runtime.output stream branches', () => {
   })
 })
 
-describe('amaEventFromRuntimeEvent — runner.metadata branch', () => {
-  it('maps runner_heartbeat to runner.metadata', () => {
+describe('amaEventFromRuntimeEvent — runner.status branch', () => {
+  it('maps runner_heartbeat to runner.status', () => {
     const result = amaEventFromRuntimeEvent({ type: 'runner_heartbeat', runnerId: 'r1' })
-    expect(result.type).toBe('runner.metadata')
+    expect(result.type).toBe('runner.status')
     expect((result.payload as Record<string, unknown>).data).toMatchObject({ runnerId: 'r1' })
   })
 
-  it('maps runner_status to runner.metadata', () => {
+  it('maps runner_status to runner.status', () => {
     const result = amaEventFromRuntimeEvent({ type: 'runner_status', status: 'ready' })
-    expect(result.type).toBe('runner.metadata')
+    expect(result.type).toBe('runner.status')
   })
 })
 
 describe('amaEventFromRuntimeEvent — message payload role branches', () => {
   it('keeps role inside event.message for message events', () => {
     const result = amaEventFromRuntimeEvent({
-      type: 'message_start',
+      type: 'message.started',
       message: { role: 'user', content: [] },
     })
     expect(result.payload).toMatchObject({ message: { role: 'user' } })
@@ -330,39 +356,39 @@ describe('amaEventFromRuntimeEvent — message payload role branches', () => {
 
   it('uses event.role when message.role is absent for message events', () => {
     const result = amaEventFromRuntimeEvent({
-      type: 'message_end',
+      type: 'message.completed',
       role: 'assistant',
     })
     expect(result.payload).toMatchObject({ message: { role: 'assistant' } })
   })
 
   it('defaults message role to assistant when neither message.role nor event.role is present', () => {
-    const result = amaEventFromRuntimeEvent({ type: 'message_start' })
+    const result = amaEventFromRuntimeEvent({ type: 'message.started' })
     expect(result.payload).toMatchObject({ message: { role: 'assistant' } })
   })
 
   it('does not add an outer role for non-message event types', () => {
-    expect(amaEventFromRuntimeEvent({ type: 'agent_start' })).not.toHaveProperty('role')
-    expect(amaEventFromRuntimeEvent({ type: 'turn_end' })).not.toHaveProperty('role')
+    expect(amaEventFromRuntimeEvent({ type: 'agent.started' })).not.toHaveProperty('role')
+    expect(amaEventFromRuntimeEvent({ type: 'turn.completed' })).not.toHaveProperty('role')
     expect(amaEventFromRuntimeEvent({ type: 'usage.recorded' })).not.toHaveProperty('role')
   })
 })
 
 describe('amaEventFromRuntimeEvent — canonicalType catchall and source branches', () => {
-  it('maps no-type event to runtime.metadata (message fallback → metadata default)', () => {
-    // event without type → sourceEventType = 'message' → not a pi type, not in map → runtime.metadata
+  it('maps no-type event to runtime.status (message fallback → metadata default)', () => {
+    // event without type → sourceEventType = 'message' → not a pi type, not in map → runtime.status
     const result = amaEventFromRuntimeEvent({ data: 'x' })
-    expect(result.type).toBe('runtime.metadata')
+    expect(result.type).toBe('runtime.status')
   })
 
-  it('maps queue_update to runtime.metadata', () => {
+  it('maps queue_update to runtime.status', () => {
     const result = amaEventFromRuntimeEvent({ type: 'queue_update', queueDepth: 5 })
-    expect(result.type).toBe('runtime.metadata')
+    expect(result.type).toBe('runtime.status')
   })
 
-  it('maps session_info_changed to runtime.metadata', () => {
+  it('maps session_info_changed to runtime.status', () => {
     const result = amaEventFromRuntimeEvent({ type: 'session_info_changed', title: 'New' })
-    expect(result.type).toBe('runtime.metadata')
+    expect(result.type).toBe('runtime.status')
   })
 
   it('maps runner.usage to usage.recorded via matchesRuntimeEvent', () => {
@@ -401,7 +427,7 @@ describe('amaEventFromRuntimeEvent — canonicalType catchall and source branche
 describe('amaEventFromRuntimeEvent — metadata runtimeSource', () => {
   it('uses metadata.runtimeSource when provided', () => {
     const result = amaEventFromRuntimeEvent(
-      { type: 'agent_start' },
+      { type: 'agent.started' },
       { runtimeSource: 'my-runner', source: 'ignored' },
     )
     expect(result.metadata?.runtimeSource).toBe('my-runner')
@@ -409,26 +435,26 @@ describe('amaEventFromRuntimeEvent — metadata runtimeSource', () => {
 
   it('falls back to metadata.source when runtimeSource is absent', () => {
     const result = amaEventFromRuntimeEvent(
-      { type: 'agent_start' },
+      { type: 'agent.started' },
       { source: 'my-source' },
     )
     expect(result.metadata?.runtimeSource).toBe('my-source')
   })
 
   it('defaults runtimeSource to runtime when neither runtimeSource nor source is in metadata', () => {
-    const result = amaEventFromRuntimeEvent({ type: 'agent_start' }, {})
+    const result = amaEventFromRuntimeEvent({ type: 'agent.started' }, {})
     expect(result.metadata?.runtimeSource).toBe('runtime')
   })
 })
 
 describe('amaEventFromRuntimeEvent — withoutType fallback branch (line 219)', () => {
   it('strips type from payload for AMA event types not handled by specific branches', () => {
-    // session_checkpoint is a lifecycle AMA type — goes through the final withoutType()
+    // session.checkpointed is a lifecycle AMA type — goes through the final withoutType()
     const result = amaEventFromRuntimeEvent({
-      type: 'session_checkpoint',
+      type: 'session.checkpointed',
       checkpointId: 'cp_1',
     })
-    expect(result.type).toBe('session_checkpoint')
+    expect(result.type).toBe('session.checkpointed')
     expect((result.payload as Record<string, unknown>)).not.toHaveProperty('type')
     expect((result.payload as Record<string, unknown>).checkpointId).toBe('cp_1')
   })

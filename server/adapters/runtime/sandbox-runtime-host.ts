@@ -17,6 +17,7 @@ import type {
   SessionSandboxExecutor,
 } from '@server/usecases/ports'
 import { isAmaSandboxToolName } from '@shared/agent-tools'
+import { amaEventFromRuntimeEvent } from '@shared/session-events'
 import { canonicalProvider } from '../../domain/runtime/provider'
 import type { Env } from '../../env'
 import {
@@ -458,7 +459,7 @@ export async function runSessionTurn(
     ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
     ...(input.continuation ? { continuation: true } : {}),
     ...(input.messages ? { messages: input.messages } : {}),
-    sink: { emit: (event, metadata) => input.onEvent(event, metadata) },
+    sink: { emit: (event, metadata) => input.onEvent(amaEventFromRuntimeEvent(event, metadata)) },
     policy: { approve: input.approveToolCall ?? (async () => ({ allowed: true })) },
     toolResults: { resolve: input.resolveToolResult ?? (async () => null) },
     liveness: { ensureActive: input.ensureActive ?? (async () => {}) },

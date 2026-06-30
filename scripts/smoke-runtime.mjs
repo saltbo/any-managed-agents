@@ -139,11 +139,11 @@ async function deterministicRun(runtime) {
   await bridge.waitForResult(requestId)
   const types = bridge.events.map((event) => event.type)
   const result = bridge.outputs.find((message) => message.requestId === requestId && message.type === 'result')?.result
-  ok('emitted turn_start', types.includes('turn_start'))
-  ok('emitted assistant message', types.includes('message_end'))
-  ok('emitted sandbox tool events', types.includes('tool_execution_start') && types.includes('tool_execution_end'))
+  ok('emitted turn.started', types.includes('turn.started'))
+  ok('emitted assistant message', types.includes('message.completed'))
+  ok('emitted sandbox tool events', types.includes('tool_call.started') && types.includes('tool_call.completed'))
   ok('emitted usage.recorded', types.includes('usage.recorded'))
-  ok('emitted turn_end', types.includes('turn_end'))
+  ok('emitted turn.completed', types.includes('turn.completed'))
   ok('returned resume token', typeof result?.resumeToken === 'string' && result.resumeToken.length > 0)
   bridge.stop()
 }
@@ -159,18 +159,18 @@ async function liveRunWithPrompt() {
       model: 'claude-sonnet-4-6',
     }),
   )
-  await bridge.waitForEventCount('message_end', 1)
+  await bridge.waitForEventCount('message.completed', 1)
   bridge.send({ type: 'send', requestId, message: 'Follow-up prompt.' })
-  await bridge.waitForEventCount('message_end', 2)
+  await bridge.waitForEventCount('message.completed', 2)
   bridge.send({ type: 'abort', requestId })
   await bridge.waitForResult(requestId)
   const messagePayload = bridge.events
-    .filter((event) => event.type === 'message_end')
+    .filter((event) => event.type === 'message.completed')
     .map((event) => JSON.stringify(event.payload))
     .join('\n')
   ok('initial prompt reached live runtime', messagePayload.includes('received:Smoke claude-code.'))
   ok('follow-up prompt reached live runtime', messagePayload.includes('live-received:Follow-up prompt.'))
-  ok('abort completed the live run', bridge.events.some((event) => event.type === 'turn_end'))
+  ok('abort completed the live run', bridge.events.some((event) => event.type === 'turn.completed'))
   bridge.stop()
 }
 
@@ -189,10 +189,10 @@ async function livePermissionFlow() {
       model: 'copilot-cli',
     }),
   )
-  await bridge.waitForEventCount('permission.request', 1)
-  const permission = bridge.events.find((event) => event.type === 'permission.request')?.payload
+  await bridge.waitForEventCount('permission.requested', 1)
+  const permission = bridge.events.find((event) => event.type === 'permission.requested')?.payload
   bridge.send({ type: 'permissionDecision', requestId, permissionId: permission?.permissionId, allowed: true })
-  await bridge.waitForEventCount('tool_execution_end', 1)
+  await bridge.waitForEventCount('tool_call.completed', 1)
   bridge.send({ type: 'abort', requestId })
   await bridge.waitForResult(requestId)
   const payloads = bridge.events.map((event) => JSON.stringify(event.payload)).join('\n')
