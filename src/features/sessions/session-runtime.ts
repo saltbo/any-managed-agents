@@ -6,6 +6,7 @@ import {
 } from '@shared/session-events'
 import type { SessionEvent } from '@/lib/amarpc'
 import { getStoredAccessToken } from '@/lib/oidc'
+import { getSelectedProjectId } from '@/lib/project-selection'
 
 export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
 export type SessionRuntimeRunState = 'idle' | 'running' | 'error'
@@ -197,6 +198,10 @@ export function sessionSocketUrl(socketPath: string) {
   const accessToken = getStoredAccessToken()
   if (accessToken) {
     url.searchParams.set('access_token', accessToken)
+  }
+  const projectId = getSelectedProjectId()
+  if (projectId) {
+    url.searchParams.set('x-ama-project-id', projectId)
   }
   return url.toString()
 }

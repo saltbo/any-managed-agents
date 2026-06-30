@@ -115,7 +115,10 @@ export function SessionRuntimePanel({
           <Button type="button" variant="ghost" size="icon" aria-label="Search events">
             <Search data-icon="inline-start" />
           </Button>
-          <Badge variant={runtime.connection === 'open' ? 'secondary' : 'outline'} className="capitalize">
+          <Badge
+            variant={runtime.connection === 'open' ? 'secondary' : 'outline'}
+            className="min-w-24 justify-center capitalize"
+          >
             {runtime.connection}
           </Badge>
           <Badge variant={runtime.runState === 'running' ? 'secondary' : 'outline'} className="capitalize">

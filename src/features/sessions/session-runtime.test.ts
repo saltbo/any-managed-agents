@@ -14,6 +14,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+function stubWindowLocation(href: string) {
+  vi.stubGlobal('window', { location: { href }, localStorage: window.localStorage })
+}
+
 function event(sequence: number, type: AmaSessionEventType, payload: SessionEvent['payload']): SessionEvent {
   return {
     id: `event_${sequence}`,
@@ -876,7 +880,7 @@ describe('sessionRuntimeReducer', () => {
 
 describe('sessionSocketUrl', () => {
   it('keeps the advertised session socket path', () => {
-    vi.stubGlobal('window', { location: { href: 'https://example.com/app' } })
+    stubWindowLocation('https://example.com/app')
     vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
 
     const url = sessionSocketUrl('/api/v1/sessions/s1/socket')
@@ -885,7 +889,7 @@ describe('sessionSocketUrl', () => {
   })
 
   it('uses ws: protocol for http: origins', () => {
-    vi.stubGlobal('window', { location: { href: 'http://localhost:3000/' } })
+    stubWindowLocation('http://localhost:3000/')
     vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
 
     const url = sessionSocketUrl('/api/v1/sessions/s1/socket')
@@ -894,11 +898,20 @@ describe('sessionSocketUrl', () => {
   })
 
   it('appends access_token query param when token is present', () => {
-    vi.stubGlobal('window', { location: { href: 'https://example.com/' } })
+    stubWindowLocation('https://example.com/')
     vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue('test_token_xyz')
 
     const url = sessionSocketUrl('/api/v1/sessions/s1/socket')
     expect(url).toContain('access_token=test_token_xyz')
+  })
+
+  it('appends selected project query param for browser WebSocket auth scope', () => {
+    stubWindowLocation('https://example.com/')
+    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
+    window.localStorage.setItem('ama:selected-project-id', 'project_socket')
+
+    const url = new URL(sessionSocketUrl('/api/v1/sessions/s1/socket'))
+    expect(url.searchParams.get('x-ama-project-id')).toBe('project_socket')
   })
 })
 

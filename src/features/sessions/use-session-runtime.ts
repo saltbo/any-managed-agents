@@ -86,7 +86,7 @@ export function useSessionRuntimeSession({
     socket.addEventListener('close', () => {
       if (socketRef.current !== socket) return
       socketRef.current = null
-      dispatch({ type: 'connection', state: 'closed' })
+      dispatch({ type: 'connection', state: 'connecting' })
       reconnectTimerRef.current = window.setTimeout(() => {
         setConnectionAttempt((attempt) => attempt + 1)
       }, 750)

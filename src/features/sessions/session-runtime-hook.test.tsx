@@ -319,11 +319,11 @@ describe('useSessionRuntimeSession — live session open', () => {
 })
 
 describe('useSessionRuntimeSession — close event', () => {
-  it('reports closed on server-initiated close; unmount cancels reconnect timer', async () => {
+  it('keeps reporting connecting during reconnectable socket close; unmount cancels reconnect timer', async () => {
     const { unmount } = await renderLive()
 
     lastSocket!.triggerClose()
-    await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('closed'), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('connecting'), { timeout: 5000 })
 
     // Unmount so clearTimeout in useEffect cleanup cancels the 750ms reconnect.
     unmount()
