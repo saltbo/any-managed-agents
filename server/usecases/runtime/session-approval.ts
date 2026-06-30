@@ -12,10 +12,10 @@
 // The module is infra-free. Logic is verbatim from the former
 // server/runtime/session-approval module; only dependency acquisition changed.
 
-import { isAmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
 import { type SessionApprovalGrants, sessionApprovalState } from '@server/domain/runtime/approval-state'
 import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { now, stringify } from '@server/domain/runtime/util'
+import { isAmaSandboxToolName } from '@shared/agent-tools'
 import type { AuthScope, SessionSandboxExecutor } from '../ports'
 import { writeSessionApprovalState } from './approval-gate'
 import type { CloudTurnDeps } from './cloud-turn'

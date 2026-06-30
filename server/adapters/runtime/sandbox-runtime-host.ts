@@ -1,4 +1,3 @@
-import { isAmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
 import { gitRepositoryMountPath } from '@server/domain/git-repository'
@@ -17,6 +16,7 @@ import type {
   RuntimeWorkspaceReader,
   SessionSandboxExecutor,
 } from '@server/usecases/ports'
+import { isAmaSandboxToolName } from '@shared/agent-tools'
 import { canonicalProvider } from '../../domain/runtime/provider'
 import type { Env } from '../../env'
 import {

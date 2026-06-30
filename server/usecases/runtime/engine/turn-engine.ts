@@ -3,7 +3,7 @@
 // reaches the model and the sandbox only through the ModelClient / ToolExecutor
 // ports. The loop runs in the cloud control plane; self-hosted AMA sessions use
 // the same cloud loop with a runner-backed sandbox executor.
-import { AMA_SANDBOX_TOOL_NAMES, type AmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
+
 import {
   Agent,
   type AgentEvent,
@@ -22,6 +22,7 @@ import {
   Type,
   type Usage,
 } from '@earendil-works/pi-ai'
+import { AMA_SANDBOX_TOOL_NAMES, type AmaSandboxToolName } from '@shared/agent-tools'
 import {
   CANCELLATION_REASON,
   isRuntimeTurnCancelled,

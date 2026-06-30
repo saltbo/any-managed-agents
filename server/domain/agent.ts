@@ -1,4 +1,4 @@
-import { AMA_SANDBOX_TOOL_NAMES, isAmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
+import { AMA_SANDBOX_TOOL_NAMES, isAmaSandboxToolName } from '@shared/agent-tools'
 import type { ResourceMetadata, ResourcePhase } from './resource'
 
 export interface AgentSpec {
