@@ -536,12 +536,13 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.RuntimeInventory = runtimeInventoryFor(runtimeEntry("codex", true, nil, nil, "ready", "", "ready"))
 	daemon.Config.WorkDir = workDir
 	// Run in a goroutine: the hub connects asynchronously, so wait for relay
 	// events to appear on hubChannel before asserting.
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.session.started to be relayed over the hub channel.
+	// Wait for at least runner.metadata to be relayed over the hub channel.
 	waitForChannelWriteCount(t, hubChannel, 1, done)
 	if err := <-done; err != nil {
 		t.Fatalf("expected codex run success, got %v", err)
@@ -575,7 +576,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	}
 	gotTypes := hubChannel.writtenEvents()
 	for _, want := range []string{
-		"runner.session.started",
+		"runner.metadata",
 		"runtime.metadata",
 		"message_end",
 		"tool_execution_start",
@@ -687,7 +688,7 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	daemon.Config.WorkDir = workDir
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.session.started + runtime.error to be relayed.
+	// Wait for at least runner.metadata + runtime.error to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	if err := <-done; err == nil || !strings.Contains(err.Error(), "codex runtime bridge failed") {
 		t.Fatalf("expected codex bridge error after failed lease update, got %v", err)
@@ -728,7 +729,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	daemon.RuntimeAdapter = runtimeAdapter
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.session.started + message_end to be relayed.
+	// Wait for at least runner.metadata + message_end to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	if err := <-done; err != nil {
 		t.Fatalf("expected claude runtime success, got %v", err)
@@ -746,7 +747,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
 	got := hubChannel.writtenEvents()
-	want := []string{"runner.session.started", "message_end", "message_end"}
+	want := []string{"runner.metadata", "message_end", "message_end"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
 	}
@@ -775,7 +776,7 @@ func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning
 
 			done := make(chan error, 1)
 			go func() { done <- daemon.RunOnce(context.Background()) }()
-			// Wait for runner.session.started + message_end before asserting completion.
+			// Wait for runner.metadata + message_end before asserting completion.
 			waitForChannelWriteCount(t, hubChannel, 2, done)
 			if err := <-done; err != nil {
 				t.Fatalf("expected successful runtime result to complete despite warning, got %v", err)
@@ -975,8 +976,8 @@ func TestRunOnceMarksExecutorFailureAsFailedLease(t *testing.T) {
 		err:    errors.New("command failed"),
 	}
 	daemon := testDaemon(client, adapter)
-	if err := daemon.RunOnce(context.Background()); err != nil {
-		t.Fatalf("expected failed lease update to succeed, got %v", err)
+	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "command failed") {
+		t.Fatalf("expected command failed error, got %v", err)
 	}
 	if len(client.updates) != 1 || leaseState(client.updates[0]) != "failed" {
 		t.Fatalf("expected failed update, got %#v", client.updates)
@@ -1009,11 +1010,11 @@ func TestRunOnceFailsFastOnUnapprovedWorkAfterMarkingLeaseFailed(t *testing.T) {
 
 func TestRunOnceFailsLeaseWhenRequiredCapabilityDoesNotMatch(t *testing.T) {
 	lease := sessionStartLease()
-	lease.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:provider:gpt-5.3-codex"
+	lease.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:missing-runtime:provider:model"
 	client := &fakeAMAServer{lease: lease}
 	daemon := testDaemon(client, &fakeAdapter{})
-	if err := daemon.RunOnce(context.Background()); err != nil {
-		t.Fatalf("expected failed lease update to succeed, got %v", err)
+	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "required capability") {
+		t.Fatalf("expected required capability error, got %v", err)
 	}
 	if len(client.updates) != 1 || leaseState(client.updates[0]) != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
@@ -1394,8 +1395,8 @@ func TestRunOnceFailsLeaseWhenRuntimeCLIIsMissing(t *testing.T) {
 		runtimeEntry("claude-code", true, []string{"claude-sonnet-4-6"}, nil, "ready", "", "ready"),
 		runtimeEntry("copilot", true, []string{"copilot-cli"}, nil, "ready", "", "ready"),
 	)
-	if err := daemon.RunOnce(context.Background()); err != nil {
-		t.Fatalf("expected failed lease update to succeed, got %v", err)
+	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "required capability") {
+		t.Fatalf("expected required capability error, got %v", err)
 	}
 	if len(client.updates) != 1 || leaseState(client.updates[0]) != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
@@ -1417,7 +1418,7 @@ func TestRunOnceFailsLeaseWhenSessionExceedsMaxDuration(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.session.started + runtime.error to be relayed.
+	// Wait for at least runner.metadata + runtime.error to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "exceeded max duration") {
@@ -1534,7 +1535,7 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 		t.Fatalf("expected stored session events, got %v", err)
 	}
 	serializedStoredEvents := mustJSON(t, storedEvents)
-	if !strings.Contains(serializedStoredEvents, "runner.session.started") ||
+	if !strings.Contains(serializedStoredEvents, "runner.metadata") ||
 		!strings.Contains(serializedStoredEvents, `"role":"user"`) ||
 		!strings.Contains(serializedStoredEvents, `"text":"copilot prompt"`) {
 		t.Fatalf("expected initial prompt to be durable in runner log, got %s", serializedStoredEvents)
@@ -1576,7 +1577,7 @@ func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	daemon.RuntimeAdapter = runtimeAdapter
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.session.started + runtime.error to be relayed.
+	// Wait for at least runner.metadata + runtime.error to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "copilot runtime bridge failed") {

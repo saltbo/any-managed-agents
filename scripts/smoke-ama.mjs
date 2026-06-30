@@ -742,7 +742,7 @@ function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   const eventLog = join(sessionDir, 'events.jsonl')
   const events = readJSONL(eventLog)
   const eventTypes = events.map((record) => record.event?.type ?? record.type)
-  for (const required of ['runner.session.started', 'message_end', 'runtime.metadata']) {
+  for (const required of ['runner.metadata', 'message_end', 'runtime.metadata']) {
     if (!eventTypes.includes(required)) fail(`event log is missing ${required}`, `events: ${eventTypes.join(', ')}`)
   }
   const serializedEvents = JSON.stringify(events)
@@ -754,7 +754,7 @@ function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   const liveEventTypes = controlPlaneState.channelMessages
     .filter((message) => message.type === 'runner.event')
     .map((message) => message.record?.event?.type ?? message.event?.type)
-  for (const required of ['runner.session.started', 'message_end', 'runtime.metadata']) {
+  for (const required of ['runner.metadata', 'message_end', 'runtime.metadata']) {
     if (!liveEventTypes.includes(required)) fail(`live relay is missing ${required}`, liveEventTypes.join(', '))
   }
 

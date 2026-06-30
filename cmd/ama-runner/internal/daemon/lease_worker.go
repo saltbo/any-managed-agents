@@ -125,7 +125,11 @@ func (r LeaseWorker) runClaimedWork(ctx context.Context, lease *ama.Lease, workI
 		return err
 	}
 	if !r.supportsRequiredCapability(payload.RequiredRunnerCapability) {
-		return r.failLease(ctx, lease, fmt.Errorf("runner does not advertise required capability %q", payload.RequiredRunnerCapability), nil)
+		err := fmt.Errorf("runner does not advertise required capability %q", payload.RequiredRunnerCapability)
+		if finishErr := r.failLease(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
 	}
 	if payload.Type == "session.start" {
 		return r.runSessionStart(ctx, lease, payload)
@@ -140,17 +144,39 @@ func (r LeaseWorker) supportsRequiredCapability(required string) bool {
 	if r.CurrentCapabilities == nil {
 		return false
 	}
-	for _, capability := range r.CurrentCapabilities() {
+	capabilities := r.CurrentCapabilities()
+	for _, capability := range capabilities {
 		if capability == required {
+			return true
+		}
+	}
+	runtimeName := requiredRuntimeCapability(required)
+	if runtimeName == "" {
+		return false
+	}
+	for _, capability := range capabilities {
+		if capability == runtimeName {
 			return true
 		}
 	}
 	return false
 }
 
+func requiredRuntimeCapability(required string) string {
+	parts := strings.Split(required, ":")
+	if len(parts) == 4 && parts[0] == "runtime-provider-model" {
+		return parts[1]
+	}
+	return ""
+}
+
 func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *ama.WorkItem, payload protocol.WorkPayload) error {
 	if r.SandboxAdapter == nil {
-		return r.failLease(ctx, lease, fmt.Errorf("runner sandbox adapter is not configured"), nil)
+		err := fmt.Errorf("runner sandbox adapter is not configured")
+		if finishErr := r.failLease(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
 	}
 	sessionID := workItemSessionID(workItem)
 	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionStart), toolCallPayload(payload))); err != nil {
@@ -182,7 +208,10 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 		endPayload["result"] = result.Output
 		endPayload["isError"] = true
 		_ = r.uploadSessionEvent(context.Background(), sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionEnd), endPayload))
-		return r.failLease(context.Background(), lease, execErr, result.Output)
+		if finishErr := r.failLease(context.Background(), lease, execErr, result.Output); finishErr != nil {
+			return finishErr
+		}
+		return execErr
 	}
 	endPayload := toolCallPayload(payload)
 	endPayload["result"] = result.Output
@@ -307,7 +336,7 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 	renewErrors := make(chan error, 1)
 	go r.renewLease(leaseCtx, lease, cancel, renewErrors, resumeTokens)
 
-	if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("runner.session.started", r.sessionStartedPayload(payload))); err != nil {
+	if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("runner.metadata", r.sessionStartedPayload(payload))); err != nil {
 		if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
 			return finishErr
 		}
@@ -565,7 +594,8 @@ func (r LeaseWorker) interruptLease(ctx context.Context, lease *ama.Lease, resum
 }
 
 func (r LeaseWorker) sessionStartedPayload(payload protocol.WorkPayload) ama.JSON {
-	started := ama.JSON{
+	data := ama.JSON{
+		"stage":         "session_started",
 		"sessionId":     payload.SessionID,
 		"hostingMode":   payload.HostingMode,
 		"runtime":       payload.Runtime,
@@ -575,9 +605,9 @@ func (r LeaseWorker) sessionStartedPayload(payload protocol.WorkPayload) ama.JSO
 		"executor":      r.Config.SandboxAdapter,
 	}
 	if payload.Model != "" {
-		started["model"] = payload.Model
+		data["model"] = payload.Model
 	}
-	return started
+	return ama.JSON{"data": data}
 }
 
 type relaySink func(ctx context.Context, event ama.JSON, relay *runnersession.RelayStamp) error

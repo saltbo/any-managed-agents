@@ -119,6 +119,14 @@ async function claimSessionLease(authorization: string, sessionId: string, runne
   return (await leaseRes.json()) as { id: string; workItemId: string; runnerId: string }
 }
 
+async function completeLease(authorization: string, leaseId: string) {
+  const res = await jsonFetch(`/api/v1/leases/${leaseId}`, authorization, {
+    method: 'PATCH',
+    body: JSON.stringify({ state: 'completed', result: { smoke: true } }),
+  })
+  if (res.status !== 200) throw new Error(`Lease completion failed: ${res.status} ${await res.text()}`)
+}
+
 // Open the runner relay channel. Returns the accepted WebSocket and a
 // waitForFrame helper, mirroring the sessions.test.ts socket helper pattern.
 async function openRunnerChannel(authorization: string, runnerId: string) {
@@ -249,19 +257,27 @@ describe('[CF] per-runner relay end-to-end', () => {
 
     const session = await createCliRelaySession(authorization, agent.id, environment.id)
     await heartbeatRunner(authorization, runner.id)
-    await claimSessionLease(authorization, session.id, runner.id)
+    const lease = await claimSessionLease(authorization, session.id, runner.id)
 
     const runnerCh = await openRunnerChannel(authorization, runner.id)
     await runnerCh.waitForFrame((f) => f.type === 'runner.channel.accepted', 'runner.channel.accepted')
 
+    runnerCh.ws.send(JSON.stringify({ type: 'work.completed', sessionId: session.id }))
+    await completeLease(authorization, lease.id)
+    runnerCh.ws.close()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    const reconnectedRunnerCh = await openRunnerChannel(authorization, runner.id)
+    await reconnectedRunnerCh.waitForFrame((f) => f.type === 'runner.channel.accepted', 'runner.channel.accepted')
+
     const browser = await openBrowserSocket(authorization, session.id)
-    const request = await runnerCh.waitForFrame(
+    const request = await reconnectedRunnerCh.waitForFrame(
       (f) => f.type === 'session.backfill_request' && f.sessionId === session.id,
       'session.backfill_request',
     )
     expect(request).toMatchObject({ type: 'session.backfill_request', sessionId: session.id, runnerId: runner.id })
 
-    runnerCh.ws.send(
+    reconnectedRunnerCh.ws.send(
       JSON.stringify({
         type: 'session.backfill_response',
         eventId: request.eventId,
@@ -289,7 +305,7 @@ describe('[CF] per-runner relay end-to-end', () => {
     )
     expect((backfill.events as Array<{ id: string }>)[0].id).toBe('event_history')
 
-    runnerCh.ws.close()
+    reconnectedRunnerCh.ws.close()
     browser.ws.close()
   })
 

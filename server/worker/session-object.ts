@@ -193,11 +193,12 @@ export class SessionObject implements DurableObject {
       ...(typeof frame.cursor === 'number' ? { cursor: frame.cursor } : {}),
       ...(typeof frame.eventType === 'string' ? { type: frame.eventType } : {}),
     }
+    const runnerEnvironmentId = scope?.runnerEnvironmentId
     let page: EventPage & { runnerUnavailable?: boolean }
     try {
       page =
-        scope?.runnerEnvironmentId !== undefined
-          ? await this.requestRunnerBackfill(scope.runnerEnvironmentId, sessionId, query)
+        runnerEnvironmentId !== undefined && scope !== null
+          ? await this.requestRunnerBackfill({ ...scope, runnerEnvironmentId }, sessionId, query)
           : queryEventsFromSql(this.eventSql(), sessionId, query)
     } catch (error) {
       this.sendSocketError(
@@ -225,14 +226,19 @@ export class SessionObject implements DurableObject {
   }
 
   private async requestRunnerBackfill(
-    environmentId: string,
+    scope: BrowserScope & { runnerEnvironmentId: string },
     sessionId: string,
     query: EventQuery,
   ): Promise<EventPage & { runnerUnavailable?: boolean }> {
-    const stub = this.env.RUNNER_POOL.get(this.env.RUNNER_POOL.idFromName(environmentId))
+    const stub = this.env.RUNNER_POOL.get(this.env.RUNNER_POOL.idFromName(scope.runnerEnvironmentId))
     const response = await stub.fetch('https://runner-pool/backfill', {
       method: 'POST',
-      body: JSON.stringify({ sessionId, query }),
+      body: JSON.stringify({
+        organizationId: scope.organizationId,
+        projectId: scope.projectId,
+        sessionId,
+        query,
+      }),
       headers: { 'content-type': 'application/json' },
     })
     if (!response.ok) {

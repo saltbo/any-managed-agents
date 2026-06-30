@@ -82,15 +82,9 @@ describe('[spec: sessions/events-hierarchy] amaEventFromRuntimeEvent', () => {
       payload: { message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 2 } },
     })
 
-    expect(
-      amaEventFromRuntimeEvent({
-        type: 'runner.session.started',
-        sessionId: 'session_1',
-        runtime: 'codex',
-      }),
-    ).toMatchObject({
+    expect(amaEventFromRuntimeEvent({ type: 'queue_update', queueDepth: 1 })).toMatchObject({
       type: 'runtime.metadata',
-      payload: { data: { sessionId: 'session_1', runtime: 'codex' } },
+      payload: { data: { queueDepth: 1 } },
     })
   })
 })

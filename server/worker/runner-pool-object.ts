@@ -315,14 +315,18 @@ export class RunnerPoolObject implements DurableObject {
   }
 
   private async requestRunnerBackfill(body: {
+    organizationId?: string
+    projectId?: string
     sessionId?: string
     query?: EventQuery
     timeoutMs?: number
   }): Promise<Response> {
-    if (typeof body.sessionId !== 'string' || !body.query) {
+    if (typeof body.sessionId !== 'string' || typeof body.projectId !== 'string' || !body.query) {
       return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
     }
-    const connection = this.connectionForSession(body.sessionId)
+    const connection =
+      this.connectionForBackfill(body.sessionId) ??
+      (await this.restoreBackfillConnection(body.projectId, body.sessionId))
     if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
       return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
     }
@@ -345,6 +349,31 @@ export class RunnerPoolObject implements DurableObject {
     } catch {
       return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
     }
+  }
+
+  private async restoreBackfillConnection(projectId: string, sessionId: string): Promise<RunnerConnection | null> {
+    const deps = createDeps(this.env)
+    const page = await deps.workItems.list({
+      projectId,
+      sessionId,
+      limit: 20,
+      cursor: null,
+    })
+    for (const workItem of page.rows) {
+      if (!workItem.runnerId || workItem.environmentId === null) {
+        continue
+      }
+      const connection = this.runners.get(workItem.runnerId)
+      if (
+        connection?.socket.readyState === WebSocket.OPEN &&
+        connection.scope.projectId === projectId &&
+        connection.scope.environmentId === workItem.environmentId
+      ) {
+        this.sessionBackfillRunners.set(sessionId, workItem.runnerId)
+        return connection
+      }
+    }
+    return null
   }
 
   private sendBackfillRequest(

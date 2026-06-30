@@ -1,0 +1,616 @@
+// Full-chain AMA smoke.
+//
+// This is intentionally heavier than the focused smoke checks:
+// - boots the real local Worker stack through the e2e server script
+// - builds and starts a real ama-runner process
+// - creates real control-plane resources over HTTP
+// - opens the real browser session WebSocket
+// - verifies live runner events and completed-session backfill after runner reconnect
+//
+//   pnpm run smoke:full
+
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { createServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
+
+const ROOT = process.cwd()
+const RUNTIME = 'codex'
+const PROVIDER = 'workers-ai'
+const MODEL = 'gpt-5.3-codex'
+const DONE_MARKER = 'AMA_FULL_SMOKE_DONE'
+const RESULT_MARKER = 'AMA_FULL_SMOKE_RUNTIME_OK'
+const BACKFILL_REQUEST_ID = 'full_smoke_backfill'
+const timeoutMs = Number(process.env.AMA_FULL_SMOKE_TIMEOUT_MS ?? 5 * 60 * 1000)
+
+const packages = { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] }
+
+function info(message) {
+  console.log(`[smoke:full] ${message}`)
+}
+
+function fail(message, detail) {
+  const error = new Error(message)
+  error.detail = detail
+  error.smokeFatal = true
+  throw error
+}
+
+function run(command, args, options = {}) {
+  info(`${command} ${args.join(' ')}`)
+  const result = spawnSync(command, args, {
+    cwd: options.cwd ?? ROOT,
+    env: options.env ?? process.env,
+    encoding: 'utf8',
+    stdio: options.stdio ?? 'pipe',
+  })
+  if (result.status !== 0) {
+    fail(`${command} failed`, [result.stdout, result.stderr].filter(Boolean).join('\n'))
+  }
+  return result
+}
+
+function commandExists(binary) {
+  return spawnSync(binary, ['--version'], { encoding: 'utf8', stdio: 'pipe' }).status === 0
+}
+
+function tempRoot() {
+  return mkdtempSync(join(tmpdir(), 'ama-full-smoke-'))
+}
+
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      server.close(() => {
+        if (!address || typeof address === 'string') {
+          reject(new Error('failed to allocate a TCP port'))
+          return
+        }
+        resolve(address.port)
+      })
+    })
+  })
+}
+
+function startProcess(command, args, options) {
+  const output = []
+  const child = spawn(command, args, {
+    cwd: options.cwd ?? ROOT,
+    env: options.env ?? process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  })
+  const capture = (chunk) => {
+    const text = chunk.toString()
+    output.push(text)
+    if (output.length > 400) {
+      output.splice(0, output.length - 400)
+    }
+    if (options.prefix) {
+      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+        console.log(`[${options.prefix}] ${line}`)
+      }
+    }
+  }
+  child.stdout.on('data', capture)
+  child.stderr.on('data', capture)
+  return { child, output }
+}
+
+async function stopProcess(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return
+  }
+  const signal = (value) => {
+    if (process.platform !== 'win32' && child.pid) {
+      try {
+        process.kill(-child.pid, value)
+        return
+      } catch {
+        // Fall back to the direct child below.
+      }
+    }
+    child.kill(value)
+  }
+  signal('SIGTERM')
+  await Promise.race([
+    new Promise((resolve) => child.once('exit', resolve)),
+    new Promise((resolve) =>
+      setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          signal('SIGKILL')
+        }
+        resolve()
+      }, 5000),
+    ),
+  ])
+}
+
+async function waitFor(predicate, label, options = {}) {
+  const started = Date.now()
+  const limit = options.timeoutMs ?? timeoutMs
+  let lastError = null
+  while (Date.now() - started <= limit) {
+    try {
+      const result = await predicate()
+      if (result) {
+        return result
+      }
+    } catch (error) {
+      if (error?.smokeFatal === true) {
+        throw error
+      }
+      lastError = error
+    }
+    await new Promise((resolve) => setTimeout(resolve, options.intervalMs ?? 500))
+  }
+  throw new Error(`timed out waiting for ${label}${lastError ? `: ${lastError.message}` : ''}`)
+}
+
+async function waitForReady(origin) {
+  await waitFor(async () => {
+    const response = await fetch(`${origin}/api/v1/e2e/ready`)
+    if (!response.ok) {
+      return false
+    }
+    const body = await response.json()
+    return body.ok === true
+  }, 'local Worker e2e readiness')
+}
+
+async function api(origin, token, path, options = {}) {
+  const headers = {
+    authorization: `Bearer ${token.accessToken}`,
+    'x-ama-project-id': token.projectId,
+    ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
+    ...(options.headers ?? {}),
+  }
+  const response = await fetch(`${origin}${path}`, {
+    method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
+    headers,
+    ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+  })
+  const text = await response.text()
+  const body = text ? JSON.parse(text) : null
+  if (!response.ok) {
+    throw new Error(`${options.method ?? 'GET'} ${path} returned ${response.status}: ${text}`)
+  }
+  return body
+}
+
+async function e2eToken(origin, runId) {
+  const response = await fetch(`${origin}/api/v1/e2e/auth/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ runId }),
+  })
+  const text = await response.text()
+  if (response.status !== 201) {
+    throw new Error(`POST /api/v1/e2e/auth/token returned ${response.status}: ${text}`)
+  }
+  return JSON.parse(text)
+}
+
+function startRunner(binary, origin, token, environmentId, stateDir, workDir) {
+  return startProcess(
+    binary,
+    [
+      '--api-server',
+      origin,
+      '--token',
+      token.accessToken,
+      '--project-id',
+      token.projectId,
+      '--environment-id',
+      environmentId,
+      '--state-dir',
+      stateDir,
+      '--workdir',
+      workDir,
+      '--allow-unsafe-process',
+      '--max-concurrent',
+      '1',
+      '--heartbeat-interval',
+      '5s',
+      '--lease-seconds',
+      '30',
+      '--renew-interval',
+      '10s',
+      '--command-timeout',
+      '4m',
+      '--shutdown-grace',
+      '5s',
+      '--max-session-duration',
+      '4m',
+    ],
+    {
+      cwd: ROOT,
+      prefix: 'ama-runner',
+      env: {
+        ...process.env,
+        AMA_RUNTIME_BRIDGE_HOST_HOME: process.env.AMA_RUNTIME_BRIDGE_HOST_HOME ?? process.env.HOME ?? '',
+      },
+    },
+  )
+}
+
+async function waitForRunner(origin, token, environmentId) {
+  return await waitFor(async () => {
+    const query = new URLSearchParams({ environmentId, state: 'active' })
+    const page = await api(origin, token, `/api/v1/runners?${query.toString()}`)
+    return page.data?.find((runner) => runner.state === 'active' && runner.environmentId === environmentId)
+  }, 'active self-hosted runner')
+}
+
+function socketURL(origin, token, sessionId) {
+  const url = new URL(`/api/v1/sessions/${sessionId}/socket`, origin)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.searchParams.set('access_token', token.accessToken)
+  return url.toString()
+}
+
+function openSocket(url) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url)
+    const timer = setTimeout(() => {
+      socket.close()
+      reject(new Error(`socket open timed out: ${url}`))
+    }, 15_000)
+    socket.addEventListener(
+      'open',
+      () => {
+        clearTimeout(timer)
+        resolve(socket)
+      },
+      { once: true },
+    )
+    socket.addEventListener(
+      'error',
+      () => {
+        clearTimeout(timer)
+        reject(new Error(`socket failed to open: ${url}`))
+      },
+      { once: true },
+    )
+  })
+}
+
+function watchSocket(socket) {
+  const frames = []
+  const waiters = []
+  const closed = { value: false, reason: null }
+  socket.addEventListener('message', (event) => {
+    const frame = JSON.parse(String(event.data))
+    frames.push(frame)
+    for (const waiter of [...waiters]) {
+      if (waiter.predicate(frame)) {
+        waiters.splice(waiters.indexOf(waiter), 1)
+        waiter.resolve(frame)
+      }
+    }
+  })
+  socket.addEventListener('close', (event) => {
+    closed.value = true
+    closed.reason = `${event.code} ${event.reason}`.trim()
+    for (const waiter of waiters.splice(0)) {
+      waiter.reject(new Error(`socket closed while waiting for ${waiter.label}: ${closed.reason}`))
+    }
+  })
+  socket.addEventListener('error', () => {
+    for (const waiter of waiters.splice(0)) {
+      waiter.reject(new Error(`socket errored while waiting for ${waiter.label}`))
+    }
+  })
+  return {
+    frames,
+    async waitFor(predicate, label, limitMs = timeoutMs) {
+      const existing = frames.find(predicate)
+      if (existing) {
+        return existing
+      }
+      if (closed.value) {
+        throw new Error(`socket is closed while waiting for ${label}: ${closed.reason}`)
+      }
+      return await new Promise((resolve, reject) => {
+        const waiter = { predicate, label, resolve, reject }
+        const timer = setTimeout(() => {
+          waiters.splice(waiters.indexOf(waiter), 1)
+          reject(new Error(`timed out waiting for socket frame: ${label}`))
+        }, limitMs)
+        waiters.push({
+          ...waiter,
+          resolve: (value) => {
+            clearTimeout(timer)
+            resolve(value)
+          },
+          reject: (error) => {
+            clearTimeout(timer)
+            reject(error)
+          },
+        })
+      })
+    },
+    requestBackfill(limit = 200) {
+      socket.send(JSON.stringify({ id: BACKFILL_REQUEST_ID, type: 'backfill', requestId: BACKFILL_REQUEST_ID, limit }))
+    },
+    close() {
+      socket.close(1000, 'smoke complete')
+    },
+  }
+}
+
+function frameContains(frame, marker) {
+  return JSON.stringify(frame).includes(marker)
+}
+
+function eventTypes(frames) {
+  return frames
+    .filter((frame) => frame.type === 'event')
+    .map((frame) => frame.record?.event?.type)
+    .filter(Boolean)
+}
+
+function workspacePaths(workDir, sessionId) {
+  const sessionDir = join(workDir, 'sessions', sessionId)
+  return {
+    sessionDir,
+    workspace: join(sessionDir, 'workspace'),
+    eventLog: join(sessionDir, 'events.jsonl'),
+    resultFile: join(sessionDir, 'workspace', 'ama-full-smoke-result.txt'),
+  }
+}
+
+function listTree(root, limit = 120) {
+  if (!existsSync(root)) {
+    return `${root} does not exist`
+  }
+  const rows = []
+  const walk = (dir, prefix = '') => {
+    if (rows.length >= limit) {
+      return
+    }
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (rows.length >= limit) {
+        return
+      }
+      const relative = `${prefix}${entry.name}${entry.isDirectory() ? '/' : ''}`
+      rows.push(relative)
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name), `${relative}`)
+      }
+    }
+  }
+  walk(root)
+  return rows.length > 0 ? rows.join('\n') : `${root} is empty`
+}
+
+function assertWorkspace(workDir, sessionId) {
+  const paths = workspacePaths(workDir, sessionId)
+  statSync(paths.workspace)
+  const result = readFileSync(paths.resultFile, 'utf8')
+  if (result !== `${RESULT_MARKER}\n`) {
+    fail('runtime did not write the expected workspace result file', `${paths.resultFile}: ${JSON.stringify(result)}`)
+  }
+  const eventLog = readFileSync(paths.eventLog, 'utf8')
+  if (!eventLog.includes(DONE_MARKER)) {
+    fail('runner local event log does not include the final assistant marker', paths.eventLog)
+  }
+}
+
+function recentOutput(output) {
+  return output.join('').split(/\r?\n/).slice(-120).join('\n')
+}
+
+async function main() {
+  if (!commandExists('codex')) {
+    fail('codex CLI is required for full smoke')
+  }
+
+  const temp = tempRoot()
+  const runnerBinary = join(temp, 'ama-runner')
+  const stateDir = join(temp, 'state')
+  const workDir = join(temp, 'work')
+  const runId = `full-smoke-${Date.now()}`
+  const port = Number(process.env.E2E_PORT || (await findFreePort()))
+  const origin = `http://localhost:${port}`
+  let server = null
+  let runner = null
+  let restartedRunner = null
+  let socket = null
+  let secondSocket = null
+  let token = null
+  let sessionId = null
+  let failure = null
+
+  try {
+    run('pnpm', ['run', 'bridge:build'])
+    run('go', ['build', '-o', runnerBinary, '.'], { cwd: join(ROOT, 'cmd/ama-runner') })
+
+    info(`starting local e2e server on ${origin}`)
+    server = startProcess('pnpm', ['run', 'e2e:server'], {
+      env: { ...process.env, E2E_PORT: String(port) },
+    })
+    await waitForReady(origin)
+    token = await e2eToken(origin, runId)
+    info(`using project ${token.projectId}`)
+
+    await api(origin, token, '/api/v1/e2e/catalog/seed', { method: 'POST', body: {} })
+    const environment = await api(origin, token, '/api/v1/environments', {
+      method: 'POST',
+      body: {
+        metadata: { name: `full-smoke-env-${runId}` },
+        spec: {
+          scope: 'project',
+          type: 'self_hosted',
+          networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+          packages,
+          variables: {},
+        },
+      },
+    })
+    const environmentId = environment.metadata.uid
+
+    const agent = await api(origin, token, '/api/v1/agents', {
+      method: 'POST',
+      body: {
+        metadata: { name: `full-smoke-agent-${runId}` },
+        spec: {
+          systemPrompt: [
+            'You are running the AMA full-chain smoke test.',
+            `Write exactly "${RESULT_MARKER}\\n" to ama-full-smoke-result.txt in the workspace root.`,
+            `When done, reply exactly "${DONE_MARKER}".`,
+          ].join('\n'),
+          provider: PROVIDER,
+          model: MODEL,
+          skills: [],
+          subagents: [],
+          mcpConnectors: [],
+        },
+      },
+    })
+
+    const session = await api(origin, token, '/api/v1/sessions', {
+      method: 'POST',
+      body: {
+        metadata: { labels: { smoke: 'full' } },
+        spec: {
+          agentId: agent.metadata.uid,
+          environmentId,
+          runtime: RUNTIME,
+          env: {},
+          envFrom: [],
+          volumes: [],
+          volumeMounts: [],
+        },
+        prompt: [
+          'Run the full-chain AMA smoke test.',
+          `Ensure ama-full-smoke-result.txt contains exactly "${RESULT_MARKER}\\n".`,
+          `Reply exactly "${DONE_MARKER}" and nothing else.`,
+        ].join('\n'),
+      },
+    })
+    sessionId = session.metadata.uid
+    info(`created session ${sessionId}`)
+
+    socket = watchSocket(await openSocket(socketURL(origin, token, sessionId)))
+    runner = startRunner(runnerBinary, origin, token, environmentId, stateDir, workDir)
+    await waitForRunner(origin, token, environmentId)
+    await socket.waitFor(
+      (frame) =>
+        frame.type === 'event' &&
+        frame.record?.event?.type === 'runner.metadata' &&
+        frame.record.event.payload?.data?.stage === 'session_started',
+      'runner.metadata/session_started',
+    )
+    await socket.waitFor((frame) => frame.type === 'event' && frameContains(frame, DONE_MARKER), DONE_MARKER)
+
+    const completedSession = await waitFor(async () => {
+      const current = await api(origin, token, `/api/v1/sessions/${sessionId}`)
+      if (current.status?.phase === 'error') {
+        fail('session entered error phase', JSON.stringify(current.status, null, 2))
+      }
+      return current.status?.phase === 'idle' || current.status?.phase === 'stopped' ? current : false
+    }, 'session completion')
+    if (completedSession.status?.phase !== 'idle' && completedSession.status?.phase !== 'stopped') {
+      fail('session did not complete cleanly', JSON.stringify(completedSession.status, null, 2))
+    }
+
+    assertWorkspace(workDir, sessionId)
+    socket.requestBackfill()
+    const firstBackfill = await socket.waitFor(
+      (frame) => frame.type === 'backfill' && frame.requestId === BACKFILL_REQUEST_ID,
+      'initial completed-session backfill',
+    )
+    if (!Array.isArray(firstBackfill.events) || !firstBackfill.events.some((event) => frameContains(event, DONE_MARKER))) {
+      fail('browser socket backfill does not include the completed runtime event', JSON.stringify(firstBackfill, null, 2))
+    }
+
+    await stopProcess(runner.child)
+    runner = null
+    restartedRunner = startRunner(runnerBinary, origin, token, environmentId, stateDir, workDir)
+    await waitForRunner(origin, token, environmentId)
+
+    secondSocket = watchSocket(await openSocket(socketURL(origin, token, sessionId)))
+    const reconnectBackfill = await secondSocket.waitFor(
+      (frame) => frame.type === 'backfill',
+      'automatic backfill after runner reconnect',
+    )
+    if (reconnectBackfill.type === 'runner_unavailable') {
+      fail('completed session backfill reported runner_unavailable after runner reconnect')
+    }
+    if (!Array.isArray(reconnectBackfill.events) || !reconnectBackfill.events.some((event) => frameContains(event, DONE_MARKER))) {
+      secondSocket.requestBackfill()
+      const explicitBackfill = await secondSocket.waitFor(
+        (frame) => frame.type === 'backfill' && frame.requestId === BACKFILL_REQUEST_ID,
+        'explicit backfill after runner reconnect',
+      )
+      if (!Array.isArray(explicitBackfill.events) || !explicitBackfill.events.some((event) => frameContains(event, DONE_MARKER))) {
+        fail(
+          'completed session backfill after runner reconnect does not include the runtime event',
+          JSON.stringify({ automatic: reconnectBackfill, explicit: explicitBackfill }, null, 2),
+        )
+      }
+    }
+
+    const types = eventTypes(socket.frames)
+    info(`verified ${sessionId}; live event types: ${types.join(', ')}`)
+    info('AMA full-chain smoke passed')
+  } catch (error) {
+    const liveDiagnostics = []
+    if (token && sessionId) {
+      try {
+        liveDiagnostics.push(
+          `session:\n${JSON.stringify(await api(origin, token, `/api/v1/sessions/${sessionId}`), null, 2)}`,
+        )
+      } catch (diagnosticError) {
+        liveDiagnostics.push(`session diagnostic failed: ${diagnosticError.message}`)
+      }
+      try {
+        const query = new URLSearchParams({ sessionId, limit: '20' })
+        liveDiagnostics.push(
+          `work items:\n${JSON.stringify(await api(origin, token, `/api/v1/work-items?${query.toString()}`), null, 2)}`,
+        )
+      } catch (diagnosticError) {
+        liveDiagnostics.push(`work item diagnostic failed: ${diagnosticError.message}`)
+      }
+    }
+    const details = [
+      `origin: ${origin}`,
+      token ? `projectId: ${token.projectId}` : null,
+      sessionId ? `sessionId: ${sessionId}` : null,
+      sessionId && existsSync(workDir) ? `sessionDir: ${workspacePaths(workDir, sessionId).sessionDir}` : null,
+      existsSync(workDir) ? `workDir tree:\n${listTree(workDir)}` : null,
+      existsSync(stateDir) ? `stateDir tree:\n${listTree(stateDir)}` : null,
+      ...liveDiagnostics,
+      server ? `e2e server output:\n${recentOutput(server.output)}` : null,
+      runner ? `runner output:\n${recentOutput(runner.output)}` : null,
+      restartedRunner ? `restarted runner output:\n${recentOutput(restartedRunner.output)}` : null,
+      socket ? `socket frames:\n${JSON.stringify(socket.frames.slice(-20), null, 2)}` : null,
+      secondSocket ? `second socket frames:\n${JSON.stringify(secondSocket.frames.slice(-20), null, 2)}` : null,
+    ].filter(Boolean)
+    failure = {
+      message: error instanceof Error ? error.message : String(error),
+      detail: [error instanceof Error ? error.detail : null, details.join('\n\n')].filter(Boolean).join('\n\n'),
+    }
+  } finally {
+    socket?.close()
+    secondSocket?.close()
+    await stopProcess(runner?.child)
+    await stopProcess(restartedRunner?.child)
+    await stopProcess(server?.child)
+  }
+  if (failure) {
+    console.error(`\nsmoke failed: ${failure.message}`)
+    if (failure.detail) {
+      console.error(failure.detail)
+    }
+    process.exitCode = 1
+  }
+}
+
+await main()
