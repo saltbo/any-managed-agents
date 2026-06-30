@@ -369,14 +369,11 @@ func stringMap(value *map[string]string) map[string]string {
 	return lo.Assign(map[string]string{}, *value)
 }
 
-func jsonMap(value *map[string]*interface{}) map[string]any {
+func jsonMap(value *map[string]interface{}) map[string]any {
 	if value == nil {
 		return nil
 	}
-	return lo.MapEntries(*value, func(key string, item *interface{}) (string, any) {
-		if item == nil {
-			return key, nil
-		}
-		return key, *item
+	return lo.MapEntries(*value, func(key string, item interface{}) (string, any) {
+		return key, item
 	})
 }

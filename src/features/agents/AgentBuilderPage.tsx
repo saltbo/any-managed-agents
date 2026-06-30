@@ -75,7 +75,7 @@ export function AgentBuilderPage() {
     queryFn: () => api.listSessionEvents(testSessionId as string, { limit: 200, order: 'asc' }),
     enabled: Boolean(testSessionId),
     refetchInterval: (query) => {
-      const hasAssistantMessage = (query.state.data?.data ?? []).some((event) => event.type === 'message_end')
+      const hasAssistantMessage = (query.state.data?.data ?? []).some((record) => record.event.type === 'message_end')
       const state = testSessionQuery.data?.status.phase
       const terminal = state !== undefined && !['pending', 'running'].includes(state)
       return terminal && hasAssistantMessage ? false : 1000

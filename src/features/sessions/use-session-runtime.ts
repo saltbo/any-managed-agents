@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import type { Session, SessionEvent } from '@/lib/amarpc'
+import type { Session, EventRecord } from '@/lib/amarpc'
 import {
   initialSessionRuntimeState,
-  type SessionSocketCommand,
-  type SessionSocketCommandType,
+  type SessionSocketClientMessage,
+  type SessionSocketClientMessageType,
   sessionSocketUrl,
   sessionRuntimeReducer,
 } from './session-runtime'
@@ -14,7 +14,7 @@ export function useSessionRuntimeSession({
   onEventsChanged,
 }: {
   session: Session | null
-  events: SessionEvent[]
+  events: EventRecord[]
   onEventsChanged: () => void
 }) {
   const [state, dispatch] = useReducer(sessionRuntimeReducer, initialSessionRuntimeState)
@@ -64,17 +64,24 @@ export function useSessionRuntimeSession({
       /* v8 ignore start -- guard fires only in stale-socket race conditions */
       if (socketRef.current !== socket) return
       /* v8 ignore stop */
-      const frame = parseRuntimeMessage(message.data)
-      if (frame instanceof Error) {
-        dispatch({ type: 'connection', state: 'error', error: frame.message })
+      const socketMessage = parseSessionSocketServerMessage(message.data)
+      if (socketMessage instanceof Error) {
+        dispatch({ type: 'connection', state: 'error', error: socketMessage.message })
         return
       }
-      if (frame.type === 'backfill') {
-        dispatch({ type: 'persisted_events', events: frame.events })
-      } else {
-        dispatch({ type: 'persisted_events', events: [frame.event] })
+      if (socketMessage.type === 'ack') {
+        return
       }
-      if (shouldRefreshAfterFrame(frame)) {
+      if (socketMessage.type === 'error') {
+        dispatch({ type: 'connection', state: 'error', error: socketMessage.message })
+        return
+      }
+      if (socketMessage.type === 'backfill') {
+        dispatch({ type: 'persisted_events', events: socketMessage.events })
+      } else {
+        dispatch({ type: 'persisted_events', events: [socketMessage.record] })
+      }
+      if (shouldRefreshAfterMessage(socketMessage)) {
         window.clearTimeout(refreshTimerRef.current ?? undefined)
         refreshTimerRef.current = window.setTimeout(onEventsChanged, 150)
       }
@@ -102,13 +109,13 @@ export function useSessionRuntimeSession({
     }
   }, [endpoint, onEventsChanged, connectionAttempt])
 
-  const sendCommand = useCallback((type: SessionSocketCommandType, content?: string) => {
+  const sendCommand = useCallback((type: SessionSocketClientMessageType, content?: string) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       dispatch({ type: 'connection', state: 'error', error: 'Session socket is not open' })
       return false
     }
-    const nextCommand = command(type, content)
+    const nextCommand = clientMessage(type, content)
     dispatch({ type: 'command_sent', command: nextCommand, at: new Date().toISOString() })
     socket.send(JSON.stringify(nextCommand))
     return true
@@ -123,7 +130,7 @@ export function useSessionRuntimeSession({
   }
 }
 
-function command(type: SessionSocketCommandType, content?: string): SessionSocketCommand {
+function clientMessage(type: SessionSocketClientMessageType, content?: string): SessionSocketClientMessage {
   return {
     id: crypto.randomUUID(),
     type,
@@ -131,11 +138,13 @@ function command(type: SessionSocketCommandType, content?: string): SessionSocke
   }
 }
 
-type RuntimeSocketFrame =
-  | { type: 'backfill'; events: SessionEvent[] }
-  | { type: 'event'; event: SessionEvent }
+type SessionSocketServerMessage =
+  | { type: 'backfill'; events: EventRecord[] }
+  | { type: 'event'; record: EventRecord }
+  | { type: 'ack'; id: string }
+  | { type: 'error'; id?: string; message: string }
 
-function parseRuntimeMessage(data: unknown): RuntimeSocketFrame | Error {
+function parseSessionSocketServerMessage(data: unknown): SessionSocketServerMessage | Error {
   if (typeof data !== 'string') {
     return new Error('Session socket emitted non-text data')
   }
@@ -144,7 +153,7 @@ function parseRuntimeMessage(data: unknown): RuntimeSocketFrame | Error {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return new Error('Session socket emitted a non-object JSON message')
     }
-    return socketFrameFrom(parsed as Record<string, unknown>)
+    return sessionSocketServerMessageFrom(parsed as Record<string, unknown>)
   } catch (error) {
     /* v8 ignore start -- JSON.parse always throws SyntaxError (an Error); the non-Error branch is unreachable */
     return error instanceof Error ? error : new Error('Session socket emitted invalid JSON')
@@ -152,42 +161,57 @@ function parseRuntimeMessage(data: unknown): RuntimeSocketFrame | Error {
   }
 }
 
-function socketFrameFrom(parsed: Record<string, unknown>): RuntimeSocketFrame | Error {
+function sessionSocketServerMessageFrom(parsed: Record<string, unknown>): SessionSocketServerMessage | Error {
   if (parsed.type === 'backfill') {
     return Array.isArray(parsed.events)
-      ? { type: 'backfill', events: parsed.events.filter(isSessionEvent) }
+      ? { type: 'backfill', events: parsed.events.filter(isEventRecord) }
       : new Error('Session socket emitted invalid backfill frame')
   }
   if (parsed.type === 'event') {
-    return isSessionEvent(parsed.event)
-      ? { type: 'event', event: parsed.event }
+    return isEventRecord(parsed.record)
+      ? { type: 'event', record: parsed.record }
       : new Error('Session socket emitted invalid event frame')
+  }
+  if (parsed.type === 'ack') {
+    return typeof parsed.id === 'string'
+      ? { type: 'ack', id: parsed.id }
+      : new Error('Session socket emitted invalid ack message')
+  }
+  if (parsed.type === 'error') {
+    return typeof parsed.message === 'string'
+      ? { type: 'error', ...(typeof parsed.id === 'string' ? { id: parsed.id } : {}), message: parsed.message }
+      : new Error('Session socket emitted invalid error message')
   }
   return new Error('Session socket emitted an unsupported frame')
 }
 
-function isSessionEvent(value: unknown): value is SessionEvent {
+function isEventRecord(value: unknown): value is EventRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return false
   }
-  const event = value as Partial<SessionEvent>
+  const record = value as Partial<EventRecord>
+  const amaEvent =
+    record.event && typeof record.event === 'object' && !Array.isArray(record.event)
+      ? (record.event as { type?: unknown; payload?: unknown })
+      : null
   return (
-    typeof event.id === 'string' &&
-    typeof event.sessionId === 'string' &&
-    typeof event.sequence === 'number' &&
-    typeof event.type === 'string' &&
-    typeof event.createdAt === 'string' &&
-    Boolean(event.payload) &&
-    typeof event.payload === 'object' &&
-    !Array.isArray(event.payload)
+    typeof record.id === 'string' &&
+    typeof record.sessionId === 'string' &&
+    typeof record.sequence === 'number' &&
+    typeof record.createdAt === 'string' &&
+    amaEvent !== null &&
+    typeof amaEvent.type === 'string' &&
+    Boolean(amaEvent.payload) &&
+    typeof amaEvent.payload === 'object' &&
+    !Array.isArray(amaEvent.payload)
   )
 }
 
-function shouldRefreshAfterFrame(frame: RuntimeSocketFrame) {
-  if (frame.type === 'backfill') {
+function shouldRefreshAfterMessage(message: SessionSocketServerMessage) {
+  if (message.type !== 'event') {
     return false
   }
-  const eventType = frame.event.type
+  const eventType = message.record.event.type
   return (
     eventType === 'agent_end' ||
     eventType === 'turn_end' ||

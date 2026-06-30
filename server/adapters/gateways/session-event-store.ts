@@ -1,22 +1,21 @@
-// The canonical session-event store router. "Storage follows the loop": cloud-
-// loop (ama) sessions keep their event firehose in the per-session Session DO
-// (SQLite hot + R2 cold); everything else — pre-migration cloud sessions and
-// self-hosted CLI sessions — stays on D1. The split is decided per session by a
-// stamp the cloud-start path writes (metadata.eventStore === 'session-do'),
-// cached per worker invocation so the firehose pays at most one lookup.
+// The session event store router. "Storage follows the loop": cloud-loop (ama)
+// sessions keep their event firehose in the per-session Session DO (SQLite hot +
+// R2 cold). Self-hosted/external runtime sessions keep durable history on the
+// runner only; the cloud relays live events and backfill reads but does not store
+// those events.
 //
 // The DO append owns redaction, sequence threading, and browser fan-out; this
 // router owns the routing + the D1 usage accounting that the DO path would
 // otherwise skip (the D1 insert records it inline).
 
 import type {
-  SessionEventOverrides,
-  SessionEventPage,
-  SessionEventQuery,
-  SessionEventStore,
+  EventWriteOptions,
+  EventPage,
+  EventQuery,
+  EventStore,
 } from '@server/usecases/ports'
-import type { CanonicalAmaSessionEvent } from '@shared/session-events'
-import { canonicalAmaSessionEventFromRuntimeEvent, SESSION_DO_EVENT_STORE } from '@shared/session-events'
+import type { AmaEvent, CanonicalAmaSessionEvent } from '@shared/session-events'
+import { canonicalAmaSessionEventFromAmaEvent, SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import { eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { sessions } from '../../db/schema'
@@ -44,27 +43,31 @@ export function createCloudLoopChecker(db: Db): CloudLoopChecker {
   }
 }
 
+async function sessionEnvironmentId(db: Db, sessionId: string): Promise<string | null> {
+  const row = await db.select({ environmentId: sessions.environmentId }).from(sessions).where(eq(sessions.id, sessionId)).get()
+  return row?.environmentId ?? null
+}
+
 // The D1 delegates the router falls back to for non-DO sessions: the existing
 // repo methods, passed in by the composition root (no new D1 query/append code).
-export interface SessionEventD1Delegates {
-  append(
-    scope: { organizationId: string; projectId: string; sessionId: string },
-    canonicalEvent: CanonicalAmaSessionEvent,
-    overrides?: SessionEventOverrides,
-  ): Promise<string>
-  queryEvents(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
+export interface EventD1Delegates {
+  queryEvents(sessionId: string, query: EventQuery): Promise<EventPage>
   eventStream(sessionId: string): Promise<{ type: string; payload: string }[]>
 }
 
-export function createSessionEventStore(
+export function createEventStore(
   db: Db,
   isCloudLoop: CloudLoopChecker,
   doStore: SessionDoEventStore,
-  d1: SessionEventD1Delegates,
-): SessionEventStore {
+  d1: EventD1Delegates,
+): EventStore {
   const usage = createUsageWriteRepo(db)
 
-  const appendCanonicalEvent: SessionEventStore['appendCanonicalEvent'] = async (scope, canonicalEvent, overrides) => {
+  const appendStoredEvent = async (
+    scope: { organizationId: string; projectId: string; sessionId: string },
+    canonicalEvent: CanonicalAmaSessionEvent,
+    overrides?: EventWriteOptions,
+  ) => {
     if (await isCloudLoop(scope.sessionId)) {
       const { id } = await doStore.append(scope, canonicalEvent, overrides)
       // The D1 insert records usage inline; the DO path does not, so the router
@@ -76,16 +79,15 @@ export function createSessionEventStore(
     // store-and-serves the event; the cloud keeps no copy.
     return 'relay'
   }
+  const appendEvent: EventStore['appendEvent'] = async (scope, event, overrides) => {
+    return await appendStoredEvent(scope, canonicalAmaSessionEventFromAmaEvent(event), overrides)
+  }
 
   return {
-    appendCanonicalEvent,
+    appendEvent,
     async insertEvents(scope, events) {
       for (const event of events) {
-        const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
-          { type: event.type, ...event.payload },
-          event.metadata,
-        )
-        await appendCanonicalEvent(scope, canonicalEvent)
+        await appendEvent(scope, event)
       }
       return events.length
     },
@@ -93,16 +95,10 @@ export function createSessionEventStore(
       if (await isCloudLoop(sessionId)) {
         return await doStore.query(sessionId, query)
       }
-      // Relay the read to the session's runner; runner offline ⇒ fall back to D1 (a
-      // pre-migration session's rows, or nothing for a completed relay session).
-      const relayed = await doStore.relayQuery(sessionId, query)
-      if (!relayed.runnerUnavailable) {
-        return { rows: relayed.rows, hasMore: relayed.hasMore }
-      }
-      return await d1.queryEvents(sessionId, query)
+      return await doStore.relayQuery(sessionId, query, await sessionEnvironmentId(db, sessionId))
     },
     async eventStream(sessionId) {
-      return (await isCloudLoop(sessionId)) ? await doStore.stream(sessionId) : await d1.eventStream(sessionId)
+      return (await isCloudLoop(sessionId)) ? await doStore.stream(sessionId) : []
     },
     async archive(scope) {
       if (await isCloudLoop(scope.sessionId)) {

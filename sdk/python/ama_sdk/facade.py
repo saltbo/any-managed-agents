@@ -147,15 +147,15 @@ class RunnerChannel(JsonWebSocket):
         while True:
             yield await self.recv_json()
 
-    async def send(self, frame: Any) -> None:
-        await self.send_json(frame)
+    async def send(self, message: Any) -> None:
+        await self.send_json(message)
 
 
 class SessionStream(JsonWebSocket):
     def __init__(self, url: str, headers: dict[str, str]) -> None:
         super().__init__(url, headers)
         self._events: asyncio.Queue[Any | None] = asyncio.Queue()
-        self._frames: asyncio.Queue[Any | None] = asyncio.Queue()
+        self._messages: asyncio.Queue[Any | None] = asyncio.Queue()
         self._backfills: dict[str, asyncio.Future[Any]] = {}
         self._reader: asyncio.Task[None] | None = None
         self._backfill_seq = 0
@@ -168,17 +168,17 @@ class SessionStream(JsonWebSocket):
     async def _read_loop(self) -> None:
         try:
             async for message in self._connected():
-                frame = json.loads(message)
-                frame_type = frame.get("type") if isinstance(frame, dict) else None
-                if frame_type == "event":
-                    await self._events.put(frame.get("event"))
-                elif frame_type == "backfill":
-                    request_id = frame.get("requestId")
+                socket_message = json.loads(message)
+                message_type = socket_message.get("type") if isinstance(socket_message, dict) else None
+                if message_type == "event":
+                    await self._events.put(socket_message.get("record"))
+                elif message_type == "backfill":
+                    request_id = socket_message.get("requestId")
                     future = self._backfills.pop(request_id, None)
                     if future is not None and not future.done():
-                        future.set_result(frame)
+                        future.set_result(socket_message)
                 else:
-                    await self._frames.put(frame)
+                    await self._messages.put(socket_message)
         except Exception as error:
             for future in self._backfills.values():
                 if not future.done():
@@ -186,7 +186,7 @@ class SessionStream(JsonWebSocket):
             self._backfills.clear()
         finally:
             await self._events.put(None)
-            await self._frames.put(None)
+            await self._messages.put(None)
 
     async def events(self) -> AsyncIterator[Any]:
         while True:
@@ -195,22 +195,22 @@ class SessionStream(JsonWebSocket):
                 return
             yield event
 
-    async def frames(self) -> AsyncIterator[Any]:
+    async def messages(self) -> AsyncIterator[Any]:
         while True:
-            frame = await self._frames.get()
-            if frame is None:
+            message = await self._messages.get()
+            if message is None:
                 return
-            yield frame
+            yield message
 
-    async def send(self, frame: Any) -> None:
-        await self.send_json(frame)
+    async def send(self, message: Any) -> None:
+        await self.send_json(message)
 
     async def backfill(self, **options: Any) -> Any:
         self._backfill_seq += 1
         request_id = f"bf_{self._backfill_seq}"
         future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         self._backfills[request_id] = future
-        await self.send_json({"type": "backfill", "requestId": request_id, **options})
+        await self.send_json({"id": request_id, "type": "backfill", "requestId": request_id, **options})
         return await future
 
     async def close(self, code: int = 1000, reason: str = "") -> None:

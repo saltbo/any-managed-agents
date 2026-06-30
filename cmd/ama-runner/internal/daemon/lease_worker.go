@@ -153,11 +153,7 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 		return r.failLease(ctx, lease, fmt.Errorf("runner sandbox adapter is not configured"), nil)
 	}
 	sessionID := workItemSessionID(workItem)
-	if err := r.uploadSessionEvent(ctx, sessionID, string(sessionevent.EventTypeToolExecutionStart), ama.JSON{
-		"toolCallId": payload.ToolCallID,
-		"toolName":   payload.ToolName,
-		"args":       payload.Input,
-	}); err != nil {
+	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionStart), toolCallPayload(payload))); err != nil {
 		return err
 	}
 
@@ -181,21 +177,17 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 		return r.cancelLease(context.Background(), lease, ctx.Err())
 	}
 	if execErr != nil {
-		_ = r.uploadSessionEvent(context.Background(), sessionID, string(sessionevent.EventTypeToolExecutionEnd), ama.JSON{
-			"toolCallId": payload.ToolCallID,
-			"toolName":   payload.ToolName,
-			"error":      execErr.Error(),
-			"result":     result.Output,
-			"isError":    true,
-		})
+		endPayload := toolCallPayload(payload)
+		endPayload["error"] = ama.JSON{"message": execErr.Error()}
+		endPayload["result"] = result.Output
+		endPayload["isError"] = true
+		_ = r.uploadSessionEvent(context.Background(), sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionEnd), endPayload))
 		return r.failLease(context.Background(), lease, execErr, result.Output)
 	}
-	if err := r.uploadSessionEvent(ctx, sessionID, string(sessionevent.EventTypeToolExecutionEnd), ama.JSON{
-		"toolCallId": payload.ToolCallID,
-		"toolName":   payload.ToolName,
-		"result":     result.Output,
-		"isError":    false,
-	}); err != nil {
+	endPayload := toolCallPayload(payload)
+	endPayload["result"] = result.Output
+	endPayload["isError"] = false
+	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolExecutionEnd), endPayload)); err != nil {
 		return err
 	}
 	return r.completeLease(ctx, lease, ama.JSON{
@@ -253,11 +245,11 @@ func (r LeaseWorker) runAMASandboxSession(ctx context.Context, lease *ama.Lease,
 	}
 	handle := runnersession.NewSandboxHandle(payload.SessionID, workspace, r.SandboxAdapter)
 	relay.Register(payload.SessionID, handle)
-	if err := r.uploadSessionEvent(leaseCtx, payload.SessionID, "runner.sandbox.ready", ama.JSON{
+	if err := r.uploadSessionEvent(leaseCtx, payload.SessionID, runnerEvent("runner.sandbox.ready", ama.JSON{
 		"sessionId": payload.SessionID,
 		"runtime":   payload.Runtime,
 		"executor":  r.Config.SandboxAdapter,
-	}); err != nil {
+	})); err != nil {
 		relay.Unregister(payload.SessionID)
 		if finishErr := r.failLease(ctx, lease, err, nil); finishErr != nil {
 			return finishErr
@@ -297,12 +289,12 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		}
 		return err
 	}
-	relayEvent := func(relayCtx context.Context, eventType string, eventPayload ama.JSON, stamp *runnersession.RelayStamp) error {
-		relay.RelayEvent(relayCtx, payload.SessionID, eventType, eventPayload, stamp)
+	relayEvent := func(relayCtx context.Context, event ama.JSON, stamp *runnersession.RelayStamp) error {
+		relay.RelayEvent(relayCtx, payload.SessionID, event, stamp)
 		return nil
 	}
 	handle := runnersession.NewHostHandle(payload.SessionID, func(message string) {
-		if err := r.relayStoredEvent(context.Background(), store, relayEvent, "message_end", userPromptEventPayload(message)); err != nil {
+		if err := r.relayStoredEvent(context.Background(), store, relayEvent, runnerEvent("message_end", userPromptEventPayload(message))); err != nil {
 			slog.Warn("runner failed to record delivered prompt event", "sessionId", payload.SessionID, "error", err)
 		}
 	})
@@ -315,14 +307,14 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 	renewErrors := make(chan error, 1)
 	go r.renewLease(leaseCtx, lease, cancel, renewErrors, resumeTokens)
 
-	if err := r.relayStoredEvent(leaseCtx, store, relayEvent, "runner.session.started", r.sessionStartedPayload(payload)); err != nil {
+	if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("runner.session.started", r.sessionStartedPayload(payload))); err != nil {
 		if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
 			return finishErr
 		}
 		return err
 	}
 	if prompt := workPrompt(payload); prompt != "" {
-		if err := r.relayStoredEvent(leaseCtx, store, relayEvent, "message_end", userPromptEventPayload(prompt)); err != nil {
+		if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("message_end", userPromptEventPayload(prompt))); err != nil {
 			if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
 				return finishErr
 			}
@@ -334,7 +326,7 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 	if workspaceErr != nil {
 		result := runtime.Result{Err: workspaceErr}
 		writeRuntimeError := func(errPayload ama.JSON) {
-			_ = r.relayStoredEvent(context.Background(), store, relayEvent, string(sessionevent.EventTypeRuntimeError), errPayload)
+			_ = r.relayStoredEvent(context.Background(), store, relayEvent, runnerEvent(string(sessionevent.EventTypeRuntimeError), errPayload))
 		}
 		finalizeErr := r.finalizeRuntimeSession(leaseCtx, ctx, lease, resumeTokens, result, writeRuntimeError)
 		cancel()
@@ -367,14 +359,14 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		WorkDir:               workspace.Cwd,
 		OnResumeToken:         resumeTokens.Set,
 		RegisterControlSender: handle.RegisterControlSender,
-	}, func(eventType string, eventPayload runtime.JSON) error {
+	}, func(event runtime.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return r.relayStoredEvent(leaseCtx, store, relayEvent, eventType, ama.JSON(eventPayload))
+		return r.relayStoredEvent(leaseCtx, store, relayEvent, ama.JSON(event))
 	})
 	result = r.attachMemoryStores(workspace, result)
 	writeRuntimeError := func(errPayload ama.JSON) {
-		_ = r.relayStoredEvent(context.Background(), store, relayEvent, string(sessionevent.EventTypeRuntimeError), errPayload)
+		_ = r.relayStoredEvent(context.Background(), store, relayEvent, runnerEvent(string(sessionevent.EventTypeRuntimeError), errPayload))
 	}
 	finalizeErr := r.finalizeRuntimeSession(leaseCtx, ctx, lease, resumeTokens, result, writeRuntimeError)
 	cancel()
@@ -524,20 +516,15 @@ func (r LeaseWorker) renewLease(ctx context.Context, lease *ama.Lease, cancel co
 	}
 }
 
-func (r LeaseWorker) uploadSessionEvent(ctx context.Context, sessionID string, eventType string, payload ama.JSON) error {
+func (r LeaseWorker) uploadSessionEvent(ctx context.Context, sessionID string, event ama.JSON) error {
 	if sessionID == "" {
 		return nil
 	}
-	_, err := r.Client.Sessions.CreateEvents(ctx, sessionID, ama.CreateSessionEventsRequest{
-		Events: []ama.SessionEventInput{{
-			Type:    eventType,
-			Payload: payload,
-			Metadata: lo.ToPtr(ama.JSON{
-				"runnerId": r.RunnerID,
-				"executor": r.Config.SandboxAdapter,
-			}),
-		}},
+	event = withRunnerMetadata(event, ama.JSON{
+		"runnerId": r.RunnerID,
+		"executor": r.Config.SandboxAdapter,
 	})
+	_, err := r.Client.Sessions.CreateRawEvents(ctx, sessionID, []ama.JSON{event})
 	return err
 }
 
@@ -593,14 +580,40 @@ func (r LeaseWorker) sessionStartedPayload(payload protocol.WorkPayload) ama.JSO
 	return started
 }
 
-type relaySink func(ctx context.Context, eventType string, payload ama.JSON, relay *runnersession.RelayStamp) error
+type relaySink func(ctx context.Context, event ama.JSON, relay *runnersession.RelayStamp) error
 
-func (r LeaseWorker) relayStoredEvent(ctx context.Context, store *runnersession.EventLog, relay relaySink, eventType string, payload ama.JSON) error {
-	stored, err := store.Append(eventType, payload, ama.JSON{"runnerId": r.RunnerID, "executor": r.Config.SandboxAdapter})
+func (r LeaseWorker) relayStoredEvent(ctx context.Context, store *runnersession.EventLog, relay relaySink, event ama.JSON) error {
+	stored, err := store.Append(withRunnerMetadata(event, ama.JSON{"runnerId": r.RunnerID, "executor": r.Config.SandboxAdapter}))
 	if err != nil {
 		return err
 	}
-	return relay(ctx, eventType, payload, &runnersession.RelayStamp{Sequence: stored.Sequence, ID: stored.ID, CreatedAt: stored.CreatedAt})
+	return relay(ctx, stored.Event, &runnersession.RelayStamp{Sequence: stored.Sequence, ID: stored.ID, CreatedAt: stored.CreatedAt})
+}
+
+func runnerEvent(eventType string, payload ama.JSON) ama.JSON {
+	return ama.JSON{"type": eventType, "payload": payload}
+}
+
+func withRunnerMetadata(event ama.JSON, metadata ama.JSON) ama.JSON {
+	next := lo.Assign(ama.JSON{}, event)
+	current, _ := next["metadata"].(ama.JSON)
+	if current == nil {
+		if record, ok := next["metadata"].(map[string]any); ok {
+			current = ama.JSON(record)
+		}
+	}
+	next["metadata"] = lo.Assign(ama.JSON{}, current, metadata)
+	return next
+}
+
+func toolCallPayload(payload protocol.WorkPayload) ama.JSON {
+	return ama.JSON{
+		"toolCall": ama.JSON{
+			"id":    payload.ToolCallID,
+			"name":  payload.ToolName,
+			"input": payload.Input,
+		},
+	}
 }
 
 func userPromptEventPayload(message string) ama.JSON {

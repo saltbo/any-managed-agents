@@ -1,6 +1,7 @@
 package ama
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -749,7 +750,7 @@ func (s SessionsService) GetMessage(ctx context.Context, sessionID string, messa
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
 }
 
-func (s SessionsService) ListEvents(ctx context.Context, sessionID string, params *ListSessionEventsParams) (*SessionEventListResponse, error) {
+func (s SessionsService) ListEvents(ctx context.Context, sessionID string, params *ListSessionEventsParams) (*EventRecordListResponse, error) {
 	response, err := s.client.raw.ListSessionEventsWithResponse(ctx, sessionID, params)
 	if err != nil {
 		return nil, err
@@ -1107,6 +1108,25 @@ type RunnerSessionsService struct {
 
 func (s RunnerSessionsService) CreateEvents(ctx context.Context, sessionID string, body CreateSessionEventsRequest) (*SessionEventsAccepted, error) {
 	response, err := s.client.raw.CreateSessionEventsWithResponse(ctx, sessionID, body)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON403, response.JSON404)
+}
+
+func (s RunnerSessionsService) CreateRawEvents(ctx context.Context, sessionID string, events []JSON) (*SessionEventsAccepted, error) {
+	body, err := json.Marshal(struct {
+		Events []JSON `json:"events"`
+	}{Events: events})
+	if err != nil {
+		return nil, err
+	}
+	response, err := s.client.raw.CreateSessionEventsWithBodyWithResponse(
+		ctx,
+		sessionID,
+		"application/json",
+		bytes.NewReader(body),
+	)
 	if err != nil {
 		return nil, err
 	}

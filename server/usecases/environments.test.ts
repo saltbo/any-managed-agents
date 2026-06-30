@@ -125,7 +125,6 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
     sessions: undefined as unknown as Deps['sessions'],
     createApprovalGate: undefined as unknown as Deps['createApprovalGate'],
     rereadStartedSession: false,
-    sessionEvents: undefined as unknown as Deps['sessionEvents'],
     audit: { record: async () => {} },
     policy: {
       resolveToolPolicy: async () => ({}),

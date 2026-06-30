@@ -10,7 +10,7 @@ export {
 export {
   type CloudTurnDeps,
   type CloudTurnOutcome,
-  consumeCloudTurnMessage,
+  consumeCloudTurnQueueMessage,
   dispatchPrompt as dispatchCloudPrompt,
   executeCloudSessionTurn,
   markCloudTurnDeadLettered,

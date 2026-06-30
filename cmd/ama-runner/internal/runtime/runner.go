@@ -14,7 +14,7 @@ type Runner struct {
 
 func (r Runner) Run(ctx context.Context, request Request, write EventWriter) Result {
 	if write == nil {
-		write = func(string, JSON) error { return nil }
+		write = func(JSON) error { return nil }
 	}
 	adapter := r.Adapter
 	if adapter == nil {

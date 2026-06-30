@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { z } from 'zod'
 import {
-  RuntimeBridgeControlSchema,
+  RuntimeBridgeControlMessageSchema,
   RuntimeBridgeErrorSchema,
-  RuntimeBridgeInventoryRequestSchema,
+  RuntimeBridgeInventoryMessageSchema,
   RuntimeBridgeInventoryResultSchema,
-  RuntimeBridgeOutputSchema,
-  RuntimeBridgeRequestSchema,
+  RuntimeBridgeOutputMessageSchema,
+  RuntimeBridgeRunMessageSchema,
   RuntimeInventoryEntrySchema,
   RuntimeUsageWindowSchema,
 } from '../packages/runtime-contracts/src/bridge-protocol'
@@ -94,14 +94,14 @@ function runtimeBridgeOpenApiDocument(): OpenApiDocument {
           'x-enum-varnames': EXTERNAL_RUNTIME_NAMES.map((name) => `ExternalRuntime${goConstName(name)}`),
         },
         AmaSessionEventType: sessionEventTypeSchema(),
-        BridgeRunRequest: bridgeRunRequestSchema(),
-        BridgeControl: bridgeControlSchema(),
-        BridgeInventoryRequest: bridgeInventoryRequestSchema(),
-        BridgeOutput: bridgeOutputSchema(),
-        BridgeError: openApiSchema(RuntimeBridgeErrorSchema),
-        BridgeInventoryResult: bridgeInventoryResultSchema(),
-        BridgeInventoryRuntime: bridgeInventoryRuntimeSchema(),
-        BridgeUsageWindow: openApiSchema(RuntimeUsageWindowSchema),
+        RuntimeBridgeRunMessage: bridgeRunMessageSchema(),
+        RuntimeBridgeControlMessage: bridgeControlMessageSchema(),
+        RuntimeBridgeInventoryMessage: bridgeInventoryMessageSchema(),
+        RuntimeBridgeOutputMessage: bridgeOutputMessageSchema(),
+        RuntimeBridgeError: openApiSchema(RuntimeBridgeErrorSchema),
+        RuntimeBridgeInventoryResult: bridgeInventoryResultSchema(),
+        RuntimeBridgeInventoryRuntime: bridgeInventoryRuntimeSchema(),
+        RuntimeBridgeUsageWindow: openApiSchema(RuntimeUsageWindowSchema),
       },
     },
   }
@@ -123,8 +123,8 @@ function sessionEventOpenApiDocument(): OpenApiDocument {
   }
 }
 
-function bridgeRunRequestSchema() {
-  const schema = openApiSchema(RuntimeBridgeRequestSchema)
+function bridgeRunMessageSchema() {
+  const schema = openApiSchema(RuntimeBridgeRunMessageSchema)
   setPropertyRef(schema, 'runtime', 'ExternalRuntimeName')
   setPropertyRef(schema, 'agentSnapshot', 'JSON')
   setPropertyRef(schema, 'runtimeConfig', 'JSON')
@@ -137,8 +137,8 @@ function bridgeRunRequestSchema() {
   return schema
 }
 
-function bridgeControlSchema() {
-  const schema = openApiSchema(RuntimeBridgeControlSchema)
+function bridgeControlMessageSchema() {
+  const schema = openApiSchema(RuntimeBridgeControlMessageSchema)
   setPropertyGoName(schema, 'requestId', 'RequestID')
   setPropertyGoName(schema, 'permissionId', 'PermissionID')
   setPropertyEnumNames(schema, 'type', [
@@ -149,27 +149,24 @@ function bridgeControlSchema() {
   return schema
 }
 
-function bridgeInventoryRequestSchema() {
-  const schema = openApiSchema(RuntimeBridgeInventoryRequestSchema)
+function bridgeInventoryMessageSchema() {
+  const schema = openApiSchema(RuntimeBridgeInventoryMessageSchema)
   setPropertyGoName(schema, 'requestId', 'RequestID')
   setPropertyGoName(schema, 'includeUsage', 'IncludeUsage')
   setPropertyEnumNames(schema, 'type', ['BridgeMessageTypeInventory'])
   return schema
 }
 
-function bridgeOutputSchema() {
-  const schema = openApiSchema(RuntimeBridgeOutputSchema)
-  setPropertyRef(schema, 'eventType', 'AmaSessionEventType')
-  setPropertyRef(schema, 'payload', 'JSON')
-  setPropertyRef(schema, 'metadata', 'JSON')
+function bridgeOutputMessageSchema() {
+  const schema = openApiSchema(RuntimeBridgeOutputMessageSchema)
+  setPropertyRef(schema, 'event', 'JSON')
   setPropertyRef(schema, 'result', 'JSON')
-  setPropertyRef(schema, 'error', 'BridgeError')
+  setPropertyRef(schema, 'error', 'RuntimeBridgeError')
   setPropertyGoName(schema, 'requestId', 'RequestID')
-  setPropertyGoName(schema, 'eventType', 'EventType')
   setPropertyGoName(schema, 'resumeToken', 'ResumeToken')
   setPropertyEnumNames(schema, 'type', [
     'BridgeMessageTypeReady',
-    'BridgeMessageTypeSessionEvent',
+    'BridgeMessageTypeRuntimeEvent',
     'BridgeMessageTypeResumeToken',
     'BridgeMessageTypeResult',
     'BridgeMessageTypeError',
@@ -179,14 +176,14 @@ function bridgeOutputSchema() {
 
 function bridgeInventoryResultSchema() {
   const schema = openApiSchema(RuntimeBridgeInventoryResultSchema)
-  setPropertyArrayRef(schema, 'runtimes', 'BridgeInventoryRuntime')
+  setPropertyArrayRef(schema, 'runtimes', 'RuntimeBridgeInventoryRuntime')
   return schema
 }
 
 function bridgeInventoryRuntimeSchema() {
   const schema = openApiSchema(RuntimeInventoryEntrySchema)
   setPropertyRef(schema, 'runtime', 'ExternalRuntimeName')
-  setPropertyArrayRef(schema, 'usageWindows', 'BridgeUsageWindow')
+  setPropertyArrayRef(schema, 'usageWindows', 'RuntimeBridgeUsageWindow')
   setPropertyGoName(schema, 'fallbackModels', 'FallbackModels')
   setPropertyGoName(schema, 'usageWindows', 'UsageWindows')
   setPropertyGoName(schema, 'limitedDetail', 'LimitedDetail')

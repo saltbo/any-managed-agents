@@ -86,10 +86,10 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 
 	requestID := "run_" + request.SessionID
 	var writeMu sync.Mutex
-	writeSerialized := func(eventType string, payload JSON) error {
+	writeSerialized := func(event JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return write(eventType, payload)
+		return write(event)
 	}
 	var stderrText bytes.Buffer
 	stderrDone := make(chan error, 1)
@@ -106,13 +106,13 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		}
 		return nil, err
 	}
-	if err := writeSerialized(eventTypeRuntimeMetadata, JSON{"data": JSON{"runtime": request.Runtime, "stage": "sdk_bridge_started", "status": "running"}}); err != nil {
+	if err := writeSerialized(JSON{"type": eventTypeRuntimeMetadata, "payload": JSON{"data": JSON{"runtime": request.Runtime, "stage": "sdk_bridge_started", "status": "running"}}}); err != nil {
 		b.stopProcess(cmd)
 		_ = cmd.Wait()
 		return nil, err
 	}
 
-	runRequest := runtimebridge.BridgeRunRequest{
+	runRequest := runtimebridge.RuntimeBridgeRunMessage{
 		Type:          runtimebridge.BridgeMessageTypeRun,
 		RequestID:     requestID,
 		Runtime:       runtimebridge.ExternalRuntimeName(request.Runtime),
@@ -173,7 +173,7 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		final["error"] = waitErr.Error()
 		return final, fmt.Errorf("%s runtime bridge exited with code %d", request.Runtime, exitCode(waitErr))
 	}
-	if err := writeSerialized(eventTypeRuntimeMetadata, JSON{"data": JSON{"runtime": request.Runtime, "stage": "sdk_bridge_exited", "status": "completed"}}); err != nil {
+	if err := writeSerialized(JSON{"type": eventTypeRuntimeMetadata, "payload": JSON{"data": JSON{"runtime": request.Runtime, "stage": "sdk_bridge_exited", "status": "completed"}}}); err != nil {
 		final["finalEventError"] = err.Error()
 	}
 	return final, nil
@@ -189,7 +189,7 @@ func (b Bridge) Inventory(ctx context.Context, includeUsage bool) (*InventorySna
 		return nil, fmt.Errorf("host home directory is unavailable")
 	}
 	requestID := "inventory"
-	result, err := b.bridgeRequest(ctx, requestID, runtimebridge.BridgeInventoryRequest{
+	result, err := b.bridgeRequest(ctx, requestID, runtimebridge.RuntimeBridgeInventoryMessage{
 		Type:         runtimebridge.BridgeMessageTypeInventory,
 		RequestID:    requestID,
 		Env:          map[string]string{"AMA_RUNTIME_BRIDGE_HOST_HOME": hostHome},
@@ -242,7 +242,7 @@ func (b Bridge) bridgeRequest(ctx context.Context, requestID string, request any
 	if err := stdin.WriteJSON(request); err != nil {
 		return nil, err
 	}
-	noop := func(string, JSON) error { return nil }
+	noop := func(JSON) error { return nil }
 	return protocol.readResult(scanner, requestID, noop, nil)
 }
 
@@ -344,7 +344,10 @@ func streamBridgeStderr(reader io.Reader, output *bytes.Buffer, runtimeName stri
 		line := scanner.Text()
 		output.WriteString(line)
 		output.WriteByte('\n')
-		if err := write(eventTypeRuntimeOutput, JSON{"stream": "stderr", "content": line, "runtime": runtimeName}); err != nil {
+		if err := write(JSON{
+			"type":    "runtime.output",
+			"payload": JSON{"stream": "stderr", "content": line, "runtime": runtimeName},
+		}); err != nil {
 			return err
 		}
 	}

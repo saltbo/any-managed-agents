@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { EXTERNAL_RUNTIME_NAMES } from './runtime-names'
-import type { AmaSessionEventType } from './session-events'
+import type { AmaEvent, AmaSessionEventType } from './session-events'
 import { AMA_SESSION_EVENT_DEFINITIONS } from './session-events'
 
 const AmaSessionEventTypeValues = Object.keys(AMA_SESSION_EVENT_DEFINITIONS) as [
@@ -13,7 +13,7 @@ export const StringMapSchema = z.record(z.string(), z.string())
 export const ExternalRuntimeNameSchema = z.enum(EXTERNAL_RUNTIME_NAMES)
 export const AmaSessionEventTypeSchema = z.enum(AmaSessionEventTypeValues)
 
-export const RuntimeBridgeRequestSchema = z
+export const RuntimeBridgeRunMessageSchema = z
   .object({
     type: z.literal('run'),
     requestId: z.string(),
@@ -31,7 +31,7 @@ export const RuntimeBridgeRequestSchema = z
   })
   .strict()
 
-export const RuntimeBridgeControlSchema = z
+export const RuntimeBridgeControlMessageSchema = z
   .object({
     type: z.enum(['abort', 'send', 'permissionDecision']),
     requestId: z.string(),
@@ -42,7 +42,7 @@ export const RuntimeBridgeControlSchema = z
   })
   .strict()
 
-export const RuntimeBridgeInventoryRequestSchema = z
+export const RuntimeBridgeInventoryMessageSchema = z
   .object({
     type: z.literal('inventory'),
     requestId: z.string(),
@@ -51,10 +51,10 @@ export const RuntimeBridgeInventoryRequestSchema = z
   })
   .strict()
 
-export const RuntimeBridgeInputSchema = z.union([
-  RuntimeBridgeRequestSchema,
-  RuntimeBridgeControlSchema,
-  RuntimeBridgeInventoryRequestSchema,
+export const RuntimeBridgeInputMessageSchema = z.union([
+  RuntimeBridgeRunMessageSchema,
+  RuntimeBridgeControlMessageSchema,
+  RuntimeBridgeInventoryMessageSchema,
 ])
 
 export const RuntimeUsageWindowSchema = z
@@ -102,24 +102,22 @@ export const RuntimeBridgeErrorSchema = z
   })
   .strict()
 
-export const RuntimeBridgeOutputSchema = z
+export const RuntimeBridgeOutputMessageSchema = z
   .object({
-    type: z.enum(['ready', 'sessionEvent', 'resumeToken', 'result', 'error']),
+    type: z.enum(['ready', 'runtime.event', 'resumeToken', 'result', 'error']),
     requestId: z.string().optional(),
-    eventType: AmaSessionEventTypeSchema.optional(),
-    payload: JsonObjectSchema.optional(),
-    metadata: JsonObjectSchema.optional(),
+    event: AmaRuntimeEventSchema.optional(),
     result: JsonObjectSchema.optional(),
     error: RuntimeBridgeErrorSchema.optional(),
     resumeToken: z.string().optional(),
   })
   .strict()
 
-export type RuntimeBridgeRequest = z.infer<typeof RuntimeBridgeRequestSchema>
-export type RuntimeBridgeControl = z.infer<typeof RuntimeBridgeControlSchema>
-export type RuntimeBridgeInventoryRequest = z.infer<typeof RuntimeBridgeInventoryRequestSchema>
-export type RuntimeBridgeInput = z.infer<typeof RuntimeBridgeInputSchema>
+export type RuntimeBridgeRunMessage = z.infer<typeof RuntimeBridgeRunMessageSchema>
+export type RuntimeBridgeControlMessage = z.infer<typeof RuntimeBridgeControlMessageSchema>
+export type RuntimeBridgeInventoryMessage = z.infer<typeof RuntimeBridgeInventoryMessageSchema>
+export type RuntimeBridgeInputMessage = z.infer<typeof RuntimeBridgeInputMessageSchema>
 export type RuntimeUsageWindow = z.infer<typeof RuntimeUsageWindowSchema>
 export type RuntimeInventoryEntry = z.infer<typeof RuntimeInventoryEntrySchema>
-export type AmaRuntimeEvent = z.infer<typeof AmaRuntimeEventSchema>
-export type RuntimeBridgeOutput = z.infer<typeof RuntimeBridgeOutputSchema>
+export type AmaRuntimeEvent = AmaEvent
+export type RuntimeBridgeOutputMessage = z.infer<typeof RuntimeBridgeOutputMessageSchema>

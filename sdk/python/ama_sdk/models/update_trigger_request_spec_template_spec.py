@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.runtime import Runtime
+from ..models.runtime_name import RuntimeName
 from ..types import UNSET, Unset
 from typing import cast
 
@@ -34,7 +34,7 @@ class UpdateTriggerRequestSpecTemplateSpec:
         Attributes:
             agent_id (str | Unset):  Example: agent_abc123.
             environment_id (None | str | Unset):  Example: env_abc123.
-            runtime (Runtime | Unset):  Example: codex.
+            runtime (RuntimeName | Unset):  Example: codex.
             env (ExecutionEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             env_from (list[EnvFromEntry] | Unset):
             volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset):
@@ -44,7 +44,7 @@ class UpdateTriggerRequestSpecTemplateSpec:
 
     agent_id: str | Unset = UNSET
     environment_id: None | str | Unset = UNSET
-    runtime: Runtime | Unset = UNSET
+    runtime: RuntimeName | Unset = UNSET
     env: ExecutionEnv | Unset = UNSET
     env_from: list[EnvFromEntry] | Unset = UNSET
     volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume] | Unset = UNSET
@@ -163,11 +163,11 @@ class UpdateTriggerRequestSpecTemplateSpec:
 
 
         _runtime = d.pop("runtime", UNSET)
-        runtime: Runtime | Unset
+        runtime: RuntimeName | Unset
         if isinstance(_runtime,  Unset):
             runtime = UNSET
         else:
-            runtime = Runtime(_runtime)
+            runtime = RuntimeName(_runtime)
 
 
 

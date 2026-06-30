@@ -292,7 +292,7 @@ function createWorkItem(runtime, gitConfig) {
         mounts: workspaceMounts,
       },
       agentSnapshot: {
-        instructions: [
+        systemPrompt: [
           'These developer instructions are part of the AMA smoke test.',
           `Create system-prompt-proof.txt in the workspace root containing exactly "${SYSTEM_PROMPT_MARKER}\\n".`,
           'Then follow the user prompt.',
@@ -460,13 +460,15 @@ function createControlPlane(runtime, gitConfig) {
           if (message.type === 'session.backfill_response') {
             state.backfillResponses.push(message)
           }
-          if (message.type === 'runner.event' && message.eventId) {
-            sendWebSocket(socket, { type: 'runner.event.accepted', eventId: message.eventId })
+          const runnerEventId = message.record?.id ?? message.eventId
+          if (message.type === 'runner.event' && runnerEventId) {
+            sendWebSocket(socket, { type: 'runner.event.accepted', eventId: runnerEventId })
           }
+          const runnerEvent = message.record?.event ?? message.event
           if (
             runtime.name === 'codex' &&
             message.type === 'runner.event' &&
-            message.event?.payload?.message?.role === 'assistant' &&
+            runnerEvent?.payload?.message?.role === 'assistant' &&
             !state.followUpSent &&
             JSON.stringify(message).includes(SMOKE_DONE_MARKER)
           ) {
@@ -543,7 +545,7 @@ function createResumeControlPlane(runtime) {
       env: {},
       volumes: [],
       volumeMounts: [],
-      agentSnapshot: { instructions: 'AMA resume smoke. Follow the user prompt exactly.' },
+      agentSnapshot: { systemPrompt: 'AMA resume smoke. Follow the user prompt exactly.' },
       prompt: resume
         ? [
             'Continue the AMA resume smoke.',
@@ -681,8 +683,9 @@ function createResumeControlPlane(runtime) {
         try {
           const message = JSON.parse(frame.payload.toString('utf8'))
           state.channelMessages.push(message)
-          if (message.type === 'runner.event' && message.eventId) {
-            sendWebSocket(socket, { type: 'runner.event.accepted', eventId: message.eventId })
+          const runnerEventId = message.record?.id ?? message.eventId
+          if (message.type === 'runner.event' && runnerEventId) {
+            sendWebSocket(socket, { type: 'runner.event.accepted', eventId: runnerEventId })
           }
         } catch {
           // ignored
@@ -738,7 +741,7 @@ function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   const { sessionDir, workspace } = findWorkspace(workDir)
   const eventLog = join(sessionDir, 'events.jsonl')
   const events = readJSONL(eventLog)
-  const eventTypes = events.map((event) => event.type)
+  const eventTypes = events.map((record) => record.event?.type ?? record.type)
   for (const required of ['runner.session.started', 'message_end', 'runtime.metadata']) {
     if (!eventTypes.includes(required)) fail(`event log is missing ${required}`, `events: ${eventTypes.join(', ')}`)
   }
@@ -750,7 +753,7 @@ function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   if (!controlPlaneState.channelAccepted) fail('runner relay channel was not accepted')
   const liveEventTypes = controlPlaneState.channelMessages
     .filter((message) => message.type === 'runner.event')
-    .map((message) => message.event?.type)
+    .map((message) => message.record?.event?.type ?? message.event?.type)
   for (const required of ['runner.session.started', 'message_end', 'runtime.metadata']) {
     if (!liveEventTypes.includes(required)) fail(`live relay is missing ${required}`, liveEventTypes.join(', '))
   }

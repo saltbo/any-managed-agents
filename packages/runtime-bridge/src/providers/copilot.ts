@@ -1,6 +1,5 @@
 import { execSync } from 'node:child_process'
 import '@github/copilot/sdk'
-import type { SessionEvent } from '@github/copilot-sdk'
 import { approveAll, CopilotClient } from '@github/copilot-sdk'
 import { reasoning, runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, turnEnd } from '../events/ama'
 import {
@@ -33,6 +32,19 @@ type CopilotState = {
   pendingTools: Map<string, { toolName: string; args: Record<string, unknown> }>
 }
 
+type CopilotEvent = {
+  type: string
+  data: {
+    content?: string
+    message?: unknown
+    toolRequests?: Array<{ name: string; arguments: unknown; toolCallId: string }>
+    toolCallId?: string
+    result?: { content?: unknown } | unknown
+    success?: boolean
+    [key: string]: unknown
+  }
+}
+
 function normalizeTool(name: string, args: Record<string, unknown>) {
   switch (name) {
     case 'bash':
@@ -51,7 +63,7 @@ function normalizeTool(name: string, args: Record<string, unknown>) {
   }
 }
 
-function* mapCopilotEvent(event: SessionEvent, state: CopilotState): Generator<AmaRuntimeEvent> {
+function* mapCopilotEvent(event: CopilotEvent, state: CopilotState): Generator<AmaRuntimeEvent> {
   switch (event.type) {
     case 'assistant.turn_start':
       yield runtimeEvent('turn_start')
@@ -69,13 +81,14 @@ function* mapCopilotEvent(event: SessionEvent, state: CopilotState): Generator<A
       }
       return
     case 'tool.execution_complete': {
-      const pending = state.pendingTools.get(event.data.toolCallId)
-      state.pendingTools.delete(event.data.toolCallId)
+      const toolCallId = typeof event.data.toolCallId === 'string' ? event.data.toolCallId : 'tool'
+      const pending = state.pendingTools.get(toolCallId)
+      state.pendingTools.delete(toolCallId)
       yield toolEnd(
-        event.data.toolCallId,
+        toolCallId,
         pending?.toolName ?? 'tool',
         pending?.args ?? {},
-        event.data.result?.content ?? event.data.result,
+        copilotResultContent(event.data.result),
         !event.data.success,
       )
       return
@@ -89,6 +102,11 @@ function* mapCopilotEvent(event: SessionEvent, state: CopilotState): Generator<A
     default:
       yield runtimeEvent('runtime.metadata', { data: event as unknown as Record<string, unknown> })
   }
+}
+
+function copilotResultContent(result: unknown) {
+  const object = objectValue(result)
+  return 'content' in object ? object.content : result
 }
 
 export const copilotProvider: RuntimeProvider = {
@@ -131,7 +149,7 @@ export const copilotProvider: RuntimeProvider = {
     }
     const unsubscribe = session.on((event) => {
       try {
-        for (const mapped of mapCopilotEvent(event as SessionEvent, state)) queue.push(mapped)
+        for (const mapped of mapCopilotEvent(event as CopilotEvent, state)) queue.push(mapped)
         if (event.type === 'session.idle') finish()
         if (event.type === 'session.error') finish()
         notify?.()

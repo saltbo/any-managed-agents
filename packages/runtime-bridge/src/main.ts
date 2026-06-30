@@ -5,8 +5,8 @@ import {
   type AmaRuntimeEvent,
   bridgeError,
   createResumeTokenWatcher,
-  type RuntimeBridgeInput,
-  type RuntimeBridgeOutput,
+  type RuntimeBridgeInputMessage,
+  type RuntimeBridgeOutputMessage,
   type RuntimeInventoryEntry,
   type RuntimeProviderHandle,
 } from './protocol'
@@ -21,30 +21,28 @@ type ActiveRun = {
 
 const active = new Map<string, ActiveRun>()
 
-function write(message: RuntimeBridgeOutput) {
+function write(message: RuntimeBridgeOutputMessage) {
   stdout.write(`${JSON.stringify(message)}\n`)
 }
 
 function writeSessionEvent(requestId: string, event: AmaRuntimeEvent) {
   const canonical = assertAmaRuntimeEvent(event)
   write({
-    type: 'sessionEvent',
+    type: 'runtime.event',
     requestId,
-    eventType: canonical.type,
-    payload: canonical.payload,
-    ...(canonical.metadata ? { metadata: canonical.metadata } : {}),
+    event: canonical,
   })
 }
 
-function parseInput(line: string): RuntimeBridgeInput | null {
-  const record = JSON.parse(line) as RuntimeBridgeInput
+function parseInput(line: string): RuntimeBridgeInputMessage | null {
+  const record = JSON.parse(line) as RuntimeBridgeInputMessage
   if (!record || typeof record !== 'object' || !('type' in record)) {
     throw new Error('Bridge input must be an object with type')
   }
   return record
 }
 
-async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
+async function run(request: Extract<RuntimeBridgeInputMessage, { type: 'run' }>) {
   const state: ActiveRun = { done: false }
   active.set(request.requestId, state)
   try {
@@ -76,7 +74,7 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
   }
 }
 
-async function inventory(request: Extract<RuntimeBridgeInput, { type: 'inventory' }>) {
+async function inventory(request: Extract<RuntimeBridgeInputMessage, { type: 'inventory' }>) {
   const runtimes: RuntimeInventoryEntry[] = []
   const bridgeTestMode = process.env.AMA_RUNTIME_BRIDGE_TEST_MODE === '1'
   for (const provider of listProviders()) {
@@ -142,7 +140,7 @@ async function inventory(request: Extract<RuntimeBridgeInput, { type: 'inventory
   write({ type: 'result', requestId: request.requestId, result: { runtimes } })
 }
 
-async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'inventory' }>) {
+async function control(message: Exclude<RuntimeBridgeInputMessage, { type: 'run' | 'inventory' }>) {
   const state = active.get(message.requestId)
   if (!state?.handle) {
     write({

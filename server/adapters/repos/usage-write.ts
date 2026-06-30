@@ -38,6 +38,11 @@ function stringField(payload: Record<string, unknown>, key: string) {
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
+function objectField(payload: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = payload[key]
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
 async function sessionAttribution(db: Db, scope: UsageRecordingScope) {
   return (
     (await db
@@ -142,12 +147,13 @@ async function recordToolUsage(
   sessionEventId: string,
   payload: Record<string, unknown>,
 ) {
-  const toolName = stringField(payload, 'toolName')
+  const toolCall = objectField(payload, 'toolCall')
+  const toolName = stringField(toolCall, 'name')
   if (!toolName) {
     return
   }
   const session = await sessionAttribution(db, scope)
-  const toolCallId = stringField(payload, 'toolCallId')
+  const toolCallId = stringField(toolCall, 'id')
   await db.insert(usageRecords).values({
     id: newId('usage'),
     organizationId: scope.organizationId,

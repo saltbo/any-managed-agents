@@ -7,7 +7,7 @@ import { sessionEvents } from './schema'
 
 type Db = ReturnType<typeof drizzle>
 
-export interface SessionEventScope {
+export interface EventWriteContext {
   organizationId: string
   projectId: string
   sessionId: string
@@ -67,10 +67,10 @@ async function transcriptCorrelation(
 // identifiers, and redacts payload/metadata before anything reaches D1.
 export async function insertCanonicalSessionEvent(
   db: Db,
-  scope: SessionEventScope,
+  scope: EventWriteContext,
   canonicalEvent: CanonicalAmaSessionEvent,
-  // Producers (the MCP tool path) that thread their own parent/correlation ids
-  // pass them here so the store does not recompute its turn/transcript threading.
+  // Producers that thread their own parent/correlation ids pass them here so
+  // the store does not recompute its turn/transcript threading.
   overrides?: { parentEventId?: string | null; correlationId?: string | null },
 ): Promise<string> {
   const parentEventId =

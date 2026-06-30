@@ -12,19 +12,19 @@ export declare class AmaApiError extends Error {
     constructor(status: number | undefined, responseText: string, body: unknown);
 }
 export interface SessionStream {
-    events: AsyncIterable<types.SessionEvent>;
-    send(frame: types.SessionClientFrame): Promise<void>;
+    events: AsyncIterable<types.EventRecord>;
+    send(message: types.SessionSocketClientMessage): Promise<void>;
     backfill(options?: {
         cursor?: number;
         limit?: number;
         eventType?: string;
         visibility?: string;
-    }): Promise<types.SessionBackfillResponse>;
+    }): Promise<types.SessionSocketBackfillMessage>;
     close(): void;
 }
 export interface RunnerChannel {
     messages: AsyncIterable<types.RunnerChannelMessage>;
-    send(frame: types.RunnerChannelMessage): Promise<void>;
+    send(message: types.RunnerChannelMessage): Promise<void>;
     close(): void;
 }
 export type AmaClient = ReturnType<typeof createAmaClient>;
@@ -112,7 +112,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
         listMessages: (sessionId: string, query?: types.ListSessionMessagesData["query"]) => Promise<types.SessionMessageListResponse>;
         createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
         getMessage: (sessionId: string, messageId: string) => Promise<types.SessionMessage>;
-        listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse>;
+        listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.EventRecordListResponse>;
         listApprovals: (sessionId: string) => Promise<types.SessionApprovalListResponse>;
         getApproval: (sessionId: string, approvalId: string) => Promise<types.SessionApproval>;
         decideApproval: (sessionId: string, approvalId: string, body: types.SessionApprovalDecisionRequest) => Promise<types.SessionApproval>;

@@ -17,8 +17,8 @@ type SessionRpc = SessionsRpc[':sessionId']
 export type SessionListResponse = RpcResponseType<SessionsRpc['$get'], 200>
 export type Session = RpcResponseType<SessionRpc['$get'], 200>
 export type SessionMessage = RpcResponseType<SessionRpc['messages']['$post'], 201>
-export type SessionEventListResponse = JsonListResponse<RpcResponseType<SessionRpc['events']['$get'], 200>>
-export type SessionEvent = ArrayItem<SessionEventListResponse['data']>
+export type EventRecordListResponse = JsonListResponse<RpcResponseType<SessionRpc['events']['$get'], 200>>
+export type EventRecord = ArrayItem<EventRecordListResponse['data']>
 export type SessionApprovalListResponse = RpcResponseType<SessionRpc['approvals']['$get'], 200>
 export type SessionApproval = ArrayItem<SessionApprovalListResponse['data']>
 export type SessionInput = RpcRequestType<SessionsRpc['$post']>['json']
@@ -43,8 +43,8 @@ export interface SessionEventListOptions {
   cursor?: number
   order?: 'asc' | 'desc'
   limit?: number
-  type?: SessionEvent['type']
-  visibility?: SessionEvent['visibility']
+  type?: EventRecord['event']['type']
+  visibility?: EventRecord['visibility']
   createdFrom?: string
   createdTo?: string
 }
@@ -64,7 +64,7 @@ export const sessionsApi = {
       v1.sessions[':sessionId'].messages.$post({ param: { sessionId: id }, json: { type: 'prompt', content } }),
     ),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
-    rpcRequest<SessionEventListResponse>(
+    rpcRequest<EventRecordListResponse>(
       v1.sessions[':sessionId'].events.$get(
         paramQueryArg<(typeof v1.sessions)[':sessionId']['events']['$get']>({ sessionId: id }, options),
       ),

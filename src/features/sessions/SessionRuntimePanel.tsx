@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, StatusBadge } from '@/console/components'
 import { formatTime, stringifyJson } from '@/console/format'
-import type { SessionEvent } from '@/lib/amarpc'
+import type { EventRecord } from '@/lib/amarpc'
 import { SessionToolTrace } from './SessionToolTrace'
 import type { SessionRuntimeState } from './session-runtime'
 import { buildSessionToolTrace } from './session-tool-trace'
@@ -32,7 +32,7 @@ export function SessionRuntimePanel({
   canSend,
 }: {
   runtime: SessionRuntimeState
-  persistedEvents: SessionEvent[]
+  persistedEvents: EventRecord[]
   message: string
   setMessage: (value: string) => void
   onSend: (message: string) => void
@@ -43,14 +43,14 @@ export function SessionRuntimePanel({
   const [eventType, setEventType] = useState<EventFilter>('all')
   const debugEvents = useMemo(() => {
     const persisted = persistedEvents
-      .filter((event) => event.visibility !== 'transcript')
-      .map((event) => ({
-        id: event.id,
-        type: event.type,
-        payload: event.payload,
-        createdAt: event.createdAt,
+      .filter((record) => record.visibility !== 'transcript')
+      .map((record) => ({
+        id: record.id,
+        type: record.event.type,
+        payload: record.event.payload,
+        createdAt: record.createdAt,
       }))
-    return [...persisted, ...runtime.debugEvents.filter((event) => !persisted.some((item) => item.id === event.id))]
+    return [...persisted, ...runtime.debugEvents.filter((record) => !persisted.some((item) => item.id === record.id))]
   }, [persistedEvents, runtime.debugEvents])
   const filteredDebugEvents =
     eventType === 'all' ? debugEvents : debugEvents.filter((event) => amaSessionEventCategory(event.type) === eventType)

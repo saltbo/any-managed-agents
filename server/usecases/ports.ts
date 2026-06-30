@@ -11,7 +11,7 @@ import type {
   MessageState,
   Session,
   SessionApproval,
-  SessionEvent,
+  EventRecord,
   SessionMessage,
   SessionState,
 } from '@server/domain/session'
@@ -28,6 +28,7 @@ import type {
   VersionState,
 } from '@server/domain/vault'
 import type { WorkspaceManifest } from '@server/domain/workspace'
+import type { AmaEvent } from '@shared/session-events'
 
 export type {
   EnvFromEntry,
@@ -35,7 +36,7 @@ export type {
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
 
-export type { Session, SessionApproval, SessionEvent, SessionMessage }
+export type { Session, SessionApproval, EventRecord, SessionMessage }
 
 // A port-level error so the http layer can map orchestration validation
 // failures to a 400 without importing usecases internals or adapters. The
@@ -632,17 +633,6 @@ export interface ConnectorRepo {
 
 // Session-event boundary. Runtime flows append canonical session events so
 // activity stays inspectable on the session after completion.
-export interface SessionEventPort {
-  append(values: {
-    auth: AuthScope
-    sessionId: string
-    type: 'policy.decision' | 'tool_execution_start' | 'tool_execution_end'
-    payload: Record<string, unknown>
-    parentEventId?: string | null
-    correlationId?: string | null
-  }): Promise<string>
-}
-
 // --- governance: policies, access rules, budgets ---
 
 import type { BudgetScope, PolicyScopeLevel } from '@server/domain/policy'
@@ -1476,7 +1466,7 @@ export interface RuntimeSecretGateway {
 // a turn that shells out (installs, builds, sleeps) or a sandbox cold boot
 // outlives the request lifetime cap and was silently killed mid-flight,
 // stranding the session. The consumer invocation owns the wall-clock budget.
-export type CloudSessionTurnMessage = {
+export type CloudTurnQueueTurnMessage = {
   type: 'session.turn'
   sessionId: string
   organizationId: string
@@ -1491,7 +1481,7 @@ export type CloudSessionTurnMessage = {
 // Carries the turnId so the step renews the SAME lease the paused turn holds —
 // the continuation chain is one logical turn, so a concurrent prompt that
 // arrives mid-chain loses the lease and is deferred until the chain ends.
-export type CloudSessionStepMessage = {
+export type CloudTurnQueueStepMessage = {
   type: 'session.step'
   sessionId: string
   organizationId: string
@@ -1502,7 +1492,7 @@ export type CloudSessionStepMessage = {
   auditAction: 'session.prompt' | 'session.command'
 }
 
-export type CloudSessionStartMessage = {
+export type CloudTurnQueueStartMessage = {
   type: 'session.start'
   sessionId: string
   organizationId: string
@@ -1516,14 +1506,14 @@ export type CloudSessionStartMessage = {
   prompt?: string
 }
 
-export type CloudTurnMessage = CloudSessionTurnMessage | CloudSessionStepMessage | CloudSessionStartMessage
+export type CloudTurnQueueMessage = CloudTurnQueueTurnMessage | CloudTurnQueueStepMessage | CloudTurnQueueStartMessage
 
 // Cloud-turn queue boundary. The runtime enqueues start/step/turn work onto the
 // CLOUD_TURNS queue (the consumer owns the wall-clock budget). `runsInline`
 // reports the test/no-binding mode where turns run synchronously inline so
 // existing assertions keep working. The only implementation lives in adapters.
 export interface CloudTurnQueue {
-  enqueue(message: CloudTurnMessage, opts?: { delaySeconds?: number }): Promise<void>
+  enqueue(message: CloudTurnQueueMessage, opts?: { delaySeconds?: number }): Promise<void>
   runsInline(): boolean
 }
 
@@ -1695,8 +1685,6 @@ import type {
   WorkItemInsert,
   WorkItemRow,
 } from '@shared/runtime-rows'
-import type { CanonicalAmaSessionEvent } from '@shared/session-events'
-
 export type {
   AgentRow,
   AgentVersionRow,
@@ -1861,12 +1849,6 @@ export interface SessionOrchestrationStore {
   closeChannel(channelId: string, channelState: 'closed' | 'stale', reason: string, timestamp: string): Promise<void>
   requeueSessionForRunnerRecovery(projectId: string, sessionId: string, timestamp: string): Promise<void>
 
-  // ── canonical event append ──
-  appendCanonicalEvent(
-    scope: { organizationId: string; projectId: string; sessionId: string },
-    canonicalEvent: CanonicalAmaSessionEvent,
-    overrides?: { parentEventId?: string | null; correlationId?: string | null },
-  ): Promise<string>
 }
 
 // --- sessions ---
@@ -1883,7 +1865,7 @@ export interface SessionListQuery {
   cursor: { createdAt: string; id: string } | null
 }
 
-export interface SessionEventQuery {
+export interface EventQuery {
   type?: string
   visibility?: string
   createdFrom?: string
@@ -1893,14 +1875,14 @@ export interface SessionEventQuery {
   limit: number
 }
 
-export interface SessionEventPage {
-  rows: SessionEvent[]
+export interface EventPage {
+  rows: EventRecord[]
   hasMore: boolean
 }
 
-// Explicit parent/correlation ids some producers (the MCP tool path) thread
-// themselves; when given they override the store's turn/transcript threading.
-export interface SessionEventOverrides {
+// Explicit parent/correlation ids producers may thread themselves; when given
+// they override the store's turn/transcript threading.
+export interface EventWriteOptions {
   parentEventId?: string | null
   correlationId?: string | null
 }
@@ -1908,20 +1890,19 @@ export interface SessionEventOverrides {
 // "Storage follows the loop": the canonical event store that routes cloud-loop
 // (ama) sessions to the per-session Session DO (SQLite hot + R2 cold) and leaves
 // pre-migration cloud + self-hosted CLI sessions on D1. One contract over both
-// backends; the read shape (SessionEvent/Page) is identical either way.
-export interface SessionEventStore {
-  appendCanonicalEvent(
+// backends; the read shape (EventRecord/Page) is identical either way.
+export interface EventStore {
+  appendEvent(
     scope: { organizationId: string; projectId: string; sessionId: string },
-    canonicalEvent: CanonicalAmaSessionEvent,
-    overrides?: SessionEventOverrides,
+    event: AmaEvent,
+    overrides?: EventWriteOptions,
   ): Promise<string>
-  // Batch ingest (the POST /events endpoint): canonicalises each runtime event
-  // and routes it to the session's store. Returns the count.
+  // Batch ingest (the POST /events endpoint). Returns the count.
   insertEvents(
     scope: { organizationId: string; projectId: string; sessionId: string },
-    events: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>,
+    events: AmaEvent[],
   ): Promise<number>
-  queryEvents(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
+  queryEvents(sessionId: string, query: EventQuery): Promise<EventPage>
   eventStream(sessionId: string): Promise<{ type: string; payload: string }[]>
   archive(scope: { organizationId: string; projectId: string; sessionId: string }): Promise<void>
 }
@@ -1991,10 +1972,10 @@ export interface SessionRepo {
     createdAt: string
   }): Promise<SessionMessage>
 
-  queryEvents(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
+  queryEvents(sessionId: string, query: EventQuery): Promise<EventPage>
   insertEvents(
     scope: { organizationId: string; projectId: string; sessionId: string },
-    events: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>,
+    events: AmaEvent[],
   ): Promise<number>
 
   listApprovals(projectId: string, sessionId: string): Promise<SessionApproval[]>

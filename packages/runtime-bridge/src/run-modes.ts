@@ -11,23 +11,21 @@ import {
   type AmaRuntimeEvent,
   bridgeError,
   createResumeTokenWatcher,
-  type RuntimeBridgeInput,
-  type RuntimeBridgeOutput,
+  type RuntimeBridgeInputMessage,
+  type RuntimeBridgeOutputMessage,
   type RuntimeProviderHandle,
 } from './protocol'
 
-type RunRequest = Extract<RuntimeBridgeInput, { type: 'run' }>
+type RunRequest = Extract<RuntimeBridgeInputMessage, { type: 'run' }>
 
 type RunState = { handle?: RuntimeProviderHandle; done: boolean }
 
-function sessionEventOutput(requestId: string, event: AmaRuntimeEvent): RuntimeBridgeOutput {
+function sessionEventOutput(requestId: string, event: AmaRuntimeEvent): RuntimeBridgeOutputMessage {
   const canonical = assertAmaRuntimeEvent(event)
   return {
-    type: 'sessionEvent',
+    type: 'runtime.event',
     requestId,
-    eventType: canonical.type,
-    payload: canonical.payload,
-    ...(canonical.metadata ? { metadata: canonical.metadata } : {}),
+    event: canonical,
   }
 }
 
@@ -197,7 +195,7 @@ export function deterministicBridgeTestEvents(request: RunRequest): AmaRuntimeEv
 export async function runE2eBridgeTest(
   request: RunRequest,
   state: RunState,
-  write: (message: RuntimeBridgeOutput) => void,
+  write: (message: RuntimeBridgeOutputMessage) => void,
 ): Promise<void> {
   const authFailure = request.runtimeConfig?.e2eBridgeAuthFailure
   if (typeof authFailure === 'string' && authFailure) {

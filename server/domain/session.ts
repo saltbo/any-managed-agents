@@ -1,4 +1,4 @@
-import type { AmaSessionEventType } from '@shared/session-events'
+import type { AmaEvent } from '@shared/session-events'
 import type { AgentSubagent } from './agent'
 import type {
   EnvironmentNetworking,
@@ -144,18 +144,16 @@ export interface SessionMessage {
   updatedAt: string
 }
 
-export interface SessionEvent {
+export interface EventRecord {
   id: string
   projectId: string
   sessionId: string
   sequence: number
-  type: AmaSessionEventType
   visibility: EventVisibility
   role: string | null
   parentEventId: string | null
   correlationId: string | null
-  payload: Record<string, unknown>
-  metadata: Record<string, unknown>
+  event: AmaEvent
   createdAt: string
 }
 

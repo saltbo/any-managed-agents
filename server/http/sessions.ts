@@ -1,5 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { AMA_SESSION_EVENT_TYPES } from '@shared/session-events'
+import { AMA_SESSION_EVENT_TYPES, type AmaEvent } from '@shared/session-events'
 import type { Context } from 'hono'
 import { isRunnerOidcAuth, requireAuth, requireAuthIdentity, requireSessionEventsAuth } from '../auth/session'
 import {
@@ -18,7 +18,7 @@ import {
 } from '../contracts/execution-spec'
 import { ResourceMetadataSchema } from '../contracts/resource-contracts'
 import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
-import type { Session, SessionApproval, SessionEvent, SessionMessage } from '../domain/session'
+import type { Session, SessionApproval, EventRecord, SessionMessage } from '../domain/session'
 import type { Env } from '../env'
 import { type ErrorType, errorResponse } from '../errors'
 import {
@@ -173,62 +173,253 @@ const SessionSchema = z
   })
   .openapi('Session')
 
-const SessionEventSchema = z
+const EventMetadataSchema = JsonObjectSchema.openapi('EventMetadata')
+const LifecyclePayloadSchema = JsonObjectSchema.openapi('LifecyclePayload')
+const TextContentBlockSchema = z.object({ type: z.literal('text'), text: z.string() }).openapi('TextContentBlock')
+const ReasoningContentBlockSchema = z
+  .object({ type: z.literal('reasoning'), text: z.string() })
+  .openapi('ReasoningContentBlock')
+const ToolCallSchema = z
+  .object({ id: z.string(), name: z.string(), input: z.unknown() })
+  .strict()
+  .openapi('EventToolCall')
+const ToolCallContentBlockSchema = z
+  .object({ type: z.literal('tool_call'), toolCall: ToolCallSchema })
+  .openapi('ToolCallContentBlock')
+const ToolResultContentBlockSchema = z
+  .object({ type: z.literal('tool_result'), toolCallId: z.string(), result: z.unknown(), isError: z.boolean().optional() })
+  .openapi('ToolResultContentBlock')
+const ImageContentBlockSchema = z
+  .object({
+    type: z.literal('image'),
+    url: z.string().optional(),
+    mediaType: z.string().optional(),
+    data: z.string().optional(),
+  })
+  .openapi('ImageContentBlock')
+const FileContentBlockSchema = z
+  .object({
+    type: z.literal('file'),
+    path: z.string().optional(),
+    name: z.string().optional(),
+    mediaType: z.string().optional(),
+    data: z.string().optional(),
+  })
+  .openapi('FileContentBlock')
+const UnknownContentBlockSchema = z.object({ type: z.literal('unknown'), value: z.unknown() }).openapi('UnknownContentBlock')
+const MessageContentBlockSchema = z
+  .discriminatedUnion('type', [
+    TextContentBlockSchema,
+    ReasoningContentBlockSchema,
+    ToolCallContentBlockSchema,
+    ToolResultContentBlockSchema,
+    ImageContentBlockSchema,
+    FileContentBlockSchema,
+    UnknownContentBlockSchema,
+  ])
+  .openapi('MessageContentBlock')
+const MessageSchema = z
+  .object({
+    id: z.string().optional(),
+    role: z.enum(['user', 'assistant', 'system', 'tool']),
+    content: z.array(MessageContentBlockSchema),
+    timestamp: z.number().optional(),
+    stopReason: z.string().optional(),
+  })
+  .strict()
+  .openapi('EventMessage')
+const EventErrorSchema = z
+  .object({
+    message: z.string(),
+    code: z.string().optional(),
+    category: z.string().optional(),
+    retryable: z.boolean().optional(),
+    retryAfterSeconds: z.number().optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    details: z.unknown().optional(),
+  })
+  .strict()
+  .openapi('EventError')
+const MessageEventPayloadSchema = z.object({ message: MessageSchema }).strict().openapi('MessageEventPayload')
+const ToolStartedPayloadSchema = z.object({ toolCall: ToolCallSchema }).strict().openapi('ToolStartedPayload')
+const ToolUpdatedPayloadSchema = z
+  .object({ toolCall: ToolCallSchema, partialResult: z.unknown().optional() })
+  .strict()
+  .openapi('ToolUpdatedPayload')
+const ToolCompletedPayloadSchema = z
+  .object({
+    toolCall: ToolCallSchema,
+    result: z.unknown().optional(),
+    error: EventErrorSchema.optional(),
+    isError: z.boolean().optional(),
+    durationMs: z.number().optional(),
+  })
+  .strict()
+  .openapi('ToolCompletedPayload')
+const TurnPayloadSchema = z
+  .object({
+    marker: z.string().optional(),
+    stage: z.string().optional(),
+    status: z.string().optional(),
+    message: MessageSchema.optional(),
+    toolResults: z.array(z.unknown()).optional(),
+  })
+  .strict()
+  .openapi('TurnPayload')
+const SessionStopPayloadSchema = z.object({ reason: z.string().optional() }).strict().openapi('SessionStopPayload')
+const SessionCheckpointPayloadSchema = z
+  .object({ resumeTokenRef: z.string().optional(), scope: z.string().optional() })
+  .strict()
+  .openapi('SessionCheckpointPayload')
+const SessionResumePayloadSchema = z
+  .object({ fromCheckpoint: z.string().optional(), reason: z.string().optional() })
+  .strict()
+  .openapi('SessionResumePayload')
+const UsageRecordedPayloadSchema = z
+  .object({
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    promptTokens: z.number().optional(),
+    completionTokens: z.number().optional(),
+    totalTokens: z.number().optional(),
+    inputTokens: z.number().optional(),
+    outputTokens: z.number().optional(),
+    cachedInputTokens: z.number().optional(),
+    reasoningTokens: z.number().optional(),
+    toolTokens: z.number().optional(),
+    costMicros: z.number().optional(),
+    details: JsonObjectSchema.optional(),
+  })
+  .strict()
+  .openapi('UsageRecordedPayload')
+const PolicyDecisionPayloadSchema = z
+  .object({
+    allowed: z.boolean(),
+    category: z.string().optional(),
+    ruleId: z.string().optional(),
+    resourceType: z.string().optional(),
+    resourceId: z.string().optional(),
+    operation: z.string().optional(),
+    command: z.string().nullable().optional(),
+    host: z.string().nullable().optional(),
+    connectorId: z.string().optional(),
+    toolName: z.string().optional(),
+    decision: z.string().optional(),
+    details: JsonObjectSchema.optional(),
+  })
+  .strict()
+  .openapi('PolicyDecisionPayload')
+const PermissionRequestPayloadSchema = z
+  .object({
+    permissionId: z.string().optional(),
+    command: z.string().optional(),
+    toolCall: ToolCallSchema.optional(),
+    details: JsonObjectSchema.optional(),
+  })
+  .strict()
+  .openapi('PermissionRequestPayload')
+const RuntimeOutputPayloadSchema = z
+  .object({ stream: z.enum(['stdout', 'stderr', 'runtime', 'reasoning', 'bridge']), content: z.unknown() })
+  .strict()
+  .openapi('RuntimeOutputPayload')
+const MetadataPayloadSchema = z.object({ data: JsonObjectSchema }).strict().openapi('MetadataPayload')
+
+function eventSchema<TType extends (typeof AMA_SESSION_EVENT_TYPES)[number]>(type: TType, payload: z.ZodTypeAny) {
+  return z.object({ type: z.literal(type), payload, metadata: EventMetadataSchema.optional() }).strict()
+}
+
+const AmaEventSchema = z
+  .discriminatedUnion('type', [
+    eventSchema('agent_start', LifecyclePayloadSchema),
+    eventSchema('agent_end', LifecyclePayloadSchema),
+    eventSchema('turn_start', TurnPayloadSchema),
+    eventSchema('turn_end', TurnPayloadSchema),
+    eventSchema('session_stop', SessionStopPayloadSchema),
+    eventSchema('session_checkpoint', SessionCheckpointPayloadSchema),
+    eventSchema('session_resume', SessionResumePayloadSchema),
+    eventSchema('message_start', MessageEventPayloadSchema),
+    eventSchema('message_update', MessageEventPayloadSchema),
+    eventSchema('message_end', MessageEventPayloadSchema),
+    eventSchema('tool_execution_start', ToolStartedPayloadSchema),
+    eventSchema('tool_execution_update', ToolUpdatedPayloadSchema),
+    eventSchema('tool_execution_end', ToolCompletedPayloadSchema),
+    eventSchema('usage.recorded', UsageRecordedPayloadSchema),
+    eventSchema('policy.decision', PolicyDecisionPayloadSchema),
+    eventSchema('permission.request', PermissionRequestPayloadSchema),
+    eventSchema('runtime.error', EventErrorSchema),
+    eventSchema('runtime.metadata', MetadataPayloadSchema),
+    eventSchema('runtime.output', RuntimeOutputPayloadSchema),
+    eventSchema('runner.metadata', MetadataPayloadSchema),
+  ])
+  .openapi('AmaEvent')
+
+const EventRecordSchema = z
   .object({
     id: z.string(),
     projectId: z.string(),
     sessionId: z.string(),
     sequence: z.number().int(),
-    type: z.enum(AMA_SESSION_EVENT_TYPES),
     visibility: z.enum(EVENT_VISIBILITIES),
     role: z.string().nullable(),
     parentEventId: z.string().nullable(),
     correlationId: z.string().nullable(),
-    payload: JsonObjectSchema,
-    metadata: JsonObjectSchema,
+    event: AmaEventSchema,
     createdAt: z.string().datetime(),
   })
-  .openapi('SessionEvent')
+  .openapi('EventRecord')
 
-// ── browser session socket frame schemas ─────────────────────────────────────
+// ── browser session socket message schemas ───────────────────────────────────
 // OpenAPI 3.x cannot describe a WebSocket message protocol, only the HTTP upgrade
 // endpoint (connectSessionSocket). These component schemas type the frames the
 // socket carries so the generated SDK types stay route/spec-derived (no drift);
 // the transport itself is hand-wrapped in the SDK facade.
 
 // server → client
-const SessionLiveEventFrameSchema = z
-  .object({ type: z.literal('event'), event: SessionEventSchema })
-  .openapi('SessionLiveEventFrame')
-const SessionBackfillResponseSchema = z
+const SessionSocketEventMessageSchema = z
+  .object({ type: z.literal('event'), record: EventRecordSchema })
+  .openapi('SessionSocketEventMessage')
+const SessionSocketBackfillMessageSchema = z
   .object({
     type: z.literal('backfill'),
     requestId: z.string().nullable(),
-    events: z.array(SessionEventSchema),
+    events: z.array(EventRecordSchema),
     nextCursor: z.number().int().nullable(),
     hasMore: z.boolean(),
   })
-  .openapi('SessionBackfillResponse')
-const SessionRunnerUnavailableSchema = z
+  .openapi('SessionSocketBackfillMessage')
+const SessionSocketRunnerUnavailableMessageSchema = z
   .object({ type: z.literal('runner_unavailable'), message: z.string() })
-  .openapi('SessionRunnerUnavailable')
+  .openapi('SessionSocketRunnerUnavailableMessage')
+const SessionSocketAckMessageSchema = z
+  .object({ type: z.literal('ack'), id: z.string() })
+  .openapi('SessionSocketAckMessage')
+const SessionSocketErrorMessageSchema = z
+  .object({ type: z.literal('error'), id: z.string().optional(), message: z.string() })
+  .openapi('SessionSocketErrorMessage')
+const SessionSocketServerMessageSchema = z
+  .discriminatedUnion('type', [
+    SessionSocketEventMessageSchema,
+    SessionSocketBackfillMessageSchema,
+    SessionSocketRunnerUnavailableMessageSchema,
+    SessionSocketAckMessageSchema,
+    SessionSocketErrorMessageSchema,
+  ])
+  .openapi('SessionSocketServerMessage')
 
 // client → server
-const SessionPromptFrameSchema = z
-  .object({ type: z.literal('prompt'), content: z.string() })
-  .openapi('SessionPromptFrame')
-const SessionAbortFrameSchema = z.object({ type: z.literal('abort') }).openapi('SessionAbortFrame')
-const SessionSteerFrameSchema = z.object({ type: z.literal('steer'), content: z.string() }).openapi('SessionSteerFrame')
-const SessionApprovalFrameSchema = z
+const SessionSocketPromptMessageSchema = z
+  .object({ id: z.string(), type: z.literal('prompt'), content: z.string() })
+  .openapi('SessionSocketPromptMessage')
+const SessionSocketAbortMessageSchema = z
+  .object({ id: z.string(), type: z.literal('abort') })
+  .openapi('SessionSocketAbortMessage')
+const SessionSocketSteerMessageSchema = z
+  .object({ id: z.string(), type: z.literal('steer'), content: z.string() })
+  .openapi('SessionSocketSteerMessage')
+const SessionSocketBackfillRequestMessageSchema = z
   .object({
-    type: z.literal('approval'),
-    approvalId: z.string(),
-    decision: z.enum(['approve', 'reject']),
-    reason: z.string().optional(),
-  })
-  .openapi('SessionApprovalFrame')
-const SessionBackfillRequestFrameSchema = z
-  .object({
+    id: z.string(),
     type: z.literal('backfill'),
     requestId: z.string().optional(),
     cursor: z.number().int().optional(),
@@ -236,30 +427,31 @@ const SessionBackfillRequestFrameSchema = z
     eventType: z.string().optional(),
     visibility: z.string().optional(),
   })
-  .openapi('SessionBackfillRequestFrame')
-const SessionClientFrameSchema = z
+  .openapi('SessionSocketBackfillRequestMessage')
+const SessionSocketClientMessageSchema = z
   .discriminatedUnion('type', [
-    SessionPromptFrameSchema,
-    SessionAbortFrameSchema,
-    SessionSteerFrameSchema,
-    SessionApprovalFrameSchema,
-    SessionBackfillRequestFrameSchema,
+    SessionSocketPromptMessageSchema,
+    SessionSocketAbortMessageSchema,
+    SessionSocketSteerMessageSchema,
+    SessionSocketBackfillRequestMessageSchema,
   ])
-  .openapi('SessionClientFrame')
+  .openapi('SessionSocketClientMessage')
 
 // The component schemas above are emitted into the OpenAPI document (and so the
 // generated SDK types) only when registered; connectSessionSocket is a bare
 // upgrade with no body, so register them explicitly.
-const SESSION_FRAME_SCHEMAS = {
-  SessionLiveEventFrame: SessionLiveEventFrameSchema,
-  SessionBackfillResponse: SessionBackfillResponseSchema,
-  SessionRunnerUnavailable: SessionRunnerUnavailableSchema,
-  SessionPromptFrame: SessionPromptFrameSchema,
-  SessionAbortFrame: SessionAbortFrameSchema,
-  SessionSteerFrame: SessionSteerFrameSchema,
-  SessionApprovalFrame: SessionApprovalFrameSchema,
-  SessionBackfillRequestFrame: SessionBackfillRequestFrameSchema,
-  SessionClientFrame: SessionClientFrameSchema,
+const SESSION_SOCKET_MESSAGE_SCHEMAS = {
+  SessionSocketEventMessage: SessionSocketEventMessageSchema,
+  SessionSocketBackfillMessage: SessionSocketBackfillMessageSchema,
+  SessionSocketRunnerUnavailableMessage: SessionSocketRunnerUnavailableMessageSchema,
+  SessionSocketAckMessage: SessionSocketAckMessageSchema,
+  SessionSocketErrorMessage: SessionSocketErrorMessageSchema,
+  SessionSocketServerMessage: SessionSocketServerMessageSchema,
+  SessionSocketPromptMessage: SessionSocketPromptMessageSchema,
+  SessionSocketAbortMessage: SessionSocketAbortMessageSchema,
+  SessionSocketSteerMessage: SessionSocketSteerMessageSchema,
+  SessionSocketBackfillRequestMessage: SessionSocketBackfillRequestMessageSchema,
+  SessionSocketClientMessage: SessionSocketClientMessageSchema,
 } as const
 
 const CreateSessionSchema = z
@@ -315,13 +507,8 @@ const CreateSessionMessageSchema = z
   .strict()
   .openapi('CreateSessionMessageRequest')
 
-const SessionEventInputSchema = z
-  .object({ type: z.string().min(1).max(120), payload: JsonObjectSchema, metadata: JsonObjectSchema.optional() })
-  .strict()
-  .openapi('SessionEventInput')
-
 const CreateSessionEventsSchema = z
-  .object({ events: z.array(SessionEventInputSchema).min(1).max(MAX_EVENT_BATCH) })
+  .object({ events: z.array(AmaEventSchema).min(1).max(MAX_EVENT_BATCH) })
   .strict()
   .openapi('CreateSessionEventsRequest')
 
@@ -421,7 +608,7 @@ const EventsQuerySchema = eventListQuerySchema().extend({
     .openapi({ param: { name: 'createdTo', in: 'query' }, example: '2026-05-31T23:59:59.999Z' }),
 })
 const SessionListResponseSchema = listResponseSchema('SessionListResponse', SessionSchema)
-const SessionEventListResponseSchema = listResponseSchema('SessionEventListResponse', SessionEventSchema)
+const EventRecordListResponseSchema = listResponseSchema('EventRecordListResponse', EventRecordSchema)
 const SessionMessageListResponseSchema = listResponseSchema('SessionMessageListResponse', SessionMessageSchema)
 const SessionApprovalListResponseSchema = listResponseSchema('SessionApprovalListResponse', SessionApprovalSchema)
 
@@ -516,8 +703,8 @@ function asSessionApprovalResponse(record: SessionApproval): z.infer<typeof Sess
   return record as z.infer<typeof SessionApprovalSchema>
 }
 
-function asSessionEventResponse(record: SessionEvent): z.infer<typeof SessionEventSchema> {
-  return record as z.infer<typeof SessionEventSchema>
+function asEventRecordResponse(record: EventRecord): z.infer<typeof EventRecordSchema> {
+  return record as z.infer<typeof EventRecordSchema>
 }
 
 function pendingApprovalResponse(
@@ -575,7 +762,7 @@ async function eventsJsonResponse(c: Context<DepsEnv>, sessionId: string, query:
   const last = page.rows.at(-1)
   const nextCursor = page.hasMore && last ? String(last.sequence) : null
   return c.json(
-    { data: page.rows.map(asSessionEventResponse), pagination: { limit, nextCursor, hasMore: page.hasMore } },
+    { data: page.rows.map(asEventRecordResponse), pagination: { limit, nextCursor, hasMore: page.hasMore } },
     200,
   )
 }
@@ -598,18 +785,18 @@ async function eventsCsvResponse(c: Context<DepsEnv>, sessionId: string, query: 
     'payload',
     'metadata',
   ]
-  const csvRows = rows.map((event) => [
-    event.id,
-    event.sessionId,
-    String(event.sequence),
-    event.type,
-    event.visibility,
-    event.role ?? '',
-    event.correlationId ?? '',
-    event.parentEventId ?? '',
-    event.createdAt,
-    JSON.stringify(event.payload),
-    JSON.stringify(event.metadata),
+  const csvRows = rows.map((record) => [
+    record.id,
+    record.sessionId,
+    String(record.sequence),
+    record.event.type,
+    record.visibility,
+    record.role ?? '',
+    record.correlationId ?? '',
+    record.parentEventId ?? '',
+    record.createdAt,
+    JSON.stringify(record.event.payload),
+    JSON.stringify(record.event.metadata ?? {}),
   ])
   return csvResponse(c, `session-${sessionId}-events.csv`, header, csvRows)
 }
@@ -650,10 +837,12 @@ function eventsSseResponse(c: Context<DepsEnv>, sessionId: string, query: Events
             limit: limit + 1,
           })
           const rows = page.rows.slice(0, limit)
-          for (const event of rows) {
-            lastSequence = event.sequence
+          for (const record of rows) {
+            lastSequence = record.sequence
             streamController.enqueue(
-              encoder.encode(`id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`),
+              encoder.encode(
+                `id: ${record.sequence}\nevent: ${record.event.type}\ndata: ${JSON.stringify(record)}\n\n`,
+              ),
             )
           }
           if (rows.length >= limit) {
@@ -844,7 +1033,7 @@ const listEventsRoute = createRoute({
     200: {
       description: 'Session events',
       content: {
-        'application/json': { schema: SessionEventListResponseSchema },
+        'application/json': { schema: EventRecordListResponseSchema },
         'text/csv': { schema: z.string() },
         'text/event-stream': { schema: z.string() },
       },
@@ -941,7 +1130,7 @@ const decideSessionApprovalRoute = createRoute({
 // static segments register before parameter segments. The assembler in app.ts
 // calls this at the sessions resource's original mount position.
 export function registerSessionRoutes(routes: SessionRoutes) {
-  for (const [name, schema] of Object.entries(SESSION_FRAME_SCHEMAS)) {
+  for (const [name, schema] of Object.entries(SESSION_SOCKET_MESSAGE_SCHEMAS)) {
     routes.openAPIRegistry.register(name, schema)
   }
   return routes
@@ -1226,13 +1415,16 @@ export function registerSessionRoutes(routes: SessionRoutes) {
           projectId: auth.project.id,
           sessionId: session.id,
         },
-        events.map((event) => ({
-          type: event.type,
-          payload: event.payload,
-          metadata: runnerLeaseMetadata
-            ? { source: 'self-hosted-runner', ...(event.metadata ?? {}), ...runnerLeaseMetadata }
-            : { source: 'api', ...(event.metadata ?? {}) },
-        })),
+        events.map((event) => {
+          const amaEvent = {
+            type: event.type,
+            payload: event.payload,
+            metadata: runnerLeaseMetadata
+              ? { source: 'self-hosted-runner', ...(event.metadata ?? {}), ...runnerLeaseMetadata }
+              : { source: 'api', ...(event.metadata ?? {}) },
+          } as AmaEvent
+          return amaEvent
+        }),
       )
       return c.json({ accepted }, 201)
     })

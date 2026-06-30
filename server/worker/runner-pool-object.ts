@@ -1,8 +1,9 @@
 import { createDeps } from '../composition'
 import type { Env } from '../env'
 import { claimLease, materializeWorkItemPayload } from '../usecases/leases'
-import type { AuthScope, LeaseRecord, RunnerAuthRecord, WorkItemRecord } from '../usecases/ports'
-import type { RelayedRunnerEvent, SessionEventScope } from './session-event-store-sql'
+import type { AuthScope, EventPage, EventQuery, LeaseRecord, RunnerAuthRecord, WorkItemRecord } from '../usecases/ports'
+import { pageRelayedEvents, type RelayedRunnerEvent, type EventWriteContext } from './session-event-store-sql'
+import { type AmaEvent, isAmaSessionEventType } from '@shared/session-events'
 
 type RunnerScope = {
   runnerId: string
@@ -24,10 +25,19 @@ type PendingSandboxRequest = {
   timer: ReturnType<typeof setTimeout>
 }
 
+type PendingBackfillRequest = {
+  runnerId: string
+  resolve: (events: RelayedRunnerEvent[]) => void
+  reject: (error: Error) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
 export class RunnerPoolObject implements DurableObject {
   private readonly runners = new Map<string, RunnerConnection>()
   private readonly sessionRunners = new Map<string, string>()
+  private readonly sessionBackfillRunners = new Map<string, string>()
   private readonly pendingSandboxRequests = new Map<string, PendingSandboxRequest>()
+  private readonly pendingBackfillRequests = new Map<string, PendingBackfillRequest>()
 
   constructor(
     private readonly durableState: DurableObjectState,
@@ -47,6 +57,9 @@ export class RunnerPoolObject implements DurableObject {
     }
     if (url.pathname === '/request' && request.method === 'POST') {
       return this.requestRunnerSandbox(await request.json())
+    }
+    if (url.pathname === '/backfill' && request.method === 'POST') {
+      return this.requestRunnerBackfill(await request.json())
     }
     if (url.pathname === '/status' && request.method === 'POST') {
       return this.status(await request.json())
@@ -96,6 +109,11 @@ export class RunnerPoolObject implements DurableObject {
         this.sessionRunners.delete(sessionId)
       }
     }
+    for (const [sessionId, runnerId] of this.sessionBackfillRunners) {
+      if (runnerId === connection.scope.runnerId) {
+        this.sessionBackfillRunners.delete(sessionId)
+      }
+    }
     for (const [requestId, pending] of this.pendingSandboxRequests) {
       if (pending.runnerId !== connection.scope.runnerId) {
         continue
@@ -103,6 +121,14 @@ export class RunnerPoolObject implements DurableObject {
       pending.reject(new Error('runner channel closed'))
       clearTimeout(pending.timer)
       this.pendingSandboxRequests.delete(requestId)
+    }
+    for (const [requestId, pending] of this.pendingBackfillRequests) {
+      if (pending.runnerId !== connection.scope.runnerId) {
+        continue
+      }
+      pending.reject(new Error('runner channel closed'))
+      clearTimeout(pending.timer)
+      this.pendingBackfillRequests.delete(requestId)
     }
   }
 
@@ -155,6 +181,7 @@ export class RunnerPoolObject implements DurableObject {
         continue
       }
       this.sessionRunners.set(workItem.sessionId, scope.runnerId)
+      this.sessionBackfillRunners.set(workItem.sessionId, scope.runnerId)
     }
   }
 
@@ -193,6 +220,7 @@ export class RunnerPoolObject implements DurableObject {
         connection.assigned += 1
         if (workItem.sessionId) {
           this.sessionRunners.set(workItem.sessionId, connection.scope.runnerId)
+          this.sessionBackfillRunners.set(workItem.sessionId, connection.scope.runnerId)
         }
         return { ok: true, runnerId: connection.scope.runnerId, leaseId: lease.id }
       } catch {}
@@ -215,7 +243,7 @@ export class RunnerPoolObject implements DurableObject {
     if (typeof body.sessionId !== 'string') {
       return Response.json({ active: false }, { status: 409 })
     }
-    const connection = this.connectionForSession(body.sessionId)
+    const connection = this.connectionForBackfill(body.sessionId)
     if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
       return Response.json({ active: false }, { status: 409 })
     }
@@ -286,8 +314,75 @@ export class RunnerPoolObject implements DurableObject {
     })
   }
 
+  private async requestRunnerBackfill(body: {
+    sessionId?: string
+    query?: EventQuery
+    timeoutMs?: number
+  }): Promise<Response> {
+    if (typeof body.sessionId !== 'string' || !body.query) {
+      return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
+    }
+    const connection = this.connectionForSession(body.sessionId)
+    if (!connection || connection.socket.readyState !== WebSocket.OPEN) {
+      return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
+    }
+    try {
+      const events = await this.sendBackfillRequest(
+        connection,
+        body.sessionId,
+        typeof body.timeoutMs === 'number' ? body.timeoutMs : 30_000,
+      )
+      const page = pageRelayedEvents(
+        events,
+        {
+          organizationId: connection.scope.organizationId,
+          projectId: connection.scope.projectId,
+          sessionId: body.sessionId,
+        },
+        body.query,
+      )
+      return Response.json(page)
+    } catch {
+      return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
+    }
+  }
+
+  private sendBackfillRequest(
+    connection: RunnerConnection,
+    sessionId: string,
+    timeoutMs: number,
+  ): Promise<RelayedRunnerEvent[]> {
+    const requestId = `backfill_${crypto.randomUUID()}`
+    return new Promise<RelayedRunnerEvent[]>((resolve, reject) => {
+      const timer = setTimeout(
+        () => {
+          this.pendingBackfillRequests.delete(requestId)
+          reject(new Error('runner backfill request timed out'))
+        },
+        Math.max(1, timeoutMs),
+      )
+      this.pendingBackfillRequests.set(requestId, { runnerId: connection.scope.runnerId, resolve, reject, timer })
+      connection.socket.send(
+        JSON.stringify({
+          type: 'session.backfill_request',
+          eventId: requestId,
+          sessionId,
+          runnerId: connection.scope.runnerId,
+        }),
+      )
+    })
+  }
+
   private connectionForSession(sessionId: string): RunnerConnection | null {
     const runnerId = this.sessionRunners.get(sessionId)
+    if (!runnerId) {
+      return null
+    }
+    return this.runners.get(runnerId) ?? null
+  }
+
+  private connectionForBackfill(sessionId: string): RunnerConnection | null {
+    const runnerId = this.sessionBackfillRunners.get(sessionId)
     if (!runnerId) {
       return null
     }
@@ -307,6 +402,10 @@ export class RunnerPoolObject implements DurableObject {
     }
     if (frame.type === 'sandbox.response') {
       this.resolveSandboxResponse(frame)
+      return
+    }
+    if (frame.type === 'session.backfill_response') {
+      this.resolveBackfillResponse(frame)
       return
     }
     if (frame.type === 'work.completed' || frame.type === 'work.failed' || frame.type === 'work.cancelled') {
@@ -346,38 +445,63 @@ export class RunnerPoolObject implements DurableObject {
     )
   }
 
+  private resolveBackfillResponse(record: Record<string, unknown>): void {
+    const requestId = typeof record.eventId === 'string' ? record.eventId : null
+    if (!requestId) {
+      return
+    }
+    const pending = this.pendingBackfillRequests.get(requestId)
+    if (!pending) {
+      return
+    }
+    clearTimeout(pending.timer)
+    this.pendingBackfillRequests.delete(requestId)
+    if (typeof record.error === 'string') {
+      pending.reject(new Error(record.error))
+      return
+    }
+    const events = Array.isArray(record.events)
+      ? record.events.flatMap((value) => {
+          const event = relayedRunnerEventFrom(value)
+          return event ? [event] : []
+        })
+      : []
+    pending.resolve(events)
+  }
+
   private async handleRunnerEvent(scope: RunnerScope, frame: Record<string, unknown>) {
     const sessionId = typeof frame.sessionId === 'string' ? frame.sessionId : null
     if (!sessionId) {
       return
     }
-    const eventRecord =
-      frame.event && typeof frame.event === 'object' ? (frame.event as Record<string, unknown>) : frame
-    const type = eventRecord.type
-    const payload = eventRecord.payload
-    const metadata = eventRecord.metadata
-    if (typeof type !== 'string' || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    const record = objectRecord(frame.record)
+    const event = objectRecord(record?.event)
+    const payload = objectRecord(event?.payload)
+    if (
+      !record ||
+      !event ||
+      !payload ||
+      typeof record.id !== 'string' ||
+      typeof record.sequence !== 'number' ||
+      typeof record.createdAt !== 'string' ||
+      typeof event.type !== 'string' ||
+      !isAmaSessionEventType(event.type)
+    ) {
       return
     }
-    await appendRelayedEvent(this.env, {
+    await fanOutRelayedEvent(this.env, {
       scope: { organizationId: scope.organizationId, projectId: scope.projectId, sessionId },
       raw: {
-        id: typeof frame.relayId === 'string' ? frame.relayId : eventId(),
-        sequence: typeof frame.relaySequence === 'number' ? frame.relaySequence : Date.now(),
-        type,
-        payload: payload as Record<string, unknown>,
-        metadata:
-          metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-            ? { runnerId: scope.runnerId, ...(metadata as Record<string, unknown>) }
-            : { runnerId: scope.runnerId },
-        createdAt: typeof frame.relayCreatedAt === 'string' ? frame.relayCreatedAt : new Date().toISOString(),
+        id: record.id,
+        sequence: record.sequence,
+        createdAt: record.createdAt,
+        event: {
+          type: event.type,
+          payload,
+          metadata: { runnerId: scope.runnerId, ...(objectRecord(event.metadata) ?? {}) },
+        } as AmaEvent,
       },
     })
-    const eventAckId = typeof frame.eventId === 'string' ? frame.eventId : null
-    const runner = this.runners.get(scope.runnerId)
-    if (eventAckId && runner?.socket.readyState === WebSocket.OPEN) {
-      runner.socket.send(JSON.stringify({ type: 'runner.event.accepted', eventId: eventAckId }))
-    }
   }
 }
 
@@ -427,17 +551,41 @@ function serializeWorkItem(workItem: WorkItemRecord) {
   }
 }
 
-async function appendRelayedEvent(env: Env, body: { scope: SessionEventScope; raw: RelayedRunnerEvent }) {
+async function fanOutRelayedEvent(env: Env, body: { scope: EventWriteContext; raw: RelayedRunnerEvent }) {
   const stub = env.SESSION.get(env.SESSION.idFromName(body.scope.sessionId))
-  await stub.fetch('https://session-object/events/relay-append', {
+  await stub.fetch('https://session-object/events/relay-live', {
     method: 'POST',
     body: JSON.stringify(body),
     headers: { 'content-type': 'application/json' },
   })
 }
 
-function eventId() {
-  return `event_${crypto.randomUUID().replaceAll('-', '')}`
+function relayedRunnerEventFrom(value: unknown): RelayedRunnerEvent | null {
+  const record = objectRecord(value)
+  const event = objectRecord(record?.event)
+  const payload = objectRecord(event?.payload)
+  if (
+    !record ||
+    !event ||
+    !payload ||
+    typeof record.id !== 'string' ||
+    typeof record.sequence !== 'number' ||
+    typeof record.createdAt !== 'string' ||
+    typeof event.type !== 'string' ||
+    !isAmaSessionEventType(event.type)
+  ) {
+    return null
+  }
+  return {
+    id: record.id,
+    sequence: record.sequence,
+    createdAt: record.createdAt,
+    event: {
+      type: event.type,
+      payload,
+      metadata: objectRecord(event.metadata) ?? {},
+    } as AmaEvent,
+  }
 }
 
 function requiredParam(url: URL, name: string) {
@@ -446,6 +594,10 @@ function requiredParam(url: URL, name: string) {
     throw new Error(`Missing runner pool parameter ${name}`)
   }
   return value
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 }
 
 function runnerScopeFromUrl(url: URL): RunnerScope {

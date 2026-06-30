@@ -1,44 +1,55 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionEvent } from '@/lib/amarpc'
+import type { EventRecord } from '@/lib/amarpc'
 import { buildSessionToolTrace, summarizeToolValue } from './session-tool-trace'
 
 let sequence = 0
 
-function buildEvent(overrides: Partial<SessionEvent>): SessionEvent {
+type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
+  type?: EventRecord['event']['type']
+  payload?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  event?: EventRecord['event']
+}
+
+function buildEvent(overrides: EventRecordOverrides): EventRecord {
   sequence += 1
+  const {
+    type = overrides.event?.type ?? 'tool_execution_start',
+    payload = overrides.event?.payload ?? {},
+    metadata = overrides.event?.metadata ?? {},
+    event: eventOverride,
+    ...recordOverrides
+  } = overrides
   return {
     id: `event_${sequence}`,
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence,
-    type: 'tool_execution_start',
     visibility: 'runtime',
     role: null,
     parentEventId: 'event_turn_1',
     correlationId: null,
-    payload: {},
-    metadata: {},
+    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
     createdAt: '2026-05-23T00:00:00.000Z',
-    ...overrides,
+    ...recordOverrides,
   }
 }
 
-function toolStart(toolCallId: string, overrides: Partial<SessionEvent> = {}) {
+function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
   return buildEvent({
     type: 'tool_execution_start',
     correlationId: `tool:${toolCallId}`,
-    payload: { toolCallId, toolName: 'bash', args: { command: 'git status' } },
+    payload: { toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } } },
     ...overrides,
   })
 }
 
-function toolEnd(toolCallId: string, overrides: Partial<SessionEvent> = {}) {
+function toolEnd(toolCallId: string, overrides: EventRecordOverrides = {}) {
   return buildEvent({
     type: 'tool_execution_end',
     correlationId: `tool:${toolCallId}`,
     payload: {
-      toolCallId,
-      toolName: 'bash',
+      toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } },
       result: { content: [{ type: 'text', text: 'clean tree' }], details: {} },
       isError: false,
     },
@@ -128,7 +139,7 @@ describe('buildSessionToolTrace', () => {
       orphanedResult: true,
       status: 'completed',
       name: 'bash',
-      input: undefined,
+      input: { command: 'git status' },
       startedAt: null,
       durationMs: null,
     })
@@ -186,7 +197,7 @@ describe('buildSessionToolTrace', () => {
     const trace = buildSessionToolTrace([
       buildEvent({ type: 'message_end', payload: { message: { role: 'assistant', content: 'hi' } } }),
       toolStart('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'bash', args: { command: 'deploy', apiKey: '[REDACTED]' } },
+        payload: { toolCall: { id: 'call_1', name: 'bash', input: { command: 'deploy', apiKey: '[REDACTED]' } } },
       }),
       toolEnd('call_1'),
       buildEvent({ type: 'tool_execution_start', visibility: 'audit', payload: { toolCallId: 'call_hidden' } }),

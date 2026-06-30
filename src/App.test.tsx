@@ -10,7 +10,7 @@ import type {
   Provider,
   Session,
   SessionEnvironmentSnapshot,
-  SessionEvent,
+  EventRecord,
   UsageSummary,
   Vault,
   VaultCredential,
@@ -109,9 +109,9 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
       this.dispatchEvent(new Event('close'))
     }
 
-    private emitEvent(payload: SessionEvent) {
+    private emitEvent(payload: EventRecord) {
       queueMicrotask(() =>
-        this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'event', event: payload }) })),
+        this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'event', record: payload }) })),
       )
     }
   }
@@ -156,21 +156,33 @@ function session(overrides: TestSessionOverrides = {}): Session {
   return buildTestSession({ environmentSnapshot: sessionEnvironmentSnapshot(), ...overrides })
 }
 
-function event(overrides: Partial<SessionEvent> = {}): SessionEvent {
+type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
+  type?: EventRecord['event']['type']
+  payload?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  event?: EventRecord['event']
+}
+
+function event(overrides: EventRecordOverrides = {}): EventRecord {
+  const {
+    type = overrides.event?.type ?? 'message_end',
+    payload = overrides.event?.payload ?? { type: 'message_end', message: { role: 'assistant', content: 'AMA message completed' } },
+    metadata = overrides.event?.metadata ?? {},
+    event: eventOverride,
+    ...recordOverrides
+  } = overrides
   return {
     id: 'event_1',
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'message_end',
     visibility: 'runtime',
     role: null,
     parentEventId: null,
     correlationId: null,
-    payload: { type: 'message_end', message: { role: 'assistant', content: 'AMA message completed' } },
-    metadata: {},
+    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
     createdAt: now,
-    ...overrides,
+    ...recordOverrides,
   }
 }
 
@@ -273,7 +285,7 @@ function mockConsoleApi(seed?: {
   agents?: Agent[]
   sessions?: Session[]
   detailSessions?: Session[]
-  events?: SessionEvent[]
+  events?: EventRecord[]
 }) {
   const state = {
     environments: seed?.environments ?? [],
@@ -793,19 +805,17 @@ describe('App', () => {
 
   it('renders sessions, runtime events, and sends messages through the session socket', async () => {
     const { sentCommands, socketUrls } = installMockRuntimeWebSocket()
-    const runtimeEvents: SessionEvent[] = [
+    const runtimeEvents: EventRecord[] = [
       {
         id: 'event_1',
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        type: 'turn_end',
         visibility: 'debug',
         role: null,
         parentEventId: null,
         correlationId: null,
-        payload: { status: 'idle', reason: 'runtime_ready' },
-        metadata: {},
+        event: { type: 'turn_end', payload: { status: 'idle', reason: 'runtime_ready' } },
         createdAt: '2026-05-23T00:00:00.000Z',
       },
     ]

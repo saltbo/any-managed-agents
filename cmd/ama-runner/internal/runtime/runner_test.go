@@ -52,7 +52,7 @@ func TestRunnerReportsTimeout(t *testing.T) {
 type writingAdapter struct{}
 
 func (writingAdapter) Run(_ context.Context, _ Request, write EventWriter) (JSON, error) {
-	if err := write("runtime.output", JSON{"content": "ok"}); err != nil {
+	if err := write(JSON{"type": "runtime.output", "payload": JSON{"content": "ok"}}); err != nil {
 		return nil, err
 	}
 	return JSON{"exitCode": 0}, nil

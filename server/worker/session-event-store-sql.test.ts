@@ -4,7 +4,12 @@ import { newRelayThreadState, type RelayedRunnerEvent, serializeRow, stepRelayEv
 const scope = { organizationId: 'org-1', projectId: 'proj-1', sessionId: 'sess-1' }
 
 function raw(id: string, sequence: number, type: string, payload: Record<string, unknown> = {}): RelayedRunnerEvent {
-  return { id, sequence, type, payload, metadata: {}, createdAt: `2026-01-01T00:00:0${sequence}Z` }
+  return {
+    id,
+    sequence,
+    event: { type: type as RelayedRunnerEvent['event']['type'], payload, metadata: {} } as RelayedRunnerEvent['event'],
+    createdAt: `2026-01-01T00:00:0${sequence}Z`,
+  }
 }
 
 describe('stepRelayEvent', () => {

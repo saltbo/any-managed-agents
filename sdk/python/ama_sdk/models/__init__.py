@@ -9,6 +9,46 @@ from .agent_subagent_input import AgentSubagentInput
 from .agent_version import AgentVersion
 from .agent_version_list_response import AgentVersionListResponse
 from .agent_version_status import AgentVersionStatus
+from .ama_event_type_0 import AmaEventType0
+from .ama_event_type_0_type import AmaEventType0Type
+from .ama_event_type_1 import AmaEventType1
+from .ama_event_type_10 import AmaEventType10
+from .ama_event_type_10_type import AmaEventType10Type
+from .ama_event_type_11 import AmaEventType11
+from .ama_event_type_11_type import AmaEventType11Type
+from .ama_event_type_12 import AmaEventType12
+from .ama_event_type_12_type import AmaEventType12Type
+from .ama_event_type_13 import AmaEventType13
+from .ama_event_type_13_type import AmaEventType13Type
+from .ama_event_type_14 import AmaEventType14
+from .ama_event_type_14_type import AmaEventType14Type
+from .ama_event_type_15 import AmaEventType15
+from .ama_event_type_15_type import AmaEventType15Type
+from .ama_event_type_16 import AmaEventType16
+from .ama_event_type_16_type import AmaEventType16Type
+from .ama_event_type_17 import AmaEventType17
+from .ama_event_type_17_type import AmaEventType17Type
+from .ama_event_type_18 import AmaEventType18
+from .ama_event_type_18_type import AmaEventType18Type
+from .ama_event_type_19 import AmaEventType19
+from .ama_event_type_19_type import AmaEventType19Type
+from .ama_event_type_1_type import AmaEventType1Type
+from .ama_event_type_2 import AmaEventType2
+from .ama_event_type_2_type import AmaEventType2Type
+from .ama_event_type_3 import AmaEventType3
+from .ama_event_type_3_type import AmaEventType3Type
+from .ama_event_type_4 import AmaEventType4
+from .ama_event_type_4_type import AmaEventType4Type
+from .ama_event_type_5 import AmaEventType5
+from .ama_event_type_5_type import AmaEventType5Type
+from .ama_event_type_6 import AmaEventType6
+from .ama_event_type_6_type import AmaEventType6Type
+from .ama_event_type_7 import AmaEventType7
+from .ama_event_type_7_type import AmaEventType7Type
+from .ama_event_type_8 import AmaEventType8
+from .ama_event_type_8_type import AmaEventType8Type
+from .ama_event_type_9 import AmaEventType9
+from .ama_event_type_9_type import AmaEventType9Type
 from .audit_record import AuditRecord
 from .audit_record_actor_type import AuditRecordActorType
 from .audit_record_after import AuditRecordAfter
@@ -118,16 +158,29 @@ from .environment_version_status import EnvironmentVersionStatus
 from .error_response import ErrorResponse
 from .error_response_error import ErrorResponseError
 from .error_response_error_details import ErrorResponseErrorDetails
+from .event_error import EventError
+from .event_message import EventMessage
+from .event_message_role import EventMessageRole
+from .event_metadata import EventMetadata
+from .event_record import EventRecord
+from .event_record_list_response import EventRecordListResponse
+from .event_record_visibility import EventRecordVisibility
+from .event_tool_call import EventToolCall
 from .execution_env import ExecutionEnv
 from .execution_spec_input import ExecutionSpecInput
+from .file_content_block import FileContentBlock
+from .file_content_block_type import FileContentBlockType
 from .git_repository_volume import GitRepositoryVolume
 from .git_repository_volume_type import GitRepositoryVolumeType
 from .health_response import HealthResponse
 from .health_response_runtime import HealthResponseRuntime
 from .health_response_status import HealthResponseStatus
+from .image_content_block import ImageContentBlock
+from .image_content_block_type import ImageContentBlockType
 from .lease import Lease
 from .lease_list_response import LeaseListResponse
 from .lease_state import LeaseState
+from .lifecycle_payload import LifecyclePayload
 from .list_agents_archived import ListAgentsArchived
 from .list_connectors_availability import ListConnectorsAvailability
 from .list_environments_archived import ListEnvironmentsArchived
@@ -160,6 +213,13 @@ from .memory_store_status import MemoryStoreStatus
 from .memory_volume import MemoryVolume
 from .memory_volume_access import MemoryVolumeAccess
 from .memory_volume_type import MemoryVolumeType
+from .message_event_payload import MessageEventPayload
+from .metadata_payload import MetadataPayload
+from .metadata_payload_data import MetadataPayloadData
+from .permission_request_payload import PermissionRequestPayload
+from .permission_request_payload_details import PermissionRequestPayloadDetails
+from .policy_decision_payload import PolicyDecisionPayload
+from .policy_decision_payload_details import PolicyDecisionPayloadDetails
 from .project import Project
 from .project_list_response import ProjectListResponse
 from .provider import Provider
@@ -182,6 +242,8 @@ from .put_runner_heartbeat_request import PutRunnerHeartbeatRequest
 from .put_runner_heartbeat_request_metadata import PutRunnerHeartbeatRequestMetadata
 from .put_runner_heartbeat_request_state import PutRunnerHeartbeatRequestState
 from .read_usage_summary_group_by import ReadUsageSummaryGroupBy
+from .reasoning_content_block import ReasoningContentBlock
+from .reasoning_content_block_type import ReasoningContentBlockType
 from .resource_create_metadata import ResourceCreateMetadata
 from .resource_metadata import ResourceMetadata
 from .resource_metadata_annotations import ResourceMetadataAnnotations
@@ -227,33 +289,27 @@ from .runner_workspace_manifest import RunnerWorkspaceManifest
 from .runner_workspace_manifest_root import RunnerWorkspaceManifestRoot
 from .runner_workspace_mount import RunnerWorkspaceMount
 from .runner_workspace_mount_type import RunnerWorkspaceMountType
-from .runtime import Runtime
+from .runtime_name import RuntimeName
+from .runtime_output_payload import RuntimeOutputPayload
+from .runtime_output_payload_stream import RuntimeOutputPayloadStream
 from .runtime_usage import RuntimeUsage
 from .runtime_usage_window import RuntimeUsageWindow
 from .secret_volume import SecretVolume
 from .secret_volume_type import SecretVolumeType
 from .session import Session
-from .session_abort_frame import SessionAbortFrame
-from .session_abort_frame_type import SessionAbortFrameType
 from .session_agent_snapshot import SessionAgentSnapshot
 from .session_approval import SessionApproval
 from .session_approval_decision_request import SessionApprovalDecisionRequest
 from .session_approval_decision_request_decision import SessionApprovalDecisionRequestDecision
 from .session_approval_decision_request_result import SessionApprovalDecisionRequestResult
-from .session_approval_frame import SessionApprovalFrame
-from .session_approval_frame_decision import SessionApprovalFrameDecision
-from .session_approval_frame_type import SessionApprovalFrameType
 from .session_approval_input import SessionApprovalInput
 from .session_approval_list_response import SessionApprovalListResponse
 from .session_approval_result_type_0 import SessionApprovalResultType0
 from .session_approval_state import SessionApprovalState
-from .session_backfill_request_frame import SessionBackfillRequestFrame
-from .session_backfill_request_frame_type import SessionBackfillRequestFrameType
-from .session_backfill_response import SessionBackfillResponse
-from .session_backfill_response_type import SessionBackfillResponseType
 from .session_bindings import SessionBindings
 from .session_bindings_agent import SessionBindingsAgent
 from .session_bindings_environment import SessionBindingsEnvironment
+from .session_checkpoint_payload import SessionCheckpointPayload
 from .session_condition import SessionCondition
 from .session_condition_status import SessionConditionStatus
 from .session_condition_type import SessionConditionType
@@ -262,19 +318,8 @@ from .session_create_metadata_annotations import SessionCreateMetadataAnnotation
 from .session_create_metadata_labels import SessionCreateMetadataLabels
 from .session_environment_json_object import SessionEnvironmentJsonObject
 from .session_environment_snapshot_type_0 import SessionEnvironmentSnapshotType0
-from .session_event import SessionEvent
-from .session_event_input import SessionEventInput
-from .session_event_input_metadata import SessionEventInputMetadata
-from .session_event_input_payload import SessionEventInputPayload
-from .session_event_list_response import SessionEventListResponse
-from .session_event_metadata import SessionEventMetadata
-from .session_event_payload import SessionEventPayload
-from .session_event_type import SessionEventType
-from .session_event_visibility import SessionEventVisibility
 from .session_events_accepted import SessionEventsAccepted
 from .session_list_response import SessionListResponse
-from .session_live_event_frame import SessionLiveEventFrame
-from .session_live_event_frame_type import SessionLiveEventFrameType
 from .session_message import SessionMessage
 from .session_message_delivery import SessionMessageDelivery
 from .session_message_list_response import SessionMessageListResponse
@@ -284,19 +329,42 @@ from .session_metadata import SessionMetadata
 from .session_metadata_annotations import SessionMetadataAnnotations
 from .session_metadata_labels import SessionMetadataLabels
 from .session_placement_type_0 import SessionPlacementType0
-from .session_prompt_frame import SessionPromptFrame
-from .session_prompt_frame_type import SessionPromptFrameType
-from .session_runner_unavailable import SessionRunnerUnavailable
-from .session_runner_unavailable_type import SessionRunnerUnavailableType
+from .session_resume_payload import SessionResumePayload
+from .session_socket_abort_message import SessionSocketAbortMessage
+from .session_socket_abort_message_type import SessionSocketAbortMessageType
+from .session_socket_ack_message import SessionSocketAckMessage
+from .session_socket_ack_message_type import SessionSocketAckMessageType
+from .session_socket_backfill_message import SessionSocketBackfillMessage
+from .session_socket_backfill_message_type import SessionSocketBackfillMessageType
+from .session_socket_backfill_request_message import SessionSocketBackfillRequestMessage
+from .session_socket_backfill_request_message_type import SessionSocketBackfillRequestMessageType
+from .session_socket_error_message import SessionSocketErrorMessage
+from .session_socket_error_message_type import SessionSocketErrorMessageType
+from .session_socket_event_message import SessionSocketEventMessage
+from .session_socket_event_message_type import SessionSocketEventMessageType
+from .session_socket_prompt_message import SessionSocketPromptMessage
+from .session_socket_prompt_message_type import SessionSocketPromptMessageType
+from .session_socket_runner_unavailable_message import SessionSocketRunnerUnavailableMessage
+from .session_socket_runner_unavailable_message_type import SessionSocketRunnerUnavailableMessageType
+from .session_socket_steer_message import SessionSocketSteerMessage
+from .session_socket_steer_message_type import SessionSocketSteerMessageType
 from .session_spec import SessionSpec
 from .session_status import SessionStatus
 from .session_status_phase import SessionStatusPhase
-from .session_steer_frame import SessionSteerFrame
-from .session_steer_frame_type import SessionSteerFrameType
+from .session_stop_payload import SessionStopPayload
 from .session_subagent import SessionSubagent
 from .session_update_metadata import SessionUpdateMetadata
 from .session_update_metadata_annotations import SessionUpdateMetadataAnnotations
 from .session_update_metadata_labels import SessionUpdateMetadataLabels
+from .text_content_block import TextContentBlock
+from .text_content_block_type import TextContentBlockType
+from .tool_call_content_block import ToolCallContentBlock
+from .tool_call_content_block_type import ToolCallContentBlockType
+from .tool_completed_payload import ToolCompletedPayload
+from .tool_result_content_block import ToolResultContentBlock
+from .tool_result_content_block_type import ToolResultContentBlockType
+from .tool_started_payload import ToolStartedPayload
+from .tool_updated_payload import ToolUpdatedPayload
 from .trigger import Trigger
 from .trigger_create_metadata import TriggerCreateMetadata
 from .trigger_list_response import TriggerListResponse
@@ -320,6 +388,9 @@ from .trigger_template_metadata_annotations import TriggerTemplateMetadataAnnota
 from .trigger_template_metadata_labels import TriggerTemplateMetadataLabels
 from .trigger_template_spec import TriggerTemplateSpec
 from .trigger_update_metadata import TriggerUpdateMetadata
+from .turn_payload import TurnPayload
+from .unknown_content_block import UnknownContentBlock
+from .unknown_content_block_type import UnknownContentBlockType
 from .update_agent_request import UpdateAgentRequest
 from .update_agent_request_spec import UpdateAgentRequestSpec
 from .update_budget_request import UpdateBudgetRequest
@@ -367,6 +438,8 @@ from .usage_record_metadata import UsageRecordMetadata
 from .usage_record_provider_type import UsageRecordProviderType
 from .usage_record_state import UsageRecordState
 from .usage_record_usage_type import UsageRecordUsageType
+from .usage_recorded_payload import UsageRecordedPayload
+from .usage_recorded_payload_details import UsageRecordedPayloadDetails
 from .usage_summary import UsageSummary
 from .usage_summary_group import UsageSummaryGroup
 from .usage_summary_group_by import UsageSummaryGroupBy
@@ -409,6 +482,46 @@ __all__ = (
     "AgentVersion",
     "AgentVersionListResponse",
     "AgentVersionStatus",
+    "AmaEventType0",
+    "AmaEventType0Type",
+    "AmaEventType1",
+    "AmaEventType10",
+    "AmaEventType10Type",
+    "AmaEventType11",
+    "AmaEventType11Type",
+    "AmaEventType12",
+    "AmaEventType12Type",
+    "AmaEventType13",
+    "AmaEventType13Type",
+    "AmaEventType14",
+    "AmaEventType14Type",
+    "AmaEventType15",
+    "AmaEventType15Type",
+    "AmaEventType16",
+    "AmaEventType16Type",
+    "AmaEventType17",
+    "AmaEventType17Type",
+    "AmaEventType18",
+    "AmaEventType18Type",
+    "AmaEventType19",
+    "AmaEventType19Type",
+    "AmaEventType1Type",
+    "AmaEventType2",
+    "AmaEventType2Type",
+    "AmaEventType3",
+    "AmaEventType3Type",
+    "AmaEventType4",
+    "AmaEventType4Type",
+    "AmaEventType5",
+    "AmaEventType5Type",
+    "AmaEventType6",
+    "AmaEventType6Type",
+    "AmaEventType7",
+    "AmaEventType7Type",
+    "AmaEventType8",
+    "AmaEventType8Type",
+    "AmaEventType9",
+    "AmaEventType9Type",
     "AuditRecord",
     "AuditRecordActorType",
     "AuditRecordAfter",
@@ -518,16 +631,29 @@ __all__ = (
     "ErrorResponse",
     "ErrorResponseError",
     "ErrorResponseErrorDetails",
+    "EventError",
+    "EventMessage",
+    "EventMessageRole",
+    "EventMetadata",
+    "EventRecord",
+    "EventRecordListResponse",
+    "EventRecordVisibility",
+    "EventToolCall",
     "ExecutionEnv",
     "ExecutionSpecInput",
+    "FileContentBlock",
+    "FileContentBlockType",
     "GitRepositoryVolume",
     "GitRepositoryVolumeType",
     "HealthResponse",
     "HealthResponseRuntime",
     "HealthResponseStatus",
+    "ImageContentBlock",
+    "ImageContentBlockType",
     "Lease",
     "LeaseListResponse",
     "LeaseState",
+    "LifecyclePayload",
     "ListAgentsArchived",
     "ListConnectorsAvailability",
     "ListEnvironmentsArchived",
@@ -560,6 +686,13 @@ __all__ = (
     "MemoryVolume",
     "MemoryVolumeAccess",
     "MemoryVolumeType",
+    "MessageEventPayload",
+    "MetadataPayload",
+    "MetadataPayloadData",
+    "PermissionRequestPayload",
+    "PermissionRequestPayloadDetails",
+    "PolicyDecisionPayload",
+    "PolicyDecisionPayloadDetails",
     "Project",
     "ProjectListResponse",
     "Provider",
@@ -582,6 +715,8 @@ __all__ = (
     "PutRunnerHeartbeatRequestMetadata",
     "PutRunnerHeartbeatRequestState",
     "ReadUsageSummaryGroupBy",
+    "ReasoningContentBlock",
+    "ReasoningContentBlockType",
     "ResourceCreateMetadata",
     "ResourceMetadata",
     "ResourceMetadataAnnotations",
@@ -627,33 +762,27 @@ __all__ = (
     "RunnerWorkspaceManifestRoot",
     "RunnerWorkspaceMount",
     "RunnerWorkspaceMountType",
-    "Runtime",
+    "RuntimeName",
+    "RuntimeOutputPayload",
+    "RuntimeOutputPayloadStream",
     "RuntimeUsage",
     "RuntimeUsageWindow",
     "SecretVolume",
     "SecretVolumeType",
     "Session",
-    "SessionAbortFrame",
-    "SessionAbortFrameType",
     "SessionAgentSnapshot",
     "SessionApproval",
     "SessionApprovalDecisionRequest",
     "SessionApprovalDecisionRequestDecision",
     "SessionApprovalDecisionRequestResult",
-    "SessionApprovalFrame",
-    "SessionApprovalFrameDecision",
-    "SessionApprovalFrameType",
     "SessionApprovalInput",
     "SessionApprovalListResponse",
     "SessionApprovalResultType0",
     "SessionApprovalState",
-    "SessionBackfillRequestFrame",
-    "SessionBackfillRequestFrameType",
-    "SessionBackfillResponse",
-    "SessionBackfillResponseType",
     "SessionBindings",
     "SessionBindingsAgent",
     "SessionBindingsEnvironment",
+    "SessionCheckpointPayload",
     "SessionCondition",
     "SessionConditionStatus",
     "SessionConditionType",
@@ -662,19 +791,8 @@ __all__ = (
     "SessionCreateMetadataLabels",
     "SessionEnvironmentJsonObject",
     "SessionEnvironmentSnapshotType0",
-    "SessionEvent",
-    "SessionEventInput",
-    "SessionEventInputMetadata",
-    "SessionEventInputPayload",
-    "SessionEventListResponse",
-    "SessionEventMetadata",
-    "SessionEventPayload",
     "SessionEventsAccepted",
-    "SessionEventType",
-    "SessionEventVisibility",
     "SessionListResponse",
-    "SessionLiveEventFrame",
-    "SessionLiveEventFrameType",
     "SessionMessage",
     "SessionMessageDelivery",
     "SessionMessageListResponse",
@@ -684,19 +802,42 @@ __all__ = (
     "SessionMetadataAnnotations",
     "SessionMetadataLabels",
     "SessionPlacementType0",
-    "SessionPromptFrame",
-    "SessionPromptFrameType",
-    "SessionRunnerUnavailable",
-    "SessionRunnerUnavailableType",
+    "SessionResumePayload",
+    "SessionSocketAbortMessage",
+    "SessionSocketAbortMessageType",
+    "SessionSocketAckMessage",
+    "SessionSocketAckMessageType",
+    "SessionSocketBackfillMessage",
+    "SessionSocketBackfillMessageType",
+    "SessionSocketBackfillRequestMessage",
+    "SessionSocketBackfillRequestMessageType",
+    "SessionSocketErrorMessage",
+    "SessionSocketErrorMessageType",
+    "SessionSocketEventMessage",
+    "SessionSocketEventMessageType",
+    "SessionSocketPromptMessage",
+    "SessionSocketPromptMessageType",
+    "SessionSocketRunnerUnavailableMessage",
+    "SessionSocketRunnerUnavailableMessageType",
+    "SessionSocketSteerMessage",
+    "SessionSocketSteerMessageType",
     "SessionSpec",
     "SessionStatus",
     "SessionStatusPhase",
-    "SessionSteerFrame",
-    "SessionSteerFrameType",
+    "SessionStopPayload",
     "SessionSubagent",
     "SessionUpdateMetadata",
     "SessionUpdateMetadataAnnotations",
     "SessionUpdateMetadataLabels",
+    "TextContentBlock",
+    "TextContentBlockType",
+    "ToolCallContentBlock",
+    "ToolCallContentBlockType",
+    "ToolCompletedPayload",
+    "ToolResultContentBlock",
+    "ToolResultContentBlockType",
+    "ToolStartedPayload",
+    "ToolUpdatedPayload",
     "Trigger",
     "TriggerCreateMetadata",
     "TriggerListResponse",
@@ -720,6 +861,9 @@ __all__ = (
     "TriggerTemplateMetadataLabels",
     "TriggerTemplateSpec",
     "TriggerUpdateMetadata",
+    "TurnPayload",
+    "UnknownContentBlock",
+    "UnknownContentBlockType",
     "UpdateAgentRequest",
     "UpdateAgentRequestSpec",
     "UpdateBudgetRequest",
@@ -762,6 +906,8 @@ __all__ = (
     "UpdateVaultRequestSpec",
     "UpdateVaultRequestSpecScope",
     "UsageRecord",
+    "UsageRecordedPayload",
+    "UsageRecordedPayloadDetails",
     "UsageRecordListResponse",
     "UsageRecordMetadata",
     "UsageRecordProviderType",

@@ -27,7 +27,7 @@ type Opener interface {
 // channel. One connection, reconnecting on drop, that outlives any single lease so
 // a completed session still reads while the runner is online ("runner online ⇒
 // available"). The relay is the SINGLE reader of the socket: it demuxes inbound
-// frames by the per-frame sessionId (a session.command → that session's live
+// messages by sessionId (a session.command → that session's live
 // handle; a session.backfill_request → answered from the session's on-disk
 // log, which survives the lease). Outbound, a session relays each stored event live
 // and fire-and-forget — the event is already durable on disk (the cloud keeps no
@@ -302,33 +302,32 @@ func (h *Relay) Unregister(sessionID string) {
 // RelayEvent dispatches one stored event live to the cloud, fire-and-forget: the
 // event is already durable on disk (the cloud keeps no copy), so a momentary
 // disconnect drops only the live fan, never the run. The stored id/sequence/time
-// ride along so the cloud fans it with the same identity the backfill serves (the
-// browser dedups by them).
-func (h *Relay) RelayEvent(ctx context.Context, sessionID string, eventType string, payload ama.JSON, relay *RelayStamp) {
-	eventID, err := newEventID()
+// ride along so the cloud fans it with the same identity the runner backfill
+// serves (the browser dedups by them).
+func (h *Relay) RelayEvent(ctx context.Context, sessionID string, event ama.JSON, relay *RelayStamp) {
+	recordID, err := newEventID()
 	if err != nil {
 		slog.Warn("runner failed to create relay event id", "sessionId", sessionID, "error", err)
 		return
 	}
-	// eventId is advisory (the server acks by it, but the runner ignores acks); the
-	// store's relayId is the real dedup key the browser uses.
+	record := ama.JSON{
+		"id":        recordID,
+		"sequence":  time.Now().UnixMilli(),
+		"createdAt": time.Now().UTC().Format(time.RFC3339Nano),
+		"event": withRelayMetadata(event, ama.JSON{
+			"runnerId": h.runnerID,
+			"executor": h.executor,
+		}),
+	}
+	if relay != nil {
+		record["id"] = relay.ID
+		record["sequence"] = relay.Sequence
+		record["createdAt"] = relay.CreatedAt
+	}
 	message := ama.JSON{
 		"type":      "runner.event",
 		"sessionId": sessionID,
-		"eventId":   eventID,
-		"event": ama.JSON{
-			"type":    eventType,
-			"payload": payload,
-			"metadata": ama.JSON{
-				"runnerId": h.runnerID,
-				"executor": h.executor,
-			},
-		},
-	}
-	if relay != nil {
-		message["relaySequence"] = relay.Sequence
-		message["relayId"] = relay.ID
-		message["relayCreatedAt"] = relay.CreatedAt
+		"record":    record,
 	}
 	// Hold writeMu across the conn check and the write so a concurrent reconnect
 	// cannot null the socket mid-write. A nil conn (disconnected) drops the live fan
@@ -341,6 +340,28 @@ func (h *Relay) RelayEvent(ctx context.Context, sessionID string, eventType stri
 	if err := h.conn.WriteJSON(ctx, message); err != nil {
 		slog.Warn("runner failed to relay event live", "sessionId", sessionID, "error", err)
 	}
+}
+
+func withRelayMetadata(event ama.JSON, metadata ama.JSON) ama.JSON {
+	next := ama.JSON{}
+	for key, value := range event {
+		next[key] = value
+	}
+	existing, _ := next["metadata"].(ama.JSON)
+	if existing == nil {
+		if record, ok := next["metadata"].(map[string]any); ok {
+			existing = ama.JSON(record)
+		}
+	}
+	merged := ama.JSON{}
+	for key, value := range existing {
+		merged[key] = value
+	}
+	for key, value := range metadata {
+		merged[key] = value
+	}
+	next["metadata"] = merged
+	return next
 }
 
 func (h *Relay) NotifyWorkFinished(ctx context.Context, sessionID string, leaseID string, state string) {

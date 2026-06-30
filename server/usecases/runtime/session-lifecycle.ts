@@ -6,7 +6,7 @@
 // whose startup window elapsed.
 //
 // Deps-first: the store, audit, cloud runtime lifecycle, runtime workspace
-// reader, and runner channel arrive as ports on `deps`; canonical events go
+// reader, and runner channel arrive as ports on `deps`; runtime events go
 // through the events usecase. The module is infra-free.
 
 import { memoryStoreIdFromRef } from '@server/domain/memory-store'
@@ -24,7 +24,7 @@ import type {
   CloudRuntimeLifecycle,
   RunnerChannel,
   RuntimeWorkspaceReader,
-  SessionEventStore,
+  EventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
@@ -32,7 +32,7 @@ import { appendRuntimeEvent } from './events'
 
 type LifecycleDeps = {
   sessionOrchestration: SessionOrchestrationStore
-  sessionEventStore: SessionEventStore
+  sessionEventStore: EventStore
   audit: AuditPort
   cloudRuntime: CloudRuntimeLifecycle
   runtimeWorkspace: RuntimeWorkspaceReader

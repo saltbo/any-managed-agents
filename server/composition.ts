@@ -6,8 +6,7 @@ import { createRunnerChannel } from './adapters/gateways/runner-channel'
 import { createRuntimeSecretGateway } from './adapters/gateways/runtime-secrets'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionDoEventStore } from './adapters/gateways/session-do-events'
-import { createCloudLoopChecker, createSessionEventStore } from './adapters/gateways/session-event-store'
-import { createSessionEventPort } from './adapters/gateways/session-events'
+import { createCloudLoopChecker, createEventStore } from './adapters/gateways/session-event-store'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
 import { createBudgetRepo } from './adapters/repos/budgets'
@@ -41,15 +40,11 @@ export function createDeps(env: Env): Deps {
   const audit = createAuditPort(db)
   const policy = createPolicyPort(db)
   const sessionOrchestration = createRuntimeOrchestrationRepo(db)
-  // Routes the canonical event store per session: cloud-loop (ama) → Session DO,
-  // pre-migration cloud + self-hosted CLI → the existing D1 repo methods. The DO
-  // gateway + cloud-loop checker are shared with the MCP event port so the
-  // per-session lookup is cached once.
+  // Routes event storage per session: cloud-loop (ama) → Session DO; relay
+  // sessions read through the runner channel and fall back to legacy D1 rows.
   const sessionDoEvents = createSessionDoEventStore(env)
   const isCloudLoop = createCloudLoopChecker(db)
-  const sessionEventStore = createSessionEventStore(db, isCloudLoop, sessionDoEvents, {
-    append: (scope, canonicalEvent, overrides) =>
-      sessionOrchestration.appendCanonicalEvent(scope, canonicalEvent, overrides),
+  const sessionEventStore = createEventStore(db, isCloudLoop, sessionDoEvents, {
     queryEvents: (sessionId, query) => sessions.queryEvents(sessionId, query),
     eventStream: (sessionId) => sessionOrchestration.sessionEventStream(sessionId),
   })
@@ -69,7 +64,6 @@ export function createDeps(env: Env): Deps {
     policies: createPolicyRepo(db),
     budgets: createBudgetRepo(db),
     memoryStores: createMemoryStoreRepo(db),
-    sessionEvents: createSessionEventPort(sessionEventStore),
     audit,
     policy,
     usageRecords: createUsageRepo(db),

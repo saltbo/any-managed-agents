@@ -236,7 +236,6 @@ function fakeDeps(
     connectors: undefined as unknown as Deps['connectors'],
     policies: undefined as unknown as Deps['policies'],
     budgets: undefined as unknown as Deps['budgets'],
-    sessionEvents: undefined as unknown as Deps['sessionEvents'],
     usageRecords: undefined as unknown as Deps['usageRecords'],
     auditRecords: undefined as unknown as Deps['auditRecords'],
     triggers: undefined as unknown as Deps['triggers'],

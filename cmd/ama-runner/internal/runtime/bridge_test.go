@@ -41,7 +41,7 @@ func TestRuntimeBridgeHostEnvIncludesNodeToolchainAndTestModeOnly(t *testing.T) 
 }
 
 func TestRuntimeBridgeReturnsProviderRegistryErrorForUnsupportedRuntime(t *testing.T) {
-	_, err := (Bridge{}).Run(context.Background(), Request{Runtime: "unknown"}, func(string, JSON) error { return nil })
+	_, err := (Bridge{}).Run(context.Background(), Request{Runtime: "unknown"}, func(JSON) error { return nil })
 	if err == nil || !strings.Contains(err.Error(), "Unsupported runtime provider") {
 		t.Fatalf("expected unsupported runtime error, got %v", err)
 	}

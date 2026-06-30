@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTime } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { type Agent, ApiError, type Environment, type Session, type SessionEvent } from '@/lib/amarpc'
+import { type Agent, ApiError, type Environment, type Session, type EventRecord } from '@/lib/amarpc'
 import {
   type AgentOverrides,
   type EnvironmentOverrides,
@@ -51,23 +51,35 @@ function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
   })
 }
 
-function buildPersistedEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
+type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
+  type?: EventRecord['event']['type']
+  payload?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  event?: EventRecord['event']
+}
+
+function buildPersistedEvent(overrides: EventRecordOverrides = {}): EventRecord {
+  const {
+    type = overrides.event?.type ?? 'message_end',
+    payload = overrides.event?.payload ?? {
+      message: { role: 'assistant', content: 'Runtime failed to start' },
+    },
+    metadata = overrides.event?.metadata ?? {},
+    event: eventOverride,
+    ...recordOverrides
+  } = overrides
   return {
     id: 'event_1',
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'message_end',
     visibility: 'runtime',
     role: null,
     parentEventId: null,
     correlationId: null,
-    payload: {
-      message: { role: 'assistant', content: 'Runtime failed to start' },
-    },
-    metadata: {},
+    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
     createdAt: '2026-05-23T00:00:00.000Z',
-    ...overrides,
+    ...recordOverrides,
   }
 }
 

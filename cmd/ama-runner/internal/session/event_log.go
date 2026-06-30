@@ -22,16 +22,14 @@ import (
 type Event struct {
 	ID        string   `json:"id"`
 	Sequence  int64    `json:"sequence"`
-	Type      string   `json:"type"`
-	Payload   ama.JSON `json:"payload"`
-	Metadata  ama.JSON `json:"metadata"`
 	CreatedAt string   `json:"createdAt"`
+	Event     ama.JSON `json:"event"`
 }
 
 // EventLog is the runner's local, durable, per-session event log for
 // CLI relay-only runtimes (claude-code/codex/copilot, loop on the runner). Their
 // events live here — the cloud keeps no copy — surviving a runner restart, and
-// the cloud Session DO relays backfill reads to this store. Append-only JSONL.
+// the RunnerPool relays backfill reads to this store. Append-only JSONL.
 type EventLog struct {
 	path string
 	mu   sync.Mutex
@@ -72,7 +70,7 @@ func newEventID() (string, error) {
 
 // Append durably records one event and returns it (with its stable id/sequence)
 // so the caller can both relay it live upstream and serve it on backfill.
-func (s *EventLog) Append(eventType string, payload, metadata ama.JSON) (Event, error) {
+func (s *EventLog) Append(body ama.JSON) (Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seq++
@@ -83,10 +81,8 @@ func (s *EventLog) Append(eventType string, payload, metadata ama.JSON) (Event, 
 	event := Event{
 		ID:        id,
 		Sequence:  s.seq,
-		Type:      eventType,
-		Payload:   payload,
-		Metadata:  metadata,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Event:     body,
 	}
 	line, err := json.Marshal(event)
 	if err != nil {

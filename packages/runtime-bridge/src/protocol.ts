@@ -1,10 +1,10 @@
-import type { AmaRuntimeEvent, RuntimeBridgeRequest, RuntimeUsageWindow } from '@ama/runtime-contracts/bridge-protocol'
+import type { AmaRuntimeEvent, RuntimeBridgeRunMessage, RuntimeUsageWindow } from '@ama/runtime-contracts/bridge-protocol'
 
 export type {
   AmaRuntimeEvent,
-  RuntimeBridgeInput,
-  RuntimeBridgeOutput,
-  RuntimeBridgeRequest,
+  RuntimeBridgeInputMessage,
+  RuntimeBridgeOutputMessage,
+  RuntimeBridgeRunMessage,
   RuntimeInventoryEntry,
   RuntimeUsageWindow,
 } from '@ama/runtime-contracts/bridge-protocol'
@@ -17,10 +17,10 @@ export type RuntimeProviderHandle = {
   resolvePermission?(permissionId: string, allowed: boolean, reason?: string): Promise<void>
 }
 
-export type RuntimeProviderRequest = RuntimeBridgeRequest
+export type RuntimeProviderRequest = RuntimeBridgeRunMessage
 
 export type RuntimeProvider = {
-  readonly name: RuntimeBridgeRequest['runtime']
+  readonly name: RuntimeBridgeRunMessage['runtime']
   readonly binary: string
   readonly fallbackModels: string[]
   readonly usageUnavailableDetail?: string

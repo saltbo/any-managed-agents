@@ -71,7 +71,7 @@
           "EventTypeRunnerMetadata"
         ]
       },
-      "BridgeRunRequest": {
+      "RuntimeBridgeRunMessage": {
         "type": "object",
         "properties": {
           "type": {
@@ -139,7 +139,7 @@
         ],
         "additionalProperties": false
       },
-      "BridgeControl": {
+      "RuntimeBridgeControlMessage": {
         "type": "object",
         "properties": {
           "type": {
@@ -179,7 +179,7 @@
         ],
         "additionalProperties": false
       },
-      "BridgeInventoryRequest": {
+      "RuntimeBridgeInventoryMessage": {
         "type": "object",
         "properties": {
           "type": {
@@ -213,21 +213,21 @@
         ],
         "additionalProperties": false
       },
-      "BridgeOutput": {
+      "RuntimeBridgeOutputMessage": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
             "enum": [
               "ready",
-              "sessionEvent",
+              "runtime.event",
               "resumeToken",
               "result",
               "error"
             ],
             "x-enum-varnames": [
               "BridgeMessageTypeReady",
-              "BridgeMessageTypeSessionEvent",
+              "BridgeMessageTypeRuntimeEvent",
               "BridgeMessageTypeResumeToken",
               "BridgeMessageTypeResult",
               "BridgeMessageTypeError"
@@ -237,21 +237,14 @@
             "type": "string",
             "x-go-name": "RequestID"
           },
-          "eventType": {
-            "$ref": "#/components/schemas/AmaSessionEventType",
-            "x-go-name": "EventType"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/JSON"
-          },
-          "metadata": {
+          "event": {
             "$ref": "#/components/schemas/JSON"
           },
           "result": {
             "$ref": "#/components/schemas/JSON"
           },
           "error": {
-            "$ref": "#/components/schemas/BridgeError"
+            "$ref": "#/components/schemas/RuntimeBridgeError"
           },
           "resumeToken": {
             "type": "string",
@@ -263,7 +256,7 @@
         ],
         "additionalProperties": false
       },
-      "BridgeError": {
+      "RuntimeBridgeError": {
         "type": "object",
         "properties": {
           "message": {
@@ -279,13 +272,13 @@
         ],
         "additionalProperties": false
       },
-      "BridgeInventoryResult": {
+      "RuntimeBridgeInventoryResult": {
         "type": "object",
         "properties": {
           "runtimes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/BridgeInventoryRuntime"
+              "$ref": "#/components/schemas/RuntimeBridgeInventoryRuntime"
             }
           }
         },
@@ -294,7 +287,7 @@
         ],
         "additionalProperties": false
       },
-      "BridgeInventoryRuntime": {
+      "RuntimeBridgeInventoryRuntime": {
         "type": "object",
         "properties": {
           "runtime": {
@@ -331,7 +324,7 @@
           "usageWindows": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/BridgeUsageWindow"
+              "$ref": "#/components/schemas/RuntimeBridgeUsageWindow"
             },
             "x-go-name": "UsageWindows"
           },
@@ -351,7 +344,7 @@
         ],
         "additionalProperties": false
       },
-      "BridgeUsageWindow": {
+      "RuntimeBridgeUsageWindow": {
         "type": "object",
         "properties": {
           "label": {

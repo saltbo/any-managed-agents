@@ -22,8 +22,7 @@ import type {
   RuntimeSecretGateway,
   RuntimeWorkspaceReader,
   SecretStoreGateway,
-  SessionEventPort,
-  SessionEventStore,
+  EventStore,
   SessionOrchestrationStore,
   SessionRepo,
   SessionSandboxExecutor,
@@ -58,7 +57,6 @@ export interface Deps {
   policies: PolicyRepo
   budgets: BudgetRepo
   memoryStores?: MemoryStoreRepo
-  sessionEvents: SessionEventPort
   audit: AuditPort
   policy: PolicyPort
   usageRecords: UsageRepo
@@ -81,7 +79,7 @@ export interface Deps {
   sessions: SessionRepo
   // "Storage follows the loop": cloud-loop (ama) events live in the Session DO,
   // everything else on D1. Routes append/read/stream/archive per session.
-  sessionEventStore: SessionEventStore
+  sessionEventStore: EventStore
   createApprovalGate: CreateApprovalGate
   // Mirrors the legacy AMA_RUNTIME_MODE === 'test' branch: in test mode the
   // inline cloud launch runs synchronously so the create flow re-reads the

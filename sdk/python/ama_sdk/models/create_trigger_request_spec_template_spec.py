@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.runtime import Runtime
+from ..models.runtime_name import RuntimeName
 from ..types import UNSET, Unset
 from typing import cast
 
@@ -33,7 +33,7 @@ class CreateTriggerRequestSpecTemplateSpec:
     """ 
         Attributes:
             agent_id (str):  Example: agent_abc123.
-            runtime (Runtime):  Example: codex.
+            runtime (RuntimeName):  Example: codex.
             prompt_template (str):  Example: Research current Canadian banking bonus offers..
             environment_id (None | str | Unset):  Example: env_abc123.
             env (ExecutionEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com'}.
@@ -43,7 +43,7 @@ class CreateTriggerRequestSpecTemplateSpec:
      """
 
     agent_id: str
-    runtime: Runtime
+    runtime: RuntimeName
     prompt_template: str
     environment_id: None | str | Unset = UNSET
     env: ExecutionEnv | Unset = UNSET
@@ -146,7 +146,7 @@ class CreateTriggerRequestSpecTemplateSpec:
         d = dict(src_dict)
         agent_id = d.pop("agentId")
 
-        runtime = Runtime(d.pop("runtime"))
+        runtime = RuntimeName(d.pop("runtime"))
 
 
 

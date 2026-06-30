@@ -75,84 +75,6 @@ func (e AmaSessionEventType) Valid() bool {
 	}
 }
 
-// Defines values for BridgeControlType.
-const (
-	BridgeMessageTypeAbort              BridgeControlType = "abort"
-	BridgeMessageTypePermissionDecision BridgeControlType = "permissionDecision"
-	BridgeMessageTypeSend               BridgeControlType = "send"
-)
-
-// Valid indicates whether the value is a known member of the BridgeControlType enum.
-func (e BridgeControlType) Valid() bool {
-	switch e {
-	case BridgeMessageTypeAbort:
-		return true
-	case BridgeMessageTypePermissionDecision:
-		return true
-	case BridgeMessageTypeSend:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for BridgeInventoryRequestType.
-const (
-	BridgeMessageTypeInventory BridgeInventoryRequestType = "inventory"
-)
-
-// Valid indicates whether the value is a known member of the BridgeInventoryRequestType enum.
-func (e BridgeInventoryRequestType) Valid() bool {
-	switch e {
-	case BridgeMessageTypeInventory:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for BridgeOutputType.
-const (
-	BridgeMessageTypeError        BridgeOutputType = "error"
-	BridgeMessageTypeReady        BridgeOutputType = "ready"
-	BridgeMessageTypeResult       BridgeOutputType = "result"
-	BridgeMessageTypeResumeToken  BridgeOutputType = "resumeToken"
-	BridgeMessageTypeSessionEvent BridgeOutputType = "sessionEvent"
-)
-
-// Valid indicates whether the value is a known member of the BridgeOutputType enum.
-func (e BridgeOutputType) Valid() bool {
-	switch e {
-	case BridgeMessageTypeError:
-		return true
-	case BridgeMessageTypeReady:
-		return true
-	case BridgeMessageTypeResult:
-		return true
-	case BridgeMessageTypeResumeToken:
-		return true
-	case BridgeMessageTypeSessionEvent:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for BridgeRunRequestType.
-const (
-	BridgeMessageTypeRun BridgeRunRequestType = "run"
-)
-
-// Valid indicates whether the value is a known member of the BridgeRunRequestType enum.
-func (e BridgeRunRequestType) Valid() bool {
-	switch e {
-	case BridgeMessageTypeRun:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ExternalRuntimeName.
 const (
 	ExternalRuntimeClaudeCode ExternalRuntimeName = "claude-code"
@@ -174,103 +96,179 @@ func (e ExternalRuntimeName) Valid() bool {
 	}
 }
 
+// Defines values for RuntimeBridgeControlMessageType.
+const (
+	BridgeMessageTypeAbort              RuntimeBridgeControlMessageType = "abort"
+	BridgeMessageTypePermissionDecision RuntimeBridgeControlMessageType = "permissionDecision"
+	BridgeMessageTypeSend               RuntimeBridgeControlMessageType = "send"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeBridgeControlMessageType enum.
+func (e RuntimeBridgeControlMessageType) Valid() bool {
+	switch e {
+	case BridgeMessageTypeAbort:
+		return true
+	case BridgeMessageTypePermissionDecision:
+		return true
+	case BridgeMessageTypeSend:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeBridgeInventoryMessageType.
+const (
+	BridgeMessageTypeInventory RuntimeBridgeInventoryMessageType = "inventory"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeBridgeInventoryMessageType enum.
+func (e RuntimeBridgeInventoryMessageType) Valid() bool {
+	switch e {
+	case BridgeMessageTypeInventory:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeBridgeOutputMessageType.
+const (
+	BridgeMessageTypeError        RuntimeBridgeOutputMessageType = "error"
+	BridgeMessageTypeReady        RuntimeBridgeOutputMessageType = "ready"
+	BridgeMessageTypeResult       RuntimeBridgeOutputMessageType = "result"
+	BridgeMessageTypeResumeToken  RuntimeBridgeOutputMessageType = "resumeToken"
+	BridgeMessageTypeRuntimeEvent RuntimeBridgeOutputMessageType = "runtime.event"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeBridgeOutputMessageType enum.
+func (e RuntimeBridgeOutputMessageType) Valid() bool {
+	switch e {
+	case BridgeMessageTypeError:
+		return true
+	case BridgeMessageTypeReady:
+		return true
+	case BridgeMessageTypeResult:
+		return true
+	case BridgeMessageTypeResumeToken:
+		return true
+	case BridgeMessageTypeRuntimeEvent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuntimeBridgeRunMessageType.
+const (
+	BridgeMessageTypeRun RuntimeBridgeRunMessageType = "run"
+)
+
+// Valid indicates whether the value is a known member of the RuntimeBridgeRunMessageType enum.
+func (e RuntimeBridgeRunMessageType) Valid() bool {
+	switch e {
+	case BridgeMessageTypeRun:
+		return true
+	default:
+		return false
+	}
+}
+
 // AmaSessionEventType defines model for AmaSessionEventType.
 type AmaSessionEventType string
-
-// BridgeControl defines model for BridgeControl.
-type BridgeControl struct {
-	Allowed      bool              `json:"allowed,omitempty"`
-	Message      string            `json:"message,omitempty"`
-	PermissionID string            `json:"permissionId,omitempty"`
-	Reason       string            `json:"reason,omitempty"`
-	RequestID    string            `json:"requestId"`
-	Type         BridgeControlType `json:"type"`
-}
-
-// BridgeControlType defines model for BridgeControl.Type.
-type BridgeControlType string
-
-// BridgeError defines model for BridgeError.
-type BridgeError struct {
-	Code    string      `json:"code,omitempty"`
-	Details interface{} `json:"details,omitempty"`
-	Message string      `json:"message"`
-}
-
-// BridgeInventoryRequest defines model for BridgeInventoryRequest.
-type BridgeInventoryRequest struct {
-	Env          map[string]string          `json:"env"`
-	IncludeUsage bool                       `json:"includeUsage,omitempty"`
-	RequestID    string                     `json:"requestId"`
-	Type         BridgeInventoryRequestType `json:"type"`
-}
-
-// BridgeInventoryRequestType defines model for BridgeInventoryRequest.Type.
-type BridgeInventoryRequestType string
-
-// BridgeInventoryResult defines model for BridgeInventoryResult.
-type BridgeInventoryResult struct {
-	Runtimes []BridgeInventoryRuntime `json:"runtimes"`
-}
-
-// BridgeInventoryRuntime defines model for BridgeInventoryRuntime.
-type BridgeInventoryRuntime struct {
-	Binary         string              `json:"binary"`
-	Detail         string              `json:"detail"`
-	FallbackModels []string            `json:"fallbackModels"`
-	Installed      bool                `json:"installed"`
-	LimitedDetail  string              `json:"limitedDetail,omitempty"`
-	Models         []string            `json:"models"`
-	Runtime        ExternalRuntimeName `json:"runtime"`
-	Status         string              `json:"status"`
-	UsageWindows   []BridgeUsageWindow `json:"usageWindows,omitempty"`
-	Version        string              `json:"version,omitempty"`
-}
-
-// BridgeOutput defines model for BridgeOutput.
-type BridgeOutput struct {
-	Error       BridgeError         `json:"error,omitempty"`
-	EventType   AmaSessionEventType `json:"eventType,omitempty"`
-	Metadata    JSON                `json:"metadata,omitempty"`
-	Payload     JSON                `json:"payload,omitempty"`
-	RequestID   string              `json:"requestId,omitempty"`
-	Result      JSON                `json:"result,omitempty"`
-	ResumeToken string              `json:"resumeToken,omitempty"`
-	Type        BridgeOutputType    `json:"type"`
-}
-
-// BridgeOutputType defines model for BridgeOutput.Type.
-type BridgeOutputType string
-
-// BridgeRunRequest defines model for BridgeRunRequest.
-type BridgeRunRequest struct {
-	AgentSnapshot JSON                 `json:"agentSnapshot,omitempty"`
-	Cwd           string               `json:"cwd"`
-	Env           map[string]string    `json:"env"`
-	Model         string               `json:"model,omitempty"`
-	Prompt        string               `json:"prompt"`
-	Provider      string               `json:"provider,omitempty"`
-	RequestID     string               `json:"requestId"`
-	Resume        bool                 `json:"resume,omitempty"`
-	ResumeToken   string               `json:"resumeToken,omitempty"`
-	Runtime       ExternalRuntimeName  `json:"runtime"`
-	RuntimeConfig JSON                 `json:"runtimeConfig,omitempty"`
-	SessionID     string               `json:"sessionId"`
-	Type          BridgeRunRequestType `json:"type"`
-}
-
-// BridgeRunRequestType defines model for BridgeRunRequest.Type.
-type BridgeRunRequestType string
-
-// BridgeUsageWindow defines model for BridgeUsageWindow.
-type BridgeUsageWindow struct {
-	Label       string  `json:"label"`
-	ResetsAt    string  `json:"resetsAt"`
-	Utilization float32 `json:"utilization"`
-}
 
 // ExternalRuntimeName defines model for ExternalRuntimeName.
 type ExternalRuntimeName string
 
 // JSON defines model for JSON.
 type JSON map[string]interface{}
+
+// RuntimeBridgeControlMessage defines model for RuntimeBridgeControlMessage.
+type RuntimeBridgeControlMessage struct {
+	Allowed      bool                            `json:"allowed,omitempty"`
+	Message      string                          `json:"message,omitempty"`
+	PermissionID string                          `json:"permissionId,omitempty"`
+	Reason       string                          `json:"reason,omitempty"`
+	RequestID    string                          `json:"requestId"`
+	Type         RuntimeBridgeControlMessageType `json:"type"`
+}
+
+// RuntimeBridgeControlMessageType defines model for RuntimeBridgeControlMessage.Type.
+type RuntimeBridgeControlMessageType string
+
+// RuntimeBridgeError defines model for RuntimeBridgeError.
+type RuntimeBridgeError struct {
+	Code    string      `json:"code,omitempty"`
+	Details interface{} `json:"details,omitempty"`
+	Message string      `json:"message"`
+}
+
+// RuntimeBridgeInventoryMessage defines model for RuntimeBridgeInventoryMessage.
+type RuntimeBridgeInventoryMessage struct {
+	Env          map[string]string                 `json:"env"`
+	IncludeUsage bool                              `json:"includeUsage,omitempty"`
+	RequestID    string                            `json:"requestId"`
+	Type         RuntimeBridgeInventoryMessageType `json:"type"`
+}
+
+// RuntimeBridgeInventoryMessageType defines model for RuntimeBridgeInventoryMessage.Type.
+type RuntimeBridgeInventoryMessageType string
+
+// RuntimeBridgeInventoryResult defines model for RuntimeBridgeInventoryResult.
+type RuntimeBridgeInventoryResult struct {
+	Runtimes []RuntimeBridgeInventoryRuntime `json:"runtimes"`
+}
+
+// RuntimeBridgeInventoryRuntime defines model for RuntimeBridgeInventoryRuntime.
+type RuntimeBridgeInventoryRuntime struct {
+	Binary         string                     `json:"binary"`
+	Detail         string                     `json:"detail"`
+	FallbackModels []string                   `json:"fallbackModels"`
+	Installed      bool                       `json:"installed"`
+	LimitedDetail  string                     `json:"limitedDetail,omitempty"`
+	Models         []string                   `json:"models"`
+	Runtime        ExternalRuntimeName        `json:"runtime"`
+	Status         string                     `json:"status"`
+	UsageWindows   []RuntimeBridgeUsageWindow `json:"usageWindows,omitempty"`
+	Version        string                     `json:"version,omitempty"`
+}
+
+// RuntimeBridgeOutputMessage defines model for RuntimeBridgeOutputMessage.
+type RuntimeBridgeOutputMessage struct {
+	Error       RuntimeBridgeError             `json:"error,omitempty"`
+	Event       JSON                           `json:"event,omitempty"`
+	RequestID   string                         `json:"requestId,omitempty"`
+	Result      JSON                           `json:"result,omitempty"`
+	ResumeToken string                         `json:"resumeToken,omitempty"`
+	Type        RuntimeBridgeOutputMessageType `json:"type"`
+}
+
+// RuntimeBridgeOutputMessageType defines model for RuntimeBridgeOutputMessage.Type.
+type RuntimeBridgeOutputMessageType string
+
+// RuntimeBridgeRunMessage defines model for RuntimeBridgeRunMessage.
+type RuntimeBridgeRunMessage struct {
+	AgentSnapshot JSON                        `json:"agentSnapshot,omitempty"`
+	Cwd           string                      `json:"cwd"`
+	Env           map[string]string           `json:"env"`
+	Model         string                      `json:"model,omitempty"`
+	Prompt        string                      `json:"prompt"`
+	Provider      string                      `json:"provider,omitempty"`
+	RequestID     string                      `json:"requestId"`
+	Resume        bool                        `json:"resume,omitempty"`
+	ResumeToken   string                      `json:"resumeToken,omitempty"`
+	Runtime       ExternalRuntimeName         `json:"runtime"`
+	RuntimeConfig JSON                        `json:"runtimeConfig,omitempty"`
+	SessionID     string                      `json:"sessionId"`
+	Type          RuntimeBridgeRunMessageType `json:"type"`
+}
+
+// RuntimeBridgeRunMessageType defines model for RuntimeBridgeRunMessage.Type.
+type RuntimeBridgeRunMessageType string
+
+// RuntimeBridgeUsageWindow defines model for RuntimeBridgeUsageWindow.
+type RuntimeBridgeUsageWindow struct {
+	Label       string  `json:"label"`
+	ResetsAt    string  `json:"resetsAt"`
+	Utilization float32 `json:"utilization"`
+}

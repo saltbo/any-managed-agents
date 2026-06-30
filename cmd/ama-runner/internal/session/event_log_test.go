@@ -15,7 +15,7 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	for i, typ := range []string{"a", "b", "c"} {
-		event, err := store.Append(typ, ama.JSON{"i": i}, ama.JSON{"runnerId": "r1"})
+		event, err := store.Append(ama.JSON{"type": typ, "payload": ama.JSON{"i": i}, "metadata": ama.JSON{"runnerId": "r1"}})
 		if err != nil {
 			t.Fatalf("append: %v", err)
 		}
@@ -34,8 +34,8 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 	if len(events) != 3 {
 		t.Fatalf("len = %d, want 3", len(events))
 	}
-	if events[0].Type != "a" || events[2].Type != "c" {
-		t.Fatalf("order wrong: %s..%s", events[0].Type, events[2].Type)
+	if events[0].Event["type"] != "a" || events[2].Event["type"] != "c" {
+		t.Fatalf("order wrong: %s..%s", events[0].Event["type"], events[2].Event["type"])
 	}
 	if events[0].Sequence != 1 || events[2].Sequence != 3 {
 		t.Fatalf("sequences = %d,%d want 1,3", events[0].Sequence, events[2].Sequence)
@@ -47,7 +47,7 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	event, err := reopened.Append("d", ama.JSON{}, nil)
+	event, err := reopened.Append(ama.JSON{"type": "d", "payload": ama.JSON{}})
 	if err != nil {
 		t.Fatalf("append after reopen: %v", err)
 	}

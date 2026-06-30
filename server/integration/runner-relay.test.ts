@@ -208,20 +208,21 @@ describe('[CF] per-runner relay end-to-end', () => {
       JSON.stringify({
         type: 'runner.event',
         sessionId: session.id,
-        eventId: 'e1',
-        event: { type: 'message_end', payload: { role: 'assistant', text: 'hi' }, metadata: {} },
-        relaySequence: 1,
-        relayId: 'event_aaa',
-        relayCreatedAt: '2026-06-20T00:00:00.000Z',
+        record: {
+          id: 'event_aaa',
+          sequence: 1,
+          createdAt: '2026-06-20T00:00:00.000Z',
+          event: { type: 'message_end', payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] } }, metadata: {} },
+        },
       }),
     )
 
     // Browser must receive a fanned {type:'event'} frame with the canonical event.
     const live = await browser.waitForFrame(
-      (f) => f.type === 'event' && (f.event as { type: string }).type === 'message_end',
+      (f) => f.type === 'event' && ((f.event as { event?: { type: string } }).event?.type ?? '') === 'message_end',
       'event:message_end',
     )
-    expect((live.event as { type: string }).type).toBe('message_end')
+    expect((live.event as { event: { type: string } }).event.type).toBe('message_end')
 
     runnerCh.ws.close()
     browser.ws.close()
@@ -300,19 +301,24 @@ describe('[CF] per-runner relay end-to-end', () => {
       JSON.stringify({
         type: 'runner.event',
         sessionId: session.id,
-        eventId: 'e2',
-        event: { type: 'message_end', payload: { role: 'assistant', text: 'reconnect works' }, metadata: {} },
-        relaySequence: 1,
-        relayId: 'event_bbb',
-        relayCreatedAt: '2026-06-20T00:00:00.000Z',
+        record: {
+          id: 'event_bbb',
+          sequence: 1,
+          createdAt: '2026-06-20T00:00:00.000Z',
+          event: {
+            type: 'message_end',
+            payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'reconnect works' }] } },
+            metadata: {},
+          },
+        },
       }),
     )
 
     const live = await browser.waitForFrame(
-      (f) => f.type === 'event' && (f.event as { type: string }).type === 'message_end',
+      (f) => f.type === 'event' && ((f.event as { event?: { type: string } }).event?.type ?? '') === 'message_end',
       'event:message_end after reconnect',
     )
-    expect((live.event as { type: string }).type).toBe('message_end')
+    expect((live.event as { event: { type: string } }).event.type).toBe('message_end')
 
     second.ws.close()
     browser.ws.close()

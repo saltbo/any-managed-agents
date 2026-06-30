@@ -1,4 +1,4 @@
-import type { CloudTurnMessage, CloudTurnQueue } from '@server/usecases/ports'
+import type { CloudTurnQueueMessage, CloudTurnQueue } from '@server/usecases/ports'
 import type { Env } from '../../env'
 
 // Wraps the CLOUD_TURNS queue binding behind the CloudTurnQueue port. The
@@ -11,7 +11,7 @@ export function createCloudTurnQueue(env: Env): CloudTurnQueue {
       return env.AMA_RUNTIME_MODE === 'test' || !env.CLOUD_TURNS
     },
 
-    async enqueue(message: CloudTurnMessage, opts?: { delaySeconds?: number }): Promise<void> {
+    async enqueue(message: CloudTurnQueueMessage, opts?: { delaySeconds?: number }): Promise<void> {
       if (!env.CLOUD_TURNS) {
         throw new Error('CLOUD_TURNS queue binding is not configured')
       }

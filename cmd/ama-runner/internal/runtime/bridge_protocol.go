@@ -33,7 +33,7 @@ func (bridgeProtocol) waitReady(scanner *bufio.Scanner) error {
 		}
 		return fmt.Errorf("runtime bridge exited before ready")
 	}
-	var envelope runtimebridge.BridgeOutput
+	var envelope runtimebridge.RuntimeBridgeOutputMessage
 	if err := json.Unmarshal([]byte(scanner.Text()), &envelope); err != nil {
 		return fmt.Errorf("invalid runtime bridge ready message: %w", err)
 	}
@@ -45,7 +45,7 @@ func (bridgeProtocol) waitReady(scanner *bufio.Scanner) error {
 
 func (bridgeProtocol) readResult(scanner *bufio.Scanner, requestID string, write EventWriter, onResumeToken func(string)) (JSON, error) {
 	for scanner.Scan() {
-		var envelope runtimebridge.BridgeOutput
+		var envelope runtimebridge.RuntimeBridgeOutputMessage
 		if err := json.Unmarshal([]byte(scanner.Text()), &envelope); err != nil {
 			return nil, fmt.Errorf("invalid runtime bridge message: %w", err)
 		}
@@ -57,14 +57,14 @@ func (bridgeProtocol) readResult(scanner *bufio.Scanner, requestID string, write
 			if onResumeToken != nil && envelope.ResumeToken != "" {
 				onResumeToken(envelope.ResumeToken)
 			}
-		case runtimebridge.BridgeMessageTypeSessionEvent:
-			if envelope.EventType == "" {
+		case runtimebridge.BridgeMessageTypeRuntimeEvent:
+			if envelope.Event == nil {
+				return nil, fmt.Errorf("runtime bridge event missing body")
+			}
+			if _, ok := envelope.Event["type"].(string); !ok {
 				return nil, fmt.Errorf("runtime bridge event missing type")
 			}
-			if envelope.Payload == nil {
-				envelope.Payload = JSON{}
-			}
-			if err := write(string(envelope.EventType), envelope.Payload); err != nil {
+			if err := write(envelope.Event); err != nil {
 				return nil, err
 			}
 		case runtimebridge.BridgeMessageTypeResult:
@@ -84,8 +84,8 @@ func (bridgeProtocol) readResult(scanner *bufio.Scanner, requestID string, write
 	return nil, fmt.Errorf("runtime bridge exited before result for request %q", requestID)
 }
 
-func (bridgeProtocol) controlFrame(requestID string, command BridgeControlFrame) runtimebridge.BridgeControl {
-	frame := runtimebridge.BridgeControl{
+func (bridgeProtocol) controlFrame(requestID string, command BridgeControlFrame) runtimebridge.RuntimeBridgeControlMessage {
+	frame := runtimebridge.RuntimeBridgeControlMessage{
 		Type:      command.Type,
 		RequestID: requestID,
 	}
@@ -109,7 +109,7 @@ func (bridgeProtocol) inventorySnapshot(value JSON) (*InventorySnapshot, error) 
 	if err != nil {
 		return nil, err
 	}
-	var raw runtimebridge.BridgeInventoryResult
+	var raw runtimebridge.RuntimeBridgeInventoryResult
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}

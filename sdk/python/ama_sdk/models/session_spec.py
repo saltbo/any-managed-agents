@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.runtime import Runtime
+from ..models.runtime_name import RuntimeName
 from typing import cast
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ class SessionSpec:
         Attributes:
             agent_id (str):  Example: agent_abc123.
             environment_id (None | str):  Example: env_abc123.
-            runtime (Runtime):  Example: codex.
+            runtime (RuntimeName):  Example: codex.
             env (ExecutionEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             env_from (list[EnvFromEntry]):
             volumes (list[GitRepositoryVolume | MemoryVolume | SecretVolume]):
@@ -42,7 +42,7 @@ class SessionSpec:
 
     agent_id: str
     environment_id: None | str
-    runtime: Runtime
+    runtime: RuntimeName
     env: ExecutionEnv
     env_from: list[EnvFromEntry]
     volumes: list[GitRepositoryVolume | MemoryVolume | SecretVolume]
@@ -132,7 +132,7 @@ class SessionSpec:
         environment_id = _parse_environment_id(d.pop("environmentId"))
 
 
-        runtime = Runtime(d.pop("runtime"))
+        runtime = RuntimeName(d.pop("runtime"))
 
 
 

@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import type { Agent, Environment, ListResponse, MemoryStore, Session, SessionEvent } from '@/lib/amarpc'
+import type { Agent, Environment, ListResponse, MemoryStore, Session, EventRecord } from '@/lib/amarpc'
 import { ApiError } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
@@ -146,7 +146,7 @@ function environmentDetail(env: Environment) {
   return http.get(`*/api/v1/environments/${env.metadata.uid}`, () => HttpResponse.json(env))
 }
 
-function sessionEventsList(sessionId: string, events: SessionEvent[] = []) {
+function sessionEventsList(sessionId: string, events: EventRecord[] = []) {
   return http.get(`*/api/v1/sessions/${sessionId}/events`, () => HttpResponse.json(listOf(events)))
 }
 
@@ -1063,19 +1063,17 @@ describe('SessionRuntimePanel — connection and state badges', () => {
       value: vi.fn(),
       configurable: true,
     })
-    const persistedEvents: SessionEvent[] = [
+    const persistedEvents: EventRecord[] = [
       {
         id: 'persisted_debug_1',
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        type: 'message_end',
         visibility: 'runtime',
         role: null,
         parentEventId: null,
         correlationId: null,
-        payload: { type: 'message_end' },
-        metadata: {},
+        event: { type: 'message_end', payload: { type: 'message_end' } },
         createdAt: now,
       },
     ]
@@ -1120,19 +1118,17 @@ describe('SessionRuntimePanel — connection and state badges', () => {
       value: vi.fn(),
       configurable: true,
     })
-    const persistedEvents: SessionEvent[] = [
+    const persistedEvents: EventRecord[] = [
       {
         id: 'transcript_only_ev',
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        type: 'message_end',
         visibility: 'transcript',
         role: null,
         parentEventId: null,
         correlationId: null,
-        payload: { type: 'message_end' },
-        metadata: {},
+        event: { type: 'message_end', payload: { type: 'message_end' } },
         createdAt: now,
       },
     ]
@@ -1178,19 +1174,17 @@ describe('SessionRuntimePanel — connection and state badges', () => {
       value: vi.fn(),
       configurable: true,
     })
-    const persistedEvents: SessionEvent[] = [
+    const persistedEvents: EventRecord[] = [
       {
         id: 'shared_event_1',
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        type: 'message_end',
         visibility: 'runtime',
         role: null,
         parentEventId: null,
         correlationId: null,
-        payload: { type: 'message_end' },
-        metadata: {},
+        event: { type: 'message_end', payload: { type: 'message_end' } },
         createdAt: now,
       },
     ]

@@ -50,6 +50,8 @@ actions:
     remove: true
   - target: $.components.schemas['UsageRecord']['properties']['metadata'].additionalProperties.nullable
     remove: true
+  - target: $.components.schemas['UsageSummaryGroup'].allOf[1].properties.key.additionalProperties.nullable
+    remove: true
   - target: $.components.schemas['AuditRecord']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['AuditRecord']['properties']['before'].additionalProperties.nullable
@@ -58,21 +60,51 @@ actions:
     remove: true
   - target: $.components.schemas['TriggerRunSpec']['properties']['metadata'].additionalProperties.nullable
     remove: true
+  - target: $.components.schemas['CreateHttpTriggerRunRequest'].additionalProperties.nullable
+    remove: true
   - target: $.components.schemas['SessionEnvironmentJsonObject'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['SessionEvent']['properties']['payload'].additionalProperties.nullable
+  - target: $.components.schemas['LifecyclePayload'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['SessionEvent']['properties']['metadata'].additionalProperties.nullable
+  - target: $.components.schemas['EventMetadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['SessionEventInput']['properties']['payload'].additionalProperties.nullable
+  - target: $.components.schemas['UsageRecordedPayload']['properties']['details'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['SessionEventInput']['properties']['metadata'].additionalProperties.nullable
+  - target: $.components.schemas['PolicyDecisionPayload']['properties']['details'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['PermissionRequestPayload']['properties']['details'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['MetadataPayload']['properties']['data'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerToolCall']['properties']['arguments'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerToolCall']['properties']['input'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerWorkPayload']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerWorkPayload']['properties']['agentSnapshot'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerWorkPayload']['properties']['environmentSnapshot'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerWorkPayload']['properties']['input'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerRuntimeToolCall']['properties']['input'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerRuntimeToolCall']['properties']['arguments'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['RunnerSandboxRequest']['properties']['input'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionApproval']['properties']['input'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionApproval']['properties']['result'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionApprovalDecisionRequest']['properties']['result'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['MemoryStoreMemorySpec']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateMemoryStoreMemoryRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateMemoryStoreMemoryRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['VaultCredentialSpec']['properties']['metadata'].additionalProperties.nullable
     remove: true

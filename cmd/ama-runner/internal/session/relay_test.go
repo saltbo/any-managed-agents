@@ -73,7 +73,8 @@ func (ch *fakeChannel) WriteJSON(_ context.Context, value any) error {
 	ch.writes = append(ch.writes, decoded)
 	ch.mu.Unlock()
 	if decoded["type"] == "runner.event" && ch.autoAck {
-		if eventID, ok := decoded["eventId"].(string); ok && eventID != "" {
+		record, _ := decoded["record"].(map[string]any)
+		if eventID, ok := record["id"].(string); ok && eventID != "" {
 			ch.reads <- ama.JSON{"type": "runner.event.accepted", "eventId": eventID}
 		}
 	}
@@ -90,7 +91,7 @@ func (ch *fakeChannel) Close(int, string) error {
 func TestRelayEventDropsWhenNotConnected(t *testing.T) {
 	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
 	// conn is nil; relayEvent must not panic and must return without writing
-	hub.RelayEvent(context.Background(), "session_1", "message_end", ama.JSON{"text": "hi"}, nil)
+	hub.RelayEvent(context.Background(), "session_1", ama.JSON{"type": "message_end", "payload": ama.JSON{"text": "hi"}}, nil)
 	// No assertions needed beyond "did not panic"
 }
 
@@ -99,7 +100,7 @@ func TestRelayEventWritesSessionTaggedFrame(t *testing.T) {
 	hub := NewRelay(&fakeOpener{channel: ch}, "runner_1", "process-unsafe", t.TempDir())
 	hub.setConn(ch)
 
-	hub.RelayEvent(context.Background(), "session_42", "message_end", ama.JSON{"text": "ok"}, &RelayStamp{
+	hub.RelayEvent(context.Background(), "session_42", ama.JSON{"type": "message_end", "payload": ama.JSON{"text": "ok"}}, &RelayStamp{
 		Sequence:  7,
 		ID:        "evt-7",
 		CreatedAt: "2026-01-01T00:00:07Z",
@@ -117,15 +118,19 @@ func TestRelayEventWritesSessionTaggedFrame(t *testing.T) {
 	if msg["sessionId"] != "session_42" {
 		t.Fatalf("expected sessionId session_42, got %v", msg["sessionId"])
 	}
-	if msg["relaySequence"] != float64(7) {
-		t.Fatalf("expected relaySequence 7, got %v", msg["relaySequence"])
+	record, _ := msg["record"].(map[string]any)
+	if record == nil {
+		t.Fatal("expected record field in frame")
 	}
-	if msg["relayId"] != "evt-7" {
-		t.Fatalf("expected relayId evt-7, got %v", msg["relayId"])
+	if record["sequence"] != float64(7) {
+		t.Fatalf("expected record sequence 7, got %v", record["sequence"])
 	}
-	event, _ := msg["event"].(map[string]any)
+	if record["id"] != "evt-7" {
+		t.Fatalf("expected record id evt-7, got %v", record["id"])
+	}
+	event, _ := record["event"].(map[string]any)
 	if event == nil {
-		t.Fatal("expected event field in frame")
+		t.Fatal("expected record event field in frame")
 	}
 	if event["type"] != "message_end" {
 		t.Fatalf("expected event type message_end, got %v", event["type"])
@@ -258,8 +263,8 @@ func TestRelayHandlesBackfillForCompletedSession(t *testing.T) {
 	}
 	logPath := EventLogPath(sessionDir)
 	events := []Event{
-		{ID: "evt_1", Sequence: 1, Type: "message_end", Payload: ama.JSON{"text": "hi"}, CreatedAt: "2026-01-01T00:00:01Z"},
-		{ID: "evt_2", Sequence: 2, Type: "usage", Payload: ama.JSON{"tokens": 42}, CreatedAt: "2026-01-01T00:00:02Z"},
+		{ID: "evt_1", Sequence: 1, Event: ama.JSON{"type": "message_end", "payload": ama.JSON{"text": "hi"}}, CreatedAt: "2026-01-01T00:00:01Z"},
+		{ID: "evt_2", Sequence: 2, Event: ama.JSON{"type": "usage", "payload": ama.JSON{"tokens": 42}}, CreatedAt: "2026-01-01T00:00:02Z"},
 	}
 	f, err := os.Create(logPath)
 	if err != nil {
@@ -388,7 +393,7 @@ func TestRelayEventLogsWhenWriteFails(t *testing.T) {
 	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
 	hub.setConn(ch)
 	// Must not panic.
-	hub.RelayEvent(context.Background(), "session_1", "message_end", ama.JSON{}, nil)
+	hub.RelayEvent(context.Background(), "session_1", ama.JSON{"type": "message_end", "payload": ama.JSON{}}, nil)
 }
 
 // errWriteChannel is a Channel whose WriteJSON always errors.

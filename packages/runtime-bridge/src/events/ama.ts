@@ -14,7 +14,7 @@ export function assertAmaRuntimeEvent(event: AmaRuntimeEvent): AmaRuntimeEvent {
 }
 
 export function runtimeEvent(type: AmaSessionEventType, payload: Record<string, unknown> = {}): AmaRuntimeEvent {
-  return assertAmaRuntimeEvent({ type, payload })
+  return assertAmaRuntimeEvent({ type, payload } as AmaRuntimeEvent)
 }
 
 export function textMessage(role: 'assistant' | 'user', text: string, id?: string) {
@@ -27,7 +27,7 @@ export function textMessage(role: 'assistant' | 'user', text: string, id?: strin
 }
 
 export function toolStart(toolCallId: string, toolName: string, args: Record<string, unknown> = {}) {
-  return runtimeEvent('tool_execution_start', { toolCallId, toolName, args })
+  return runtimeEvent('tool_execution_start', { toolCall: { id: toolCallId, name: toolName, input: args } })
 }
 
 export function toolEnd(
@@ -37,7 +37,12 @@ export function toolEnd(
   result: unknown,
   isError = false,
 ) {
-  return runtimeEvent('tool_execution_end', { toolCallId, toolName, args, result, isError })
+  return runtimeEvent('tool_execution_end', {
+    toolCall: { id: toolCallId, name: toolName, input: args },
+    result,
+    isError,
+    ...(isError ? { error: typeof result === 'string' ? { message: result } : { message: 'Tool execution failed', details: result } } : {}),
+  })
 }
 
 export function usageEvent(payload: Record<string, unknown>) {

@@ -3,7 +3,7 @@
 // This cluster owns the cloud-side model turn loop: launching the cloud runtime
 // for a pending session row (startSessionRuntimeForRow), running a single model
 // turn with the approval/policy gate (executeCloudSessionTurn), the queue
-// consumer that dispatches start/step/turn messages (consumeCloudTurnMessage),
+// consumer that dispatches start/step/turn messages (consumeCloudTurnQueueMessage),
 // and the initial-prompt dispatch that seeds the first turn after startup
 // (dispatchPrompt).
 //
@@ -43,12 +43,12 @@ import type {
   AuditPort,
   AuthScope,
   CloudRuntimeLifecycle,
-  CloudTurnMessage,
+  CloudTurnQueueMessage,
   CloudTurnQueue,
   PolicyPort,
   ProviderRepo,
   RuntimeSecretGateway,
-  SessionEventStore,
+  EventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
@@ -71,7 +71,7 @@ type CreateApprovalGate = (values: {
 
 export type CloudTurnDeps = {
   sessionOrchestration: SessionOrchestrationStore
-  sessionEventStore: SessionEventStore
+  sessionEventStore: EventStore
   policy: PolicyPort
   providers: ProviderRepo
   audit: AuditPort
@@ -410,7 +410,7 @@ async function runLeasedTurn(
   session: SessionRow,
   work: { prompt?: string; continuation?: boolean },
   auditAction: 'session.prompt' | 'session.command',
-  deferMessage: CloudTurnMessage,
+  deferMessage: CloudTurnQueueMessage,
 ): Promise<void> {
   const store = deps.sessionOrchestration
   const turnId = newTurnId()
@@ -430,7 +430,7 @@ async function runLeasedTurn(
   await handleTurnOutcome(deps, auth, session, turnId, auditAction, outcome)
 }
 
-export async function consumeCloudTurnMessage(deps: CloudTurnDeps, message: CloudTurnMessage): Promise<void> {
+export async function consumeCloudTurnQueueMessage(deps: CloudTurnDeps, message: CloudTurnQueueMessage): Promise<void> {
   const store = deps.sessionOrchestration
   const auth = cloudTurnSystemAuth(message)
   const session = await store.findSession(auth.project.id, message.sessionId)
@@ -530,7 +530,7 @@ export async function dispatchPrompt(deps: CloudTurnDeps, auth: AuthScope, sessi
 // A cloud turn message that exhausted its retries lands in the dead-letter queue.
 // Mark the stranded session errored (clearing any lease it held) so clients
 // recover it immediately instead of waiting for the 20-minute stall sweep.
-export async function markCloudTurnDeadLettered(deps: CloudTurnDeps, message: CloudTurnMessage): Promise<void> {
+export async function markCloudTurnDeadLettered(deps: CloudTurnDeps, message: CloudTurnQueueMessage): Promise<void> {
   const store = deps.sessionOrchestration
   const auth = cloudTurnSystemAuth(message)
   await store.updateSessionWhenState(auth.project.id, message.sessionId, ['pending', 'running'], {

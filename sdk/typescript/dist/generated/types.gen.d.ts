@@ -1,57 +1,312 @@
 export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
-export type SessionLiveEventFrame = {
+export type SessionSocketEventMessage = {
     type: 'event';
-    event: SessionEvent;
+    record: EventRecord;
 };
-export type SessionEvent = {
+export type EventRecord = {
     id: string;
     projectId: string;
     sessionId: string;
     sequence: number;
-    type: 'agent_start' | 'agent_end' | 'turn_start' | 'turn_end' | 'session_stop' | 'session_checkpoint' | 'session_resume' | 'message_start' | 'message_update' | 'message_end' | 'tool_execution_start' | 'tool_execution_update' | 'tool_execution_end' | 'usage.recorded' | 'policy.decision' | 'permission.request' | 'runtime.error' | 'runtime.metadata' | 'runtime.output' | 'runner.metadata';
     visibility: 'runtime' | 'transcript' | 'debug' | 'audit';
     role: string | null;
     parentEventId: string | null;
     correlationId: string | null;
-    payload: {
-        [key: string]: unknown;
-    };
-    metadata: {
-        [key: string]: unknown;
-    };
+    event: AmaEvent;
     createdAt: string;
 };
-export type SessionBackfillResponse = {
+export type AmaEvent = {
+    type: 'agent_start';
+    payload: LifecyclePayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'agent_end';
+    payload: LifecyclePayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'turn_start';
+    payload: TurnPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'turn_end';
+    payload: TurnPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'session_stop';
+    payload: SessionStopPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'session_checkpoint';
+    payload: SessionCheckpointPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'session_resume';
+    payload: SessionResumePayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'message_start';
+    payload: MessageEventPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'message_update';
+    payload: MessageEventPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'message_end';
+    payload: MessageEventPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'tool_execution_start';
+    payload: ToolStartedPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'tool_execution_update';
+    payload: ToolUpdatedPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'tool_execution_end';
+    payload: ToolCompletedPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'usage.recorded';
+    payload: UsageRecordedPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'policy.decision';
+    payload: PolicyDecisionPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'permission.request';
+    payload: PermissionRequestPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'runtime.error';
+    payload: EventError;
+    metadata?: EventMetadata;
+} | {
+    type: 'runtime.metadata';
+    payload: MetadataPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'runtime.output';
+    payload: RuntimeOutputPayload;
+    metadata?: EventMetadata;
+} | {
+    type: 'runner.metadata';
+    payload: MetadataPayload;
+    metadata?: EventMetadata;
+};
+export type LifecyclePayload = {
+    [key: string]: unknown;
+};
+export type EventMetadata = {
+    [key: string]: unknown;
+};
+export type TurnPayload = {
+    marker?: string;
+    stage?: string;
+    status?: string;
+    message?: EventMessage;
+    toolResults?: Array<unknown>;
+};
+export type EventMessage = {
+    id?: string;
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    content: Array<MessageContentBlock>;
+    timestamp?: number;
+    stopReason?: string;
+};
+export type MessageContentBlock = ({
+    type: 'text';
+} & TextContentBlock) | ({
+    type: 'reasoning';
+} & ReasoningContentBlock) | ({
+    type: 'tool_call';
+} & ToolCallContentBlock) | ({
+    type: 'tool_result';
+} & ToolResultContentBlock) | ({
+    type: 'image';
+} & ImageContentBlock) | ({
+    type: 'file';
+} & FileContentBlock) | ({
+    type: 'unknown';
+} & UnknownContentBlock);
+export type TextContentBlock = {
+    type: 'text';
+    text: string;
+};
+export type ReasoningContentBlock = {
+    type: 'reasoning';
+    text: string;
+};
+export type ToolCallContentBlock = {
+    type: 'tool_call';
+    toolCall: EventToolCall;
+};
+export type EventToolCall = {
+    id: string;
+    name: string;
+    input?: unknown;
+};
+export type ToolResultContentBlock = {
+    type: 'tool_result';
+    toolCallId: string;
+    result?: unknown;
+    isError?: boolean;
+};
+export type ImageContentBlock = {
+    type: 'image';
+    url?: string;
+    mediaType?: string;
+    data?: string;
+};
+export type FileContentBlock = {
+    type: 'file';
+    path?: string;
+    name?: string;
+    mediaType?: string;
+    data?: string;
+};
+export type UnknownContentBlock = {
+    type: 'unknown';
+    value?: unknown;
+};
+export type SessionStopPayload = {
+    reason?: string;
+};
+export type SessionCheckpointPayload = {
+    resumeTokenRef?: string;
+    scope?: string;
+};
+export type SessionResumePayload = {
+    fromCheckpoint?: string;
+    reason?: string;
+};
+export type MessageEventPayload = {
+    message: EventMessage;
+};
+export type ToolStartedPayload = {
+    toolCall: EventToolCall;
+};
+export type ToolUpdatedPayload = {
+    toolCall: EventToolCall;
+    partialResult?: unknown;
+};
+export type ToolCompletedPayload = {
+    toolCall: EventToolCall;
+    result?: unknown;
+    error?: EventError;
+    isError?: boolean;
+    durationMs?: number;
+};
+export type EventError = {
+    message: string;
+    code?: string;
+    category?: string;
+    retryable?: boolean;
+    retryAfterSeconds?: number;
+    provider?: string;
+    model?: string;
+    details?: unknown;
+};
+export type UsageRecordedPayload = {
+    provider?: string;
+    model?: string;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    cachedInputTokens?: number;
+    reasoningTokens?: number;
+    toolTokens?: number;
+    costMicros?: number;
+    details?: {
+        [key: string]: unknown;
+    };
+};
+export type PolicyDecisionPayload = {
+    allowed: boolean;
+    category?: string;
+    ruleId?: string;
+    resourceType?: string;
+    resourceId?: string;
+    operation?: string;
+    command?: string | null;
+    host?: string | null;
+    connectorId?: string;
+    toolName?: string;
+    decision?: string;
+    details?: {
+        [key: string]: unknown;
+    };
+};
+export type PermissionRequestPayload = {
+    permissionId?: string;
+    command?: string;
+    toolCall?: EventToolCall;
+    details?: {
+        [key: string]: unknown;
+    };
+};
+export type MetadataPayload = {
+    data: {
+        [key: string]: unknown;
+    };
+};
+export type RuntimeOutputPayload = {
+    stream: 'stdout' | 'stderr' | 'runtime' | 'reasoning' | 'bridge';
+    content?: unknown;
+};
+export type SessionSocketBackfillMessage = {
     type: 'backfill';
     requestId: string | null;
-    events: Array<SessionEvent>;
+    events: Array<EventRecord>;
     nextCursor: number | null;
     hasMore: boolean;
 };
-export type SessionRunnerUnavailable = {
+export type SessionSocketRunnerUnavailableMessage = {
     type: 'runner_unavailable';
     message: string;
 };
-export type SessionPromptFrame = {
+export type SessionSocketAckMessage = {
+    type: 'ack';
+    id: string;
+};
+export type SessionSocketErrorMessage = {
+    type: 'error';
+    id?: string;
+    message: string;
+};
+export type SessionSocketServerMessage = ({
+    type: 'event';
+} & SessionSocketEventMessage) | ({
+    type: 'backfill';
+} & SessionSocketBackfillMessage) | ({
+    type: 'runner_unavailable';
+} & SessionSocketRunnerUnavailableMessage) | ({
+    type: 'ack';
+} & SessionSocketAckMessage) | ({
+    type: 'error';
+} & SessionSocketErrorMessage);
+export type SessionSocketPromptMessage = {
+    id: string;
     type: 'prompt';
     content: string;
 };
-export type SessionAbortFrame = {
+export type SessionSocketAbortMessage = {
+    id: string;
     type: 'abort';
 };
-export type SessionSteerFrame = {
+export type SessionSocketSteerMessage = {
+    id: string;
     type: 'steer';
     content: string;
 };
-export type SessionApprovalFrame = {
-    type: 'approval';
-    approvalId: string;
-    decision: 'approve' | 'reject';
-    reason?: string;
-};
-export type SessionBackfillRequestFrame = {
+export type SessionSocketBackfillRequestMessage = {
+    id: string;
     type: 'backfill';
     requestId?: string;
     cursor?: number;
@@ -59,17 +314,15 @@ export type SessionBackfillRequestFrame = {
     eventType?: string;
     visibility?: string;
 };
-export type SessionClientFrame = ({
+export type SessionSocketClientMessage = ({
     type: 'prompt';
-} & SessionPromptFrame) | ({
+} & SessionSocketPromptMessage) | ({
     type: 'abort';
-} & SessionAbortFrame) | ({
+} & SessionSocketAbortMessage) | ({
     type: 'steer';
-} & SessionSteerFrame) | ({
-    type: 'approval';
-} & SessionApprovalFrame) | ({
+} & SessionSocketSteerMessage) | ({
     type: 'backfill';
-} & SessionBackfillRequestFrame);
+} & SessionSocketBackfillRequestMessage);
 export type RunnerMemorySnapshot = {
     path: string;
     content: string;
@@ -870,14 +1123,14 @@ export type TriggerTemplateMetadata = {
 export type TriggerTemplateSpec = {
     agentId: string;
     environmentId: string | null;
-    runtime: Runtime;
+    runtime: RuntimeName;
     env: ExecutionEnv;
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
     volumeMounts: Array<VolumeMount>;
     promptTemplate: string;
 };
-export type Runtime = 'ama' | 'claude-code' | 'codex' | 'copilot';
+export type RuntimeName = 'ama' | 'claude-code' | 'codex' | 'copilot';
 export type ExecutionEnv = {
     [key: string]: string;
 };
@@ -951,7 +1204,7 @@ export type CreateTriggerRequest = {
             spec: {
                 agentId: string;
                 environmentId?: string | null;
-                runtime: Runtime;
+                runtime: RuntimeName;
                 env?: ExecutionEnv;
                 envFrom?: Array<EnvFromEntry>;
                 volumes?: Array<Volume>;
@@ -994,7 +1247,7 @@ export type UpdateTriggerRequest = {
             spec?: {
                 agentId?: string;
                 environmentId?: string | null;
-                runtime?: Runtime;
+                runtime?: RuntimeName;
                 env?: ExecutionEnv;
                 envFrom?: Array<EnvFromEntry>;
                 volumes?: Array<Volume>;
@@ -1060,7 +1313,7 @@ export type SessionMetadata = {
 export type SessionSpec = {
     agentId: string;
     environmentId: string | null;
-    runtime: Runtime;
+    runtime: RuntimeName;
     env: ExecutionEnv;
     envFrom: Array<EnvFromEntry>;
     volumes: Array<Volume>;
@@ -1092,7 +1345,7 @@ export type SessionBindings = {
         versionId: string | null;
         snapshot: SessionEnvironmentSnapshot;
     };
-    runtime: Runtime;
+    runtime: RuntimeName;
 };
 export type SessionAgentSnapshot = {
     id: string;
@@ -1155,7 +1408,7 @@ export type SessionCreateMetadata = {
 export type ExecutionSpecInput = {
     agentId: string;
     environmentId?: string | null;
-    runtime: Runtime;
+    runtime: RuntimeName;
     env?: ExecutionEnv;
     envFrom?: Array<EnvFromEntry>;
     volumes?: Array<Volume>;
@@ -1198,24 +1451,15 @@ export type CreateSessionMessageRequest = {
     type: 'prompt';
     content: string;
 };
-export type SessionEventListResponse = {
-    data: Array<SessionEvent>;
+export type EventRecordListResponse = {
+    data: Array<EventRecord>;
     pagination: ListPagination;
 };
 export type SessionEventsAccepted = {
     accepted: number;
 };
 export type CreateSessionEventsRequest = {
-    events: Array<SessionEventInput>;
-};
-export type SessionEventInput = {
-    type: string;
-    payload: {
-        [key: string]: unknown;
-    };
-    metadata?: {
-        [key: string]: unknown;
-    };
+    events: Array<AmaEvent>;
 };
 export type SessionApprovalListResponse = {
     data: Array<SessionApproval>;
@@ -3375,7 +3619,7 @@ export type ListSessionEventsResponses = {
     /**
      * Session events
      */
-    200: SessionEventListResponse;
+    200: EventRecordListResponse;
 };
 export type ListSessionEventsResponse = ListSessionEventsResponses[keyof ListSessionEventsResponses];
 export type CreateSessionEventsData = {

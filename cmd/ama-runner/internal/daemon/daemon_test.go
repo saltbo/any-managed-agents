@@ -38,7 +38,7 @@ type fakeAMAServer struct {
 	creates      []ama.CreateRunnerRequest
 	heartbeats   []ama.PutRunnerHeartbeatRequest
 	updates      []ama.UpdateLeaseRequest
-	events       [][]ama.SessionEventInput
+	events       [][]ama.JSON
 	lease        *fakeWork
 	runnerID     string
 	claims       int
@@ -161,7 +161,9 @@ func (f *fakeAMAServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusInternalServerError, f.eventErr)
 			return
 		}
-		var body ama.CreateSessionEventsRequest
+		var body struct {
+			Events []ama.JSON `json:"events"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeAPIError(w, http.StatusBadRequest, err)
 			return
@@ -236,8 +238,22 @@ type fakeRuntimeAdapter struct {
 }
 
 type RuntimeEventRecord struct {
-	Type    string
-	Payload ama.JSON
+	Event ama.JSON
+}
+
+func runtimeEvent(eventType string, payload ama.JSON) RuntimeEventRecord {
+	return RuntimeEventRecord{Event: ama.JSON{"type": eventType, "payload": payload}}
+}
+
+func runtimeToolEvent(eventType, toolCallID, toolName string, input ama.JSON, fields ama.JSON) RuntimeEventRecord {
+	payload := lo.Assign(ama.JSON{
+		"toolCall": ama.JSON{
+			"id":    toolCallID,
+			"name":  toolName,
+			"input": input,
+		},
+	}, fields)
+	return runtimeEvent(eventType, payload)
 }
 
 type fakeSessionChannel struct {
@@ -286,10 +302,11 @@ func (ch *fakeSessionChannel) WriteJSON(_ context.Context, value any) error {
 	ch.writes = append(ch.writes, decoded)
 	ch.mu.Unlock()
 	if decoded["type"] == "runner.event" {
-		if eventID, ok := decoded["eventId"].(string); ok && eventID != "" {
-			event, _ := decoded["event"].(map[string]any)
+		record, _ := decoded["record"].(map[string]any)
+		if eventID, ok := record["id"].(string); ok && eventID != "" {
+			event, _ := record["event"].(map[string]any)
 			if event == nil {
-				event, _ = decoded["event"].(ama.JSON)
+				event, _ = record["event"].(ama.JSON)
 			}
 			eventType, _ := event["type"].(string)
 			if message := ch.eventErrors[eventType]; message != "" {
@@ -319,7 +336,8 @@ func (ch *fakeSessionChannel) lastWriteEventID() string {
 	if len(ch.writes) == 0 {
 		return ""
 	}
-	eventID, _ := ch.writes[len(ch.writes)-1]["eventId"].(string)
+	record, _ := ch.writes[len(ch.writes)-1]["record"].(map[string]any)
+	eventID, _ := record["id"].(string)
 	return eventID
 }
 
@@ -334,9 +352,10 @@ func (ch *fakeSessionChannel) writtenEvents() []string {
 	defer ch.mu.Unlock()
 	events := make([]string, 0, len(ch.writes))
 	for _, write := range ch.writes {
-		event, _ := write["event"].(map[string]any)
+		record, _ := write["record"].(map[string]any)
+		event, _ := record["event"].(map[string]any)
 		if event == nil {
-			event, _ = write["event"].(ama.JSON)
+			event, _ = record["event"].(ama.JSON)
 		}
 		if event != nil {
 			events = append(events, event["type"].(string))
@@ -375,15 +394,14 @@ func (a *fakeRuntimeAdapter) Run(ctx context.Context, request runtime.Request, w
 	}
 	events := a.events
 	if len(events) == 0 {
-		events = []RuntimeEventRecord{{
-			Type: "message_end",
-			Payload: ama.JSON{
+		events = []RuntimeEventRecord{
+			runtimeEvent("message_end", ama.JSON{
 				"message": ama.JSON{"role": "assistant", "content": "runtime ok"},
-			},
-		}}
+			}),
+		}
 	}
 	for _, event := range events {
-		if err := write(event.Type, runtime.JSON(event.Payload)); err != nil {
+		if err := write(runtime.JSON(event.Event)); err != nil {
 			return nil, err
 		}
 	}
@@ -508,12 +526,12 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 			return nil
 		},
 		events: []RuntimeEventRecord{
-			{Type: "runtime.metadata", Payload: ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}},
-			{Type: "message_end", Payload: ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "prompt:build the feature"}}}}},
-			{Type: "tool_execution_start", Payload: ama.JSON{"toolCallId": "tool_1", "toolName": "sandbox.exec", "input": ama.JSON{"command": "printf ok"}}},
-			{Type: "tool_execution_end", Payload: ama.JSON{"toolCallId": "tool_1", "toolName": "sandbox.exec", "output": ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}, "durationMs": 3}},
-			{Type: "usage", Payload: ama.JSON{"provider": "provider_codex", "model": "gpt-5.3-codex", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}},
-			{Type: "runtime.output", Payload: ama.JSON{"stream": "bridge", "content": "diagnostic line"}},
+			runtimeEvent("runtime.metadata", ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}),
+			runtimeEvent("message_end", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "prompt:build the feature"}}}}),
+			runtimeToolEvent("tool_execution_start", "tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, nil),
+			runtimeToolEvent("tool_execution_end", "tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, ama.JSON{"result": ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}, "durationMs": 3}),
+			runtimeEvent("usage", ama.JSON{"provider": "provider_codex", "model": "gpt-5.3-codex", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
+			runtimeEvent("runtime.output", ama.JSON{"stream": "bridge", "content": "diagnostic line"}),
 		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -661,7 +679,7 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 		result: ama.JSON{"exitCode": 7, "stderr": "bad failure"},
 		err:    errors.New("codex runtime bridge failed"),
 		events: []RuntimeEventRecord{
-			{Type: "runtime.output", Payload: ama.JSON{"stream": "stderr", "content": "bad failure"}},
+			runtimeEvent("runtime.output", ama.JSON{"stream": "stderr", "content": "bad failure"}),
 		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -1465,12 +1483,12 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "copilot_thread_1"},
 		events: []RuntimeEventRecord{
-			{Type: "runtime.metadata", Payload: ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}},
-			{Type: "message_end", Payload: ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "copilot prompt ok"}}}}},
-			{Type: "tool_execution_start", Payload: ama.JSON{"toolCallId": "copilot_tool_1", "toolName": "sandbox.exec", "input": ama.JSON{"command": "printf ok"}}},
-			{Type: "tool_execution_end", Payload: ama.JSON{"toolCallId": "copilot_tool_1", "toolName": "sandbox.exec", "output": ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}, "durationMs": 3}},
-			{Type: "usage", Payload: ama.JSON{"provider": "provider_copilot", "model": "copilot-cli", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}},
-			{Type: "runtime.output", Payload: ama.JSON{"stream": "bridge", "content": "copilot diagnostic"}},
+			runtimeEvent("runtime.metadata", ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}),
+			runtimeEvent("message_end", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "copilot prompt ok"}}}}),
+			runtimeToolEvent("tool_execution_start", "copilot_tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, nil),
+			runtimeToolEvent("tool_execution_end", "copilot_tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, ama.JSON{"result": ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}, "durationMs": 3}),
+			runtimeEvent("usage", ama.JSON{"provider": "provider_copilot", "model": "copilot-cli", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
+			runtimeEvent("runtime.output", ama.JSON{"stream": "bridge", "content": "copilot diagnostic"}),
 		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -1522,7 +1540,8 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 		t.Fatalf("expected initial prompt to be durable in runner log, got %s", serializedStoredEvents)
 	}
 	for _, message := range hubChannel.writtenMessages() {
-		if message["type"] != "runner.event" || message["eventId"] == "" {
+		record, _ := message["record"].(map[string]any)
+		if message["type"] != "runner.event" || record["id"] == "" {
 			t.Fatalf("expected copilot event to use runner event envelope, got %#v", message)
 		}
 	}
@@ -1550,7 +1569,7 @@ func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
 		result: ama.JSON{"exitCode": 7, "stderr": "bad failure"},
 		err:    errors.New("copilot runtime bridge failed"),
 		events: []RuntimeEventRecord{
-			{Type: "runtime.output", Payload: ama.JSON{"stream": "stderr", "content": "bad failure"}},
+			runtimeEvent("runtime.output", ama.JSON{"stream": "stderr", "content": "bad failure"}),
 		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})

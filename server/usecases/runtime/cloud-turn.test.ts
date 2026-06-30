@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type CloudTurnDeps,
-  consumeCloudTurnMessage,
+  consumeCloudTurnQueueMessage,
   markCloudTurnDeadLettered,
   startSessionRuntimeForRow,
 } from './cloud-turn'
 import { RuntimePolicyDeniedError } from './engine/errors'
 
 // Characterization (golden-master) tests for the cloud-command / queue turn
-// path: consumeCloudTurnMessage → executeCloudSessionTurn. The integration
+// path: consumeCloudTurnQueueMessage → executeCloudSessionTurn. The integration
 // suite runs turns INLINE (AMA_RUNTIME_MODE=test ⇒ cloudTurnsRunInline), so the
 // paused→enqueue continuation branch is unreachable there. These pin it (and
 // the provider/model selection the Phase 1 TurnEngine unification must
@@ -129,7 +129,7 @@ const stepMessage = {
   auditAction: 'session.command',
 } as const
 
-describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/cloud-turn]', () => {
+describe('consumeCloudTurnQueueMessage — cloud-command turn path [spec: runtime/cloud-turn]', () => {
   beforeEach(() => {
     runSessionTurnMock.mockReset()
     enqueueCloudTurnMock.mockReset()
@@ -154,7 +154,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
   it('re-enqueues a session.step continuation when the turn pauses, without parking idle', async () => {
     runSessionTurnMock.mockResolvedValue({ status: 'paused' })
 
-    await consumeCloudTurnMessage(deps, stepMessage)
+    await consumeCloudTurnQueueMessage(deps, stepMessage)
 
     expect(enqueueCloudTurnMock).toHaveBeenCalledTimes(1)
     expect(enqueueCloudTurnMock).toHaveBeenCalledWith(
@@ -176,7 +176,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
   it('parks the session idle and does not enqueue when the turn completes', async () => {
     runSessionTurnMock.mockResolvedValue({ status: 'idle' })
 
-    await consumeCloudTurnMessage(deps, stepMessage)
+    await consumeCloudTurnQueueMessage(deps, stepMessage)
 
     expect(enqueueCloudTurnMock).not.toHaveBeenCalled()
     expect(updateSessionWhenStateMock).toHaveBeenCalledWith(
@@ -190,7 +190,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
   it('passes session.modelProvider (over the agent snapshot provider) and the resolved model into the turn', async () => {
     runSessionTurnMock.mockResolvedValue({ status: 'idle' })
 
-    await consumeCloudTurnMessage(deps, stepMessage)
+    await consumeCloudTurnQueueMessage(deps, stepMessage)
 
     expect(runSessionTurnMock).toHaveBeenCalledTimes(1)
     const input = runSessionTurnMock.mock.calls[0]?.[0]
@@ -202,7 +202,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
     findSessionMock.mockResolvedValue(fakeSession({ modelConfig: JSON.stringify({ model: '@cf/override' }) }))
     runSessionTurnMock.mockResolvedValue({ status: 'idle' })
 
-    await consumeCloudTurnMessage(deps, stepMessage)
+    await consumeCloudTurnQueueMessage(deps, stepMessage)
 
     const input = runSessionTurnMock.mock.calls[0]?.[0]
     expect(input?.model).toBe('@cf/override')
@@ -212,7 +212,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
     runSessionTurnMock.mockResolvedValue({ status: 'idle' })
     findSessionMock.mockResolvedValue(fakeSession({ state: 'idle' }))
 
-    await consumeCloudTurnMessage(deps, {
+    await consumeCloudTurnQueueMessage(deps, {
       type: 'session.turn',
       sessionId: 'session_1',
       organizationId: 'org_1',
@@ -241,7 +241,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
   it('parks the session idle with a policy-denied reason when the turn is policy-denied', async () => {
     runSessionTurnMock.mockRejectedValue(new RuntimePolicyDeniedError('blocked by sandbox policy'))
 
-    await consumeCloudTurnMessage(deps, stepMessage)
+    await consumeCloudTurnQueueMessage(deps, stepMessage)
 
     expect(updateSessionWhenStateMock).toHaveBeenCalledWith(
       'proj_1',
@@ -254,7 +254,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
   it('defers the turn (without running it) when another turn holds the session lease [spec: runtime/cloud-turn]', async () => {
     acquireTurnLeaseMock.mockResolvedValue(false)
 
-    await consumeCloudTurnMessage(deps, stepMessage)
+    await consumeCloudTurnQueueMessage(deps, stepMessage)
 
     // The lease CAS failed → the message is re-enqueued with a delay and the turn
     // never runs against the session another turn is already driving.
@@ -270,7 +270,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
     runSessionTurnMock.mockResolvedValue({ status: 'paused' })
     incrementContinuationDepthMock.mockResolvedValue(25)
 
-    await consumeCloudTurnMessage(deps, stepMessage)
+    await consumeCloudTurnQueueMessage(deps, stepMessage)
 
     // At the cap the lease is released with a recoverable reason and no further
     // step is enqueued.
@@ -286,7 +286,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
   it('stops a budget-continuation step whose held lease was lost (renew fails)', async () => {
     renewTurnLeaseMock.mockResolvedValue(false)
 
-    await consumeCloudTurnMessage(deps, { ...stepMessage, turnId: 'turn_held' })
+    await consumeCloudTurnQueueMessage(deps, { ...stepMessage, turnId: 'turn_held' })
 
     // renew failed → another worker owns the chain; this step must not run.
     expect(renewTurnLeaseMock).toHaveBeenCalledWith('proj_1', 'session_1', 'turn_held', expect.any(String))
@@ -296,7 +296,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
   it('marks the session errored without reaching the runtime driver on an unknown runtime name [spec: runtime/cloud-turn]', async () => {
     findSessionMock.mockResolvedValue(fakeSession({ state: 'pending' }))
 
-    await consumeCloudTurnMessage(deps, {
+    await consumeCloudTurnQueueMessage(deps, {
       type: 'session.start',
       sessionId: 'session_1',
       organizationId: 'org_1',
@@ -304,7 +304,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
       runtime: 'totally-not-a-runtime',
       runtimeConfig: {},
       auditAction: 'session.prompt',
-    } as unknown as Parameters<typeof consumeCloudTurnMessage>[1])
+    } as unknown as Parameters<typeof consumeCloudTurnQueueMessage>[1])
 
     // An unknown runtime is dead-lettered up front: the turn engine never runs.
     expect(runSessionTurnMock).not.toHaveBeenCalled()

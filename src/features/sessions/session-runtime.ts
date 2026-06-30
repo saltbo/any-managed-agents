@@ -1,20 +1,19 @@
 import {
   type AmaSessionEventType,
   amaSessionEventCategory,
-  amaSessionEventTypeFromPayload,
-  isAmaSessionEventType,
 } from '@shared/session-events'
-import type { SessionEvent } from '@/lib/amarpc'
+import type { EventRecord } from '@/lib/amarpc'
 import { getStoredAccessToken } from '@/lib/oidc'
 
 export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
 export type SessionRuntimeRunState = 'idle' | 'running' | 'error'
+type AmaEvent = EventRecord['event']
 
-export type SessionSocketCommandType = 'prompt' | 'steer' | 'abort'
+export type SessionSocketClientMessageType = 'prompt' | 'steer' | 'abort'
 
-export interface SessionSocketCommand {
+export interface SessionSocketClientMessage {
   id: string
-  type: SessionSocketCommandType
+  type: SessionSocketClientMessageType
   content?: string
 }
 
@@ -60,9 +59,9 @@ export interface SessionRuntimeState {
 export type SessionRuntimeAction =
   | { type: 'reset' }
   | { type: 'connection'; state: SessionRuntimeConnectionState; error?: string | null }
-  | { type: 'command_sent'; command: SessionSocketCommand; at: string }
-  | { type: 'event'; event: Record<string, unknown>; at: string }
-  | { type: 'persisted_events'; events: SessionEvent[] }
+  | { type: 'command_sent'; command: SessionSocketClientMessage; at: string }
+  | { type: 'event'; item: AmaEvent | EventRecord; at: string }
+  | { type: 'persisted_events'; events: EventRecord[] }
 
 export const initialSessionRuntimeState: SessionRuntimeState = {
   connection: 'connecting',
@@ -88,6 +87,9 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
   if (action.type === 'persisted_events') {
     return mergePersistedEvents(state, action.events)
   }
+  if (action.type === 'event') {
+    return mergePersistedEvents(state, [eventRecordFromAction(action.item, action.at, state)])
+  }
   if (action.type === 'command_sent') {
     if (!action.command.content) {
       return state
@@ -104,91 +106,7 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
       }),
     }
   }
-
-  const eventType = amaSessionEventTypeFromPayload(action.event)
-  if (!isAmaSessionEventType(eventType)) {
-    return state
-  }
-  const eventKey = runtimeEventKey(action.event, eventType)
-  if (eventKey && state.eventKeys.includes(eventKey)) {
-    return state
-  }
-  const debugEvent: SessionRuntimeDebugEvent = {
-    id: stringField(action.event, 'id') ?? `${eventType}_${action.at}_${state.debugEvents.length + 1}`,
-    type: eventType,
-    payload: action.event,
-    createdAt: action.at,
-  }
-
-  if (
-    eventType === 'agent_start' ||
-    eventType === 'turn_start' ||
-    eventType === 'agent_end' ||
-    eventType === 'turn_end'
-  ) {
-    const terminal = eventType === 'agent_end' || eventType === 'turn_end'
-    return {
-      ...state,
-      runState: terminal ? 'idle' : 'running',
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  if (eventType === 'message_start' || eventType === 'message_update' || eventType === 'message_end') {
-    const message = messageFromSessionEvent(
-      action.event,
-      action.at,
-      eventType === 'message_end' ? 'complete' : 'streaming',
-    )
-    return {
-      ...state,
-      messages: message ? upsertMessage(state.messages, message) : state.messages,
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  if (
-    eventType === 'tool_execution_start' ||
-    eventType === 'tool_execution_update' ||
-    eventType === 'tool_execution_end'
-  ) {
-    const tool = toolFromSessionEvent(action.event, action.at, eventType)
-    return {
-      ...state,
-      tools: tool ? upsertTool(state.tools, tool) : state.tools,
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  if (eventType === 'runtime.error') {
-    const message = messageFromRuntimeError(action.event, action.at, debugEvent.id)
-    return {
-      ...state,
-      runState: 'error',
-      error: runtimeErrorMessage(action.event),
-      messages: upsertMessage(state.messages, message),
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  if (
-    eventType === 'usage.recorded' ||
-    eventType === 'runtime.output' ||
-    eventType === 'runtime.metadata' ||
-    eventType === 'runner.metadata' ||
-    eventType === 'policy.decision'
-  ) {
-    return {
-      ...state,
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  return {
-    ...state,
-    debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-    eventKeys: appendEventKey(state.eventKeys, eventKey),
-  }
+  return state
 }
 
 export function sessionSocketUrl(socketPath: string) {
@@ -201,12 +119,47 @@ export function sessionSocketUrl(socketPath: string) {
   return url.toString()
 }
 
-function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]) {
-  const runtimeEvents = uniquePersistedRuntimeEvents(events)
+function eventRecordFromAction(event: AmaEvent | EventRecord, at: string, state: SessionRuntimeState): EventRecord {
+  if (isEventRecord(event)) {
+    return event
+  }
+  return {
+    id: `${event.type}_${at}_${state.debugEvents.length + 1}`,
+    projectId: '',
+    sessionId: '',
+    sequence: state.eventKeys.length + 1,
+    visibility: 'runtime',
+    role: null,
+    parentEventId: null,
+    correlationId: null,
+    event,
+    createdAt: at,
+  }
+}
+
+function isEventRecord(value: AmaEvent | EventRecord): value is EventRecord {
+  return 'event' in value
+}
+
+function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[]) {
+  const runtimeEvents = uniquePersistedRuntimeEvents(events).filter(({ stored, payload }) => {
+    const key = runtimeEventKey(payload, sessionEventType(stored, payload))
+    return !key || !state.eventKeys.includes(key)
+  })
   const messages = dedupeRuntimeMessages(
     runtimeEvents
       .map(({ stored, payload }) => {
         const type = sessionEventType(stored, payload)
+        if (type === 'message_start') {
+          return messageFromStoredSessionEvent(stored, payload, 'streaming')
+        }
+        if (type === 'message_update') {
+          const message = objectValue(payload.message)
+          if (!stringField(message, 'id') && !scalarField(message, 'timestamp') && !scalarField(payload, 'timestamp')) {
+            return null
+          }
+          return messageFromStoredSessionEvent(stored, payload, 'streaming')
+        }
         if (type === 'message_end') {
           return messageFromStoredSessionEvent(stored, payload, 'complete')
         }
@@ -241,32 +194,31 @@ function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]
     return type === 'agent_end' || type === 'turn_end'
   })
   const hasErrorEvent = runtimeEvents.some(({ stored }) => {
-    return stored.type === 'runtime.error'
+    return stored.event.type === 'runtime.error'
   })
+  const latestError = [...runtimeEvents]
+    .reverse()
+    .find(({ stored }) => stored.event.type === 'runtime.error')
   return {
     ...state,
     runState: hasErrorEvent ? 'error' : hasTerminalEvent ? 'idle' : state.runState,
-    messages: [
-      ...messages,
-      ...state.messages.filter(
-        (item) => !messages.some((message) => message.id === item.id || sameRuntimeMessage(message, item)),
-      ),
-    ],
-    tools: [...tools, ...state.tools.filter((item) => !tools.some((tool) => tool.id === item.id))],
+    error: latestError ? runtimeErrorMessage(latestError.payload) : state.error,
+    messages: messages.reduce((next, message) => upsertMessage(next, message), state.messages),
+    tools: state.tools.length === 0 ? tools : tools.reduce((next, tool) => upsertTool(next, tool), state.tools),
     debugEvents: [
-      ...debugEvents,
       ...state.debugEvents.filter((item) => !debugEvents.some((event) => event.id === item.id)),
+      ...debugEvents,
     ],
     eventKeys: mergeEventKeys(eventKeys, state.eventKeys),
   }
 }
 
 type StoredRuntimeEvent = {
-  stored: SessionEvent
+  stored: EventRecord
   payload: Record<string, unknown>
 }
 
-function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEvent[] {
+function uniquePersistedRuntimeEvents(events: EventRecord[]): StoredRuntimeEvent[] {
   const seen = new Set<string>()
   let turnKey: string | null = null
   const uniqueEvents: StoredRuntimeEvent[] = []
@@ -274,7 +226,7 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
     .filter((event) => event.visibility === 'runtime')
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((stored) => {
-      const payload = objectValue(stored.payload)
+      const payload = objectValue(stored.event.payload)
       const type = sessionEventType(stored, payload)
       const nextTurnKey = runtimeTurnKey(payload, type)
       if (nextTurnKey) {
@@ -292,8 +244,8 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
   return uniqueEvents
 }
 
-function sessionEventType(stored: SessionEvent, _payload: Record<string, unknown>): AmaSessionEventType {
-  return stored.type
+function sessionEventType(stored: EventRecord, _payload: Record<string, unknown>): AmaSessionEventType {
+  return stored.event.type
 }
 
 function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
@@ -350,7 +302,7 @@ function messageFromSessionEvent(event: Record<string, unknown>, at: string, sta
 }
 
 function messageFromStoredSessionEvent(
-  stored: SessionEvent,
+  stored: EventRecord,
   event: Record<string, unknown>,
   status: SessionRuntimeMessage['status'],
 ) {

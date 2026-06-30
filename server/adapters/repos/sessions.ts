@@ -1,6 +1,6 @@
 import type {
   RuntimeSessionHandle,
-  SessionEventQuery,
+  EventQuery,
   SessionListPage,
   SessionListQuery,
   SessionMessageListPage,
@@ -9,6 +9,8 @@ import type {
 } from '@server/usecases/ports'
 import {
   AMA_SESSION_EVENT_TYPES,
+  type AmaEvent,
+  type CanonicalAmaSessionEvent,
   type AmaSessionEventType,
   canonicalAmaSessionEventFromRuntimeEvent,
   isAmaSessionEventType,
@@ -28,7 +30,7 @@ import {
   type SessionAgentSnapshot,
   type SessionApproval,
   type SessionEnvironmentSnapshot,
-  type SessionEvent,
+  type EventRecord,
   type SessionMessage,
   type SessionState,
   sessionEventVisibility,
@@ -213,36 +215,38 @@ function serializeApproval(row: SessionApprovalRow): SessionApproval {
   }
 }
 
-function serializeEvent(row: SessionEventRow): SessionEvent {
+function serializeEvent(row: SessionEventRow): EventRecord {
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
-  const event = isAmaSessionEventType(row.type)
+  const canonical: CanonicalAmaSessionEvent = isAmaSessionEventType(row.type)
     ? {
         type: row.type,
-        visibility: row.visibility,
+        visibility: sessionEventVisibility(row.visibility),
         role: row.role,
         payload: rawPayload,
         metadata: rawMetadata,
-      }
+      } as CanonicalAmaSessionEvent
     : canonicalAmaSessionEventFromRuntimeEvent(
         { ...rawPayload, type: row.type },
         { source: 'stored-session-event', ...rawMetadata },
       )
   if (!isAmaSessionEventType(row.type)) {
-    event.metadata = { ...event.metadata, rawSessionEventType: row.type }
+    canonical.metadata = { ...canonical.metadata, rawSessionEventType: row.type }
   }
   return {
     id: row.id,
     projectId: row.projectId,
     sessionId: row.sessionId,
     sequence: row.sequence,
-    type: event.type,
-    visibility: sessionEventVisibility(event.visibility),
-    role: event.role,
+    visibility: sessionEventVisibility(canonical.visibility),
+    role: canonical.role,
     parentEventId: row.parentEventId,
     correlationId: row.correlationId,
-    payload: redactSensitiveValue(event.payload) as Record<string, unknown>,
-    metadata: redactSensitiveValue(event.metadata) as Record<string, unknown>,
+    event: {
+      type: canonical.type,
+      payload: redactSensitiveValue(canonical.payload) as typeof canonical.payload,
+      metadata: redactSensitiveValue(canonical.metadata) as typeof canonical.metadata,
+    } as AmaEvent,
     createdAt: row.createdAt,
   }
 }
@@ -295,7 +299,7 @@ function eventCursorFilter(cursor: number | undefined, order: EventOrder) {
   return eventSequenceFilter(cursor, order)
 }
 
-function eventFilters(sessionId: string, query: SessionEventQuery) {
+function eventFilters(sessionId: string, query: EventQuery) {
   return [
     eq(sessionEvents.sessionId, sessionId),
     eventCursorFilter(query.cursor, query.order),

@@ -1,45 +1,51 @@
 // Cross-cutting session event + transcript usecases for the runtime data plane.
-// Deps-first: they append canonical events and read the event stream through
-// deps.sessionOrchestration, and record the prompt failure through
-// deps.audit. No db handle, no adapters — they call ports only. Logic is
-// verbatim from the former server/runtime/session-base helpers; only how the
-// store/audit are acquired changed.
+// Deps-first: they append AMA protocol events and read the event stream through
+// ports. No db handle, no adapters.
 
 import { now } from '@server/domain/runtime/util'
 import type { SessionRow } from '@shared/runtime-rows'
-import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
-import type { AuditPort, AuthScope, SessionEventStore, SessionOrchestrationStore } from '../ports'
+import { amaEventFromRuntimeEvent, type AmaEvent } from '@shared/session-events'
+import type { AuditPort, AuthScope, EventStore, SessionOrchestrationStore } from '../ports'
 import { runtimeMessagesFromEvents } from './engine/transcript'
 
-export async function appendRuntimeEvent(
-  deps: { sessionEventStore: SessionEventStore },
-  values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
+export async function appendAmaEvent(
+  deps: { sessionEventStore: EventStore },
+  values: { auth: AuthScope; sessionId: string; event: AmaEvent },
 ) {
-  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
-    values.event,
-    values.metadata ?? { source: 'runtime' },
-  )
-  return await deps.sessionEventStore.appendCanonicalEvent(
+  return await deps.sessionEventStore.appendEvent(
     { organizationId: values.auth.organization.id, projectId: values.auth.project.id, sessionId: values.sessionId },
-    canonicalEvent,
+    values.event,
   )
 }
 
+export async function appendRuntimeEvent(
+  deps: { sessionEventStore: EventStore },
+  values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
+) {
+  return appendAmaEvent(deps, {
+    auth: values.auth,
+    sessionId: values.sessionId,
+    event: amaEventFromRuntimeEvent(values.event, values.metadata ?? { source: 'runtime' }),
+  })
+}
+
 export async function appendUserPromptEvent(
-  deps: { sessionEventStore: SessionEventStore },
+  deps: { sessionEventStore: EventStore },
   values: { auth: AuthScope; sessionId: string; prompt: string; metadata?: Record<string, unknown> },
 ) {
-  return appendRuntimeEvent(deps, {
+  return appendAmaEvent(deps, {
     auth: values.auth,
     sessionId: values.sessionId,
     event: {
       type: 'message_end',
-      message: {
-        role: 'user',
-        content: [{ type: 'text', text: values.prompt }],
+      payload: {
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: values.prompt }],
+        },
       },
+      metadata: { source: 'user-prompt', ...(values.metadata ?? {}) },
     },
-    metadata: { source: 'user-prompt', ...(values.metadata ?? {}) },
   })
 }
 
@@ -66,6 +72,6 @@ export async function markPromptFailed(
   })
 }
 
-export async function loadRuntimeMessages(deps: { sessionEventStore: SessionEventStore }, sessionId: string) {
+export async function loadRuntimeMessages(deps: { sessionEventStore: EventStore }, sessionId: string) {
   return runtimeMessagesFromEvents(await deps.sessionEventStore.eventStream(sessionId))
 }

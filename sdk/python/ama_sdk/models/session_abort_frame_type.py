@@ -1,7 +1,0 @@
-from enum import Enum
-
-class SessionAbortFrameType(str, Enum):
-    ABORT = "abort"
-
-    def __str__(self) -> str:
-        return str(self.value)

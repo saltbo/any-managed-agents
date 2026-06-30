@@ -11,7 +11,7 @@ import { formatDuration, formatRelativeTime, stringifyJson } from '@/console/for
 import { JsonBlock } from '@/features/console/json-block'
 import { SessionRuntimePanel } from '@/features/sessions/SessionRuntimePanel'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
-import type { Session, SessionEvent } from '@/lib/amarpc'
+import type { Session, EventRecord } from '@/lib/amarpc'
 
 export function SessionDetailView({
   session,
@@ -30,7 +30,7 @@ export function SessionDetailView({
   session: Session
   agentName: string | undefined
   environmentName: string | undefined
-  events: SessionEvent[]
+  events: EventRecord[]
   runtime: SessionRuntimeState
   onStop: (id: string) => void
   onArchive: (id: string) => void

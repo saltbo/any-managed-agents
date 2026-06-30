@@ -5,7 +5,7 @@ import {
   amaSessionEventTypeFromPayload,
 } from '@shared/session-events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SessionEvent } from '@/lib/amarpc'
+import type { EventRecord } from '@/lib/amarpc'
 import * as oidcModule from '@/lib/oidc'
 import { initialSessionRuntimeState, sessionRuntimeReducer, sessionSocketUrl } from './session-runtime'
 
@@ -18,21 +18,26 @@ function stubWindowLocation(href: string) {
   vi.stubGlobal('window', { location: { href }, localStorage: window.localStorage })
 }
 
-function event(sequence: number, type: AmaSessionEventType, payload: SessionEvent['payload']): SessionEvent {
+function event(sequence: number, type: AmaSessionEventType, payload: Record<string, unknown>): EventRecord {
   return {
     id: `event_${sequence}`,
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence,
-    type,
     visibility: 'runtime',
     role: null,
     parentEventId: null,
     correlationId: null,
-    payload,
-    metadata: {},
+    event: { type, payload } as EventRecord['event'],
     createdAt: new Date(sequence * 1000).toISOString(),
   }
+}
+
+function amaEvent(payload: Record<string, unknown>): EventRecord['event'] {
+  return {
+    type: payload.type as AmaSessionEventType,
+    payload,
+  } as EventRecord['event']
 }
 
 const canonicalEventPayloads = {
@@ -97,7 +102,7 @@ describe('sessionRuntimeReducer', () => {
       (next, [, payload], index) =>
         sessionRuntimeReducer(next, {
           type: 'event',
-          event: payload,
+          item: amaEvent(payload),
           at: new Date((index + 1) * 1000).toISOString(),
         }),
       initialSessionRuntimeState,
@@ -118,57 +123,41 @@ describe('sessionRuntimeReducer', () => {
     expect(amaSessionEventCategory('toString')).toBe('unknown')
   })
 
-  it('ignores noncanonical events instead of rendering them as transcript messages or debug rows', () => {
-    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'event',
-      event: { type: 'future_event', content: 'debug only' },
-      at: new Date(1000).toISOString(),
-    })
-    const untyped = sessionRuntimeReducer(state, {
-      type: 'event',
-      event: { content: 'debug only' },
-      at: new Date(2000).toISOString(),
-    })
-
-    expect(untyped.messages).toHaveLength(0)
-    expect(untyped.debugEvents).toHaveLength(0)
-  })
-
   it('keeps prior tool output when updates carry empty values', () => {
     const started = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_start',
         toolCall: { id: 'tool_empty_values', name: 'inspect', input: { path: 'README.md' } },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
     const withText = sessionRuntimeReducer(started, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_update',
         toolCall: {
           id: 'tool_empty_values',
           name: 'inspect',
           output: { content: ['ignored', { type: 'text', text: 'first' }] },
         },
-      },
+      }),
       at: new Date(2000).toISOString(),
     })
     const withEmptyString = sessionRuntimeReducer(withText, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_update',
         toolCall: { id: 'tool_empty_values', name: 'inspect', output: '' },
-      },
+      }),
       at: new Date(3000).toISOString(),
     })
     const withEmptyArray = sessionRuntimeReducer(withEmptyString, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_update',
         toolCall: { id: 'tool_empty_values', name: 'inspect', output: [] },
-      },
+      }),
       at: new Date(4000).toISOString(),
     })
 
@@ -179,7 +168,7 @@ describe('sessionRuntimeReducer', () => {
   it('renders scalar runtime error diagnostics', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'runtime.error', data: 500 },
+      item: amaEvent({ type: 'runtime.error', data: 500 }),
       at: new Date(1000).toISOString(),
     })
 
@@ -190,12 +179,12 @@ describe('sessionRuntimeReducer', () => {
   it('renders string and object runtime error diagnostics', () => {
     const stringError = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'runtime.error', error: 'direct failure' },
+      item: amaEvent({ type: 'runtime.error', error: 'direct failure' }),
       at: new Date(1000).toISOString(),
     })
     const objectError = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'runtime.error', data: { reason: 'structured failure' } },
+      item: amaEvent({ type: 'runtime.error', data: { reason: 'structured failure' } }),
       at: new Date(2000).toISOString(),
     })
 
@@ -216,11 +205,11 @@ describe('sessionRuntimeReducer', () => {
   it('keeps error tool calls inspectable when Pi omits an error body', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_end',
         isError: true,
         toolCall: { id: 'tool_missing_error', name: 'inspect', output: null },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
 
@@ -234,12 +223,12 @@ describe('sessionRuntimeReducer', () => {
   it('dedupes live debug events by id', () => {
     const first = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'usage.recorded', id: 'usage_1', totalTokens: 1 },
+      item: amaEvent({ type: 'usage.recorded', id: 'usage_1', totalTokens: 1 }),
       at: new Date(1000).toISOString(),
     })
     const second = sessionRuntimeReducer(first, {
       type: 'event',
-      event: { type: 'usage.recorded', id: 'usage_1', totalTokens: 1 },
+      item: amaEvent({ type: 'usage.recorded', id: 'usage_1', totalTokens: 1 }),
       at: new Date(2000).toISOString(),
     })
 
@@ -249,7 +238,7 @@ describe('sessionRuntimeReducer', () => {
   it('omits non-transcript message content blocks', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'message_end',
         message: {
           role: 'assistant',
@@ -258,7 +247,7 @@ describe('sessionRuntimeReducer', () => {
             { type: 'toolCall', content: 'hidden' },
           ],
         },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
 
@@ -592,7 +581,7 @@ describe('sessionRuntimeReducer', () => {
     })
     const replayed = sessionRuntimeReducer(loaded, {
       type: 'event',
-      event: messagePayload,
+      item: amaEvent(messagePayload),
       at: new Date(99_000).toISOString(),
     })
 
@@ -650,7 +639,7 @@ describe('sessionRuntimeReducer', () => {
   it('handles reset action by returning initial state', () => {
     const modified = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'runtime.error', message: 'test error' },
+      item: amaEvent({ type: 'runtime.error', message: 'test error' }),
       at: new Date(1000).toISOString(),
     })
     const reset = sessionRuntimeReducer(modified, { type: 'reset' })
@@ -661,17 +650,17 @@ describe('sessionRuntimeReducer', () => {
   it('handles session_stop and session_checkpoint and session_resume events as debug-only events', () => {
     const afterStop = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'session_stop', reason: 'user_requested' },
+      item: amaEvent({ type: 'session_stop', reason: 'user_requested' }),
       at: new Date(1000).toISOString(),
     })
     const afterCheckpoint = sessionRuntimeReducer(afterStop, {
       type: 'event',
-      event: { type: 'session_checkpoint', resumeTokenRef: 'ref_1', scope: 'runtime-resume-token' },
+      item: amaEvent({ type: 'session_checkpoint', resumeTokenRef: 'ref_1', scope: 'runtime-resume-token' }),
       at: new Date(2000).toISOString(),
     })
     const afterResume = sessionRuntimeReducer(afterCheckpoint, {
       type: 'event',
-      event: { type: 'session_resume', fromCheckpoint: 'ref_1', reason: 'runner-recovery' },
+      item: amaEvent({ type: 'session_resume', fromCheckpoint: 'ref_1', reason: 'runner-recovery' }),
       at: new Date(3000).toISOString(),
     })
 
@@ -683,13 +672,13 @@ describe('sessionRuntimeReducer', () => {
   it('handles permission.request as debug event without transcript message', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'permission.request',
         permissionId: 'perm_1',
         action: 'shell',
         command: 'ls',
         runtime: 'claude-code',
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
 
@@ -709,13 +698,14 @@ describe('sessionRuntimeReducer', () => {
             projectId: 'project_1',
             sessionId: 'session_1',
             sequence: 1,
-            type: 'session_checkpoint',
             visibility: 'runtime',
             role: null,
             parentEventId: null,
             correlationId: null,
-            payload: { type: 'session_checkpoint', resumeTokenRef: 'ref_1', scope: 'runtime-resume-token' },
-            metadata: {},
+            event: {
+              type: 'session_checkpoint',
+              payload: { type: 'session_checkpoint', resumeTokenRef: 'ref_1', scope: 'runtime-resume-token' },
+            },
             createdAt: new Date(1000).toISOString(),
           },
         ],
@@ -730,7 +720,7 @@ describe('sessionRuntimeReducer', () => {
   it('handles runtime.error with object-type error field', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'runtime.error', error: { message: 'structured error' } },
+      item: amaEvent({ type: 'runtime.error', error: { message: 'structured error' } }),
       at: new Date(1000).toISOString(),
     })
 
@@ -740,7 +730,7 @@ describe('sessionRuntimeReducer', () => {
   it('handles runtime.error with content field as fallback', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'runtime.error', content: 'content error fallback' },
+      item: amaEvent({ type: 'runtime.error', content: 'content error fallback' }),
       at: new Date(1000).toISOString(),
     })
 
@@ -750,7 +740,7 @@ describe('sessionRuntimeReducer', () => {
   it('handles runtime.error with no specific fields using default message', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'runtime.error' },
+      item: amaEvent({ type: 'runtime.error' }),
       at: new Date(1000).toISOString(),
     })
 
@@ -760,10 +750,10 @@ describe('sessionRuntimeReducer', () => {
   it('handles message_start event with streaming status', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'message_start',
         message: { role: 'assistant', content: 'Starting...', timestamp: 12345 },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
 
@@ -774,18 +764,18 @@ describe('sessionRuntimeReducer', () => {
   it('appends streaming content to existing message on message_update', () => {
     const started = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'message_start',
         message: { role: 'assistant', content: 'Hello', id: 'msg_stream_1' },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
     const updated = sessionRuntimeReducer(started, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'message_update',
         message: { role: 'assistant', content: ' world', id: 'msg_stream_1' },
-      },
+      }),
       at: new Date(2000).toISOString(),
     })
 
@@ -797,10 +787,10 @@ describe('sessionRuntimeReducer', () => {
   it('handles tool_execution_start with callId from toolCall.id', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_start',
         toolCall: { id: 'tool_from_call', name: 'read_file', input: { path: 'README.md' } },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
 
@@ -812,24 +802,24 @@ describe('sessionRuntimeReducer', () => {
   it('handles tool_execution_end with error status from isError=true', () => {
     const started = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_start',
         toolCallId: 'tool_err_1',
         toolName: 'exec',
         args: { command: 'fail' },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
     const ended = sessionRuntimeReducer(started, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_end',
         toolCallId: 'tool_err_1',
         toolName: 'exec',
         isError: true,
         error: 'exec failed',
         result: { content: [{ type: 'text', text: 'exec failed' }] },
-      },
+      }),
       at: new Date(2000).toISOString(),
     })
 
@@ -840,10 +830,10 @@ describe('sessionRuntimeReducer', () => {
   it('handles message_end with errorMessage field', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'message_end',
         message: { role: 'assistant', errorMessage: 'Model refused' },
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
 
@@ -854,10 +844,10 @@ describe('sessionRuntimeReducer', () => {
   it('handles message_end with delta field for content', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'message_end',
         delta: 'delta content here',
-      },
+      }),
       at: new Date(1000).toISOString(),
     })
 
@@ -887,12 +877,12 @@ describe('sessionRuntimeReducer', () => {
     })
     const replayedStart = sessionRuntimeReducer(loaded, {
       type: 'event',
-      event: startPayload,
+      item: amaEvent(startPayload),
       at: new Date(99_000).toISOString(),
     })
     const replayedEnd = sessionRuntimeReducer(replayedStart, {
       type: 'event',
-      event: endPayload,
+      item: amaEvent(endPayload),
       at: new Date(100_000).toISOString(),
     })
 
@@ -944,7 +934,7 @@ describe('sessionRuntimeReducer — extractText edge cases (line 594)', () => {
     // When message content is a number, extractText returns '' (line 594 fallback)
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'message_end', message: { role: 'assistant', content: 42 } },
+      item: amaEvent({ type: 'message_end', message: { role: 'assistant', content: 42 } }),
       at: '2026-05-23T00:00:00.000Z',
     })
     const msg = state.messages[0]
@@ -955,7 +945,7 @@ describe('sessionRuntimeReducer — extractText edge cases (line 594)', () => {
   it('extracts empty string from message with boolean content', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'message_end', message: { role: 'assistant', content: false } },
+      item: amaEvent({ type: 'message_end', message: { role: 'assistant', content: false } }),
       at: '2026-05-23T00:00:00.000Z',
     })
     expect(state.messages[0]?.content ?? '').toBe('')
@@ -1087,25 +1077,25 @@ describe('sessionRuntimeReducer — hasToolValue edge cases (lines 632, 635)', (
     // Create the tool first via tool_execution_start
     const stateAfterStart = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_start',
         toolCallId: 'tool_str',
         toolName: 'read',
         args: { path: '/file.txt' },
-      },
+      }),
       at: '2026-05-23T00:00:00.000Z',
     })
 
     // Update with empty string result — hasToolValue('') = false → existing output kept
     const stateAfterEnd = sessionRuntimeReducer(stateAfterStart, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_end',
         toolCallId: 'tool_str',
         toolName: 'read',
         result: '',
         isError: false,
-      },
+      }),
       at: '2026-05-23T00:00:01.000Z',
     })
 
@@ -1119,12 +1109,12 @@ describe('sessionRuntimeReducer — hasToolValue edge cases (lines 632, 635)', (
     // First, create the tool via tool_execution_start with a real output
     const stateAfterStart = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_start',
         toolCallId: 'tool_arr',
         toolName: 'read',
         args: { path: '/file.txt' },
-      },
+      }),
       at: '2026-05-23T00:00:00.000Z',
     })
 
@@ -1132,13 +1122,13 @@ describe('sessionRuntimeReducer — hasToolValue edge cases (lines 632, 635)', (
     // hasToolValue([]) → value.length > 0 → false → existing.output is kept
     const stateAfterEnd = sessionRuntimeReducer(stateAfterStart, {
       type: 'event',
-      event: {
+      item: amaEvent({
         type: 'tool_execution_end',
         toolCallId: 'tool_arr',
         toolName: 'read',
         result: [],
         isError: false,
-      },
+      }),
       at: '2026-05-23T00:00:01.000Z',
     })
 

@@ -27,7 +27,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useCallback } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Session, SessionEvent } from '@/lib/amarpc'
+import type { Session, EventRecord } from '@/lib/amarpc'
 import * as oidcModule from '@/lib/oidc'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { useSessionRuntimeSession } from './use-session-runtime'
@@ -91,27 +91,39 @@ class MockWebSocket extends EventTarget {
 
 const now = '2026-05-23T00:00:00.000Z'
 
-const NO_EVENTS: SessionEvent[] = []
+const NO_EVENTS: EventRecord[] = []
 
 function buildSession(overrides: TestSessionOverrides = {}): Session {
   return buildTestSession({ name: 'Test session', ...overrides })
 }
 
-function buildEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
+type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
+  type?: EventRecord['event']['type']
+  payload?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  event?: EventRecord['event']
+}
+
+function buildEvent(overrides: EventRecordOverrides = {}): EventRecord {
+  const {
+    type = overrides.event?.type ?? 'message_end',
+    payload = overrides.event?.payload ?? { type: 'message_end', message: { role: 'assistant', content: 'Hello' } },
+    metadata = overrides.event?.metadata ?? {},
+    event: eventOverride,
+    ...recordOverrides
+  } = overrides
   return {
     id: 'event_1',
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'message_end',
     visibility: 'runtime',
     role: null,
     parentEventId: null,
     correlationId: null,
-    payload: { type: 'message_end', message: { role: 'assistant', content: 'Hello' } },
-    metadata: {},
+    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
     createdAt: now,
-    ...overrides,
+    ...recordOverrides,
   }
 }
 
@@ -134,7 +146,7 @@ function RuntimeHarness({
   onEventsChangedRef,
 }: {
   session: Session | null
-  events: SessionEvent[] // MUST be a stable reference — never inline []
+  events: EventRecord[] // MUST be a stable reference — never inline []
   onEventsChangedRef: React.MutableRefObject<() => void>
 }) {
   const onEventsChanged = useCallback(() => onEventsChangedRef.current(), [onEventsChangedRef])
@@ -216,7 +228,7 @@ describe('useSessionRuntimeSession — null/stopped session', () => {
 
   it('dispatches persisted message_end events for a stopped session', async () => {
     // Define events OUTSIDE render — stable reference
-    const events: SessionEvent[] = [
+    const events: EventRecord[] = [
       buildEvent(),
       buildEvent({ id: 'event_2', sequence: 2, type: 'turn_end', payload: { type: 'turn_end' } }),
     ]
@@ -254,7 +266,7 @@ describe('useSessionRuntimeSession — live session open', () => {
 
     lastSocket!.emit({
       type: 'event',
-      event: buildEvent({
+      record: buildEvent({
         id: 'event_live',
         sequence: 2,
         payload: { type: 'message_end', message: { role: 'assistant', content: 'Live frame', id: 'msg_live' } },
@@ -400,7 +412,7 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'event', event: buildEvent({ type: 'turn_end', payload: { type: 'turn_end' } }) })
+    lastSocket!.emit({ type: 'event', record: buildEvent({ type: 'turn_end', payload: { type: 'turn_end' } }) })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
@@ -411,7 +423,7 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
 
     lastSocket!.emit({
       type: 'event',
-      event: buildEvent({ type: 'runtime.error', payload: { type: 'runtime.error', message: 'crashed' } }),
+      record: buildEvent({ type: 'runtime.error', payload: { type: 'runtime.error', message: 'crashed' } }),
     })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
@@ -423,7 +435,7 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
 
     lastSocket!.emit({
       type: 'event',
-      event: buildEvent({
+      record: buildEvent({
         type: 'tool_execution_end',
         payload: { type: 'tool_execution_end', toolCallId: 'tc_1', toolName: 'exec', result: {}, isError: false },
       }),
@@ -436,7 +448,7 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'event', event: buildEvent({ type: 'agent_end', payload: { type: 'agent_end' } }) })
+    lastSocket!.emit({ type: 'event', record: buildEvent({ type: 'agent_end', payload: { type: 'agent_end' } }) })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })

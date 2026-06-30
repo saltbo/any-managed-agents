@@ -14,7 +14,6 @@ import type {
   WorkItemInsert,
   WorkItemRow,
 } from '@shared/runtime-rows'
-import type { CanonicalAmaSessionEvent } from '@shared/session-events'
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, notLike, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import {
@@ -35,7 +34,6 @@ import {
   vaultCredentialVersions,
   workItems,
 } from '../../db/schema'
-import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 import { type ConnectorCatalogEntry, DEFAULT_CONNECTORS } from '../../domain/connector'
 import { amaMemoryRef, memoryStoreMountPath } from '../../domain/memory-store'
 
@@ -863,14 +861,6 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId)))
     },
 
-    // ── canonical event append (runtime + channel ingest) ───────────────────
-    async appendCanonicalEvent(
-      scope: { organizationId: string; projectId: string; sessionId: string },
-      canonicalEvent: CanonicalAmaSessionEvent,
-      overrides?: { parentEventId?: string | null; correlationId?: string | null },
-    ): Promise<string> {
-      return insertCanonicalSessionEvent(db, scope, canonicalEvent, overrides)
-    },
   }
 }
 

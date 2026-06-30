@@ -1,5 +1,5 @@
 // The AMA turn-execution core. It drives the pi-agent-core loop,
-// gates tools through the policy port, emits canonical events to the sink, and
+// gates tools through the policy port, emits runtime events to the sink, and
 // reaches the model and the sandbox only through the ModelClient / ToolExecutor
 // ports. The loop runs in the cloud control plane; self-hosted AMA sessions use
 // the same cloud loop with a runner-backed sandbox executor.

@@ -28,10 +28,10 @@ type Request struct {
 	RegisterControlSender func(send func(BridgeControlFrame) error)
 }
 
-type BridgeControlFrame = runtimebridge.BridgeControl
-type BridgeControlType = runtimebridge.BridgeControlType
+type BridgeControlFrame = runtimebridge.RuntimeBridgeControlMessage
+type BridgeControlType = runtimebridge.RuntimeBridgeControlMessageType
 
-type EventWriter func(eventType string, payload JSON) error
+type EventWriter func(event JSON) error
 
 type Adapter interface {
 	Run(ctx context.Context, request Request, write EventWriter) (JSON, error)
@@ -86,4 +86,4 @@ type RuntimeUsage struct {
 	Windows []UsageWindow
 }
 
-type UsageWindow = runtimebridge.BridgeUsageWindow
+type UsageWindow = runtimebridge.RuntimeBridgeUsageWindow

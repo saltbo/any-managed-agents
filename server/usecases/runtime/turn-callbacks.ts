@@ -20,7 +20,7 @@ import type {
   AuthScope,
   PolicyPort,
   SandboxPolicyBlock,
-  SessionEventStore,
+  EventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
@@ -58,7 +58,7 @@ export interface SessionTurnCallbacks {
 
 type TurnCallbacksDeps = {
   sessionOrchestration: SessionOrchestrationStore
-  sessionEventStore: SessionEventStore
+  sessionEventStore: EventStore
   policy: PolicyPort
   // The approval gate factory. Injected so the tool-approvals layer stays the
   // single owner of gate construction (and stays mockable for the golden-master

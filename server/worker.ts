@@ -2,9 +2,9 @@ import { createApp } from './app'
 import { createDeps } from './composition'
 import type { Env } from './env'
 import { dispatchDueScheduledTriggers } from './scheduled-dispatch'
-import type { CloudTurnMessage } from './usecases/ports'
+import type { CloudTurnQueueMessage } from './usecases/ports'
 import { refreshPlatformCatalog } from './usecases/providers'
-import { consumeCloudTurnMessage, markCloudTurnDeadLettered, markStalledCloudSessions } from './usecases/runtime'
+import { consumeCloudTurnQueueMessage, markCloudTurnDeadLettered, markStalledCloudSessions } from './usecases/runtime'
 
 export { Sandbox } from '@cloudflare/sandbox'
 export { RunnerPoolObject } from './worker/runner-pool-object'
@@ -33,9 +33,9 @@ export default {
     for (const message of batch.messages) {
       try {
         if (deadLetter) {
-          await markCloudTurnDeadLettered(deps, message.body as CloudTurnMessage)
+          await markCloudTurnDeadLettered(deps, message.body as CloudTurnQueueMessage)
         } else {
-          await consumeCloudTurnMessage(deps, message.body as CloudTurnMessage)
+          await consumeCloudTurnQueueMessage(deps, message.body as CloudTurnQueueMessage)
         }
         message.ack()
       } catch (error) {

@@ -12,7 +12,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
-import type { Agent, Environment, Session, SessionEvent } from '@/lib/amarpc'
+import type { Agent, Environment, Session, EventRecord } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,
@@ -69,23 +69,35 @@ function buildSession(overrides: TestSessionOverrides = {}): Session {
   return buildTestSession({ agentSnapshot: defaultAgentSnapshot, name: 'Quickstart session', ...overrides })
 }
 
-function buildSessionEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
+type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
+  type?: EventRecord['event']['type']
+  payload?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  event?: EventRecord['event']
+}
+
+function buildEventRecord(overrides: EventRecordOverrides = {}): EventRecord {
+  const {
+    type = overrides.event?.type ?? 'message_end',
+    payload = overrides.event?.payload ?? {
+      message: { role: 'assistant', content: 'Hello from the agent' },
+    },
+    metadata = overrides.event?.metadata ?? {},
+    event: eventOverride,
+    ...recordOverrides
+  } = overrides
   return {
     id: 'event_1',
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'message_end',
     visibility: 'runtime',
     role: 'assistant',
     parentEventId: null,
     correlationId: null,
-    payload: {
-      message: { role: 'assistant', content: 'Hello from the agent' },
-    },
-    metadata: {},
+    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
     createdAt: now,
-    ...overrides,
+    ...recordOverrides,
   }
 }
 
@@ -136,10 +148,10 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
 
 function sessionPreviewHandlers({
   session = buildSession() as Session,
-  events = [] as SessionEvent[],
+  events = [] as EventRecord[],
 }: {
   session?: Session
-  events?: SessionEvent[]
+  events?: EventRecord[]
 } = {}) {
   return [
     http.get('*/api/v1/sessions/:sessionId', () => HttpResponse.json(session)),
@@ -618,7 +630,7 @@ describe('QuickstartSessionStep — session preview with messages', () => {
         },
       ],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildSessionEvent()] }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildEventRecord()] }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -778,7 +790,7 @@ describe('QuickstartSessionStep — session preview with mixed transcript', () =
         },
       ],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildSessionEvent()] }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildEventRecord()] }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),

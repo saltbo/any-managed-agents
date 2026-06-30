@@ -46,22 +46,22 @@ function createSessionStream(config, sessionId) {
         }
     };
     socket.addEventListener('message', (event) => {
-        const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
-        if (frame.type === 'event') {
+        const message = JSON.parse(typeof event.data === 'string' ? event.data : '');
+        if (message.type === 'event') {
             const waiter = waiters.shift();
             if (waiter) {
-                waiter({ value: frame.event, done: false });
+                waiter({ value: message.record, done: false });
             }
             else {
-                buffered.push(frame.event);
+                buffered.push(message.record);
             }
         }
-        else if (frame.type === 'backfill') {
-            const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined;
-            if (frame.requestId) {
-                backfillWaiters.delete(frame.requestId);
+        else if (message.type === 'backfill') {
+            const resolve = message.requestId ? backfillWaiters.get(message.requestId) : undefined;
+            if (message.requestId) {
+                backfillWaiters.delete(message.requestId);
             }
-            resolve?.(frame);
+            resolve?.(message);
         }
     });
     socket.addEventListener('close', drainDone);
@@ -87,15 +87,15 @@ function createSessionStream(config, sessionId) {
                 };
             },
         },
-        async send(frame) {
+        async send(message) {
             await ready;
-            socket.send(JSON.stringify(frame));
+            socket.send(JSON.stringify(message));
         },
         async backfill(options = {}) {
             await ready;
             const requestId = `bf_${(backfillSeq += 1)}`;
             const response = new Promise((resolve) => backfillWaiters.set(requestId, resolve));
-            socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }));
+            socket.send(JSON.stringify({ id: requestId, type: 'backfill', requestId, ...options }));
             return response;
         },
         close() {
@@ -115,13 +115,13 @@ function createRunnerChannel(config, runnerId) {
         }
     };
     socket.addEventListener('message', (event) => {
-        const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
+        const message = JSON.parse(typeof event.data === 'string' ? event.data : '');
         const waiter = waiters.shift();
         if (waiter) {
-            waiter({ value: frame, done: false });
+            waiter({ value: message, done: false });
         }
         else {
-            buffered.push(frame);
+            buffered.push(message);
         }
     });
     socket.addEventListener('close', drainDone);
@@ -146,9 +146,9 @@ function createRunnerChannel(config, runnerId) {
                 };
             },
         },
-        async send(frame) {
+        async send(message) {
             await ready;
-            socket.send(JSON.stringify(frame));
+            socket.send(JSON.stringify(message));
         },
         close() {
             socket.close();

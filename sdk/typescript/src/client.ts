@@ -33,21 +33,21 @@ async function unwrap<TData>(call: Promise<{ data: TData | undefined; error?: un
 }
 
 export interface SessionStream {
-  events: AsyncIterable<types.SessionEvent>
-  send(frame: types.SessionClientFrame): Promise<void>
-  backfill(options?: { cursor?: number; limit?: number; eventType?: string; visibility?: string }): Promise<types.SessionBackfillResponse>
+  events: AsyncIterable<types.EventRecord>
+  send(message: types.SessionSocketClientMessage): Promise<void>
+  backfill(options?: { cursor?: number; limit?: number; eventType?: string; visibility?: string }): Promise<types.SessionSocketBackfillMessage>
   close(): void
 }
 
 export interface RunnerChannel {
   messages: AsyncIterable<types.RunnerChannelMessage>
-  send(frame: types.RunnerChannelMessage): Promise<void>
+  send(message: types.RunnerChannelMessage): Promise<void>
   close(): void
 }
 
-type SessionStreamFrame =
-  | { type: 'event'; event: types.SessionEvent }
-  | (types.SessionBackfillResponse & { type: 'backfill' })
+type SessionSocketServerMessage =
+  | { type: 'event'; record: types.EventRecord }
+  | (types.SessionSocketBackfillMessage & { type: 'backfill' })
   | { type: 'runner_unavailable'; message: string }
 
 function websocketURL(config: AmaClientConfig, path: string): URL {
@@ -64,9 +64,9 @@ function websocketURL(config: AmaClientConfig, path: string): URL {
 
 function createSessionStream(config: AmaClientConfig, sessionId: string): SessionStream {
   const socket = new WebSocket(websocketURL(config, `/api/v1/sessions/${encodeURIComponent(sessionId)}/socket`).toString())
-  const buffered: types.SessionEvent[] = []
-  const waiters: Array<(result: IteratorResult<types.SessionEvent>) => void> = []
-  const backfillWaiters = new Map<string, (response: types.SessionBackfillResponse) => void>()
+  const buffered: types.EventRecord[] = []
+  const waiters: Array<(result: IteratorResult<types.EventRecord>) => void> = []
+  const backfillWaiters = new Map<string, (response: types.SessionSocketBackfillMessage) => void>()
   let done = false
 
   const drainDone = () => {
@@ -77,20 +77,20 @@ function createSessionStream(config: AmaClientConfig, sessionId: string): Sessio
   }
 
   socket.addEventListener('message', (event: MessageEvent) => {
-    const frame = JSON.parse(typeof event.data === 'string' ? event.data : '') as SessionStreamFrame
-    if (frame.type === 'event') {
+    const message = JSON.parse(typeof event.data === 'string' ? event.data : '') as SessionSocketServerMessage
+    if (message.type === 'event') {
       const waiter = waiters.shift()
       if (waiter) {
-        waiter({ value: frame.event, done: false })
+        waiter({ value: message.record, done: false })
       } else {
-        buffered.push(frame.event)
+        buffered.push(message.record)
       }
-    } else if (frame.type === 'backfill') {
-      const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined
-      if (frame.requestId) {
-        backfillWaiters.delete(frame.requestId)
+    } else if (message.type === 'backfill') {
+      const resolve = message.requestId ? backfillWaiters.get(message.requestId) : undefined
+      if (message.requestId) {
+        backfillWaiters.delete(message.requestId)
       }
-      resolve?.(frame)
+      resolve?.(message)
     }
   })
   socket.addEventListener('close', drainDone)
@@ -105,7 +105,7 @@ function createSessionStream(config: AmaClientConfig, sessionId: string): Sessio
     events: {
       [Symbol.asyncIterator]() {
         return {
-          next(): Promise<IteratorResult<types.SessionEvent>> {
+          next(): Promise<IteratorResult<types.EventRecord>> {
             const value = buffered.shift()
             if (value !== undefined) {
               return Promise.resolve({ value, done: false })
@@ -118,15 +118,15 @@ function createSessionStream(config: AmaClientConfig, sessionId: string): Sessio
         }
       },
     },
-    async send(frame) {
+    async send(message) {
       await ready
-      socket.send(JSON.stringify(frame))
+      socket.send(JSON.stringify(message))
     },
     async backfill(options = {}) {
       await ready
       const requestId = `bf_${(backfillSeq += 1)}`
-      const response = new Promise<types.SessionBackfillResponse>((resolve) => backfillWaiters.set(requestId, resolve))
-      socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }))
+      const response = new Promise<types.SessionSocketBackfillMessage>((resolve) => backfillWaiters.set(requestId, resolve))
+      socket.send(JSON.stringify({ id: requestId, type: 'backfill', requestId, ...options }))
       return response
     },
     close() {
@@ -149,12 +149,12 @@ function createRunnerChannel(config: AmaClientConfig, runnerId: string): RunnerC
   }
 
   socket.addEventListener('message', (event: MessageEvent) => {
-    const frame = JSON.parse(typeof event.data === 'string' ? event.data : '') as types.RunnerChannelMessage
+    const message = JSON.parse(typeof event.data === 'string' ? event.data : '') as types.RunnerChannelMessage
     const waiter = waiters.shift()
     if (waiter) {
-      waiter({ value: frame, done: false })
+      waiter({ value: message, done: false })
     } else {
-      buffered.push(frame)
+      buffered.push(message)
     }
   })
   socket.addEventListener('close', drainDone)
@@ -181,9 +181,9 @@ function createRunnerChannel(config: AmaClientConfig, runnerId: string): RunnerC
         }
       },
     },
-    async send(frame) {
+    async send(message) {
       await ready
-      socket.send(JSON.stringify(frame))
+      socket.send(JSON.stringify(message))
     },
     close() {
       socket.close()

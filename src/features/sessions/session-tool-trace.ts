@@ -1,4 +1,4 @@
-import type { SessionEvent } from '@/lib/amarpc'
+import type { EventRecord } from '@/lib/amarpc'
 
 export type SessionToolTraceStatus = 'running' | 'completed' | 'failed'
 export type SessionToolTraceApproval = 'approved' | 'denied' | 'approval required'
@@ -32,27 +32,27 @@ interface TraceAccumulator extends SessionToolTraceEntry {
 // Pairing relies on the canonical `correlationId` (`tool:<tool call id>`)
 // assigned by the event store; results without a recorded call degrade into
 // explicit orphaned entries instead of being dropped.
-export function buildSessionToolTrace(events: SessionEvent[]): SessionToolTraceEntry[] {
+export function buildSessionToolTrace(events: EventRecord[]): SessionToolTraceEntry[] {
   const ordered = [...events]
-    .filter((event) => event.visibility === 'runtime')
+    .filter((record) => record.visibility === 'runtime')
     .sort((left, right) => left.sequence - right.sequence)
   const entries: TraceAccumulator[] = []
-  for (const event of ordered) {
-    if (event.type === 'tool_execution_start') {
-      entries.push(entryFromStart(event))
+  for (const record of ordered) {
+    if (record.event.type === 'tool_execution_start') {
+      entries.push(entryFromStart(record))
       continue
     }
-    if (event.type === 'tool_execution_end') {
-      const open = findOpenEntry(entries, pairingKey(event))
+    if (record.event.type === 'tool_execution_end') {
+      const open = findOpenEntry(entries, pairingKey(record))
       if (open) {
-        completeEntry(open, event)
+        completeEntry(open, record)
       } else {
-        entries.push(orphanedEntryFromEnd(event))
+        entries.push(orphanedEntryFromEnd(record))
       }
     }
   }
   const denials = ordered.filter(
-    (event) => event.type === 'policy.decision' && objectValue(event.payload).allowed === false,
+    (record) => record.event.type === 'policy.decision' && objectValue(record.event.payload).allowed === false,
   )
   return entries.map((entry) => ({ ...entry, approval: approvalState(entry, denials) }))
 }
@@ -65,68 +65,71 @@ export function summarizeToolValue(value: unknown): string {
   return truncate(text.replace(/\s+/g, ' ').trim(), VALUE_SUMMARY_LIMIT)
 }
 
-function entryFromStart(event: SessionEvent): TraceAccumulator {
-  const payload = objectValue(event.payload)
+function entryFromStart(record: EventRecord): TraceAccumulator {
+  const payload = objectValue(record.event.payload)
+  const toolCall = objectValue(payload.toolCall)
   return {
-    key: event.id,
-    correlationId: event.correlationId,
-    toolCallId: stringField(payload, 'toolCallId'),
-    name: stringField(payload, 'toolName') ?? 'tool',
+    key: record.id,
+    correlationId: record.correlationId,
+    toolCallId: stringField(toolCall, 'id'),
+    name: stringField(toolCall, 'name') ?? 'tool',
     status: 'running',
     approval: 'approved',
     orphanedResult: false,
-    input: payload.args,
+    input: toolCall.input,
     output: undefined,
     errorSummary: null,
     durationMs: null,
-    startedAt: event.createdAt,
+    startedAt: record.createdAt,
     completedAt: null,
-    turnEventId: event.parentEventId,
-    startSequence: event.sequence,
+    turnEventId: record.parentEventId,
+    startSequence: record.sequence,
     endSequence: null,
   }
 }
 
-function completeEntry(entry: TraceAccumulator, event: SessionEvent) {
-  const payload = objectValue(event.payload)
-  const failed = payload.isError === true
+function completeEntry(entry: TraceAccumulator, record: EventRecord) {
+  const payload = objectValue(record.event.payload)
+  const failed = payload.isError === true || Boolean(payload.error)
   entry.status = failed ? 'failed' : 'completed'
   entry.output = payload.result
   entry.errorSummary = failed
-    ? truncate(toolValueText(payload.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
+    ? truncate(toolValueText(payload.error ?? payload.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
     : null
-  entry.durationMs = numberField(payload, 'durationMs') ?? elapsedMs(entry.startedAt, event.createdAt)
-  entry.completedAt = event.createdAt
-  entry.endSequence = event.sequence
+  entry.durationMs = numberField(payload, 'durationMs') ?? elapsedMs(entry.startedAt, record.createdAt)
+  entry.completedAt = record.createdAt
+  entry.endSequence = record.sequence
 }
 
-function orphanedEntryFromEnd(event: SessionEvent): TraceAccumulator {
-  const payload = objectValue(event.payload)
-  const failed = payload.isError === true
+function orphanedEntryFromEnd(record: EventRecord): TraceAccumulator {
+  const payload = objectValue(record.event.payload)
+  const toolCall = objectValue(payload.toolCall)
+  const failed = payload.isError === true || Boolean(payload.error)
   return {
-    key: event.id,
-    correlationId: event.correlationId,
-    toolCallId: stringField(payload, 'toolCallId'),
-    name: stringField(payload, 'toolName') ?? 'tool',
+    key: record.id,
+    correlationId: record.correlationId,
+    toolCallId: stringField(toolCall, 'id'),
+    name: stringField(toolCall, 'name') ?? 'tool',
     status: failed ? 'failed' : 'completed',
     approval: 'approved',
     orphanedResult: true,
-    input: undefined,
+    input: toolCall.input,
     output: payload.result,
     errorSummary: failed
-      ? truncate(toolValueText(payload.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
+      ? truncate(toolValueText(payload.error ?? payload.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
       : null,
     durationMs: numberField(payload, 'durationMs'),
     startedAt: null,
-    completedAt: event.createdAt,
-    turnEventId: event.parentEventId,
+    completedAt: record.createdAt,
+    turnEventId: record.parentEventId,
     startSequence: null,
-    endSequence: event.sequence,
+    endSequence: record.sequence,
   }
 }
 
-function pairingKey(event: SessionEvent) {
-  return event.correlationId ?? `tool:${stringField(objectValue(event.payload), 'toolCallId') ?? event.id}`
+function pairingKey(record: EventRecord) {
+  const toolCall = objectValue(objectValue(record.event.payload).toolCall)
+  return record.correlationId ?? `tool:${stringField(toolCall, 'id') ?? record.id}`
 }
 
 function findOpenEntry(entries: TraceAccumulator[], key: string) {
@@ -141,22 +144,22 @@ function findOpenEntry(entries: TraceAccumulator[], key: string) {
 
 // A denial recorded inside the same turn while the tool call was in flight is
 // the canonical approval outcome for that call.
-function approvalState(entry: TraceAccumulator, denials: SessionEvent[]): SessionToolTraceApproval {
+function approvalState(entry: TraceAccumulator, denials: EventRecord[]): SessionToolTraceApproval {
   const command = stringField(objectValue(entry.input), 'command')
-  const denial = denials.find((event) => {
-    if (event.parentEventId !== entry.turnEventId || entry.startSequence === null) {
+  const denial = denials.find((record) => {
+    if (record.parentEventId !== entry.turnEventId || entry.startSequence === null) {
       return false
     }
-    if (event.sequence < entry.startSequence || (entry.endSequence !== null && event.sequence > entry.endSequence)) {
+    if (record.sequence < entry.startSequence || (entry.endSequence !== null && record.sequence > entry.endSequence)) {
       return false
     }
-    const denialCommand = stringField(objectValue(event.payload), 'command')
+    const denialCommand = stringField(objectValue(record.event.payload), 'command')
     return !command || !denialCommand || denialCommand === command
   })
   if (!denial) {
     return 'approved'
   }
-  return objectValue(denial.payload).category === 'approval' ? 'approval required' : 'denied'
+  return objectValue(denial.event.payload).category === 'approval' ? 'approval required' : 'denied'
 }
 
 function toolValueText(value: unknown): string {

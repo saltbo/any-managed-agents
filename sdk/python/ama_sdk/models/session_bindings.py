@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.runtime import Runtime
+from ..models.runtime_name import RuntimeName
 from typing import cast
 
 if TYPE_CHECKING:
@@ -29,12 +29,12 @@ class SessionBindings:
         Attributes:
             agent (SessionBindingsAgent):
             environment (SessionBindingsEnvironment):
-            runtime (Runtime):  Example: codex.
+            runtime (RuntimeName):  Example: codex.
      """
 
     agent: SessionBindingsAgent
     environment: SessionBindingsEnvironment
-    runtime: Runtime
+    runtime: RuntimeName
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -78,7 +78,7 @@ class SessionBindings:
 
 
 
-        runtime = Runtime(d.pop("runtime"))
+        runtime = RuntimeName(d.pop("runtime"))
 
 
 
