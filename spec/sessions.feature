@@ -18,13 +18,6 @@ Feature: Sessions
     Then path traversal, the reserved root, and absolute escapes are rejected
     And secret-looking keys and credential-bearing URLs are rejected at any depth
 
-  @sessions/initial-prompt-compose @domain
-  Scenario: Compose the initial prompt with optional agent memory
-    Given an agent with or without stored memory
-    When the initial prompt is composed
-    Then memory is prepended as a labeled block only when present
-    And the task prompt is preserved verbatim
-
   # ── API contract (api: assembled server, real D1, runtime, OpenAPI) ──
 
 	  @sessions/create @api
@@ -64,7 +57,7 @@ Feature: Sessions
     When an external scheduler creates a session with an initial prompt and run correlation metadata
     Then the prompt is dispatched to the AMA-owned runtime without a browser socket
     And the initial-prompt dispatch is recorded as an audit event
-    And enabled agent memory is included in the initial prompt
+    And workspace resource context is supplied through the session runtime snapshot
 
   @sessions/prompt @api
   Scenario: Send a prompt to an active session

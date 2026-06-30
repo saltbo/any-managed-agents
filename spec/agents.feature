@@ -1,6 +1,6 @@
 Feature: Agents
-  Project-scoped, versioned agent definitions: reusable instructions, model,
-  role, tools, MCP connectors, memory, and handoff policy that sessions snapshot.
+  Project-scoped, versioned agent definitions: reusable system prompts, model,
+  tools, MCP connectors, sub-agents, and skills that sessions snapshot.
 
   # ── Definition lifecycle (domain + usecase: business rules, cheapest layer) ──
 
@@ -39,22 +39,6 @@ Feature: Agents
     Then tool attachments are normalized to the stable contract
     And governance-blocked tools are rejected
 
-  @agents/handoff @usecase
-  Scenario: Resolve handoff candidates by role or capability within the project
-    Given agents with distinct roles and capability tags exist in a project
-    When a session requests a handoff target by role or capability
-    Then candidates are resolved inside the same project scope
-    And the requesting agent is excluded from its own candidates
-    And no product-specific task or board model is required
-
-  @agents/memory @usecase
-  Scenario: Agent memory is project-scoped and per-definition
-    Given an agent with memory enabled
-    When the agent memory is read before any write
-    Then an empty memory singleton is materialized
-    When the agent memory is replaced
-    Then the whole singleton is replaced and secret material is rejected
-
   # ── API contract (api: assembled server, OpenAPI, tenancy, pagination) ──
 
   @agents/api-crud @api
@@ -69,8 +53,8 @@ Feature: Agents
   Scenario: Publish agent routes in the OpenAPI document
     Given the Worker app is initialized
     When the OpenAPI document is requested
-    Then it includes the agents collection, item, memory, and versions paths
-    And the role, handoff, and memory contract is exposed through OpenAPI and generated SDKs
+    Then it includes the agents collection, item, and versions paths
+    And the system prompt, tools, sub-agents, and skills contract is exposed through OpenAPI and generated SDKs
 
 	  @agents/api-pagination @api
 	  Scenario: List agents with pagination, filters, and tenant scope

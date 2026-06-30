@@ -71,7 +71,7 @@ describe('agent builder model', () => {
     expect(apiErrorToBuilder(error)).toEqual({ errors: {}, step: null })
   })
 
-  it('renders API examples with allowed tools', () => {
+  it('renders API examples with allowed tools [spec: agents/builder-examples]', () => {
     const examples = agentApiExamples(
       'https://example.com',
       resourceAgent({ systemPrompt: 'Do the work', allowedTools: ['read'] }),
