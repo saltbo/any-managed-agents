@@ -3,6 +3,7 @@
 // reaches the model and the sandbox only through the ModelClient / ToolExecutor
 // ports. The loop runs in the cloud control plane; self-hosted AMA sessions use
 // the same cloud loop with a runner-backed sandbox executor.
+import type { AmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
 import {
   Agent,
   type AgentEvent,
@@ -165,7 +166,7 @@ function runtimeTools(
   const ensure = (signal: AbortSignal | undefined) =>
     ensureTurnActive(signal ?? values.engineSignal, () => values.liveness.ensureActive())
   const tool = (
-    name: 'sandbox.exec' | 'sandbox.read' | 'sandbox.write' | 'sandbox.fetch',
+    name: AmaSandboxToolName,
     label: string,
     description: string,
     parameters: AgentTool['parameters'],
@@ -232,28 +233,77 @@ function runtimeTools(
 
   return [
     tool(
-      'sandbox.exec',
-      'Run command',
-      'Run a shell command in the session workspace.',
-      Type.Object({ command: Type.String() }),
-    ),
-    tool(
-      'sandbox.read',
+      'read',
       'Read file',
       'Read a UTF-8 file from the session workspace.',
-      Type.Object({ path: Type.String() }),
+      Type.Object({
+        path: Type.String(),
+        offset: Type.Optional(Type.Number()),
+        limit: Type.Optional(Type.Number()),
+      }),
     ),
     tool(
-      'sandbox.write',
+      'bash',
+      'Run command',
+      'Run a shell command in the session workspace.',
+      Type.Object({ command: Type.String(), timeout: Type.Optional(Type.Number()) }),
+    ),
+    tool(
+      'edit',
+      'Edit file',
+      'Replace text in a UTF-8 file under the session workspace.',
+      Type.Object({
+        path: Type.String(),
+        edits: Type.Array(Type.Object({ oldText: Type.String(), newText: Type.String() })),
+      }),
+    ),
+    tool(
+      'write',
       'Write file',
       'Write a UTF-8 file under the session workspace.',
       Type.Object({ path: Type.String(), content: Type.String() }),
     ),
     tool(
-      'sandbox.fetch',
+      'grep',
+      'Search text',
+      'Search workspace files for text using ripgrep-style matching.',
+      Type.Object({
+        pattern: Type.String(),
+        path: Type.Optional(Type.String()),
+        glob: Type.Optional(Type.String()),
+        ignoreCase: Type.Optional(Type.Boolean()),
+        literal: Type.Optional(Type.Boolean()),
+        context: Type.Optional(Type.Number()),
+        limit: Type.Optional(Type.Number()),
+      }),
+    ),
+    tool(
+      'find',
+      'Find files',
+      'Find workspace files by name pattern.',
+      Type.Object({
+        pattern: Type.String(),
+        path: Type.Optional(Type.String()),
+        limit: Type.Optional(Type.Number()),
+      }),
+    ),
+    tool(
+      'ls',
+      'List files',
+      'List files in a workspace directory.',
+      Type.Object({ path: Type.Optional(Type.String()), limit: Type.Optional(Type.Number()) }),
+    ),
+    tool(
+      'fetch',
       'Fetch URL',
       'Fetch an HTTP(S) URL over the sandbox network, subject to the session network policy.',
       Type.Object({ url: Type.String() }),
+    ),
+    tool(
+      'web_search',
+      'Search web',
+      'Search the web from inside the sandbox network.',
+      Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
     ),
   ].filter((candidate) => allowsTool(candidate.name))
 }

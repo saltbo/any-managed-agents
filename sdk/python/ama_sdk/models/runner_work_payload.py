@@ -52,7 +52,7 @@ class RunnerWorkPayload:
             resume_token (None | str | Unset):
             approved (bool | Unset):
             tool_call_id (str | Unset):  Example: call_abc123.
-            tool_name (str | Unset):  Example: sandbox.exec.
+            tool_name (str | Unset):  Example: bash.
             input_ (RunnerWorkPayloadInput | Unset):
             tool_call (RunnerToolCall | Unset):
      """

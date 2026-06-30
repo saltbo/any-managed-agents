@@ -39,7 +39,7 @@ describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeE
       canonicalAmaSessionEventFromRuntimeEvent({
         type: 'tool_execution_end',
         toolCallId: 'call_1',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         args: { command: 'npm test' },
         result: { content: [{ type: 'text', text: 'done' }], details: { exitCode: 0 } },
         isError: false,
@@ -48,7 +48,7 @@ describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeE
       type: 'tool_execution_end',
       payload: {
         toolCallId: 'call_1',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         args: { command: 'npm test' },
         result: { content: [{ type: 'text', text: 'done' }], details: { exitCode: 0 } },
         isError: false,

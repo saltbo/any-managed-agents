@@ -14,7 +14,7 @@ const auth: AuthScope = {
 const effective: EffectivePolicyResult = {
   source: { type: 'project', id: 'policy_1' },
   sources: [{ scope: 'project', id: 'policy_1', teamId: null }],
-  toolPolicy: { blockedTools: ['sandbox.exec'] },
+  toolPolicy: { blockedTools: ['bash'] },
   mcpPolicy: {},
   sandboxPolicy: {},
 }
@@ -55,7 +55,7 @@ function fakeDeps(
 describe('[spec: governance/effective-policy] readEffectivePolicy', () => {
   it('resolves the merged policy objects and lists enabled budgets', async () => {
     const result = await readEffectivePolicy(fakeDeps(), auth, {})
-    expect(result.toolPolicy).toEqual({ blockedTools: ['sandbox.exec'] })
+    expect(result.toolPolicy).toEqual({ blockedTools: ['bash'] })
     expect(result.budgets).toHaveLength(1)
     expect(result.decision).toBeUndefined()
   })

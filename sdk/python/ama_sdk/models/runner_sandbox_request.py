@@ -30,7 +30,7 @@ class RunnerSandboxRequest:
         Attributes:
             type_ (str):  Example: sandbox.execute.
             tool_call_id (str | Unset):  Example: call_abc123.
-            tool_name (str | Unset):  Example: sandbox.exec.
+            tool_name (str | Unset):  Example: bash.
             input_ (RunnerSandboxRequestInput | Unset):
             volumes (list[RunnerVolume] | Unset):
             volume_mounts (list[RunnerVolumeMount] | Unset):

@@ -131,10 +131,10 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
       }
       const toolCallId = `${permissionId}_tool`
       push(
-        toolStart(toolCallId, 'sandbox.exec', { command: 'printf permission-ok' }),
+        toolStart(toolCallId, 'bash', { command: 'printf permission-ok' }),
         toolEnd(
           toolCallId,
-          'sandbox.exec',
+          'bash',
           { command: 'printf permission-ok' },
           { stdout: 'permission-ok', stderr: '', exitCode: 0 },
           false,
@@ -168,10 +168,10 @@ export function deterministicBridgeTestEvents(request: RunRequest): AmaRuntimeEv
   return [
     runtimeEvent('turn_start', { ...receipt, stage: `${marker}-started`, status: 'running' }),
     runtimeEvent('message_end', { message: textMessage('assistant', `${marker} received:${request.prompt}`) }),
-    toolStart(toolCallId, 'sandbox.exec', { command: `printf ${request.runtime}-tool-ok` }),
+    toolStart(toolCallId, 'bash', { command: `printf ${request.runtime}-tool-ok` }),
     toolEnd(
       toolCallId,
-      'sandbox.exec',
+      'bash',
       { command: `printf ${request.runtime}-tool-ok` },
       { stdout: `${request.runtime}-tool-ok`, stderr: '', exitCode: 0 },
       false,

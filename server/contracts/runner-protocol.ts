@@ -79,7 +79,7 @@ export const RunnerVolumeMountSchema = z
 export const RunnerToolCallSchema = z
   .object({
     id: z.string().optional().openapi({ example: 'call_abc123' }),
-    name: z.string().optional().openapi({ example: 'sandbox.exec' }),
+    name: z.string().optional().openapi({ example: 'bash' }),
     arguments: JsonObjectSchema.optional(),
     input: JsonObjectSchema.optional(),
     approved: z.boolean().optional(),
@@ -108,7 +108,7 @@ export const RunnerWorkPayloadSchema = z
     resumeToken: z.string().nullable().optional(),
     approved: z.boolean().optional(),
     toolCallId: z.string().optional().openapi({ example: 'call_abc123' }),
-    toolName: z.string().optional().openapi({ example: 'sandbox.exec' }),
+    toolName: z.string().optional().openapi({ example: 'bash' }),
     input: JsonObjectSchema.optional(),
     toolCall: RunnerToolCallSchema.optional(),
   })
@@ -118,7 +118,7 @@ export const RunnerWorkPayloadSchema = z
 export const RunnerRuntimeToolCallSchema = z
   .object({
     id: z.string().optional().openapi({ example: 'tool_1' }),
-    name: z.string().optional().openapi({ example: 'sandbox.exec' }),
+    name: z.string().optional().openapi({ example: 'bash' }),
     input: JsonObjectSchema.optional(),
     arguments: JsonObjectSchema.optional(),
   })
@@ -150,7 +150,7 @@ export const RunnerSandboxRequestSchema = z
   .object({
     type: z.string().openapi({ example: 'sandbox.execute' }),
     toolCallId: z.string().optional().openapi({ example: 'call_abc123' }),
-    toolName: z.string().optional().openapi({ example: 'sandbox.exec' }),
+    toolName: z.string().optional().openapi({ example: 'bash' }),
     input: JsonObjectSchema.optional(),
     volumes: z.array(RunnerVolumeSchema).optional(),
     volumeMounts: z.array(RunnerVolumeMountSchema).optional(),

@@ -252,7 +252,7 @@ describe('[spec: agents/create] createAgent', () => {
       description: null,
       config: config({
         tools: [
-          { name: 'web.search', description: null, inputSchema: {}, approvalMode: 'per_call', policyMetadata: {} },
+          { name: 'web_search', description: null, inputSchema: {}, approvalMode: 'per_call', policyMetadata: {} },
         ],
       }),
     })

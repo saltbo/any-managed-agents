@@ -1,3 +1,13 @@
+export const ENVIRONMENT_PACKAGE_MANAGERS = ['apt', 'cargo', 'gem', 'go', 'npm', 'pip'] as const
+
+export type EnvironmentPackageManager = (typeof ENVIRONMENT_PACKAGE_MANAGERS)[number]
+
+export interface EnvironmentPackageFormEntry {
+  id: string
+  manager: EnvironmentPackageManager
+  name: string
+}
+
 export interface EnvironmentFormState {
   name: string
   description: string
@@ -6,7 +16,7 @@ export interface EnvironmentFormState {
   allowMcpServers: boolean
   allowPackageManagers: boolean
   allowedHosts: string
-  packages: string
+  packages: EnvironmentPackageFormEntry[]
   variables: string
 }
 

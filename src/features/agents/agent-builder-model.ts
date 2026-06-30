@@ -1,5 +1,8 @@
+import { AMA_SANDBOX_TOOL_NAMES } from '@ama/runtime-contracts/agent-tools'
 import { parseTools, providerPatch } from '@/console/format'
 import { type Agent, type AgentInput, ApiError } from '@/lib/amarpc'
+
+const DEFAULT_ALLOWED_TOOLS = AMA_SANDBOX_TOOL_NAMES.join('\n')
 
 export const BUILDER_STEPS = ['start', 'core', 'tools', 'sandbox', 'roles', 'test', 'done'] as const
 export type BuilderStep = (typeof BUILDER_STEPS)[number]
@@ -64,7 +67,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       name: 'Coding agent',
       description: 'Executes development work in a managed sandbox.',
       systemPrompt: 'You are a focused coding agent. Make changes, run checks, and report the result.',
-      allowedTools: 'read\nwrite\nshell',
+      allowedTools: DEFAULT_ALLOWED_TOOLS,
       sandboxEnabled: true,
       skills: 'ama@coding-agent',
     },
@@ -79,7 +82,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       description: 'Investigates questions and reports findings with sources.',
       systemPrompt:
         'You are a research assistant. Investigate the question, verify sources, and answer with citations.',
-      allowedTools: 'web.search',
+      allowedTools: 'fetch\nweb_search',
     },
   },
   {
@@ -108,7 +111,7 @@ export function draftFromGoal(goal: string): AgentBuilderDraft {
     name: `${headline.charAt(0).toUpperCase()}${headline.slice(1)} agent`.slice(0, 120),
     description: trimmed.slice(0, 1000),
     systemPrompt: `You are a managed agent.\nGoal: ${trimmed}\nWork in small verifiable steps and report what you did.`,
-    allowedTools: 'read\nwrite\nshell',
+    allowedTools: DEFAULT_ALLOWED_TOOLS,
   }
 }
 

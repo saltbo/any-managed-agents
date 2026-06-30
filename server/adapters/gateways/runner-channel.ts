@@ -77,7 +77,7 @@ export function createRunnerChannel(
       })
       return {
         toolCallId: String(result.toolCallId ?? input.toolCallId),
-        toolName: String(result.toolName ?? input.toolName),
+        toolName: input.toolName,
         output:
           result.output && typeof result.output === 'object' && !Array.isArray(result.output)
             ? (result.output as Record<string, unknown>)

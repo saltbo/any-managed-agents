@@ -100,7 +100,7 @@ function buildTraceEntry(overrides: Partial<SessionToolTraceEntry> = {}): Sessio
     key: 'entry_1',
     correlationId: 'tool:call_1',
     toolCallId: 'call_1',
-    name: 'sandbox.exec',
+    name: 'bash',
     status: 'completed',
     approval: 'approved',
     orphanedResult: false,
@@ -1251,7 +1251,7 @@ describe('SessionToolTrace component', () => {
 
   it('renders a completed entry with duration and approval', () => {
     render(<SessionToolTrace entries={[buildTraceEntry()]} />)
-    expect(screen.getByText('sandbox.exec')).toBeTruthy()
+    expect(screen.getByText('bash')).toBeTruthy()
     expect(screen.getByText('completed')).toBeTruthy()
     expect(screen.getByText('approved')).toBeTruthy()
     expect(screen.getByText('250ms')).toBeTruthy()

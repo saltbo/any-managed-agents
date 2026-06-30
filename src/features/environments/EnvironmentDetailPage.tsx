@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { PageHeader } from '@/console/components'
-import { isArchived, parsePackages, parseVariables } from '@/console/format'
+import { isArchived, parsePackages, parseVariables, stringifyPackages } from '@/console/format'
 import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
 import { api, type Environment, type EnvironmentNetworking } from '@/lib/amarpc'
@@ -25,7 +25,7 @@ function formStateFromEnvironment(environment: Environment): EnvironmentFormStat
     allowPackageManagers: environment.spec.networking.allowPackageManagers,
     allowedHosts:
       environment.spec.networking.type === 'limited' ? (environment.spec.networking.allowedHosts ?? []).join('\n') : '',
-    packages: environment.spec.packages.npm.join('\n'),
+    packages: stringifyPackages(environment.spec.packages),
     variables: Object.entries(environment.spec.variables)
       .map(
         ([name, variable]) =>

@@ -1211,7 +1211,7 @@ describe('[CF] /api/v1/sessions', () => {
         events: [
           {
             type: 'tool_execution_start',
-            payload: { toolCallId: 'call_pi', toolName: 'sandbox.exec', args: { command: 'npm test' } },
+            payload: { toolCallId: 'call_pi', toolName: 'bash', args: { command: 'npm test' } },
           },
         ],
       }),
@@ -1230,7 +1230,7 @@ describe('[CF] /api/v1/sessions', () => {
           type: 'tool_execution_start',
           payload: expect.objectContaining({
             toolCallId: 'call_pi',
-            toolName: 'sandbox.exec',
+            toolName: 'bash',
             args: { command: 'npm test' },
           }),
         }),

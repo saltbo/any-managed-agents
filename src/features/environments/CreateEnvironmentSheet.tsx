@@ -69,12 +69,12 @@ export function CreateEnvironmentSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent className="overflow-hidden data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Create Environment</SheetTitle>
           <SheetDescription>Define a reusable execution environment for future sessions.</SheetDescription>
         </SheetHeader>
-        <div className="px-4 pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <EnvironmentForm value={form} setValue={setForm} onSubmit={submit} />
         </div>
       </SheetContent>

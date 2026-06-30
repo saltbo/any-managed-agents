@@ -55,6 +55,31 @@ function normalizeToolInput(name: string, input: Record<string, unknown>): Recor
   }
 }
 
+function normalizeToolName(name: string) {
+  switch (name) {
+    case 'Read':
+      return 'read'
+    case 'Bash':
+      return 'bash'
+    case 'Edit':
+      return 'edit'
+    case 'Write':
+      return 'write'
+    case 'Grep':
+      return 'grep'
+    case 'Glob':
+      return 'find'
+    case 'WebFetch':
+      return 'fetch'
+    case 'WebSearch':
+      return 'web_search'
+    case 'Agent':
+      return 'agent'
+    default:
+      return name
+  }
+}
+
 function usageFromResult(msg: Record<string, unknown>) {
   return {
     ...normalizeProviderUsage(objectValue(msg.usage)),
@@ -125,7 +150,7 @@ function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
         }
         if (block.type === 'tool_use') {
           const args = normalizeToolInput(block.name, objectValue(block.input))
-          yield toolStart(block.id, block.name, args)
+          yield toolStart(block.id, normalizeToolName(block.name), args)
         }
       }
       return

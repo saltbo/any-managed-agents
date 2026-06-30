@@ -60,15 +60,15 @@ describe('session-runtime', () => {
     expect(runtimeToolCalls({})).toEqual([])
     expect(
       runtimeToolCalls({
-        toolCalls: [null, 'bad', { id: 'tool_1', name: 'sandbox.exec' }],
+        toolCalls: [null, 'bad', { id: 'tool_1', name: 'bash' }],
       }),
-    ).toEqual([{ id: 'tool_1', name: 'sandbox.exec' }])
+    ).toEqual([{ id: 'tool_1', name: 'bash' }])
   })
 
   it('dispatches runtime tool calls through the configured executor', async () => {
     mockExecutor.execute.mockResolvedValueOnce({
       toolCallId: 'call_git_status',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       output: { stdout: 'clean' },
       error: null,
       durationMs: 42,
@@ -81,7 +81,7 @@ describe('session-runtime', () => {
         toolCalls: [
           {
             id: 'call_git_status',
-            name: 'sandbox.exec',
+            name: 'bash',
             input: { command: 'git status' },
             output: { stdout: 'clean' },
             durationMs: 42,
@@ -95,7 +95,7 @@ describe('session-runtime', () => {
       sessionId: 'session_123',
       sandboxId: 'sandbox_123',
       toolCallId: 'call_git_status',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       input: {
         command: 'git status',
         output: { stdout: 'clean' },
@@ -106,7 +106,7 @@ describe('session-runtime', () => {
     expect(results).toEqual([
       {
         toolCallId: 'call_git_status',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         output: { stdout: 'clean' },
         error: null,
         durationMs: 42,
@@ -205,7 +205,7 @@ describe('session-runtime', () => {
   it('runs a prompt through Pi Core and dispatches model tool calls through the executor [spec: runtime/turn]', async () => {
     mockExecutor.execute.mockResolvedValueOnce({
       toolCallId: 'call_git_status',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       output: { stdout: 'clean', stderr: '', exitCode: 0 },
       error: null,
       durationMs: 5,
@@ -217,7 +217,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.exec' }] },
+      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'bash' }] },
       prompt: 'Inspect repository status',
       onEvent: async (event) => {
         events.push(event)
@@ -229,7 +229,7 @@ describe('session-runtime', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'call_git_status',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         input: { command: 'git status' },
         cwd: '/workspace',
       },
@@ -257,7 +257,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'sandbox.exec' }] },
+      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'bash' }] },
       prompt: 'Alpha durable prompt',
       onEvent: async (event) => {
         firstTurnEvents.push(event)
@@ -270,7 +270,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'sandbox.exec' }] },
+      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'bash' }] },
       prompt: 'What was my previous prompt?',
       messages: runtimeMessagesFromEvents(firstTurnEvents.map((event) => ({ payload: event }))),
       onEvent: async (event) => {
@@ -284,7 +284,7 @@ describe('session-runtime', () => {
   it('pauses a multi-turn run at the budget boundary and finishes via continuation', async () => {
     mockExecutor.execute.mockResolvedValue({
       toolCallId: 'call_git_status',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       output: { stdout: 'clean' },
       error: null,
       durationMs: 5,
@@ -296,7 +296,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.exec' }] },
+      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'bash' }] },
       prompt: 'Inspect repository status',
       shouldPause: () => true,
       onEvent: async (event) => {
@@ -316,7 +316,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.exec' }] },
+      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'bash' }] },
       continuation: true,
       messages: runtimeMessagesFromEvents(firstEvents.map((event) => ({ payload: event }))),
       onEvent: async (event) => {
@@ -424,7 +424,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Stop cleanly.', tools: [{ name: 'sandbox.exec' }] },
+      agentSnapshot: { instructions: 'Stop cleanly.', tools: [{ name: 'bash' }] },
       prompt: 'Alpha durable prompt',
       ensureActive: async () => {
         if (!active) {
@@ -453,7 +453,7 @@ describe('session-runtime', () => {
         sandboxId: 'sandbox_123',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
-        agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.read' }] },
+        agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'read' }] },
         prompt: 'Inspect repository status',
         onEvent: async (event) => {
           events.push(event)
@@ -475,7 +475,7 @@ describe('session-runtime', () => {
   it('grants the full sandbox toolset when the agent has no explicit allow-list', async () => {
     mockExecutor.execute.mockResolvedValueOnce({
       toolCallId: 'call_git_status',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       output: { stdout: 'clean' },
       error: null,
       durationMs: 5,
@@ -491,10 +491,7 @@ describe('session-runtime', () => {
       onEvent: async () => {},
     })
 
-    expect(mockExecutor.execute).toHaveBeenCalledWith(
-      expect.objectContaining({ toolName: 'sandbox.exec' }),
-      expect.anything(),
-    )
+    expect(mockExecutor.execute).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'bash' }), expect.anything())
   })
 
   it('initializes sandbox workspace metadata in live mode without starting a Pi process [spec: runtime/workspace-contract]', async () => {

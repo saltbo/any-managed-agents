@@ -89,13 +89,16 @@ export type SandboxOperation = ReturnType<typeof commandOperation> | ReturnType<
 export function sandboxOperationFromToolCall(call: Record<string, unknown>) {
   const name = typeof call.name === 'string' ? call.name : ''
   const input = call.input && typeof call.input === 'object' ? (call.input as Record<string, unknown>) : {}
-  if (name === 'sandbox.exec' || name === 'shell.exec' || name === 'terminal.exec') {
+  if (name === 'bash') {
     const command = typeof input.command === 'string' ? input.command : null
     return commandOperation(command, name)
   }
-  if (name === 'sandbox.fetch' || name === 'network.fetch' || name === 'web.fetch') {
+  if (name === 'fetch') {
     const host = typeof input.host === 'string' ? input.host : hostFromUrl(input.url)
     return networkOperation(host, name)
+  }
+  if (name === 'web_search') {
+    return networkOperation('lite.duckduckgo.com', name)
   }
   return null
 }

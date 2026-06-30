@@ -61,7 +61,7 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
       operation: { operation: 'command', command: 'rm -rf', resourceType: 'sandbox_command', resourceId: 'rm' },
     })
     const callbacks = build()
-    const decision = await callbacks.approveToolCall({ toolCallId: 'tc_1', toolName: 'sandbox.exec', input: {} })
+    const decision = await callbacks.approveToolCall({ toolCallId: 'tc_1', toolName: 'bash', input: {} })
 
     expect(recordPolicyDenial).toHaveBeenCalledTimes(1)
     expect(decision).toEqual({ allowed: false, reason: 'blocked by policy' })
@@ -72,7 +72,7 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
   it('falls through to the approval gate when the operation is not policy-blocked', async () => {
     policyBlocksSandboxOperation.mockResolvedValue(null)
     const callbacks = build()
-    const decision = await callbacks.approveToolCall({ toolCallId: 'tc_2', toolName: 'sandbox.exec', input: {} })
+    const decision = await callbacks.approveToolCall({ toolCallId: 'tc_2', toolName: 'bash', input: {} })
 
     expect(recordPolicyDenial).not.toHaveBeenCalled()
     expect(gate.gate).toHaveBeenCalledTimes(1)
@@ -84,7 +84,7 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
     policyBlocksSandboxOperation.mockResolvedValue(null)
     gate.gate.mockResolvedValue({ allowed: false, reason: 'awaiting approval' })
     const callbacks = build()
-    const decision = await callbacks.approveToolCall({ toolCallId: 'tc_3', toolName: 'sandbox.exec', input: {} })
+    const decision = await callbacks.approveToolCall({ toolCallId: 'tc_3', toolName: 'bash', input: {} })
 
     expect(decision).toEqual({ allowed: false, reason: 'awaiting approval' })
     expect(callbacks.wasPolicyDenied()).toBe(false)

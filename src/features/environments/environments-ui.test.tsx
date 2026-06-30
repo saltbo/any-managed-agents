@@ -482,6 +482,57 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     expect(capturedBody!.name).toBe('Node workspace')
   })
 
+  it('sends packages grouped by package manager', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    server.use(
+      http.post('*/api/v1/environments', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment({ id: 'env_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateEnvironmentSheet open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add package' }))
+    fireEvent.change(screen.getByLabelText('Package 3 name'), { target: { value: 'pandas' } })
+    const thirdManager = screen.getByLabelText('Package 3 manager')
+    thirdManager.focus()
+    fireEvent.pointerDown(thirdManager, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(thirdManager)
+    fireEvent.click(await screen.findByRole('option', { name: 'Pip' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add package' }))
+    fireEvent.change(screen.getByLabelText('Package 4 name'), { target: { value: 'golang.org/x/tools@latest' } })
+    const fourthManager = screen.getByLabelText('Package 4 manager')
+    fourthManager.focus()
+    fireEvent.pointerDown(fourthManager, { button: 0, ctrlKey: false, pointerId: 2, pointerType: 'mouse' })
+    fireEvent.mouseDown(fourthManager)
+    fireEvent.click(await screen.findByRole('option', { name: 'Go' }))
+
+    fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
+
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody!.packages).toEqual({
+      type: 'packages',
+      apt: [],
+      cargo: [],
+      gem: [],
+      go: ['golang.org/x/tools@latest'],
+      npm: ['tsx@latest', 'typescript@latest'],
+      pip: ['pandas'],
+    })
+  })
+
   it('stays open and does not crash when the api returns an error', async () => {
     server.use(http.post('*/api/v1/environments', () => HttpResponse.json({ error: 'Server error' }, { status: 500 })))
 
@@ -803,7 +854,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(screen.getByText('Name is required')).toBeTruthy())
 
-    fireEvent.change(screen.getByDisplayValue(''), { target: { value: 'Fixed name' } })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Fixed name' } })
     await waitFor(() => expect(screen.queryByText('Name is required')).toBeNull())
   })
 

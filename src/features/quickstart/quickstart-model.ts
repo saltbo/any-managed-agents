@@ -1,3 +1,4 @@
+import { AMA_SANDBOX_TOOL_NAMES } from '@ama/runtime-contracts/agent-tools'
 import { isArchived } from '@/console/format'
 import type { Agent, AgentInput, Environment, EnvironmentInput, Provider, Session } from '@/lib/amarpc'
 
@@ -115,12 +116,12 @@ export function quickstartEnvironmentInput(form: QuickstartEnvironmentForm): Env
 
 // ─── Sandbox add-on ───
 
-export const SANDBOX_TOOLS = ['sandbox.exec', 'sandbox.read', 'sandbox.write'] as const
+export const SANDBOX_TOOLS = AMA_SANDBOX_TOOL_NAMES
 export const DEFAULT_SANDBOX_SKILL = 'ama@coding-agent'
 
 export function agentHasSandboxExecution(agent: Agent) {
   const names = agent.spec.tools.map((tool) => tool.name)
-  return names.length === 0 || names.includes('*') || names.includes('sandbox.exec')
+  return names.length === 0 || names.includes('*') || names.includes('bash')
 }
 
 export function sandboxAgentInput(agent: Agent): Partial<AgentInput> {

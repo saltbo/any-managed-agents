@@ -81,7 +81,7 @@ describe('[CF] /api/v1/agents', () => {
     const authorization = await signIn()
     for (const body of [
       { name: 'Legacy prompt', instructions: 'Answer with citations.' },
-      { name: 'Legacy tools', allowedTools: ['web.search'] },
+      { name: 'Legacy tools', allowedTools: ['web_search'] },
       { name: 'Legacy provider', providerId: 'workers-ai' },
       { name: 'Legacy status', status: 'active' },
     ]) {
@@ -609,7 +609,7 @@ describe('[CF] /api/v1/agents', () => {
 
     const duplicateRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Duplicate tools', tools: [{ name: 'web.search' }, { name: 'web.search' }] }),
+      body: JSON.stringify({ name: 'Duplicate tools', tools: [{ name: 'web_search' }, { name: 'web_search' }] }),
     })
     expect(duplicateRes.status).toBe(400)
 
@@ -619,7 +619,7 @@ describe('[CF] /api/v1/agents', () => {
         name: 'Tooled agent',
         tools: [
           {
-            name: 'web.search',
+            name: 'web_search',
             description: 'Search the public web.',
             inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
             approvalMode: 'per_call',
@@ -639,7 +639,7 @@ describe('[CF] /api/v1/agents', () => {
     const versions = (await versionsRes.json()) as { data: Array<{ spec: { tools: unknown[] } }> }
     expect(versions.data[0]?.spec.tools).toEqual([
       {
-        name: 'web.search',
+        name: 'web_search',
         description: 'Search the public web.',
         inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
         approvalMode: 'per_call',

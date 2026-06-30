@@ -78,7 +78,7 @@ describe('[CF] v1 usage records', () => {
       usageRow(project, {
         providerId: null,
         providerType: 'sandbox',
-        modelId: 'sandbox.exec',
+        modelId: 'bash',
         usageType: 'tool',
         createdAt: '2026-05-03T00:00:00.000Z',
       }),
@@ -133,7 +133,7 @@ describe('[CF] v1 usage records', () => {
       .insert(usageRecords)
       .values([
         usageRow(project, {}),
-        usageRow(project, { providerId: null, providerType: 'sandbox', modelId: 'sandbox.exec', usageType: 'tool' }),
+        usageRow(project, { providerId: null, providerType: 'sandbox', modelId: 'bash', usageType: 'tool' }),
       ])
 
     const res = await jsonFetch('/api/v1/usage-records?providerId=workers-ai', authorization, {

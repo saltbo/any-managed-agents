@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/console/components'
 import { isArchived } from '@/console/format'
-import { TextAreaField, TextField } from '@/console/forms'
+import { AllowedToolsField, TextAreaField, TextField } from '@/console/forms'
 import { api, type Connector, type Environment } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
@@ -176,9 +176,8 @@ export function ToolsStep({ draft, errors, setField, connectors }: StepProps & {
   }
   return (
     <div className="grid gap-4">
-      <TextAreaField
+      <AllowedToolsField
         label="Allowed tools"
-        description="One runtime tool name per line. Policy-blocked tools are rejected when the agent is saved."
         value={draft.allowedTools}
         onChange={(value) => setField('allowedTools', value)}
         error={errors.allowedTools}

@@ -196,8 +196,8 @@ describe('session/environment tool gating', () => {
   it('allows when no agent snapshot and gates by snapshot tool names', () => {
     expect(sessionAllowsTool(null, 'c', 't')).toBe(true)
     expect(sessionAllowsTool({ agentSnapshot: '{"tools":[]}' }, 'c', 't')).toBe(false)
-    expect(sessionAllowsTool({ agentSnapshot: '{"tools":["mcp:c"]}' }, 'c', 't')).toBe(true)
-    expect(sessionAllowsTool({ agentSnapshot: '{"tools":["mcp:c.t"]}' }, 'c', 't')).toBe(true)
+    expect(sessionAllowsTool({ agentSnapshot: '{"tools":["mcp__c__*"]}' }, 'c', 't')).toBe(true)
+    expect(sessionAllowsTool({ agentSnapshot: '{"tools":["mcp__c__t"]}' }, 'c', 't')).toBe(true)
   })
 
   it('gates connectors by the environment networking capability flag', () => {
@@ -208,18 +208,24 @@ describe('session/environment tool gating', () => {
 })
 
 describe('[spec: governance/sandbox-restrictions] sandboxOperationForRuntimeTool', () => {
-  it('maps sandbox.exec to a command op and sandbox.fetch to a network op', () => {
-    expect(sandboxOperationForRuntimeTool('sandbox.exec', { command: 'ls -la' })).toEqual({
+  it('maps bash to a command op and fetch to a network op', () => {
+    expect(sandboxOperationForRuntimeTool('bash', { command: 'ls -la' })).toEqual({
       operation: 'command',
       command: 'ls -la',
       resourceType: 'sandbox_command',
       resourceId: 'ls',
     })
-    expect(sandboxOperationForRuntimeTool('sandbox.fetch', { url: 'https://api.example.com/x' })).toEqual({
+    expect(sandboxOperationForRuntimeTool('fetch', { url: 'https://api.example.com/x' })).toEqual({
       operation: 'network',
       host: 'api.example.com',
       resourceType: 'sandbox_network',
       resourceId: 'api.example.com',
+    })
+    expect(sandboxOperationForRuntimeTool('web_search', { query: 'managed agents' })).toEqual({
+      operation: 'network',
+      host: 'lite.duckduckgo.com',
+      resourceType: 'sandbox_network',
+      resourceId: 'lite.duckduckgo.com',
     })
     expect(sandboxOperationForRuntimeTool('other.tool', {})).toBeNull()
   })
@@ -401,43 +407,43 @@ describe('mergePolicyObjects additional branches', () => {
 })
 
 describe('sandboxOperationForRuntimeTool additional branches', () => {
-  it('uses the sandbox.fetch host field directly when provided', () => {
-    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { host: 'api.example.com' })
+  it('uses the fetch host field directly when provided', () => {
+    const result = sandboxOperationForRuntimeTool('fetch', { host: 'api.example.com' })
     expect(result?.resourceId).toBe('api.example.com')
   })
 
   it('uses toolName as resourceId when no host or url', () => {
-    const result = sandboxOperationForRuntimeTool('sandbox.fetch', {}) as NetworkOp | null
-    expect(result?.resourceId).toBe('sandbox.fetch')
+    const result = sandboxOperationForRuntimeTool('fetch', {}) as NetworkOp | null
+    expect(result?.resourceId).toBe('fetch')
     expect(result?.host).toBeNull()
   })
 
-  it('uses toolName as resourceId for sandbox.exec when command is missing', () => {
-    const result = sandboxOperationForRuntimeTool('sandbox.exec', {}) as CommandOp | null
+  it('uses toolName as resourceId for bash when command is missing', () => {
+    const result = sandboxOperationForRuntimeTool('bash', {}) as CommandOp | null
     expect(result?.command).toBeNull()
-    expect(result?.resourceId).toBe('sandbox.exec')
+    expect(result?.resourceId).toBe('bash')
   })
 
-  it('extracts hostname from a URL for sandbox.fetch', () => {
-    const result = sandboxOperationForRuntimeTool('sandbox.fetch', {
+  it('extracts hostname from a URL for fetch', () => {
+    const result = sandboxOperationForRuntimeTool('fetch', {
       url: 'https://api.example.com/path',
     }) as NetworkOp | null
     expect(result?.host).toBe('api.example.com')
   })
 
   it('returns null host when url is invalid', () => {
-    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { url: 'not-a-url' }) as NetworkOp | null
+    const result = sandboxOperationForRuntimeTool('fetch', { url: 'not-a-url' }) as NetworkOp | null
     expect(result?.host).toBeNull()
   })
 
   it('returns null when url has no hostname (e.g. file protocol)', () => {
     // file:///path has empty hostname — triggers the `|| null` fallback
-    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { url: 'file:///etc/passwd' }) as NetworkOp | null
+    const result = sandboxOperationForRuntimeTool('fetch', { url: 'file:///etc/passwd' }) as NetworkOp | null
     expect(result?.host).toBeNull()
   })
 
   it('returns null host when url field is not a string', () => {
-    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { url: 42 }) as NetworkOp | null
+    const result = sandboxOperationForRuntimeTool('fetch', { url: 42 }) as NetworkOp | null
     expect(result?.host).toBeNull()
   })
 })
@@ -581,19 +587,19 @@ describe('policyBlocksConnector additional branches', () => {
 
 describe('policyBlocksTool additional branches', () => {
   it('returns null when tool is in the allowed list', () => {
-    expect(policyBlocksTool({ allowedTools: ['web.search'] }, 'web.search')).toBeNull()
+    expect(policyBlocksTool({ allowedTools: ['web_search'] }, 'web_search')).toBeNull()
   })
 
   it('returns null when default effect is not deny', () => {
-    expect(policyBlocksTool({}, 'web.search')).toBeNull()
+    expect(policyBlocksTool({}, 'web_search')).toBeNull()
   })
 
   it('blocks when tool is not in the non-wildcard allowedTools list', () => {
-    expect(policyBlocksTool({ allowedTools: ['other'] }, 'web.search')?.rule).toBe('toolPolicy.allowedTools')
+    expect(policyBlocksTool({ allowedTools: ['other'] }, 'web_search')?.rule).toBe('toolPolicy.allowedTools')
   })
 
   it('blocks when defaultEffect is deny and no explicit lists', () => {
-    expect(policyBlocksTool({ defaultEffect: 'deny' }, 'web.search')?.rule).toBe('toolPolicy.defaultEffect')
+    expect(policyBlocksTool({ defaultEffect: 'deny' }, 'web_search')?.rule).toBe('toolPolicy.defaultEffect')
   })
 })
 

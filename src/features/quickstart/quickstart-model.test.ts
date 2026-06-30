@@ -126,7 +126,7 @@ describe('quickstart sandbox add-on [spec: quickstart/sandbox-addon]', () => {
     const agent = resourceAgent({
       tools: [
         { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
-        { name: 'sandbox.exec', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
+        { name: 'bash', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
       ],
       skills: [],
     })
@@ -140,7 +140,17 @@ describe('quickstart sandbox add-on [spec: quickstart/sandbox-addon]', () => {
       ),
     ).toBe(false)
     expect(sandboxAgentInput(agent)).toEqual({
-      tools: [{ name: 'read' }, { name: 'sandbox.exec' }, { name: 'sandbox.read' }, { name: 'sandbox.write' }],
+      tools: [
+        { name: 'read' },
+        { name: 'bash' },
+        { name: 'edit' },
+        { name: 'write' },
+        { name: 'grep' },
+        { name: 'find' },
+        { name: 'ls' },
+        { name: 'fetch' },
+        { name: 'web_search' },
+      ],
       skills: ['ama@coding-agent'],
     })
     expect(sandboxAgentInput(resourceAgent({ tools: [], skills: ['team@skill'] })).skills).toEqual(['team@skill'])

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./agent-tools": "./src/agent-tools.ts",
     "./bridge-protocol": "./src/bridge-protocol.ts",
     "./runtime-names": "./src/runtime-names.ts",
     "./sandbox-tools": "./src/sandbox-tools.ts",

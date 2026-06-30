@@ -461,7 +461,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         type: 'tool_execution_start',
         parentEventId: 'event_turn',
         correlationId: 'tool:call_ok',
-        payload: { toolCallId: 'call_ok', toolName: 'sandbox.exec', args: { command: 'git status' } },
+        payload: { toolCallId: 'call_ok', toolName: 'bash', args: { command: 'git status' } },
         createdAt: '2026-05-23T00:00:00.000Z',
       }),
       buildPersistedEvent({
@@ -472,7 +472,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         correlationId: 'tool:call_ok',
         payload: {
           toolCallId: 'call_ok',
-          toolName: 'sandbox.exec',
+          toolName: 'bash',
           result: { content: [{ type: 'text', text: 'clean tree' }] },
           isError: false,
         },
@@ -484,7 +484,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         type: 'tool_execution_start',
         parentEventId: 'event_turn',
         correlationId: 'tool:call_fail',
-        payload: { toolCallId: 'call_fail', toolName: 'sandbox.write', args: { path: 'x', apiKey: '[REDACTED]' } },
+        payload: { toolCallId: 'call_fail', toolName: 'write', args: { path: 'x', apiKey: '[REDACTED]' } },
         createdAt: '2026-05-23T00:00:02.000Z',
       }),
       buildPersistedEvent({
@@ -495,7 +495,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         correlationId: 'tool:call_fail',
         payload: {
           toolCallId: 'call_fail',
-          toolName: 'sandbox.write',
+          toolName: 'write',
           result: { content: [{ type: 'text', text: 'write denied' }] },
           isError: true,
         },
@@ -509,7 +509,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         correlationId: 'tool:call_orphan',
         payload: {
           toolCallId: 'call_orphan',
-          toolName: 'sandbox.read',
+          toolName: 'read',
           result: { content: [{ type: 'text', text: 'orphan output' }] },
           isError: false,
         },
@@ -537,13 +537,13 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     fireEvent.click(toolsTab)
     await waitFor(() => expect(toolsTab.getAttribute('aria-selected')).toBe('true'))
 
-    const completedEntry = screen.getByText('sandbox.exec').closest('details') as HTMLDetailsElement
+    const completedEntry = screen.getByText('bash').closest('details') as HTMLDetailsElement
     expect(completedEntry.getAttribute('data-status')).toBe('completed')
     expect(within(completedEntry).getByText('approved')).toBeTruthy()
     expect(within(completedEntry).getByText('1.3s')).toBeTruthy()
     expect(within(completedEntry).getByText('clean tree')).toBeTruthy()
 
-    const failedEntry = screen.getByText('sandbox.write').closest('details') as HTMLDetailsElement
+    const failedEntry = screen.getByText('write').closest('details') as HTMLDetailsElement
     expect(failedEntry.getAttribute('data-status')).toBe('failed')
     expect(failedEntry.className).toContain('destructive')
     expect(completedEntry.className).not.toContain('destructive')
@@ -551,7 +551,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     expect(within(failedEntry).getAllByText('write denied').length).toBeGreaterThan(0)
     expect(within(failedEntry).getByText(/"apiKey": "\[REDACTED\]"/)).toBeTruthy()
 
-    const orphanEntry = screen.getByText('sandbox.read').closest('details') as HTMLDetailsElement
+    const orphanEntry = screen.getByText('read').closest('details') as HTMLDetailsElement
     expect(
       within(orphanEntry).getByText('Result without a recorded tool call. Showing the result data that was received.'),
     ).toBeTruthy()

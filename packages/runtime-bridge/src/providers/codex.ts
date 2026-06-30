@@ -57,10 +57,10 @@ function itemId(item: Record<string, unknown>) {
 function codexToolShape(item: Record<string, unknown>): { toolName: string; args: Record<string, unknown> } | null {
   switch (item.type) {
     case 'command_execution':
-      return { toolName: 'sandbox.exec', args: { command: item.command } }
+      return { toolName: 'bash', args: { command: item.command } }
     case 'file_change':
       return {
-        toolName: 'workspace.edit',
+        toolName: 'edit',
         args: {
           changes: item.changes,
           files: arrayValue(item.changes)
@@ -72,7 +72,7 @@ function codexToolShape(item: Record<string, unknown>): { toolName: string; args
     case 'mcp_tool_call':
       return { toolName: typeof item.name === 'string' ? item.name : 'mcp_tool', args: objectValue(item.arguments) }
     case 'web_search':
-      return { toolName: 'web.search', args: { query: item.query } }
+      return { toolName: 'web_search', args: { query: item.query } }
     default:
       return null
   }

@@ -40,7 +40,7 @@ import {
 const EMPTY_LIST: never[] = []
 const STEP_DESCRIPTIONS: Record<BuilderStep, string> = {
   start: 'Describe the agent goal or pick a template. The builder drafts a configuration you can edit.',
-  core: 'Name the agent and set the instructions, provider, and model it runs with.',
+  core: 'Name the agent and set the system prompt, provider, and model it runs with.',
   tools: 'Decide which runtime tools and MCP connectors the agent may use.',
   sandbox: 'Decide whether sessions may execute inside Cloudflare Sandbox and which skills they carry.',
   roles: 'Optionally describe the agent role, capabilities, handoff targets, and memory policy.',

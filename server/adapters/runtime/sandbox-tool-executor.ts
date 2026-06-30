@@ -11,7 +11,7 @@ export type { ToolExecutionInput, ToolExecutionResult, ToolExecutor }
 function commandFromInput(input: Record<string, unknown>) {
   const command = input.command
   if (typeof command !== 'string' || !command.trim()) {
-    throw new Error('sandbox.exec requires a non-empty command')
+    throw new Error('bash requires a non-empty command')
   }
   return command
 }
@@ -37,7 +37,7 @@ function filePathFromInput(input: Record<string, unknown>) {
 function textFromInput(input: Record<string, unknown>) {
   const content = input.content
   if (typeof content !== 'string') {
-    throw new Error('sandbox.write requires string content')
+    throw new Error('write requires string content')
   }
   return content
 }
@@ -45,9 +45,89 @@ function textFromInput(input: Record<string, unknown>) {
 function urlFromInput(input: Record<string, unknown>) {
   const url = input.url
   if (typeof url !== 'string' || !/^https?:\/\//.test(url)) {
-    throw new Error('sandbox.fetch requires an http(s) url')
+    throw new Error('fetch requires an http(s) url')
   }
   return url
+}
+
+function optionalPositiveInteger(value: unknown, field: string) {
+  if (value === undefined) {
+    return undefined
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative integer`)
+  }
+  return value
+}
+
+function timeoutFromInput(input: Record<string, unknown>, fallbackMs: number) {
+  if (input.timeout === undefined) {
+    return fallbackMs
+  }
+  if (typeof input.timeout !== 'number' || !Number.isFinite(input.timeout) || input.timeout <= 0) {
+    throw new Error('bash timeout must be a positive number of milliseconds')
+  }
+  return Math.min(input.timeout, fallbackMs)
+}
+
+function patternFromInput(input: Record<string, unknown>) {
+  const pattern = input.pattern
+  if (typeof pattern !== 'string' || !pattern.trim()) {
+    throw new Error('search tools require a non-empty pattern')
+  }
+  return pattern
+}
+
+function queryFromInput(input: Record<string, unknown>) {
+  const query = input.query
+  if (typeof query !== 'string' || !query.trim()) {
+    throw new Error('web_search requires a non-empty query')
+  }
+  return query.trim()
+}
+
+function limitFromInput(input: Record<string, unknown>, fallback: number) {
+  return optionalPositiveInteger(input.limit, 'limit') ?? fallback
+}
+
+function lineWindow(content: string, input: Record<string, unknown>) {
+  const offset = optionalPositiveInteger(input.offset, 'offset') ?? 0
+  const limit = optionalPositiveInteger(input.limit, 'limit')
+  if (offset === 0 && limit === undefined) {
+    return content
+  }
+  const lines = content.split(/\r?\n/)
+  return lines.slice(offset, limit === undefined ? undefined : offset + limit).join('\n')
+}
+
+function editsFromInput(input: Record<string, unknown>) {
+  if (!Array.isArray(input.edits) || input.edits.length === 0) {
+    throw new Error('edit requires at least one edit')
+  }
+  return input.edits.map((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error('edit entries must be objects')
+    }
+    const edit = entry as Record<string, unknown>
+    if (typeof edit.oldText !== 'string' || !edit.oldText) {
+      throw new Error('edit oldText must be a non-empty string')
+    }
+    if (typeof edit.newText !== 'string') {
+      throw new Error('edit newText must be a string')
+    }
+    return { oldText: edit.oldText, newText: edit.newText }
+  })
+}
+
+function applyEdits(content: string, input: Record<string, unknown>) {
+  let next = content
+  for (const edit of editsFromInput(input)) {
+    if (!next.includes(edit.oldText)) {
+      throw new Error('edit oldText was not found')
+    }
+    next = next.replace(edit.oldText, edit.newText)
+  }
+  return next
 }
 
 function sandboxExecOutput(value: unknown) {
@@ -60,6 +140,19 @@ function sandboxExecOutput(value: unknown) {
     stderr: typeof record.stderr === 'string' ? record.stderr : '',
     exitCode: typeof record.exitCode === 'number' ? record.exitCode : 0,
   }
+}
+
+function sandboxText(value: unknown) {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (value instanceof ArrayBuffer) {
+    return new TextDecoder().decode(value)
+  }
+  if (value instanceof Uint8Array) {
+    return new TextDecoder().decode(value)
+  }
+  return String(value ?? '')
 }
 
 async function getSandboxBinding() {
@@ -75,6 +168,43 @@ const SANDBOX_FETCH_TIMEOUT_MS = 90_000
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`
+}
+
+function shellPathFromInput(input: Record<string, unknown>) {
+  return shellQuote(filePathFromInput({ path: typeof input.path === 'string' && input.path.trim() ? input.path : '.' }))
+}
+
+function grepCommand(input: Record<string, unknown>) {
+  const args = ['rg', '--line-number', '--color', 'never']
+  if (input.ignoreCase === true) args.push('--ignore-case')
+  if (input.literal === true) args.push('--fixed-strings')
+  if (typeof input.glob === 'string' && input.glob.trim()) args.push('--glob', shellQuote(input.glob))
+  if (input.context !== undefined) args.push('--context', String(optionalPositiveInteger(input.context, 'context')))
+  args.push('--max-count', String(limitFromInput(input, 200)))
+  args.push(shellQuote(patternFromInput(input)), shellPathFromInput(input))
+  return args.join(' ')
+}
+
+function findCommand(input: Record<string, unknown>) {
+  const limit = limitFromInput(input, 200)
+  return `find ${shellPathFromInput(input)} -type f -name ${shellQuote(`*${patternFromInput(input)}*`)} -print | head -n ${limit}`
+}
+
+function lsCommand(input: Record<string, unknown>) {
+  const limit = limitFromInput(input, 200)
+  return `find ${shellPathFromInput(input)} -maxdepth 1 -mindepth 1 -print | sort | head -n ${limit}`
+}
+
+function webSearchCommand(input: Record<string, unknown>) {
+  const query = new URLSearchParams({ q: queryFromInput(input) }).toString()
+  const limit = Math.min(limitFromInput(input, 20), 50)
+  const url = `https://lite.duckduckgo.com/lite/?${query}`
+  return [
+    `curl -fsSL --max-time 30 ${shellQuote(url)}`,
+    "sed -E 's/<[^>]*>/ /g; s/&amp;/\\&/g; s/&quot;/\"/g; s/&#39;/'\"'\"'/g'",
+    "awk '{$1=$1; if (length($0) > 0) print}'",
+    `head -n ${limit * 4}`,
+  ].join(' | ')
 }
 
 export class CloudflareSandboxToolExecutor implements ToolExecutor {
@@ -122,29 +252,69 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
     // not enabled". A cancelled turn is instead handled by the pre-exec abort
     // check (no new tool calls start) plus stop() → sandbox.destroy(), which
     // tears down any in-flight command. The per-exec timeout bounds hangs.
-    if (input.toolName === 'sandbox.exec') {
+    if (input.toolName === 'bash') {
       // Bounded: an unbounded hang (network stall, interactive prompt) would
       // otherwise consume the whole turn budget and strand the session.
       return sandboxExecOutput(
         await sandbox.exec(commandFromInput(input.input), {
           cwd: input.cwd ?? '/workspace',
+          timeout: timeoutFromInput(input.input, SANDBOX_EXEC_TIMEOUT_MS),
+        }),
+      )
+    }
+    if (input.toolName === 'read') {
+      const content = sandboxText(await sandbox.readFile(filePathFromInput(input.input), { encoding: 'utf-8' }))
+      return { content: lineWindow(content, input.input) }
+    }
+    if (input.toolName === 'write') {
+      await sandbox.writeFile(filePathFromInput(input.input), textFromInput(input.input), { encoding: 'utf-8' })
+      return { ok: true }
+    }
+    if (input.toolName === 'edit') {
+      const path = filePathFromInput(input.input)
+      const original = sandboxText(await sandbox.readFile(path, { encoding: 'utf-8' }))
+      const content = applyEdits(original, input.input)
+      await sandbox.writeFile(path, content, { encoding: 'utf-8' })
+      return { ok: true, path }
+    }
+    if (input.toolName === 'grep') {
+      return sandboxExecOutput(
+        await sandbox.exec(grepCommand(input.input), {
+          cwd: input.cwd ?? '/workspace',
           timeout: SANDBOX_EXEC_TIMEOUT_MS,
         }),
       )
     }
-    if (input.toolName === 'sandbox.read') {
-      return { content: await sandbox.readFile(filePathFromInput(input.input), { encoding: 'utf-8' }) }
+    if (input.toolName === 'find') {
+      return sandboxExecOutput(
+        await sandbox.exec(findCommand(input.input), {
+          cwd: input.cwd ?? '/workspace',
+          timeout: SANDBOX_EXEC_TIMEOUT_MS,
+        }),
+      )
     }
-    if (input.toolName === 'sandbox.write') {
-      await sandbox.writeFile(filePathFromInput(input.input), textFromInput(input.input), { encoding: 'utf-8' })
-      return { ok: true }
+    if (input.toolName === 'ls') {
+      return sandboxExecOutput(
+        await sandbox.exec(lsCommand(input.input), {
+          cwd: input.cwd ?? '/workspace',
+          timeout: SANDBOX_EXEC_TIMEOUT_MS,
+        }),
+      )
     }
-    if (input.toolName === 'sandbox.fetch') {
+    if (input.toolName === 'fetch') {
       // Outbound network access happens from inside the sandbox so it is
       // subject to the sandbox network namespace, after the policy gate has
       // already approved the host.
       return sandboxExecOutput(
         await sandbox.exec(`curl -fsS --max-time 60 ${shellQuote(urlFromInput(input.input))}`, {
+          cwd: input.cwd ?? '/workspace',
+          timeout: SANDBOX_FETCH_TIMEOUT_MS,
+        }),
+      )
+    }
+    if (input.toolName === 'web_search') {
+      return sandboxExecOutput(
+        await sandbox.exec(webSearchCommand(input.input), {
           cwd: input.cwd ?? '/workspace',
           timeout: SANDBOX_FETCH_TIMEOUT_MS,
         }),
@@ -185,10 +355,15 @@ export class TestToolExecutor implements ToolExecutor {
       throw new RuntimeTurnCancelledError()
     }
     if (
-      input.toolName !== 'sandbox.exec' &&
-      input.toolName !== 'sandbox.read' &&
-      input.toolName !== 'sandbox.write' &&
-      input.toolName !== 'sandbox.fetch'
+      input.toolName !== 'bash' &&
+      input.toolName !== 'read' &&
+      input.toolName !== 'write' &&
+      input.toolName !== 'edit' &&
+      input.toolName !== 'grep' &&
+      input.toolName !== 'find' &&
+      input.toolName !== 'ls' &&
+      input.toolName !== 'fetch' &&
+      input.toolName !== 'web_search'
     ) {
       throw new Error(`Unsupported sandbox tool: ${input.toolName}`)
     }
@@ -224,10 +399,10 @@ export class TestToolExecutor implements ToolExecutor {
   // are readable back per sandbox, and fetches resolve without leaving the
   // test process.
   private simulate(input: ToolExecutionInput): Record<string, unknown> {
-    if (input.toolName === 'sandbox.exec') {
+    if (input.toolName === 'bash') {
       return typeof input.input.command === 'string' ? simulatedExecOutput(input.input.command) : {}
     }
-    if (input.toolName === 'sandbox.write') {
+    if (input.toolName === 'write') {
       if (typeof input.input.path !== 'string') {
         return {}
       }
@@ -236,7 +411,7 @@ export class TestToolExecutor implements ToolExecutor {
       simulatedSandboxFs(input.sandboxId).set(path, content)
       return { ok: true, path, bytes: content.length }
     }
-    if (input.toolName === 'sandbox.read') {
+    if (input.toolName === 'read') {
       if (typeof input.input.path !== 'string') {
         return {}
       }
@@ -245,7 +420,67 @@ export class TestToolExecutor implements ToolExecutor {
       if (content === undefined) {
         throw new Error(`Sandbox file not found: ${path}`)
       }
-      return { content, path }
+      return { content: lineWindow(content, input.input), path }
+    }
+    if (input.toolName === 'edit') {
+      if (typeof input.input.path !== 'string') {
+        return {}
+      }
+      const path = filePathFromInput(input.input)
+      const content = simulatedSandboxFs(input.sandboxId).get(path)
+      if (content === undefined) {
+        throw new Error(`Sandbox file not found: ${path}`)
+      }
+      const next = applyEdits(content, input.input)
+      simulatedSandboxFs(input.sandboxId).set(path, next)
+      return { ok: true, path }
+    }
+    if (input.toolName === 'grep') {
+      const pattern = patternFromInput(input.input)
+      const limit = limitFromInput(input.input, 200)
+      const literal = input.input.literal === true
+      const ignoreCase = input.input.ignoreCase === true
+      const matches: string[] = []
+      for (const [path, content] of simulatedSandboxFs(input.sandboxId)) {
+        const lines = content.split(/\r?\n/)
+        for (const [index, line] of lines.entries()) {
+          const haystack = ignoreCase ? line.toLowerCase() : line
+          const needle = ignoreCase ? pattern.toLowerCase() : pattern
+          const matched = literal ? haystack.includes(needle) : new RegExp(pattern, ignoreCase ? 'i' : '').test(line)
+          if (matched) matches.push(`${path}:${index + 1}:${line}`)
+          if (matches.length >= limit) break
+        }
+        if (matches.length >= limit) break
+      }
+      return { stdout: matches.join('\n'), stderr: '', exitCode: matches.length > 0 ? 0 : 1 }
+    }
+    if (input.toolName === 'find') {
+      const pattern = patternFromInput(input.input)
+      const limit = limitFromInput(input.input, 200)
+      const paths = [...simulatedSandboxFs(input.sandboxId).keys()]
+        .filter((path) => path.includes(pattern))
+        .slice(0, limit)
+      return { stdout: paths.join('\n'), stderr: '', exitCode: 0 }
+    }
+    if (input.toolName === 'ls') {
+      const root = filePathFromInput({ path: typeof input.input.path === 'string' ? input.input.path : '.' })
+      const prefix = root.endsWith('/') ? root : `${root}/`
+      const limit = limitFromInput(input.input, 200)
+      const entries = [...simulatedSandboxFs(input.sandboxId).keys()]
+        .filter((path) => path.startsWith(prefix))
+        .map((path) =>
+          path.slice(0, path.indexOf('/', prefix.length) === -1 ? undefined : path.indexOf('/', prefix.length)),
+        )
+        .filter((path, index, all) => all.indexOf(path) === index)
+        .slice(0, limit)
+      return { stdout: entries.join('\n'), stderr: '', exitCode: 0 }
+    }
+    if (input.toolName === 'web_search') {
+      return {
+        stdout: `simulated web search: ${queryFromInput(input.input)}`,
+        stderr: '',
+        exitCode: 0,
+      }
     }
     if (typeof input.input.url !== 'string' && typeof input.input.host !== 'string') {
       return {}

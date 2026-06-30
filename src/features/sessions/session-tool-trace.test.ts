@@ -27,7 +27,7 @@ function toolStart(toolCallId: string, overrides: Partial<SessionEvent> = {}) {
   return buildEvent({
     type: 'tool_execution_start',
     correlationId: `tool:${toolCallId}`,
-    payload: { toolCallId, toolName: 'sandbox.exec', args: { command: 'git status' } },
+    payload: { toolCallId, toolName: 'bash', args: { command: 'git status' } },
     ...overrides,
   })
 }
@@ -38,7 +38,7 @@ function toolEnd(toolCallId: string, overrides: Partial<SessionEvent> = {}) {
     correlationId: `tool:${toolCallId}`,
     payload: {
       toolCallId,
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       result: { content: [{ type: 'text', text: 'clean tree' }], details: {} },
       isError: false,
     },
@@ -56,7 +56,7 @@ describe('buildSessionToolTrace', () => {
     expect(trace).toHaveLength(1)
     expect(trace[0]).toMatchObject({
       toolCallId: 'call_1',
-      name: 'sandbox.exec',
+      name: 'bash',
       status: 'completed',
       approval: 'approved',
       orphanedResult: false,
@@ -73,7 +73,7 @@ describe('buildSessionToolTrace', () => {
       toolStart('call_1', { createdAt: '2026-05-23T00:00:00.000Z' }),
       toolEnd('call_1', {
         createdAt: '2026-05-23T00:00:09.000Z',
-        payload: { toolCallId: 'call_1', toolName: 'sandbox.exec', result: {}, isError: false, durationMs: 1250 },
+        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: false, durationMs: 1250 },
       }),
     ])
 
@@ -88,7 +88,7 @@ describe('buildSessionToolTrace', () => {
       toolEnd('call_1', {
         payload: {
           toolCallId: 'call_1',
-          toolName: 'sandbox.exec',
+          toolName: 'bash',
           result: { content: [{ type: 'text', text: 'Sandbox command is blocked by policy.' }] },
           isError: true,
         },
@@ -108,7 +108,7 @@ describe('buildSessionToolTrace', () => {
       toolEnd('call_1', {
         payload: {
           toolCallId: 'call_1',
-          toolName: 'sandbox.exec',
+          toolName: 'bash',
           result: { content: [{ type: 'text', text: longError }] },
           isError: true,
         },
@@ -127,7 +127,7 @@ describe('buildSessionToolTrace', () => {
     expect(trace[0]).toMatchObject({
       orphanedResult: true,
       status: 'completed',
-      name: 'sandbox.exec',
+      name: 'bash',
       input: undefined,
       startedAt: null,
       durationMs: null,
@@ -142,7 +142,7 @@ describe('buildSessionToolTrace', () => {
         payload: { allowed: false, category: 'sandbox_command', command: 'git status' },
       }),
       toolEnd('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'sandbox.exec', result: {}, isError: true },
+        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
       }),
     ])
 
@@ -157,7 +157,7 @@ describe('buildSessionToolTrace', () => {
         payload: { allowed: false, category: 'approval', command: 'git status' },
       }),
       toolEnd('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'sandbox.exec', result: {}, isError: true },
+        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
       }),
     ])
 
@@ -186,7 +186,7 @@ describe('buildSessionToolTrace', () => {
     const trace = buildSessionToolTrace([
       buildEvent({ type: 'message_end', payload: { message: { role: 'assistant', content: 'hi' } } }),
       toolStart('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'sandbox.exec', args: { command: 'deploy', apiKey: '[REDACTED]' } },
+        payload: { toolCallId: 'call_1', toolName: 'bash', args: { command: 'deploy', apiKey: '[REDACTED]' } },
       }),
       toolEnd('call_1'),
       buildEvent({ type: 'tool_execution_start', visibility: 'audit', payload: { toolCallId: 'call_hidden' } }),
@@ -265,7 +265,7 @@ describe('buildSessionToolTrace — approval edge cases', () => {
         payload: { allowed: false, category: 'sandbox_command' }, // no command field
       }),
       toolEnd('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'sandbox.exec', result: {}, isError: true },
+        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
       }),
     ])
 
@@ -277,7 +277,7 @@ describe('buildSessionToolTrace — approval edge cases', () => {
     const startNoCommand = buildEvent({
       type: 'tool_execution_start',
       correlationId: 'tool:call_nocmd',
-      payload: { toolCallId: 'call_nocmd', toolName: 'sandbox.exec', args: { path: '/tmp' } },
+      payload: { toolCallId: 'call_nocmd', toolName: 'bash', args: { path: '/tmp' } },
     })
     const trace = buildSessionToolTrace([
       startNoCommand,
@@ -286,7 +286,7 @@ describe('buildSessionToolTrace — approval edge cases', () => {
         payload: { allowed: false, category: 'sandbox_command' },
       }),
       toolEnd('call_nocmd', {
-        payload: { toolCallId: 'call_nocmd', toolName: 'sandbox.exec', result: {}, isError: true },
+        payload: { toolCallId: 'call_nocmd', toolName: 'bash', result: {}, isError: true },
       }),
     ])
 
@@ -298,7 +298,7 @@ describe('buildSessionToolTrace — approval edge cases', () => {
       toolEnd('call_orphan_err', {
         payload: {
           toolCallId: 'call_orphan_err',
-          toolName: 'sandbox.exec',
+          toolName: 'bash',
           result: { content: [{ type: 'text', text: 'Permission denied' }] },
           isError: true,
         },

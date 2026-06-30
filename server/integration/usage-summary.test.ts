@@ -86,7 +86,7 @@ describe('[CF] v1 usage summary', () => {
       usageRow(project, {
         providerId: null,
         providerType: 'sandbox',
-        modelId: 'sandbox.exec',
+        modelId: 'bash',
         agentId: 'agent_beta',
         usageType: 'tool',
         totalTokens: 0,

@@ -287,7 +287,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
           role: 'assistant',
           content: [
             { type: 'text', text: 'thinking...' },
-            { type: 'toolCall', id: 'call_1', name: 'sandbox.exec', arguments: { command: 'ls' } },
+            { type: 'toolCall', id: 'call_1', name: 'bash', arguments: { command: 'ls' } },
           ],
           api: 'openai-completions',
           provider: 'workers-ai',
@@ -318,7 +318,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
       {
         id: 'call_1',
         type: 'function',
-        function: { name: 'sandbox.exec', arguments: JSON.stringify({ command: 'ls' }) },
+        function: { name: 'bash', arguments: JSON.stringify({ command: 'ls' }) },
       },
     ])
   })
@@ -327,14 +327,14 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
     const aiRun = vi.fn().mockResolvedValue(successResponse())
     const client = workersAiModelClient(makeEnv(aiRun))
     const withToolResult: Context = {
-      messages: [toolResultMsg('call_1', 'sandbox.exec', 'stdout: ok'), userMsg('done')],
+      messages: [toolResultMsg('call_1', 'bash', 'stdout: ok'), userMsg('done')],
     }
 
     await client.complete(model, withToolResult)
 
     const callArgs = aiRun.mock.calls[0] as [string, { messages: Array<Record<string, unknown>> }]
     const toolMsg = callArgs[1].messages.find((m) => m.role === 'tool')
-    expect(toolMsg).toMatchObject({ role: 'tool', tool_call_id: 'call_1', name: 'sandbox.exec', content: 'stdout: ok' })
+    expect(toolMsg).toMatchObject({ role: 'tool', tool_call_id: 'call_1', name: 'bash', content: 'stdout: ok' })
   })
 
   it('serializes a tool-result message whose content is an array of text blocks', async () => {
@@ -345,7 +345,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
         {
           role: 'toolResult',
           toolCallId: 'call_2',
-          toolName: 'sandbox.read',
+          toolName: 'read',
           content: [{ type: 'text', text: 'file content here' }],
           isError: false,
           timestamp: 0,
@@ -368,7 +368,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
       messages: [userMsg('run something')],
       tools: [
         {
-          name: 'sandbox.exec',
+          name: 'bash',
           description: 'Run a shell command',
           parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
         },
@@ -384,7 +384,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
           {
             type: 'function',
             function: {
-              name: 'sandbox.exec',
+              name: 'bash',
               description: 'Run a shell command',
               parameters: expect.objectContaining({ type: 'object' }),
             },
@@ -416,7 +416,7 @@ describe('workersAiModelClient — response mapping (providerAssistantMessage)',
               {
                 id: 'call_abc',
                 type: 'function',
-                function: { name: 'sandbox.exec', arguments: JSON.stringify({ command: 'ls' }) },
+                function: { name: 'bash', arguments: JSON.stringify({ command: 'ls' }) },
               },
             ],
           },
@@ -430,7 +430,7 @@ describe('workersAiModelClient — response mapping (providerAssistantMessage)',
 
     const toolCalls = result.content.filter((b) => b.type === 'toolCall')
     expect(toolCalls).toHaveLength(1)
-    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', id: 'call_abc', name: 'sandbox.exec' })
+    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', id: 'call_abc', name: 'bash' })
     expect(result.stopReason).toBe('toolUse')
   })
 
@@ -500,7 +500,7 @@ describe('workersAiModelClient — response mapping (providerAssistantMessage)',
               {
                 id: 'call_obj',
                 type: 'function',
-                function: { name: 'sandbox.exec', arguments: { command: 'pwd' } },
+                function: { name: 'bash', arguments: { command: 'pwd' } },
               },
             ],
           },
@@ -512,7 +512,7 @@ describe('workersAiModelClient — response mapping (providerAssistantMessage)',
     const result = await client.complete(model, context)
 
     const toolCall = result.content.find((b) => b.type === 'toolCall')
-    expect(toolCall).toMatchObject({ type: 'toolCall', name: 'sandbox.exec' })
+    expect(toolCall).toMatchObject({ type: 'toolCall', name: 'bash' })
     expect((toolCall as { arguments: Record<string, unknown> }).arguments).toEqual({ command: 'pwd' })
   })
 
@@ -567,7 +567,7 @@ describe('workersAiModelClient — tool_call edge cases', () => {
           message: {
             role: 'assistant',
             content: '',
-            tool_calls: [{ id: 'call_y', name: 'sandbox.exec', arguments: { command: 'pwd' } }],
+            tool_calls: [{ id: 'call_y', name: 'bash', arguments: { command: 'pwd' } }],
           },
         },
       ],
@@ -578,7 +578,7 @@ describe('workersAiModelClient — tool_call edge cases', () => {
     const result = await client.complete(model, context)
 
     const toolCall = result.content.find((b) => b.type === 'toolCall')
-    expect(toolCall).toMatchObject({ name: 'sandbox.exec' })
+    expect(toolCall).toMatchObject({ name: 'bash' })
   })
 
   it('generates a fallback id when tool_call has no string id', async () => {
@@ -588,7 +588,7 @@ describe('workersAiModelClient — tool_call edge cases', () => {
           message: {
             role: 'assistant',
             content: '',
-            tool_calls: [{ type: 'function', function: { name: 'sandbox.exec', arguments: '{}' } }],
+            tool_calls: [{ type: 'function', function: { name: 'bash', arguments: '{}' } }],
           },
         },
       ],
@@ -610,7 +610,7 @@ describe('workersAiModelClient — tool_call edge cases', () => {
           message: {
             role: 'assistant',
             content: '',
-            tool_calls: [{ id: 'call_x', type: 'function', function: { name: 'sandbox.exec', arguments: null } }],
+            tool_calls: [{ id: 'call_x', type: 'function', function: { name: 'bash', arguments: null } }],
           },
         },
       ],
@@ -635,7 +635,7 @@ describe('workersAiModelClient — textContent edge cases', () => {
         {
           role: 'toolResult',
           toolCallId: 'c1',
-          toolName: 'sandbox.exec',
+          toolName: 'bash',
           content: null as unknown as [],
           isError: false,
           timestamp: 0,
@@ -658,7 +658,7 @@ describe('workersAiModelClient — textContent edge cases', () => {
         {
           role: 'toolResult',
           toolCallId: 'c1',
-          toolName: 'sandbox.exec',
+          toolName: 'bash',
           content: [{ type: 'image', data: 'abc' }] as unknown as [],
           isError: false,
           timestamp: 0,
@@ -710,7 +710,7 @@ describe('workersAiModelClient — test mode bypass', () => {
 
     const toolCalls = result.content.filter((b) => b.type === 'toolCall')
     expect(toolCalls).toHaveLength(1)
-    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'sandbox.write' })
+    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'write' })
     expect(result.stopReason).toBe('toolUse')
   })
 
@@ -720,7 +720,7 @@ describe('workersAiModelClient — test mode bypass', () => {
     const result = await client.complete(model, ctx('read the file /etc/config'))
 
     const toolCalls = result.content.filter((b) => b.type === 'toolCall')
-    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'sandbox.read' })
+    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'read' })
   })
 
   it('returns a fetch tool-call in test mode for a fetch/outbound URL prompt', async () => {
@@ -729,7 +729,20 @@ describe('workersAiModelClient — test mode bypass', () => {
     const result = await client.complete(model, ctx('fetch https://example.com/data'))
 
     const toolCalls = result.content.filter((b) => b.type === 'toolCall')
-    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'sandbox.fetch' })
+    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'fetch' })
+  })
+
+  it('returns a web_search tool-call in test mode for a search prompt', async () => {
+    const client = workersAiModelClient(testEnv())
+
+    const result = await client.complete(model, ctx('search managed agents architecture'))
+
+    const toolCalls = result.content.filter((b) => b.type === 'toolCall')
+    expect(toolCalls[0]).toMatchObject({
+      type: 'toolCall',
+      name: 'web_search',
+      arguments: { query: 'managed agents architecture' },
+    })
   })
 
   it('returns an exec tool-call in test mode for a "run the sandbox command" prompt', async () => {
@@ -738,7 +751,7 @@ describe('workersAiModelClient — test mode bypass', () => {
     const result = await client.complete(model, ctx('run the sandbox command "echo hello"'))
 
     const toolCalls = result.content.filter((b) => b.type === 'toolCall')
-    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'sandbox.exec', arguments: { command: 'echo hello' } })
+    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'bash', arguments: { command: 'echo hello' } })
   })
 
   it('returns a git-status tool-call in test mode for an inspect/status prompt', async () => {
@@ -747,13 +760,13 @@ describe('workersAiModelClient — test mode bypass', () => {
     const result = await client.complete(model, ctx('inspect repository status'))
 
     const toolCalls = result.content.filter((b) => b.type === 'toolCall')
-    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'sandbox.exec', arguments: { command: 'git status' } })
+    expect(toolCalls[0]).toMatchObject({ type: 'toolCall', name: 'bash', arguments: { command: 'git status' } })
   })
 
   it('echoes tool result text in test mode when the last message is a toolResult', async () => {
     const client = workersAiModelClient(testEnv())
     const withResult: Context = {
-      messages: [userMsg('inspect'), toolResultMsg('c1', 'sandbox.exec', 'branch main')],
+      messages: [userMsg('inspect'), toolResultMsg('c1', 'bash', 'branch main')],
     }
 
     const result = await client.complete(model, withResult)
@@ -768,7 +781,7 @@ describe('workersAiModelClient — test mode bypass', () => {
   it('returns "ok" when the last toolResult message has empty content', async () => {
     const client = workersAiModelClient(testEnv())
     const withEmptyResult: Context = {
-      messages: [userMsg('inspect'), toolResultMsg('c1', 'sandbox.exec', '')],
+      messages: [userMsg('inspect'), toolResultMsg('c1', 'bash', '')],
     }
 
     const result = await client.complete(model, withEmptyResult)

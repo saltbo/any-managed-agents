@@ -28,7 +28,7 @@ class RunnerRuntimeToolCall:
     """ 
         Attributes:
             id (str | Unset):  Example: tool_1.
-            name (str | Unset):  Example: sandbox.exec.
+            name (str | Unset):  Example: bash.
             input_ (RunnerRuntimeToolCallInput | Unset):
             arguments (RunnerRuntimeToolCallArguments | Unset):
      """

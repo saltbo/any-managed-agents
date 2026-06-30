@@ -1,11 +1,21 @@
+import { AMA_SANDBOX_TOOL_NAMES } from '@ama/runtime-contracts/agent-tools'
 import { useQuery } from '@tanstack/react-query'
-import { Bot, Boxes, MessageSquare, Server } from 'lucide-react'
+import { Bot, Boxes, MessageSquare, Plus, Server, Trash2 } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   type Agent,
@@ -17,8 +27,24 @@ import {
   type VolumeMount,
 } from '@/lib/amarpc'
 import { queryKeys } from '@/lib/query-keys'
-import { isArchived } from './format'
-import type { AgentFormState, EnvironmentFormState, SessionFormState, VaultFormState } from './types'
+import { isArchived, parseTools } from './format'
+import {
+  type AgentFormState,
+  ENVIRONMENT_PACKAGE_MANAGERS,
+  type EnvironmentFormState,
+  type EnvironmentPackageManager,
+  type SessionFormState,
+  type VaultFormState,
+} from './types'
+
+const PACKAGE_MANAGER_LABELS: Record<(typeof ENVIRONMENT_PACKAGE_MANAGERS)[number], string> = {
+  apt: 'APT',
+  cargo: 'Cargo',
+  gem: 'Gem',
+  go: 'Go',
+  npm: 'NPM',
+  pip: 'Pip',
+}
 
 export function EnvironmentForm({
   value,
@@ -88,6 +114,22 @@ export function EnvironmentForm({
             Limited networking allows only the hosts listed below. Closed networking blocks outbound requests.
           </FieldDescription>
         </Field>
+        <Field orientation="horizontal" className="justify-between">
+          <FieldLabel htmlFor="field-allow-mcp">Allow MCP servers</FieldLabel>
+          <Switch
+            id="field-allow-mcp"
+            checked={value.allowMcpServers}
+            onCheckedChange={(checked) => setValue({ ...value, allowMcpServers: checked === true })}
+          />
+        </Field>
+        <Field orientation="horizontal" className="justify-between">
+          <FieldLabel htmlFor="field-allow-package-managers">Allow package managers</FieldLabel>
+          <Switch
+            id="field-allow-package-managers"
+            checked={value.allowPackageManagers}
+            onCheckedChange={(checked) => setValue({ ...value, allowPackageManagers: checked === true })}
+          />
+        </Field>
         {value.networkingType === 'limited' ? (
           <TextAreaField
             label="Allowed hosts"
@@ -96,28 +138,7 @@ export function EnvironmentForm({
             onChange={(allowedHosts) => setValue({ ...value, allowedHosts })}
           />
         ) : null}
-        <Field className="flex flex-row items-center gap-3">
-          <Checkbox
-            id="field-allow-mcp"
-            checked={value.allowMcpServers}
-            onCheckedChange={(checked) => setValue({ ...value, allowMcpServers: checked === true })}
-          />
-          <FieldLabel htmlFor="field-allow-mcp">Allow MCP servers</FieldLabel>
-        </Field>
-        <Field className="flex flex-row items-center gap-3">
-          <Checkbox
-            id="field-allow-package-managers"
-            checked={value.allowPackageManagers}
-            onCheckedChange={(checked) => setValue({ ...value, allowPackageManagers: checked === true })}
-          />
-          <FieldLabel htmlFor="field-allow-package-managers">Allow package managers</FieldLabel>
-        </Field>
-        <TextAreaField
-          label="Packages"
-          description="One package per line. Use name@version when a version is required."
-          value={value.packages}
-          onChange={(packages) => setValue({ ...value, packages })}
-        />
+        <PackageManagerFields value={value} setValue={setValue} />
         <TextAreaField
           label="Variables"
           description="One variable per line using KEY=description. Secret values are stored separately."
@@ -130,6 +151,85 @@ export function EnvironmentForm({
         Save environment
       </Button>
     </form>
+  )
+}
+
+function PackageManagerFields({
+  value,
+  setValue,
+}: {
+  value: EnvironmentFormState
+  setValue: (value: EnvironmentFormState) => void
+}) {
+  const packages = value.packages
+  const updatePackage = (index: number, patch: Partial<{ manager: EnvironmentPackageManager; name: string }>) => {
+    setValue({
+      ...value,
+      packages: packages.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
+    })
+  }
+  const addPackage = () => {
+    setValue({
+      ...value,
+      packages: [
+        ...packages,
+        { id: `pkg-${Date.now()}-${Math.random().toString(16).slice(2)}`, manager: 'npm', name: '' },
+      ],
+    })
+  }
+  const removePackage = (index: number) => {
+    setValue({ ...value, packages: packages.filter((_, itemIndex) => itemIndex !== index) })
+  }
+
+  return (
+    <FieldSet>
+      <FieldLegend>Packages</FieldLegend>
+      <FieldDescription>
+        Add one package per row. Select the package manager, then enter the package name.
+      </FieldDescription>
+      <div className="flex flex-col gap-3">
+        {packages.map((item, index) => (
+          <div key={item.id} className="grid grid-cols-[7rem_minmax(0,1fr)_2rem] items-start gap-2">
+            <Select
+              value={item.manager}
+              onValueChange={(manager) => updatePackage(index, { manager: manager as EnvironmentPackageManager })}
+            >
+              <SelectTrigger className="w-28" aria-label={`Package ${index + 1} manager`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {ENVIRONMENT_PACKAGE_MANAGERS.map((manager) => (
+                    <SelectItem key={manager} value={manager}>
+                      {PACKAGE_MANAGER_LABELS[manager]}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Input
+              aria-label={`Package ${index + 1} name`}
+              value={item.name}
+              placeholder="name@version"
+              onChange={(event) => updatePackage(index, { name: event.target.value })}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove package ${index + 1}`}
+              onClick={() => removePackage(index)}
+            >
+              <Trash2 data-icon="inline-start" />
+            </Button>
+          </div>
+        ))}
+        <Button type="button" variant="outline" className="w-fit" onClick={addPackage}>
+          <Plus data-icon="inline-start" />
+          Add package
+        </Button>
+      </div>
+    </FieldSet>
   )
 }
 
@@ -154,23 +254,22 @@ export function AgentForm({
           onChange={(description) => setValue({ ...value, description })}
         />
         <TextAreaField
-          label="Instructions"
-          description="Operational instructions the Agent follows for every session."
+          label="System prompt"
+          description="System prompt the agent follows for every session."
           value={value.systemPrompt}
           onChange={(systemPrompt) => setValue({ ...value, systemPrompt })}
         />
         <AgentProviderModelFields value={value} setValue={setValue} />
+        <AllowedToolsField
+          label="Allowed tools"
+          value={value.allowedTools}
+          onChange={(allowedTools) => setValue({ ...value, allowedTools })}
+        />
         <TextAreaField
           label="Skills"
           description="One stable skill reference per line, such as source@skill."
           value={value.skills}
           onChange={(skills) => setValue({ ...value, skills })}
-        />
-        <TextAreaField
-          label="Allowed Pi tools"
-          description="One Pi tool name per line. These names are passed to the runtime policy."
-          value={value.allowedTools}
-          onChange={(allowedTools) => setValue({ ...value, allowedTools })}
         />
         <TextAreaField
           label="MCP connectors"
@@ -184,6 +283,71 @@ export function AgentForm({
         {submitLabel}
       </Button>
     </form>
+  )
+}
+
+export function AllowedToolsField({
+  label,
+  value,
+  onChange,
+  error,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  error?: string | undefined
+}) {
+  const selectId = `field-${label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}`
+  const selected = parseTools(value)
+  const available = AMA_SANDBOX_TOOL_NAMES.filter((tool) => !selected.includes(tool))
+  const addTool = (tool: string) => {
+    if (!tool || selected.includes(tool)) {
+      return
+    }
+    onChange([...selected, tool].join('\n'))
+  }
+  const removeTool = (tool: string) => {
+    onChange(selected.filter((name) => name !== tool).join('\n'))
+  }
+
+  return (
+    <Field data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor={selectId}>{label}</FieldLabel>
+      <Select value="__select_tool" onValueChange={addTool} disabled={available.length === 0}>
+        <SelectTrigger id={selectId}>
+          <SelectValue placeholder="Add tool" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem value="__select_tool" disabled>
+              Add tool
+            </SelectItem>
+            {available.map((tool) => (
+              <SelectItem key={tool} value={tool}>
+                {tool}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      {selected.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {selected.map((tool) => (
+            <span
+              key={tool}
+              className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2 text-sm"
+            >
+              {tool}
+              <Button type="button" variant="ghost" size="icon" className="size-6" onClick={() => removeTool(tool)}>
+                <Trash2 />
+                <span className="sr-only">Remove {tool}</span>
+              </Button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {error ? <FieldError>{error}</FieldError> : null}
+    </Field>
   )
 }
 

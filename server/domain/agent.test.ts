@@ -34,11 +34,11 @@ describe('[spec: agents/tool-contract] normalizeToolAttachments', () => {
   it('preserves provided fields', () => {
     expect(
       normalizeToolAttachments([
-        { name: 'web.search', description: 'Search', inputSchema: { a: 1 }, approvalMode: 'per_call' },
+        { name: 'web_search', description: 'Search', inputSchema: { a: 1 }, approvalMode: 'per_call' },
       ]),
     ).toEqual([
       {
-        name: 'web.search',
+        name: 'web_search',
         description: 'Search',
         inputSchema: { a: 1 },
         approvalMode: 'per_call',
@@ -55,14 +55,14 @@ describe('[spec: agents/tool-contract] governanceBlocksTool', () => {
   })
 
   it('blocks tools outside a non-wildcard allowlist', () => {
-    expect(governanceBlocksTool({ allowedTools: ['web.search'] }, 'repo.read')).toBe(true)
-    expect(governanceBlocksTool({ allowedTools: ['web.search'] }, 'web.search')).toBe(false)
-    expect(governanceBlocksTool({ allowedTools: ['*'] }, 'web.search')).toBe(false)
+    expect(governanceBlocksTool({ allowedTools: ['web_search'] }, 'repo.read')).toBe(true)
+    expect(governanceBlocksTool({ allowedTools: ['web_search'] }, 'web_search')).toBe(false)
+    expect(governanceBlocksTool({ allowedTools: ['*'] }, 'web_search')).toBe(false)
   })
 
   it('blocks when the default effect is deny', () => {
-    expect(governanceBlocksTool({ defaultEffect: 'deny' }, 'web.search')).toBe(true)
-    expect(governanceBlocksTool({}, 'web.search')).toBe(false)
+    expect(governanceBlocksTool({ defaultEffect: 'deny' }, 'web_search')).toBe(true)
+    expect(governanceBlocksTool({}, 'web_search')).toBe(false)
   })
 })
 
@@ -92,7 +92,7 @@ describe('[spec: agents/tool-contract] validateToolAttachments', () => {
   })
 
   it('accepts a clean tool set', () => {
-    expect(validateToolAttachments([tool({ name: 'web.search' }), tool({ name: 'repo.read' })], {})).toBeNull()
+    expect(validateToolAttachments([tool({ name: 'web_search' }), tool({ name: 'repo.read' })], {})).toBeNull()
   })
 })
 

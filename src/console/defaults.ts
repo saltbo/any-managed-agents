@@ -1,4 +1,7 @@
+import { AMA_SANDBOX_TOOL_NAMES } from '@ama/runtime-contracts/agent-tools'
 import type { AgentFormState, EnvironmentFormState, SessionFormState, VaultFormState } from './types'
+
+const DEFAULT_ALLOWED_TOOLS = AMA_SANDBOX_TOOL_NAMES.join('\n')
 
 export const emptyEnvironment: EnvironmentFormState = {
   name: 'Node workspace',
@@ -8,7 +11,10 @@ export const emptyEnvironment: EnvironmentFormState = {
   allowMcpServers: false,
   allowPackageManagers: true,
   allowedHosts: 'registry.npmjs.org',
-  packages: 'tsx@latest\ntypescript@latest',
+  packages: [
+    { id: 'pkg-default-tsx', manager: 'npm', name: 'tsx@latest' },
+    { id: 'pkg-default-typescript', manager: 'npm', name: 'typescript@latest' },
+  ],
   variables: 'NODE_ENV=development',
 }
 
@@ -19,7 +25,7 @@ export const emptyAgent: AgentFormState = {
   provider: 'workers-ai',
   model: '@cf/moonshotai/kimi-k2.6',
   skills: 'ama@coding-agent',
-  allowedTools: 'read\nwrite\nshell',
+  allowedTools: DEFAULT_ALLOWED_TOOLS,
   mcpConnectors: '',
 }
 

@@ -197,7 +197,7 @@ describe('QuickstartSessionStep — agent without sandbox execution', () => {
     tools: [{ name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
   })
 
-  it('shows Add sandbox execution button when agent lacks sandbox.exec', () => {
+  it('shows Add sandbox execution button when agent lacks bash', () => {
     server.use(
       http.post('*/api/v1/sessions', () => new HttpResponse(null, { status: 404 })),
       http.patch('*/api/v1/agents/:agentId', () => new HttpResponse(null, { status: 404 })),
@@ -231,7 +231,7 @@ describe('QuickstartSessionStep — agent without sandbox execution', () => {
 
   it('calls updateAgent when Add sandbox execution is clicked', async () => {
     const updatedAgent = buildAgent({
-      tools: [{ name: 'sandbox.exec', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+      tools: [{ name: 'bash', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
     })
     let patchCalled = false
     server.use(
@@ -257,7 +257,7 @@ describe('QuickstartSessionStep — agent without sandbox execution', () => {
 
 describe('QuickstartSessionStep — agent with sandbox execution enabled', () => {
   const agentWithSandbox = buildAgent({
-    tools: [{ name: 'sandbox.exec', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
+    tools: [{ name: 'bash', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} }],
   })
 
   it('shows Sandbox execution enabled and disables the button', () => {

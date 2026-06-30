@@ -171,24 +171,28 @@ function testPromptToolCall(prompt: string): ToolCall | null {
     return {
       type: 'toolCall',
       id: 'call_write_file',
-      name: 'sandbox.write',
+      name: 'write',
       arguments: { path: write[1], content: write[2].trim() },
     }
   }
   const read = prompt.match(/read the file (\S+)/i)
   if (read?.[1]) {
-    return { type: 'toolCall', id: 'call_read_file', name: 'sandbox.read', arguments: { path: read[1] } }
+    return { type: 'toolCall', id: 'call_read_file', name: 'read', arguments: { path: read[1] } }
   }
   const url = prompt.match(/https?:\/\/[^\s"']+/)
   if (url && /fetch|download|outbound/i.test(prompt)) {
-    return { type: 'toolCall', id: 'call_fetch_url', name: 'sandbox.fetch', arguments: { url: url[0] } }
+    return { type: 'toolCall', id: 'call_fetch_url', name: 'fetch', arguments: { url: url[0] } }
+  }
+  const search = prompt.match(/(?:search|web search|look up)\s+(.+)$/i)
+  if (search?.[1]) {
+    return { type: 'toolCall', id: 'call_web_search', name: 'web_search', arguments: { query: search[1].trim() } }
   }
   const command = prompt.match(/run the sandbox command "([^"]+)"/i)
   if (command?.[1]) {
-    return { type: 'toolCall', id: 'call_sandbox_command', name: 'sandbox.exec', arguments: { command: command[1] } }
+    return { type: 'toolCall', id: 'call_sandbox_command', name: 'bash', arguments: { command: command[1] } }
   }
   if (/status|inspect|whoami|command|sandbox/i.test(prompt)) {
-    return { type: 'toolCall', id: 'call_git_status', name: 'sandbox.exec', arguments: { command: 'git status' } }
+    return { type: 'toolCall', id: 'call_git_status', name: 'bash', arguments: { command: 'git status' } }
   }
   return null
 }

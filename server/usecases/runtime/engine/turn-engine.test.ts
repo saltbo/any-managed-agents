@@ -4,6 +4,7 @@ import { RuntimeTurnCancelledError } from './errors'
 import type {
   ModelClient,
   RuntimeEventSink,
+  ToolExecutionResult,
   ToolExecutor,
   ToolPolicyGate,
   ToolResultResolver,
@@ -31,7 +32,7 @@ describe('AMA runtime turn-engine', () => {
     const { events, stream } = recordingStream()
     const content = [
       { type: 'text', text: 'first' },
-      { type: 'toolCall', id: 'tc_1', name: 'sandbox.exec', arguments: { command: 'ls' } },
+      { type: 'toolCall', id: 'tc_1', name: 'bash', arguments: { command: 'ls' } },
     ] as unknown as AssistantMessage['content']
 
     emitAssistantMessage(stream, assistantMessage(model, content, 'stop', ZERO_USAGE))
@@ -74,13 +75,15 @@ describe('AMA runtime turn-engine', () => {
   it('aborts the run when the external input.signal is already aborted', async () => {
     const sink: RuntimeEventSink = { emit: vi.fn(async () => {}) }
     const executor: ToolExecutor = {
-      execute: vi.fn(async () => ({
-        toolCallId: 'x',
-        toolName: 'sandbox.exec',
-        output: {},
-        error: null,
-        durationMs: 0,
-      })),
+      execute: vi.fn(
+        async (): Promise<ToolExecutionResult> => ({
+          toolCallId: 'x',
+          toolName: 'bash',
+          output: {},
+          error: null,
+          durationMs: 0,
+        }),
+      ),
     }
     const modelClient: ModelClient = { complete: vi.fn(async () => assistantMessage(model, [], 'stop', ZERO_USAGE)) }
     const policy: ToolPolicyGate = { approve: vi.fn(async () => ({ allowed: true })) }

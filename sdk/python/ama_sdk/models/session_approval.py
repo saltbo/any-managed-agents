@@ -31,7 +31,7 @@ class SessionApproval:
             id (str):  Example: approval_abc123.
             session_id (str):  Example: session_abc123.
             tool_call_id (str):  Example: call_git_status.
-            tool_name (str):  Example: sandbox.exec.
+            tool_name (str):  Example: bash.
             input_ (SessionApprovalInput):
             related_event_ids (list[str]):  Example: ['event_abc123'].
             state (SessionApprovalState):  Example: pending.

@@ -1,3 +1,4 @@
+import { isAmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
 import { gitRepositoryMountPath } from '@server/domain/git-repository'
@@ -383,6 +384,9 @@ export async function executeRuntimeToolCalls(
   for (const [index, call] of runtimeToolCalls(values.body).entries()) {
     const toolCallId = typeof call.id === 'string' ? call.id : `tool_${index + 1}`
     const toolName = typeof call.name === 'string' ? call.name : 'tool'
+    if (!isAmaSandboxToolName(toolName)) {
+      throw new Error(`Unsupported sandbox tool: ${toolName}`)
+    }
     const input = call.input ?? {}
     results.push(
       await executor.execute({
@@ -533,7 +537,13 @@ export function createRuntimeExecutionAdapters(
                 sessionId: input.sessionId,
                 sandboxId: input.sandboxId,
                 toolCallId: typeof call.id === 'string' ? call.id : `tool_${index + 1}`,
-                toolName: typeof call.name === 'string' ? call.name : 'tool',
+                toolName: (() => {
+                  const toolName = typeof call.name === 'string' ? call.name : 'tool'
+                  if (!isAmaSandboxToolName(toolName)) {
+                    throw new Error(`Unsupported sandbox tool: ${toolName}`)
+                  }
+                  return toolName
+                })(),
                 input: call.input ?? {},
                 cwd: '/workspace',
               }),

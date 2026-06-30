@@ -28,7 +28,7 @@ class RunnerToolCall:
     """ 
         Attributes:
             id (str | Unset):  Example: call_abc123.
-            name (str | Unset):  Example: sandbox.exec.
+            name (str | Unset):  Example: bash.
             arguments (RunnerToolCallArguments | Unset):
             input_ (RunnerToolCallInput | Unset):
             approved (bool | Unset):

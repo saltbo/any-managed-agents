@@ -33,7 +33,7 @@ describe('createSessionEventPort (MCP)', () => {
       auth: auth as never,
       sessionId: 'sess_42',
       type: 'tool_execution_start',
-      payload: { toolName: 'sandbox.exec' },
+      payload: { toolName: 'bash' },
     })
 
     expect(eventId).toBe('event_routed')
@@ -41,7 +41,7 @@ describe('createSessionEventPort (MCP)', () => {
       { organizationId: 'org_1', projectId: 'project_1', sessionId: 'sess_42' },
       {
         type: 'tool_execution_start',
-        payload: { toolName: 'sandbox.exec' },
+        payload: { toolName: 'bash' },
         visibility: 'runtime',
         role: null,
         metadata: { source: 'mcp-client' },

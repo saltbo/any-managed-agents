@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import localizedFormat from 'dayjs/plugin/localizedFormat'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import { ENVIRONMENT_PACKAGE_MANAGERS, type EnvironmentPackageFormEntry } from './types'
 
 dayjs.extend(localizedFormat)
 dayjs.extend(relativeTime)
@@ -35,19 +36,27 @@ export function formatMillis(value: number) {
   return `${(millis / 1000).toFixed(1)}s`
 }
 
-export function parsePackages(value: string) {
-  return {
+export function parsePackages(value: EnvironmentPackageFormEntry[]) {
+  const packages = {
     type: 'packages' as const,
-    apt: [],
-    cargo: [],
-    gem: [],
-    go: [],
-    npm: value
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean),
-    pip: [],
+    apt: [] as string[],
+    cargo: [] as string[],
+    gem: [] as string[],
+    go: [] as string[],
+    npm: [] as string[],
+    pip: [] as string[],
   }
+  for (const item of value) {
+    const name = item.name.trim()
+    if (name) packages[item.manager].push(name)
+  }
+  return packages
+}
+
+export function stringifyPackages(value: Partial<Record<(typeof ENVIRONMENT_PACKAGE_MANAGERS)[number], string[]>>) {
+  return ENVIRONMENT_PACKAGE_MANAGERS.flatMap((manager) =>
+    (value[manager] ?? []).map((name, index) => ({ id: `pkg-${manager}-${index}-${name}`, manager, name })),
+  ) satisfies EnvironmentPackageFormEntry[]
 }
 
 export function parseVariables(value: string) {

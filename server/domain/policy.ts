@@ -6,6 +6,8 @@
 // effective-policy resolution) stays in server/policy.ts, which reuses
 // mergePolicyObjects from here.
 
+import { agentToolNameForMcp, mcpConnectorToolWildcard } from '@ama/runtime-contracts/agent-tools'
+
 export type FieldErrors = Record<string, string>
 
 export type PolicyScopeLevel = 'organization' | 'team' | 'project'
@@ -171,14 +173,14 @@ export type SandboxRuntimeOperation =
   | { operation: 'command'; command: string | null; resourceType: 'sandbox_command'; resourceId: string }
   | { operation: 'network'; host: string | null; resourceType: 'sandbox_network'; resourceId: string }
 
-// Maps a cloud runtime tool invocation to the sandbox policy operation it
-// performs. sandbox.exec runs a workspace command; sandbox.fetch performs an
-// outbound network operation from the sandbox.
+// Maps an agent-level tool invocation to the sandbox policy operation it
+// performs. bash runs a workspace command; fetch and web_search perform
+// outbound network from the sandbox.
 export function sandboxOperationForRuntimeTool(
   toolName: string,
   input: Record<string, unknown>,
 ): SandboxRuntimeOperation | null {
-  if (toolName === 'sandbox.exec') {
+  if (toolName === 'bash') {
     const command = typeof input.command === 'string' ? input.command : null
     return {
       operation: 'command',
@@ -187,9 +189,13 @@ export function sandboxOperationForRuntimeTool(
       resourceId: command?.trim().split(/\s+/)[0] ?? toolName,
     }
   }
-  if (toolName === 'sandbox.fetch') {
+  if (toolName === 'fetch') {
     const host = typeof input.host === 'string' ? input.host : hostFromUrl(input.url)
     return { operation: 'network', host, resourceType: 'sandbox_network', resourceId: host ?? toolName }
+  }
+  if (toolName === 'web_search') {
+    const host = 'lite.duckduckgo.com'
+    return { operation: 'network', host, resourceType: 'sandbox_network', resourceId: host }
   }
   return null
 }
@@ -442,8 +448,8 @@ export function sessionAllowsTool(
 
   return (
     includesWildcard(toolNames, toolName) ||
-    includesWildcard(toolNames, `mcp:${connectorId}`) ||
-    includesWildcard(toolNames, `mcp:${connectorId}.${toolName}`)
+    includesWildcard(toolNames, mcpConnectorToolWildcard(connectorId)) ||
+    includesWildcard(toolNames, agentToolNameForMcp(connectorId, toolName))
   )
 }
 

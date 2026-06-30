@@ -390,7 +390,7 @@ const SessionApprovalSchema = z
     id: z.string().openapi({ example: 'approval_abc123' }),
     sessionId: z.string().openapi({ example: 'session_abc123' }),
     toolCallId: z.string().openapi({ example: 'call_git_status' }),
-    toolName: z.string().openapi({ example: 'sandbox.exec' }),
+    toolName: z.string().openapi({ example: 'bash' }),
     input: JsonObjectSchema,
     relatedEventIds: z.array(z.string()).openapi({ example: ['event_abc123'] }),
     state: z.enum(APPROVAL_STATES).openapi({ example: 'pending' }),

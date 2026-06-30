@@ -33,7 +33,7 @@ class Runner:
             id (str):  Example: runner_abc123.
             project_id (str):  Example: project_abc123.
             name (str):  Example: mac-mini-build-runner.
-            capabilities (list[str]):  Example: ['node', 'git', 'sandbox.exec'].
+            capabilities (list[str]):  Example: ['node', 'git', 'bash'].
             environment_id (None | str):  Example: env_abc123.
             secret_ref (None | str):  Example:
                 ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123.

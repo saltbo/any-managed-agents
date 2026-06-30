@@ -540,7 +540,7 @@
           },
           "name": {
             "type": "string",
-            "example": "sandbox.exec"
+            "example": "bash"
           },
           "arguments": {
             "type": "object",
@@ -649,7 +649,7 @@
           },
           "toolName": {
             "type": "string",
-            "example": "sandbox.exec"
+            "example": "bash"
           },
           "input": {
             "type": "object",
@@ -672,7 +672,7 @@
           },
           "name": {
             "type": "string",
-            "example": "sandbox.exec"
+            "example": "bash"
           },
           "input": {
             "type": "object",
@@ -753,7 +753,7 @@
           },
           "toolName": {
             "type": "string",
-            "example": "sandbox.exec"
+            "example": "bash"
           },
           "input": {
             "type": "object",
@@ -2643,7 +2643,7 @@
             "example": [
               "node",
               "git",
-              "sandbox.exec"
+              "bash"
             ]
           },
           "environmentId": {
@@ -5894,7 +5894,7 @@
           },
           "toolName": {
             "type": "string",
-            "example": "sandbox.exec"
+            "example": "bash"
           },
           "input": {
             "type": "object",

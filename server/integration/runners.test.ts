@@ -74,7 +74,7 @@ describe('[CF] /api/v1/runners', () => {
       body: JSON.stringify({
         name: 'Local runner',
         environmentId: environment.id,
-        capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        capabilities: ['node', 'git', 'bash', DEFAULT_AMA_RUNNER_CAPABILITY],
         secretRef: credential.activeVersion.secretRef,
         maxConcurrent: 2,
         metadata: { pool: 'default' },
@@ -85,7 +85,7 @@ describe('[CF] /api/v1/runners', () => {
     expect(runner).toMatchObject({
       state: 'offline',
       environmentId: environment.id,
-      capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      capabilities: ['node', 'git', 'bash', DEFAULT_AMA_RUNNER_CAPABILITY],
       secretRef: credential.activeVersion.secretRef,
       maxConcurrent: 2,
       archivedAt: null,
@@ -108,7 +108,7 @@ describe('[CF] /api/v1/runners', () => {
       method: 'PUT',
       body: JSON.stringify({
         state: 'active',
-        capabilities: ['node', 'git', 'sandbox.exec', 'workspace', DEFAULT_AMA_RUNNER_CAPABILITY],
+        capabilities: ['node', 'git', 'bash', 'workspace', DEFAULT_AMA_RUNNER_CAPABILITY],
         runtimeUsage: [
           {
             runtime: 'claude-code',
@@ -139,7 +139,7 @@ describe('[CF] /api/v1/runners', () => {
       id: runnerId,
       state: 'active',
       currentLoad: 0,
-      capabilities: ['node', 'git', 'sandbox.exec', 'workspace', DEFAULT_AMA_RUNNER_CAPABILITY],
+      capabilities: ['node', 'git', 'bash', 'workspace', DEFAULT_AMA_RUNNER_CAPABILITY],
       lastHeartbeatAt: expect.any(String),
     })
   })
@@ -359,7 +359,7 @@ describe('[CF] /api/v1/runners', () => {
       body: JSON.stringify({
         name: 'OIDC device runner',
         environmentId: environment.id,
-        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        capabilities: ['bash', DEFAULT_AMA_RUNNER_CAPABILITY],
       }),
     })
     expect(runnerRes.status).toBe(201)

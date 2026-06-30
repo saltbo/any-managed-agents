@@ -66,7 +66,7 @@ const RunnerSchema = z
     id: z.string().openapi({ example: 'runner_abc123' }),
     projectId: z.string().openapi({ example: 'project_abc123' }),
     name: z.string().openapi({ example: 'mac-mini-build-runner' }),
-    capabilities: z.array(CapabilitySchema).openapi({ example: ['node', 'git', 'sandbox.exec'] }),
+    capabilities: z.array(CapabilitySchema).openapi({ example: ['node', 'git', 'bash'] }),
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     secretRef: NullableSecretRefSchema,
     authMode: z.enum(RUNNER_AUTH_MODES).openapi({ example: 'oidc' }),

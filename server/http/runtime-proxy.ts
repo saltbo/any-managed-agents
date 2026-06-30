@@ -358,7 +358,7 @@ export async function handleRuntimeProxyRequest(c: Context<DepsEnv>): Promise<Re
           toolCalls: [
             {
               id: newId('tool'),
-              name: 'sandbox.exec',
+              name: 'bash',
               input: { command: operation.command },
             },
           ],

@@ -12,6 +12,7 @@
 // The module is infra-free. Logic is verbatim from the former
 // server/runtime/session-approval module; only dependency acquisition changed.
 
+import { isAmaSandboxToolName } from '@ama/runtime-contracts/agent-tools'
 import { type SessionApprovalGrants, sessionApprovalState } from '@server/domain/runtime/approval-state'
 import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { now, stringify } from '@server/domain/runtime/util'
@@ -151,6 +152,9 @@ export async function decideSessionApproval(
   if (approved && body.result) {
     resultOutput = body.result
   } else if (approved) {
+    if (!isAmaSandboxToolName(pending.toolName)) {
+      throw new Error(`Unsupported approved sandbox tool: ${pending.toolName}`)
+    }
     const executed = await deps.sandboxExecutor.executeTool({
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',

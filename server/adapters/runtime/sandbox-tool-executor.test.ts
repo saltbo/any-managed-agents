@@ -44,7 +44,7 @@ describe('tool-executor', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'call_1',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         input: {
           output: { stdout: 'ok' },
           error: { message: 'failed' },
@@ -53,7 +53,7 @@ describe('tool-executor', () => {
       }),
     ).resolves.toEqual({
       toolCallId: 'call_1',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       output: { stdout: 'ok' },
       error: { message: 'failed' },
       durationMs: 9,
@@ -68,30 +68,16 @@ describe('tool-executor', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'call_1',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         input: {},
       }),
     ).resolves.toEqual({
       toolCallId: 'call_1',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       output: {},
       error: null,
       durationMs: 0,
     })
-  })
-
-  it('fails fast for unsupported test-mode tools', async () => {
-    const executor = new TestToolExecutor()
-
-    await expect(
-      executor.execute({
-        sessionId: 'session_123',
-        sandboxId: 'sandbox_123',
-        toolCallId: 'call_1',
-        toolName: 'mcp.github.repo.read',
-        input: {},
-      }),
-    ).rejects.toThrow('Unsupported sandbox tool: mcp.github.repo.read')
   })
 
   it('executes sandbox commands in /workspace through Cloudflare Sandbox', async () => {
@@ -103,12 +89,12 @@ describe('tool-executor', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'call_1',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         input: { command: 'git status' },
       }),
     ).resolves.toMatchObject({
       toolCallId: 'call_1',
-      toolName: 'sandbox.exec',
+      toolName: 'bash',
       output: { stdout: 'ok', stderr: '', exitCode: 0 },
       error: null,
     })
@@ -125,7 +111,7 @@ describe('tool-executor', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'read_1',
-        toolName: 'sandbox.read',
+        toolName: 'read',
         input: { path: 'notes/todo.txt' },
       }),
     ).resolves.toMatchObject({ output: { content: 'hello' } })
@@ -136,11 +122,44 @@ describe('tool-executor', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'write_1',
-        toolName: 'sandbox.write',
+        toolName: 'write',
         input: { path: 'notes/todo.txt', content: 'done' },
       }),
     ).resolves.toMatchObject({ output: { ok: true } })
     expect(sandboxMock.writeFile).toHaveBeenCalledWith('/workspace/notes/todo.txt', 'done', { encoding: 'utf-8' })
+  })
+
+  it('executes web search inside the sandbox network', async () => {
+    sandboxMock.exec.mockResolvedValue({ stdout: 'result', stderr: '', exitCode: 0 })
+    const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
+
+    await expect(
+      executor.execute({
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        toolCallId: 'search_1',
+        toolName: 'web_search',
+        input: { query: 'managed agents', limit: 3 },
+      }),
+    ).resolves.toMatchObject({ output: { stdout: 'result', stderr: '', exitCode: 0 } })
+    expect(sandboxMock.exec).toHaveBeenCalledWith(expect.stringContaining('lite.duckduckgo.com'), {
+      cwd: '/workspace',
+      timeout: 90_000,
+    })
+  })
+
+  it('simulates web search in test mode', async () => {
+    const executor = new TestToolExecutor()
+
+    await expect(
+      executor.execute({
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        toolCallId: 'search_1',
+        toolName: 'web_search',
+        input: { query: 'managed agents' },
+      }),
+    ).resolves.toMatchObject({ output: { stdout: 'simulated web search: managed agents' } })
   })
 
   it('rejects file paths outside /workspace before calling the sandbox', async () => {
@@ -151,25 +170,11 @@ describe('tool-executor', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'read_1',
-        toolName: 'sandbox.read',
+        toolName: 'read',
         input: { path: '../secret.txt' },
       }),
     ).rejects.toThrow('sandbox file paths must stay under /workspace')
     expect(sandboxMock.readFile).not.toHaveBeenCalled()
-  })
-
-  it('fails fast for unsupported Cloudflare Sandbox tools', async () => {
-    const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
-
-    await expect(
-      executor.execute({
-        sessionId: 'session_123',
-        sandboxId: 'sandbox_123',
-        toolCallId: 'call_1',
-        toolName: 'mcp.github.repo.read',
-        input: {},
-      }),
-    ).rejects.toThrow('Unsupported sandbox tool: mcp.github.repo.read')
   })
 
   it('rejects an already-aborted turn before acquiring the sandbox', async () => {
@@ -181,7 +186,7 @@ describe('tool-executor', () => {
           sessionId: 'session_123',
           sandboxId: 'sandbox_123',
           toolCallId: 'call_1',
-          toolName: 'sandbox.exec',
+          toolName: 'bash',
           input: { command: 'git status' },
         },
         AbortSignal.abort(),
@@ -201,7 +206,7 @@ describe('tool-executor', () => {
         sessionId: 'session_123',
         sandboxId: 'sandbox_123',
         toolCallId: 'call_1',
-        toolName: 'sandbox.exec',
+        toolName: 'bash',
         input: { command: 'git status' },
       },
       controller.signal,

@@ -406,7 +406,7 @@ describe('CoreStep', () => {
 // ─── ToolsStep ─────────────────────────────────────────────────────────────
 
 describe('ToolsStep', () => {
-  it('renders allowed tools textarea and empty connector message when no connectors', () => {
+  it('renders allowed tools selector and empty connector message when no connectors', () => {
     render(
       <MemoryRouter>
         <ToolsStep draft={emptyBuilderDraft} errors={{}} setField={vi.fn()} connectors={[]} />
@@ -577,15 +577,21 @@ describe('ToolsStep', () => {
     expect(screen.getByText('tool_x')).toBeInTheDocument()
   })
 
-  it('calls setField with new value when typing in allowed tools textarea', () => {
+  it('calls setField with new value when selecting an allowed tool', async () => {
     const setField = vi.fn()
     render(
       <MemoryRouter>
         <ToolsStep draft={emptyBuilderDraft} errors={{}} setField={setField} connectors={[]} />
       </MemoryRouter>,
     )
-    fireEvent.change(screen.getByLabelText('Allowed tools'), { target: { value: 'read\nwrite' } })
-    expect(setField).toHaveBeenCalledWith('allowedTools', 'read\nwrite')
+    fireEvent.pointerDown(screen.getByRole('combobox', { name: 'Allowed tools' }), {
+      button: 0,
+      ctrlKey: false,
+      pointerId: 1,
+      pointerType: 'mouse',
+    })
+    fireEvent.click(await screen.findByRole('option', { name: 'read' }))
+    expect(setField).toHaveBeenCalledWith('allowedTools', 'read')
   })
 })
 

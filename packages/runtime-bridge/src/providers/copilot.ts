@@ -36,14 +36,14 @@ type CopilotState = {
 function normalizeTool(name: string, args: Record<string, unknown>) {
   switch (name) {
     case 'bash':
-      return { toolName: 'sandbox.exec', args }
+      return { toolName: 'bash', args }
     case 'read':
     case 'view':
-      return { toolName: 'sandbox.read', args: { path: args.path ?? args.file_path } }
+      return { toolName: 'read', args: { path: args.path ?? args.file_path } }
     case 'write':
     case 'create':
       return {
-        toolName: 'sandbox.write',
+        toolName: 'write',
         args: { path: args.path ?? args.file_path, content: args.file_text ?? args.content },
       }
     default:

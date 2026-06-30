@@ -37,7 +37,7 @@ async function createAgent(authorization: string) {
     body: JSON.stringify({
       name: `Runner-backed agent ${crypto.randomUUID()}`,
       systemPrompt: 'Use AMA-owned self-hosted runner work.',
-      tools: [{ name: 'sandbox.exec' }],
+      tools: [{ name: 'bash' }],
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
     }),

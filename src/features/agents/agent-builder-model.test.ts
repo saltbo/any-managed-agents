@@ -24,7 +24,7 @@ describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder m
     expect(draft.name).toBe('Review incoming pull requests and summarize agent')
     expect(draft.systemPrompt).toContain('Review incoming pull requests')
     expect(draft.model).toBe('@cf/moonshotai/kimi-k2.6')
-    expect(draft.allowedTools).toBe('read\nwrite\nshell')
+    expect(draft.allowedTools).toBe('read\nbash\nedit\nwrite\ngrep\nfind\nls\nfetch\nweb_search')
   })
 
   it('requires name, system prompt, provider, and model in the core step', () => {
