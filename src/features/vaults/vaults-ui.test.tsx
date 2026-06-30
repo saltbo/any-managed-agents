@@ -107,6 +107,16 @@ function stubPointerCapture() {
   })
 }
 
+async function selectCredentialType(label: string) {
+  fireEvent.pointerDown(screen.getByRole('combobox', { name: 'Type' }), {
+    button: 0,
+    ctrlKey: false,
+    pointerId: 1,
+    pointerType: 'mouse',
+  })
+  fireEvent.click(await screen.findByRole('option', { name: label }))
+}
+
 // ─── VaultsView ─────────────────────────────────────────────────────────────
 
 describe('[spec: vaults/console-list] VaultsView', () => {
@@ -827,6 +837,44 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     await waitFor(() => expect(capturedBody.secret).toEqual({ stringData: { token: 'sk-secret' } }))
   })
 
+  it('adds and removes opaque secret data rows', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add secret value' }))
+    expect(screen.getByLabelText('Data key 2')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Data key 2'), { target: { value: 'token' } })
+    fireEvent.change(screen.getByLabelText('Data value 2'), { target: { value: 'sk-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove data key 1' }))
+
+    expect(screen.getByLabelText('Data key 1')).toHaveValue('token')
+    expect(screen.getByLabelText('Data value 1')).toHaveValue('sk-secret')
+  })
+
+  it('resets opaque secret data when the final row is removed', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Data key 1'), { target: { value: 'token' } })
+    fireEvent.change(screen.getByLabelText('Data value 1'), { target: { value: 'sk-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove data key 1' }))
+
+    expect(screen.getByLabelText('Data key 1')).toHaveValue('value')
+    expect(screen.getByLabelText('Data value 1')).toHaveValue('')
+  })
+
   it('does not expose raw metadata or stringData fields', () => {
     const client = makeQueryClient()
     render(
@@ -951,13 +999,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Git credentials' } })
-    fireEvent.pointerDown(screen.getByRole('combobox', { name: 'Type' }), {
-      button: 0,
-      ctrlKey: false,
-      pointerId: 1,
-      pointerType: 'mouse',
-    })
-    fireEvent.click(await screen.findByRole('option', { name: 'Basic auth' }))
+    await selectCredentialType('Basic auth')
     fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'git-user' } })
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'git-password' } })
     fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
@@ -968,6 +1010,156 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
         type: 'ama.dev/basic-auth',
         metadata: {},
         secret: { stringData: { username: 'git-user', password: 'git-password' } },
+      }),
+    )
+  })
+
+  it('renders the structured fields for each credential type', async () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await selectCredentialType('SSH auth')
+    expect(screen.getByLabelText('SSH private key')).toBeInTheDocument()
+
+    await selectCredentialType('TLS')
+    expect(screen.getByLabelText('TLS certificate')).toBeInTheDocument()
+    expect(screen.getByLabelText('TLS private key')).toBeInTheDocument()
+
+    await selectCredentialType('Private key JWK')
+    expect(screen.getByLabelText('JWK')).toBeInTheDocument()
+
+    await selectCredentialType('OAuth token')
+    expect(screen.getByLabelText('Access token')).toBeInTheDocument()
+    expect(screen.getByLabelText('Refresh token')).toBeInTheDocument()
+    expect(screen.getByLabelText('Token type')).toBeInTheDocument()
+    expect(screen.getByLabelText('Expires at')).toBeInTheDocument()
+    expect(screen.getByLabelText('Scopes')).toBeInTheDocument()
+  })
+
+  const structuredCredentialCases: Array<{
+    label: string
+    type: string
+    fields: Array<[string, string]>
+    stringData: Record<string, string>
+  }> = [
+    {
+      label: 'SSH auth',
+      type: 'ama.dev/ssh-auth',
+      fields: [['SSH private key', '-----BEGIN OPENSSH PRIVATE KEY-----']],
+      stringData: { 'ssh-privatekey': '-----BEGIN OPENSSH PRIVATE KEY-----' },
+    },
+    {
+      label: 'TLS',
+      type: 'ama.dev/tls',
+      fields: [
+        ['TLS certificate', '-----BEGIN CERTIFICATE-----'],
+        ['TLS private key', '-----BEGIN PRIVATE KEY-----'],
+      ],
+      stringData: { 'tls.crt': '-----BEGIN CERTIFICATE-----', 'tls.key': '-----BEGIN PRIVATE KEY-----' },
+    },
+    {
+      label: 'Private key JWK',
+      type: 'ama.dev/private-key-jwk',
+      fields: [['JWK', '{"kty":"OKP"}']],
+      stringData: { jwk: '{"kty":"OKP"}' },
+    },
+  ]
+
+  it.each(structuredCredentialCases)('submits $label credential fields in the create payload', async ({
+    label,
+    type,
+    fields,
+    stringData,
+  }) => {
+    let capturedBody: Record<string, unknown> = {}
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(credential({ id: 'vaultcred_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: label } })
+    await selectCredentialType(label)
+    for (const [fieldLabel, value] of fields) {
+      fireEvent.change(screen.getByLabelText(fieldLabel), { target: { value } })
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+
+    await waitFor(() =>
+      expect(capturedBody).toEqual({
+        name: label,
+        type,
+        metadata: {},
+        secret: { stringData },
+      }),
+    )
+  })
+
+  it('submits oauth token fields in the create payload', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(credential({ id: 'vaultcred_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'OAuth token' } })
+    await selectCredentialType('OAuth token')
+    fireEvent.change(screen.getByLabelText('Access token'), { target: { value: 'access-token' } })
+    fireEvent.change(screen.getByLabelText('Refresh token'), { target: { value: 'refresh-token' } })
+    fireEvent.change(screen.getByLabelText('Token type'), { target: { value: 'Bearer' } })
+    fireEvent.change(screen.getByLabelText('Expires at'), { target: { value: '2026-05-23T00:00:00Z' } })
+    fireEvent.change(screen.getByLabelText('Scopes'), { target: { value: 'repo read:user' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+
+    await waitFor(() =>
+      expect(capturedBody).toEqual({
+        name: 'OAuth token',
+        type: 'ama.dev/oauth-token',
+        metadata: {},
+        secret: {
+          stringData: {
+            'access-token': 'access-token',
+            'refresh-token': 'refresh-token',
+            'token-type': 'Bearer',
+            'expires-at': '2026-05-23T00:00:00Z',
+            scopes: 'repo read:user',
+          },
+        },
       }),
     )
   })

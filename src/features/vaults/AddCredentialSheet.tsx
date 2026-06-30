@@ -12,77 +12,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, type CredentialType } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
-
-interface CredentialFormState {
-  name: string
-  type: CredentialType
-  data: Record<string, string>
-}
-
-const emptyCredential: CredentialFormState = {
-  name: '',
-  type: 'opaque',
-  data: { value: '' },
-}
-
-const credentialTypes: Array<{ type: CredentialType; label: string }> = [
-  { type: 'opaque', label: 'Opaque' },
-  { type: 'ama.dev/basic-auth', label: 'Basic auth' },
-  { type: 'ama.dev/ssh-auth', label: 'SSH auth' },
-  { type: 'ama.dev/tls', label: 'TLS' },
-  { type: 'ama.dev/private-key-jwk', label: 'Private key JWK' },
-  { type: 'ama.dev/oauth-token', label: 'OAuth token' },
-]
-
-function defaultData(type: CredentialType): Record<string, string> {
-  switch (type) {
-    case 'opaque':
-      return { value: '' }
-    case 'ama.dev/basic-auth':
-      return { username: '', password: '' }
-    case 'ama.dev/ssh-auth':
-      return { 'ssh-privatekey': '' }
-    case 'ama.dev/tls':
-      return { 'tls.crt': '', 'tls.key': '' }
-    case 'ama.dev/private-key-jwk':
-      return { jwk: '' }
-    case 'ama.dev/oauth-token':
-      return { 'access-token': '', 'refresh-token': '', 'token-type': '', 'expires-at': '', scopes: '' }
-  }
-}
-
-function requiredDataKeys(type: CredentialType) {
-  switch (type) {
-    case 'opaque':
-      return []
-    case 'ama.dev/basic-auth':
-      return ['username', 'password']
-    case 'ama.dev/ssh-auth':
-      return ['ssh-privatekey']
-    case 'ama.dev/tls':
-      return ['tls.crt', 'tls.key']
-    case 'ama.dev/private-key-jwk':
-      return ['jwk']
-    case 'ama.dev/oauth-token':
-      return ['access-token']
-  }
-}
-
-function secretData(form: CredentialFormState) {
-  return Object.fromEntries(
-    Object.entries(form.data)
-      .map(([key, value]) => [key.trim(), value] as const)
-      .filter(([key, value]) => key.length > 0 && value.length > 0),
-  )
-}
-
-function hasValidSecretData(form: CredentialFormState) {
-  const data = secretData(form)
-  if (Object.keys(data).length === 0) {
-    return false
-  }
-  return requiredDataKeys(form.type).every((key) => Boolean(data[key]))
-}
+import {
+  type CredentialFormState,
+  credentialSecretData,
+  credentialTypes,
+  defaultCredentialData,
+  emptyCredential,
+  hasValidCredentialSecretData,
+} from './credential-form-model'
 
 export function AddCredentialSheet({
   vaultId,
@@ -101,7 +38,7 @@ export function AddCredentialSheet({
         name: form.name,
         type: form.type,
         metadata: {},
-        secret: { stringData: secretData(form) },
+        secret: { stringData: credentialSecretData(form) },
       }),
     onSuccess: () => {
       onOpenChange(false)
@@ -111,7 +48,7 @@ export function AddCredentialSheet({
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
-  const valid = form.name.trim() !== '' && hasValidSecretData(form)
+  const valid = form.name.trim() !== '' && hasValidCredentialSecretData(form)
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!valid) return
@@ -143,7 +80,11 @@ export function AddCredentialSheet({
                 <Select
                   value={form.type}
                   onValueChange={(type) =>
-                    setForm({ ...form, type: type as CredentialType, data: defaultData(type as CredentialType) })
+                    setForm({
+                      ...form,
+                      type: type as CredentialType,
+                      data: defaultCredentialData(type as CredentialType),
+                    })
                   }
                 >
                   <SelectTrigger id="credential-type" className="w-full">
@@ -189,15 +130,11 @@ function CredentialSecretFields({
     case 'ama.dev/basic-auth':
       return (
         <>
-          <SecretInput
-            label="Username"
-            value={form.data.username ?? ''}
-            onChange={(value) => setData('username', value)}
-          />
+          <SecretInput label="Username" value={form.data.username!} onChange={(value) => setData('username', value)} />
           <SecretInput
             label="Password"
             type="password"
-            value={form.data.password ?? ''}
+            value={form.data.password!}
             onChange={(value) => setData('password', value)}
           />
         </>
@@ -206,7 +143,7 @@ function CredentialSecretFields({
       return (
         <SecretTextarea
           label="SSH private key"
-          value={form.data['ssh-privatekey'] ?? ''}
+          value={form.data['ssh-privatekey']!}
           onChange={(value) => setData('ssh-privatekey', value)}
         />
       )
@@ -215,44 +152,44 @@ function CredentialSecretFields({
         <>
           <SecretTextarea
             label="TLS certificate"
-            value={form.data['tls.crt'] ?? ''}
+            value={form.data['tls.crt']!}
             onChange={(value) => setData('tls.crt', value)}
           />
           <SecretTextarea
             label="TLS private key"
-            value={form.data['tls.key'] ?? ''}
+            value={form.data['tls.key']!}
             onChange={(value) => setData('tls.key', value)}
           />
         </>
       )
     case 'ama.dev/private-key-jwk':
-      return <SecretTextarea label="JWK" value={form.data.jwk ?? ''} onChange={(value) => setData('jwk', value)} />
+      return <SecretTextarea label="JWK" value={form.data.jwk!} onChange={(value) => setData('jwk', value)} />
     case 'ama.dev/oauth-token':
       return (
         <>
           <SecretInput
             label="Access token"
             type="password"
-            value={form.data['access-token'] ?? ''}
+            value={form.data['access-token']!}
             onChange={(value) => setData('access-token', value)}
           />
           <SecretInput
             label="Refresh token"
             type="password"
-            value={form.data['refresh-token'] ?? ''}
+            value={form.data['refresh-token']!}
             onChange={(value) => setData('refresh-token', value)}
           />
           <SecretInput
             label="Token type"
-            value={form.data['token-type'] ?? ''}
+            value={form.data['token-type']!}
             onChange={(value) => setData('token-type', value)}
           />
           <SecretInput
             label="Expires at"
-            value={form.data['expires-at'] ?? ''}
+            value={form.data['expires-at']!}
             onChange={(value) => setData('expires-at', value)}
           />
-          <SecretInput label="Scopes" value={form.data.scopes ?? ''} onChange={(value) => setData('scopes', value)} />
+          <SecretInput label="Scopes" value={form.data.scopes!} onChange={(value) => setData('scopes', value)} />
         </>
       )
   }
