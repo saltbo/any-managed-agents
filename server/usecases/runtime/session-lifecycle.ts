@@ -22,9 +22,9 @@ import type {
   AuditPort,
   AuthScope,
   CloudRuntimeLifecycle,
+  EventStore,
   RunnerChannel,
   RuntimeWorkspaceReader,
-  EventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'

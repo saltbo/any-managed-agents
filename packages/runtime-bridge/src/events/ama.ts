@@ -41,7 +41,12 @@ export function toolEnd(
     toolCall: { id: toolCallId, name: toolName, input: args },
     result,
     isError,
-    ...(isError ? { error: typeof result === 'string' ? { message: result } : { message: 'Tool execution failed', details: result } } : {}),
+    ...(isError
+      ? {
+          error:
+            typeof result === 'string' ? { message: result } : { message: 'Tool execution failed', details: result },
+        }
+      : {}),
   })
 }
 

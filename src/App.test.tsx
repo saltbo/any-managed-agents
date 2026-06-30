@@ -7,10 +7,10 @@ import type {
   AuthContext,
   Connector,
   Environment,
+  EventRecord,
   Provider,
   Session,
   SessionEnvironmentSnapshot,
-  EventRecord,
   UsageSummary,
   Vault,
   VaultCredential,
@@ -166,7 +166,10 @@ type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
 function event(overrides: EventRecordOverrides = {}): EventRecord {
   const {
     type = overrides.event?.type ?? 'message_end',
-    payload = overrides.event?.payload ?? { type: 'message_end', message: { role: 'assistant', content: 'AMA message completed' } },
+    payload = overrides.event?.payload ?? {
+      type: 'message_end',
+      message: { role: 'assistant', content: 'AMA message completed' },
+    },
     metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
     ...recordOverrides

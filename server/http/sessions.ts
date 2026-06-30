@@ -18,7 +18,7 @@ import {
 } from '../contracts/execution-spec'
 import { ResourceMetadataSchema } from '../contracts/resource-contracts'
 import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
-import type { Session, SessionApproval, EventRecord, SessionMessage } from '../domain/session'
+import type { EventRecord, Session, SessionApproval, SessionMessage } from '../domain/session'
 import type { Env } from '../env'
 import { type ErrorType, errorResponse } from '../errors'
 import {
@@ -187,7 +187,12 @@ const ToolCallContentBlockSchema = z
   .object({ type: z.literal('tool_call'), toolCall: ToolCallSchema })
   .openapi('ToolCallContentBlock')
 const ToolResultContentBlockSchema = z
-  .object({ type: z.literal('tool_result'), toolCallId: z.string(), result: z.unknown(), isError: z.boolean().optional() })
+  .object({
+    type: z.literal('tool_result'),
+    toolCallId: z.string(),
+    result: z.unknown(),
+    isError: z.boolean().optional(),
+  })
   .openapi('ToolResultContentBlock')
 const ImageContentBlockSchema = z
   .object({
@@ -206,7 +211,9 @@ const FileContentBlockSchema = z
     data: z.string().optional(),
   })
   .openapi('FileContentBlock')
-const UnknownContentBlockSchema = z.object({ type: z.literal('unknown'), value: z.unknown() }).openapi('UnknownContentBlock')
+const UnknownContentBlockSchema = z
+  .object({ type: z.literal('unknown'), value: z.unknown() })
+  .openapi('UnknownContentBlock')
 const MessageContentBlockSchema = z
   .discriminatedUnion('type', [
     TextContentBlockSchema,

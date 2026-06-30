@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTime } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { type Agent, ApiError, type Environment, type Session, type EventRecord } from '@/lib/amarpc'
+import { type Agent, ApiError, type Environment, type EventRecord, type Session } from '@/lib/amarpc'
 import {
   type AgentOverrides,
   type EnvironmentOverrides,

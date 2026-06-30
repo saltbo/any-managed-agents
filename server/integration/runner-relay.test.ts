@@ -212,7 +212,11 @@ describe('[CF] per-runner relay end-to-end', () => {
           id: 'event_aaa',
           sequence: 1,
           createdAt: '2026-06-20T00:00:00.000Z',
-          event: { type: 'message_end', payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] } }, metadata: {} },
+          event: {
+            type: 'message_end',
+            payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
+            metadata: {},
+          },
         },
       }),
     )

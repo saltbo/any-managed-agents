@@ -40,14 +40,11 @@ export function createDeps(env: Env): Deps {
   const audit = createAuditPort(db)
   const policy = createPolicyPort(db)
   const sessionOrchestration = createRuntimeOrchestrationRepo(db)
-  // Routes event storage per session: cloud-loop (ama) → Session DO; relay
-  // sessions read through the runner channel and fall back to legacy D1 rows.
+  // Routes event storage per session: cloud-loop (ama) -> Session DO; relay
+  // sessions read live/backfill events through the runner channel only.
   const sessionDoEvents = createSessionDoEventStore(env)
   const isCloudLoop = createCloudLoopChecker(db)
-  const sessionEventStore = createEventStore(db, isCloudLoop, sessionDoEvents, {
-    queryEvents: (sessionId, query) => sessions.queryEvents(sessionId, query),
-    eventStream: (sessionId) => sessionOrchestration.sessionEventStream(sessionId),
-  })
+  const sessionEventStore = createEventStore(db, isCloudLoop, sessionDoEvents)
   const runnerChannel = createRunnerChannel(env, (sessionId) => sessions.resolveRunnerEnvironmentId(sessionId))
   const runtimeExecution = createRuntimeExecutionAdapters(env, {
     runnerChannel,

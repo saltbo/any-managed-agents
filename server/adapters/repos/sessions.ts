@@ -1,6 +1,6 @@
 import type {
-  RuntimeSessionHandle,
   EventQuery,
+  RuntimeSessionHandle,
   SessionListPage,
   SessionListQuery,
   SessionMessageListPage,
@@ -10,8 +10,8 @@ import type {
 import {
   AMA_SESSION_EVENT_TYPES,
   type AmaEvent,
-  type CanonicalAmaSessionEvent,
   type AmaSessionEventType,
+  type CanonicalAmaSessionEvent,
   canonicalAmaSessionEventFromRuntimeEvent,
   isAmaSessionEventType,
 } from '@shared/session-events'
@@ -23,6 +23,7 @@ import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 import { runtimePlacement } from '../../domain/runtime/driver'
 import {
   type ApprovalState,
+  type EventRecord,
   hostingModeFromSnapshot,
   type MessageDelivery,
   type MessageState,
@@ -30,7 +31,6 @@ import {
   type SessionAgentSnapshot,
   type SessionApproval,
   type SessionEnvironmentSnapshot,
-  type EventRecord,
   type SessionMessage,
   type SessionState,
   sessionEventVisibility,
@@ -219,13 +219,13 @@ function serializeEvent(row: SessionEventRow): EventRecord {
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
   const canonical: CanonicalAmaSessionEvent = isAmaSessionEventType(row.type)
-    ? {
+    ? ({
         type: row.type,
         visibility: sessionEventVisibility(row.visibility),
         role: row.role,
         payload: rawPayload,
         metadata: rawMetadata,
-      } as CanonicalAmaSessionEvent
+      } as CanonicalAmaSessionEvent)
     : canonicalAmaSessionEventFromRuntimeEvent(
         { ...rawPayload, type: row.type },
         { source: 'stored-session-event', ...rawMetadata },

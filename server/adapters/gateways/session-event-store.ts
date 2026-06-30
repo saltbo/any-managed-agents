@@ -8,13 +8,8 @@
 // router owns the routing + the D1 usage accounting that the DO path would
 // otherwise skip (the D1 insert records it inline).
 
-import type {
-  EventWriteOptions,
-  EventPage,
-  EventQuery,
-  EventStore,
-} from '@server/usecases/ports'
-import type { AmaEvent, CanonicalAmaSessionEvent } from '@shared/session-events'
+import type { EventStore, EventWriteOptions } from '@server/usecases/ports'
+import type { CanonicalAmaSessionEvent } from '@shared/session-events'
 import { canonicalAmaSessionEventFromAmaEvent, SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import { eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
@@ -44,23 +39,15 @@ export function createCloudLoopChecker(db: Db): CloudLoopChecker {
 }
 
 async function sessionEnvironmentId(db: Db, sessionId: string): Promise<string | null> {
-  const row = await db.select({ environmentId: sessions.environmentId }).from(sessions).where(eq(sessions.id, sessionId)).get()
+  const row = await db
+    .select({ environmentId: sessions.environmentId })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .get()
   return row?.environmentId ?? null
 }
 
-// The D1 delegates the router falls back to for non-DO sessions: the existing
-// repo methods, passed in by the composition root (no new D1 query/append code).
-export interface EventD1Delegates {
-  queryEvents(sessionId: string, query: EventQuery): Promise<EventPage>
-  eventStream(sessionId: string): Promise<{ type: string; payload: string }[]>
-}
-
-export function createEventStore(
-  db: Db,
-  isCloudLoop: CloudLoopChecker,
-  doStore: SessionDoEventStore,
-  d1: EventD1Delegates,
-): EventStore {
+export function createEventStore(db: Db, isCloudLoop: CloudLoopChecker, doStore: SessionDoEventStore): EventStore {
   const usage = createUsageWriteRepo(db)
 
   const appendStoredEvent = async (

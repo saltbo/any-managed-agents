@@ -1,9 +1,9 @@
+import { type AmaEvent, isAmaSessionEventType } from '@shared/session-events'
 import { createDeps } from '../composition'
 import type { Env } from '../env'
 import { claimLease, materializeWorkItemPayload } from '../usecases/leases'
-import type { AuthScope, EventPage, EventQuery, LeaseRecord, RunnerAuthRecord, WorkItemRecord } from '../usecases/ports'
-import { pageRelayedEvents, type RelayedRunnerEvent, type EventWriteContext } from './session-event-store-sql'
-import { type AmaEvent, isAmaSessionEventType } from '@shared/session-events'
+import type { AuthScope, EventQuery, LeaseRecord, RunnerAuthRecord, WorkItemRecord } from '../usecases/ports'
+import { type EventWriteContext, pageRelayedEvents, type RelayedRunnerEvent } from './session-event-store-sql'
 
 type RunnerScope = {
   runnerId: string

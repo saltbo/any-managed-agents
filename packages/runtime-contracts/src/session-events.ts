@@ -109,8 +109,20 @@ export type EventError = {
 export type MessageEventPayload = { message: Message }
 export type ToolStartedPayload = { toolCall: ToolCall }
 export type ToolUpdatedPayload = { toolCall: ToolCall; partialResult?: unknown }
-export type ToolCompletedPayload = { toolCall: ToolCall; result?: unknown; error?: EventError; isError?: boolean; durationMs?: number }
-export type TurnPayload = { marker?: string; stage?: string; status?: string; message?: Message; toolResults?: unknown[] }
+export type ToolCompletedPayload = {
+  toolCall: ToolCall
+  result?: unknown
+  error?: EventError
+  isError?: boolean
+  durationMs?: number
+}
+export type TurnPayload = {
+  marker?: string
+  stage?: string
+  status?: string
+  message?: Message
+  toolResults?: unknown[]
+}
 export type SessionStopPayload = { reason?: string }
 export type SessionCheckpointPayload = { resumeTokenRef?: string; scope?: string }
 export type SessionResumePayload = { fromCheckpoint?: string; reason?: string }
@@ -149,7 +161,10 @@ export type PermissionRequestPayload = {
   details?: Record<string, unknown>
 }
 export type RuntimeErrorPayload = EventError
-export type RuntimeOutputPayload = { stream: 'stdout' | 'stderr' | 'runtime' | 'reasoning' | 'bridge'; content: unknown }
+export type RuntimeOutputPayload = {
+  stream: 'stdout' | 'stderr' | 'runtime' | 'reasoning' | 'bridge'
+  content: unknown
+}
 export type MetadataPayload = { data: Record<string, unknown> }
 
 export type AmaEventPayloadByType = {
@@ -214,7 +229,10 @@ export function isAmaSessionEventType(value: string): value is AmaSessionEventTy
 // message_* trio shares `message:<id>` and tool_execution_* pairs share
 // `tool:<tool call id>`, so product consumers can pair calls with results
 // and reconstruct transcript threads without raw runtime events.
-export function canonicalEventCorrelation(type: AmaSessionEventType, payload: AmaEventPayloadByType[AmaSessionEventType]): string | null {
+export function canonicalEventCorrelation(
+  type: AmaSessionEventType,
+  payload: AmaEventPayloadByType[AmaSessionEventType],
+): string | null {
   const category = AMA_SESSION_EVENT_DEFINITIONS[type].category
   if (category === 'tool') {
     const toolCall = objectValue((payload as Record<string, unknown>).toolCall)
@@ -266,10 +284,7 @@ export function canonicalAmaSessionEventFromRuntimeEvent(
   return canonicalAmaSessionEventFromAmaEvent(amaEvent)
 }
 
-export function amaEventFromRuntimeEvent(
-  event: Record<string, unknown>,
-  metadata: EventMetadata = {},
-): AmaEvent {
+export function amaEventFromRuntimeEvent(event: Record<string, unknown>, metadata: EventMetadata = {}): AmaEvent {
   const sourceEventType = sourceEventTypeFromRuntimeEvent(event)
   const type = canonicalType(sourceEventType)
   const payload = canonicalPayload(type, sourceEventType, event)
@@ -453,7 +468,10 @@ function normalizeKnownPayload(
   }
   if (type === 'runtime.error') return normalizeError(payload)
   if (type === 'runtime.output') {
-    return { stream: runtimeOutputStream(payload, type), content: payload.content ?? payload.message ?? payload.data ?? '' }
+    return {
+      stream: runtimeOutputStream(payload, type),
+      content: payload.content ?? payload.message ?? payload.data ?? '',
+    }
   }
   if (type === 'runtime.metadata' || type === 'runner.metadata') return { data: payload }
   return payload
@@ -506,7 +524,14 @@ function normalizeContentBlocks(value: unknown): MessageContentBlock[] {
           },
         ]
       case 'image':
-        return [compactObject({ type: 'image', url: block.url, mediaType: block.mediaType, data: block.data }) as ImageContentBlock]
+        return [
+          compactObject({
+            type: 'image',
+            url: block.url,
+            mediaType: block.mediaType,
+            data: block.data,
+          }) as ImageContentBlock,
+        ]
       case 'file':
         return [
           compactObject({
@@ -575,7 +600,9 @@ function normalizeError(value: unknown): RuntimeErrorPayload {
     retryAfterSeconds: error.retryAfterSeconds,
     provider: error.provider,
     model: error.model,
-    details: error.details ?? restObject(error, ['message', 'code', 'category', 'retryable', 'retryAfterSeconds', 'provider', 'model']),
+    details:
+      error.details ??
+      restObject(error, ['message', 'code', 'category', 'retryable', 'retryAfterSeconds', 'provider', 'model']),
   }) as RuntimeErrorPayload
 }
 
@@ -638,6 +665,8 @@ function compactObject<T extends Record<string, unknown>>(record: T): Partial<T>
 
 function restObject(record: Record<string, unknown>, omitted: string[]): Record<string, unknown> | undefined {
   const omittedSet = new Set(omitted)
-  const rest = Object.fromEntries(Object.entries(record).filter(([key, value]) => !omittedSet.has(key) && value !== undefined))
+  const rest = Object.fromEntries(
+    Object.entries(record).filter(([key, value]) => !omittedSet.has(key) && value !== undefined),
+  )
   return Object.keys(rest).length > 0 ? rest : undefined
 }

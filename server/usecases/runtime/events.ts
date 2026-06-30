@@ -4,7 +4,7 @@
 
 import { now } from '@server/domain/runtime/util'
 import type { SessionRow } from '@shared/runtime-rows'
-import { amaEventFromRuntimeEvent, type AmaEvent } from '@shared/session-events'
+import { type AmaEvent, amaEventFromRuntimeEvent } from '@shared/session-events'
 import type { AuditPort, AuthScope, EventStore, SessionOrchestrationStore } from '../ports'
 import { runtimeMessagesFromEvents } from './engine/transcript'
 

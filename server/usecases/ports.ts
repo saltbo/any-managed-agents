@@ -7,11 +7,11 @@ import type { ModelAvailability, ModelCatalogState } from '@server/domain/provid
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type { EnvFromEntry, MemoryVolume, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import type {
+  EventRecord,
   MessageDelivery,
   MessageState,
   Session,
   SessionApproval,
-  EventRecord,
   SessionMessage,
   SessionState,
 } from '@server/domain/session'
@@ -36,7 +36,7 @@ export type {
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
 
-export type { Session, SessionApproval, EventRecord, SessionMessage }
+export type { EventRecord, Session, SessionApproval, SessionMessage }
 
 // A port-level error so the http layer can map orchestration validation
 // failures to a 400 without importing usecases internals or adapters. The
@@ -1685,6 +1685,7 @@ import type {
   WorkItemInsert,
   WorkItemRow,
 } from '@shared/runtime-rows'
+
 export type {
   AgentRow,
   AgentVersionRow,
@@ -1848,7 +1849,6 @@ export interface SessionOrchestrationStore {
   touchChannel(channelId: string, timestamp: string): Promise<void>
   closeChannel(channelId: string, channelState: 'closed' | 'stale', reason: string, timestamp: string): Promise<void>
   requeueSessionForRunnerRecovery(projectId: string, sessionId: string, timestamp: string): Promise<void>
-
 }
 
 // --- sessions ---

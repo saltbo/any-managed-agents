@@ -9,14 +9,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
-import type {
-  Agent,
-  Environment,
-  Provider,
-  Session,
-  SessionAgentSnapshot,
-  EventRecord,
-} from '@/lib/amarpc'
+import type { Agent, Environment, EventRecord, Provider, Session, SessionAgentSnapshot } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,

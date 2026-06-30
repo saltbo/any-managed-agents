@@ -227,7 +227,9 @@ describe('[CF] generated SDK contract', () => {
     expect(events.data.length).toBeGreaterThan(0)
     expect(JSON.stringify(events.data)).toContain(`work item for ${runId}`)
     for (const record of events.data) {
-      expect(isAmaSessionEventType(String(record.event.type)), `non-canonical event type "${record.event.type}"`).toBe(true)
+      expect(isAmaSessionEventType(String(record.event.type)), `non-canonical event type "${record.event.type}"`).toBe(
+        true,
+      )
     }
     const sequences = events.data.map((e) => Number(e.sequence))
     expect(sequences).toEqual([...sequences].sort((a, b) => a - b))
@@ -261,7 +263,9 @@ describe('[CF] generated SDK contract', () => {
     const events = await listEvents(ama, sessionId)
     expect(JSON.stringify(events.data).includes(`external product follow-up ${runId}`)).toBe(true)
     for (const record of events.data) {
-      expect(isAmaSessionEventType(String(record.event.type)), `non-canonical event type "${record.event.type}"`).toBe(true)
+      expect(isAmaSessionEventType(String(record.event.type)), `non-canonical event type "${record.event.type}"`).toBe(
+        true,
+      )
     }
     expect(events.data.some((record) => record.event.type === 'session_stop')).toBe(true)
     expect(obj(await readSession(ama, sessionId)).status).toMatchObject({ phase: 'stopped' })

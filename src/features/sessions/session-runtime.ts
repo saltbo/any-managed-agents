@@ -1,7 +1,4 @@
-import {
-  type AmaSessionEventType,
-  amaSessionEventCategory,
-} from '@shared/session-events'
+import { type AmaSessionEventType, amaSessionEventCategory } from '@shared/session-events'
 import type { EventRecord } from '@/lib/amarpc'
 import { getStoredAccessToken } from '@/lib/oidc'
 
@@ -196,9 +193,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
   const hasErrorEvent = runtimeEvents.some(({ stored }) => {
     return stored.event.type === 'runtime.error'
   })
-  const latestError = [...runtimeEvents]
-    .reverse()
-    .find(({ stored }) => stored.event.type === 'runtime.error')
+  const latestError = [...runtimeEvents].reverse().find(({ stored }) => stored.event.type === 'runtime.error')
   return {
     ...state,
     runState: hasErrorEvent ? 'error' : hasTerminalEvent ? 'idle' : state.runState,
@@ -443,13 +438,6 @@ function findLastToolIndex(tools: SessionRuntimeToolTrace[], predicate: (tool: S
   return -1
 }
 
-function appendDebugEvent(events: SessionRuntimeDebugEvent[], event: SessionRuntimeDebugEvent) {
-  if (events.some((item) => item.id === event.id)) {
-    return events
-  }
-  return [...events.slice(-199), event]
-}
-
 function runtimeEventKey(event: Record<string, unknown>, eventType: string, turnKey?: string | null) {
   const message = objectValue(event.message)
   const timestamp =
@@ -493,13 +481,6 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
 
 function isToolEvent(eventType: string) {
   return amaSessionEventCategory(eventType) === 'tool'
-}
-
-function appendEventKey(keys: string[], key: string | null) {
-  if (!key || keys.includes(key)) {
-    return keys
-  }
-  return [...keys.slice(-799), key]
 }
 
 function mergeEventKeys(left: string[], right: string[]) {

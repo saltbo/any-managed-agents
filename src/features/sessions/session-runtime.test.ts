@@ -926,7 +926,6 @@ describe('sessionSocketUrl', () => {
     const url = sessionSocketUrl('/api/v1/sessions/s1/socket')
     expect(url).toContain('access_token=test_token_xyz')
   })
-
 })
 
 describe('sessionRuntimeReducer — extractText edge cases (line 594)', () => {

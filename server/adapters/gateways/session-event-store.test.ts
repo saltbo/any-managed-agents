@@ -44,13 +44,6 @@ function fakeDoStore() {
   }
 }
 
-function fakeD1() {
-  return {
-    queryEvents: vi.fn().mockResolvedValue({ rows: [{ id: 'd1_event' }], hasMore: false }),
-    eventStream: vi.fn().mockResolvedValue([{ type: 'message_end', payload: '{}' }]),
-  }
-}
-
 const scope = { organizationId: 'org_1', projectId: 'project_1', sessionId: 'sess_1' }
 const canonical: CanonicalAmaSessionEvent = {
   type: 'turn_end',
@@ -66,30 +59,27 @@ const query = { order: 'asc' as const, limit: 50 }
 // checker is the only branch; the separate relay checker is gone.
 function makeStore(inDo: boolean, environmentId: string | null = 'env_1') {
   const doStore = fakeDoStore()
-  const d1 = fakeD1()
   const db = fakeStampDb({ metadata: null, environmentId })
-  const store = createEventStore(db as never, async () => inDo, doStore as never, d1)
-  return { store, doStore, d1 }
+  const store = createEventStore(db as never, async () => inDo, doStore as never)
+  return { store, doStore }
 }
 
 describe('createEventStore — storage follows the loop', () => {
   it('cloud-loop append goes to the DO and records usage exactly once', async () => {
     recordProviderSignals.mockClear()
-    const { store, doStore, d1 } = makeStore(true)
+    const { store, doStore } = makeStore(true)
     const id = await store.appendEvent(scope, event, { parentEventId: 'p', correlationId: 'c' })
     expect(id).toBe('do_event')
     expect(doStore.append).toHaveBeenCalledWith(scope, canonical, { parentEventId: 'p', correlationId: 'c' })
-    expect(d1.queryEvents).not.toHaveBeenCalled()
     expect(recordProviderSignals).toHaveBeenCalledTimes(1)
   })
 
   it('non-cloud append is a relay no-op — the runner store-and-serves it', async () => {
     recordProviderSignals.mockClear()
-    const { store, doStore, d1 } = makeStore(false)
+    const { store, doStore } = makeStore(false)
     const id = await store.appendEvent(scope, event)
     expect(id).toBe('relay')
     expect(doStore.append).not.toHaveBeenCalled()
-    expect(d1.queryEvents).not.toHaveBeenCalled()
     expect(recordProviderSignals).not.toHaveBeenCalled()
   })
 
@@ -103,7 +93,6 @@ describe('createEventStore — storage follows the loop', () => {
     const relay = makeStore(false)
     expect((await relay.store.queryEvents('sess_1', query)).rows[0]).toEqual({ id: 'relay_event' })
     expect(relay.doStore.relayQuery).toHaveBeenCalledWith('sess_1', query, 'env_1')
-    expect(relay.d1.queryEvents).not.toHaveBeenCalled()
 
     const offline = makeStore(false)
     offline.doStore.relayQuery.mockResolvedValue({ rows: [], hasMore: false, runnerUnavailable: true })
@@ -112,7 +101,6 @@ describe('createEventStore — storage follows the loop', () => {
       hasMore: false,
       runnerUnavailable: true,
     })
-    expect(offline.d1.queryEvents).not.toHaveBeenCalled()
   })
 
   it('routes eventStream to the DO for cloud-loop and returns no cloud transcript for relay sessions', async () => {
@@ -122,7 +110,6 @@ describe('createEventStore — storage follows the loop', () => {
 
     const local = makeStore(false)
     expect(await local.store.eventStream('sess_1')).toEqual([])
-    expect(local.d1.eventStream).not.toHaveBeenCalled()
   })
 
   it('archives only cloud-loop sessions (no-op on relay)', async () => {

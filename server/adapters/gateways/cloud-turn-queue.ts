@@ -1,4 +1,4 @@
-import type { CloudTurnQueueMessage, CloudTurnQueue } from '@server/usecases/ports'
+import type { CloudTurnQueue, CloudTurnQueueMessage } from '@server/usecases/ports'
 import type { Env } from '../../env'
 
 // Wraps the CLOUD_TURNS queue binding behind the CloudTurnQueue port. The

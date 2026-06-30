@@ -860,7 +860,6 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .set({ state: 'pending', stateReason: 'waiting-for-runner-recovery', updatedAt: timestamp })
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId)))
     },
-
   }
 }
 

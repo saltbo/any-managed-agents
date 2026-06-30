@@ -529,10 +529,14 @@ describe('[CF] /api/v1/sessions', () => {
     )
     expect(events.data.every((event) => event.visibility === 'runtime')).toBe(true)
     const toolCallEvent = events.data.find(
-      (record) => record.event.type === 'tool_execution_start' && (record.event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
+      (record) =>
+        record.event.type === 'tool_execution_start' &&
+        (record.event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
     )
     const toolResultEvent = events.data.find(
-      (record) => record.event.type === 'tool_execution_end' && (record.event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
+      (record) =>
+        record.event.type === 'tool_execution_end' &&
+        (record.event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
     )
     expect(toolCallEvent).toMatchObject({ correlationId: 'tool:call_git_status' })
     expect(toolCallEvent?.parentEventId).toMatch(/^event_/)
@@ -1241,7 +1245,9 @@ describe('[CF] /api/v1/sessions', () => {
       authorization,
     )
     expect(eventsRes.status).toBe(200)
-    const events = (await eventsRes.json()) as { data: Array<{ event: { type: string; payload: Record<string, unknown> } }> }
+    const events = (await eventsRes.json()) as {
+      data: Array<{ event: { type: string; payload: Record<string, unknown> } }>
+    }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1310,7 +1316,9 @@ describe('[CF] /api/v1/sessions', () => {
       method: 'POST',
       body: JSON.stringify({
         events: [
-          { event: { type: 'turn_end', payload: { message: { role: 'assistant', content: 'done' }, toolResults: [] } } },
+          {
+            event: { type: 'turn_end', payload: { message: { role: 'assistant', content: 'done' }, toolResults: [] } },
+          },
           { event: { type: 'runtime.error', payload: { message: 'Bridge failed', code: 'runtime_exit' } } },
         ],
       }),
@@ -1319,7 +1327,9 @@ describe('[CF] /api/v1/sessions', () => {
     await expect(ingestRes.json()).resolves.toEqual({ accepted: 2 })
 
     const eventsRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events?type=turn_end`, authorization)
-    const events = (await eventsRes.json()) as { data: Array<{ event: { type: string; metadata?: Record<string, unknown> } }> }
+    const events = (await eventsRes.json()) as {
+      data: Array<{ event: { type: string; metadata?: Record<string, unknown> } }>
+    }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1404,7 +1414,9 @@ describe('[CF] /api/v1/sessions', () => {
     // A historical event the backfill request must replay.
     await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, authorization, {
       method: 'POST',
-      body: JSON.stringify({ events: [{ event: { type: 'message_start', payload: { message: { role: 'assistant' } } } }] }),
+      body: JSON.stringify({
+        events: [{ event: { type: 'message_start', payload: { message: { role: 'assistant' } } } }],
+      }),
     })
 
     const socketRes = await SELF.fetch(`https://example.com/api/v1/sessions/${created.metadata.uid}/socket`, {
@@ -1436,7 +1448,9 @@ describe('[CF] /api/v1/sessions', () => {
 
     ws.send(JSON.stringify({ id: 'r1', type: 'backfill', requestId: 'r1', limit: 100 }))
     const backfill = await waitForFrame((frame) => frame.type === 'backfill')
-    expect((backfill.events as Array<{ event: { type: string } }>).some((record) => record.event.type === 'message_start')).toBe(true)
+    expect(
+      (backfill.events as Array<{ event: { type: string } }>).some((record) => record.event.type === 'message_start'),
+    ).toBe(true)
 
     // A live append fans out to the open socket without polling.
     await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, authorization, {
@@ -1647,12 +1661,12 @@ describe('[CF] /api/v1/sessions', () => {
           event: expect.objectContaining({
             type: 'message_end',
             payload: expect.objectContaining({
-            message: expect.objectContaining({
-              role: 'user',
-              content: [
-                expect.objectContaining({ type: 'text', text: 'Research current Canadian banking bonus offers.' }),
-              ],
-            }),
+              message: expect.objectContaining({
+                role: 'user',
+                content: [
+                  expect.objectContaining({ type: 'text', text: 'Research current Canadian banking bonus offers.' }),
+                ],
+              }),
             }),
           }),
         }),
@@ -1942,7 +1956,9 @@ describe('[CF] /api/v1/sessions', () => {
     })
 
     const eventsRes = await jsonFetch(`/api/v1/sessions/${session.metadata.uid}/events`, authorization)
-    const events = (await eventsRes.json()) as { data: Array<{ event: { type: string; payload: Record<string, unknown> } }> }
+    const events = (await eventsRes.json()) as {
+      data: Array<{ event: { type: string; payload: Record<string, unknown> } }>
+    }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

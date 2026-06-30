@@ -287,7 +287,11 @@ export function stepRelayEvent(raw: RelayedRunnerEvent, scope: EventWriteContext
   }
 }
 
-export function pageRelayedEvents(rawEvents: RelayedRunnerEvent[], scope: EventWriteContext, query: EventQuery): EventPage {
+export function pageRelayedEvents(
+  rawEvents: RelayedRunnerEvent[],
+  scope: EventWriteContext,
+  query: EventQuery,
+): EventPage {
   const state = newRelayThreadState()
   const direction = query.order === 'desc' ? -1 : 1
   const visibility = query.visibility ?? 'runtime'

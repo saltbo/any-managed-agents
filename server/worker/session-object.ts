@@ -10,14 +10,14 @@ import { dispatchSessionPrompt, stopSession } from '../usecases/runtime'
 import {
   appendCanonicalEventToSql,
   countSessionEvents,
+  type EventWriteContext,
   ensureSessionEventSchema,
   exportSessionEventsJsonl,
   newRelayThreadState,
-  serializeRow,
   queryEventsFromSql,
   type RelayedRunnerEvent,
   type RelayThreadState,
-  type EventWriteContext,
+  serializeRow,
   stepRelayEvent,
   streamSessionEvents,
 } from './session-event-store-sql'
@@ -218,7 +218,8 @@ export class SessionObject implements DurableObject {
     ws.send(
       JSON.stringify({
         type: 'backfill',
-        requestId: typeof frame.requestId === 'string' ? frame.requestId : typeof frame.id === 'string' ? frame.id : null,
+        requestId:
+          typeof frame.requestId === 'string' ? frame.requestId : typeof frame.id === 'string' ? frame.id : null,
         events: page.rows,
         nextCursor: page.hasMore && last ? last.sequence : null,
         hasMore: page.hasMore,
@@ -321,9 +322,7 @@ function sessionSocketClientMessageFrom(value: unknown): SessionSocketClientMess
     return null
   }
   if (message.type === 'prompt' || message.type === 'steer') {
-    return typeof message.content === 'string'
-      ? { id: message.id, type: message.type, content: message.content }
-      : null
+    return typeof message.content === 'string' ? { id: message.id, type: message.type, content: message.content } : null
   }
   if (message.type === 'abort') {
     return { id: message.id, type: 'abort', ...(typeof message.reason === 'string' ? { reason: message.reason } : {}) }

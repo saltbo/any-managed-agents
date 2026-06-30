@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import type { Session, EventRecord } from '@/lib/amarpc'
+import type { EventRecord, Session } from '@/lib/amarpc'
 import {
   initialSessionRuntimeState,
   type SessionSocketClientMessage,
   type SessionSocketClientMessageType,
-  sessionSocketUrl,
   sessionRuntimeReducer,
+  sessionSocketUrl,
 } from './session-runtime'
 
 export function useSessionRuntimeSession({

@@ -1,4 +1,8 @@
-import type { AmaRuntimeEvent, RuntimeBridgeRunMessage, RuntimeUsageWindow } from '@ama/runtime-contracts/bridge-protocol'
+import type {
+  AmaRuntimeEvent,
+  RuntimeBridgeRunMessage,
+  RuntimeUsageWindow,
+} from '@ama/runtime-contracts/bridge-protocol'
 
 export type {
   AmaRuntimeEvent,

@@ -18,9 +18,9 @@
 import { parseJson } from '@server/domain/runtime/session-snapshot'
 import type {
   AuthScope,
+  EventStore,
   PolicyPort,
   SandboxPolicyBlock,
-  EventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
