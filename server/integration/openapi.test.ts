@@ -127,7 +127,8 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).not.toHaveProperty('/api/scheduled-agent-triggers')
     expect(doc.paths).toHaveProperty('/api/v1/sessions')
     expect(doc.paths).toHaveProperty('/api/v1/sessions/{sessionId}')
-    expect(doc.paths).toHaveProperty('/api/v1/sessions/{sessionId}/connection')
+    expect(doc.paths).not.toHaveProperty('/api/v1/sessions/{sessionId}/connection')
+    expect(doc.paths).toHaveProperty('/api/v1/sessions/{sessionId}/socket')
     expect(doc.paths).toHaveProperty('/api/v1/sessions/{sessionId}/messages')
     expect(doc.paths).toHaveProperty('/api/v1/sessions/{sessionId}/events')
     expect(doc.paths).toHaveProperty('/api/v1/sessions/{sessionId}/approvals')
@@ -162,7 +163,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/sessions']).toHaveProperty('post')
     expect(doc.paths['/api/v1/sessions/{sessionId}']).toHaveProperty('get')
     expect(doc.paths['/api/v1/sessions/{sessionId}']).toHaveProperty('patch')
-    expect(doc.paths['/api/v1/sessions/{sessionId}/connection']).toHaveProperty('get')
+    expect(doc.paths['/api/v1/sessions/{sessionId}/socket']).toHaveProperty('get')
     expect(doc.paths['/api/v1/sessions/{sessionId}/messages']).toHaveProperty('get')
     expect(doc.paths['/api/v1/sessions/{sessionId}/messages']).toHaveProperty('post')
     expect(doc.paths['/api/v1/sessions/{sessionId}/events']).toHaveProperty('get')
@@ -558,8 +559,8 @@ describe('[CF] OpenAPI documentation', () => {
       expect(operation.summary, `${operation.operationId} must have a summary`).toEqual(expect.any(String))
       expect(operation.tags?.length, `${operation.operationId} must have tags`).toBeGreaterThan(0)
       expect(
-        Object.keys(operation.responses ?? {}).some((status) => /^[23]/.test(status)),
-        `${operation.operationId} must document a success or redirect response`,
+        Object.keys(operation.responses ?? {}).some((status) => status === '101' || /^[23]/.test(status)),
+        `${operation.operationId} must document a success, upgrade, or redirect response`,
       ).toBe(true)
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
         if (/^2/.test(status) && status !== '204') {

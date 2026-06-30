@@ -15,7 +15,6 @@ import type {
   Provider,
   Session,
   SessionAgentSnapshot,
-  SessionConnection,
   SessionEvent,
 } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
@@ -95,7 +94,6 @@ function handlers({
   createdSession = null as Session | null,
   sessionDetail = null as Session | null,
   sessionEvents = [] as SessionEvent[],
-  sessionConnection = null as SessionConnection | null,
   agentError = null as { message: string; status: number } | null,
   environmentError = null as { message: string; status: number } | null,
   sessionError = null as { message: string; status: number } | null,
@@ -138,9 +136,6 @@ function handlers({
       return session ? HttpResponse.json(session) : new HttpResponse(null, { status: 404 })
     }),
     http.get('*/api/v1/sessions/:sessionId/events', () => HttpResponse.json(listEnvelope(sessionEvents))),
-    http.get('*/api/v1/sessions/:sessionId/connection', () =>
-      sessionConnection ? HttpResponse.json(sessionConnection) : new HttpResponse(null, { status: 404 }),
-    ),
     // Provider models are queried by CoreStep when a draft has a provider set
     http.get('*/api/v1/providers/:providerId/models', () => HttpResponse.json(listEnvelope([]))),
   ]
@@ -163,7 +158,6 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
     endpoint: null,
     state: fullState,
     sendPrompt: vi.fn().mockReturnValue(false),
-    sendFollowUp: vi.fn().mockReturnValue(false),
     sendSteer: vi.fn().mockReturnValue(false),
     abort: vi.fn().mockReturnValue(false),
   })

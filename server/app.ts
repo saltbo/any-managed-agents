@@ -17,7 +17,6 @@ import { registerMemoryStoreRoutes } from './http/memory-stores'
 import { registerProjectRoutes } from './http/projects'
 import { registerProviderRoutes } from './http/providers'
 import { registerRunnerRoutes } from './http/runners'
-import { registerRuntimeProxy } from './http/runtime-proxy'
 import { registerSessionRoutes } from './http/sessions'
 import { registerTriggerRoutes } from './http/triggers'
 import { registerUsageRecordRoutes } from './http/usage-records'
@@ -56,10 +55,7 @@ export function createApp() {
 
   // Every control-plane resource lives under /api/v1. Auth and its federation
   // config are the one namespaced area (the IdP boundary; also disambiguates
-  // login sessions from agent /sessions). The /api/v1/runtime session proxy is
-  // a protocol-adapter endpoint: its wire shape is dictated by the runtime
-  // tunnel protocol and is therefore exempt from REST resource modeling
-  // (docs/api-v1-design.md §1.8).
+  // login sessions from agent /sessions).
   // agents, environments, providers, vaults, connectors, the governance
   // resources, and the usage/audit reporting resources are migrated
   // to the clean-architecture http layer. Each registers its OpenAPI
@@ -118,7 +114,7 @@ export function createApp() {
       title: 'Any Managed Agents API',
       version: '1.0.0',
       description:
-        'Control-plane API for Any Managed Agents. Every resource lives under /api/v1 and follows REST conventions. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic flows through the /api/v1/runtime protocol-adapter endpoints and canonical session events.',
+        'Control-plane API for Any Managed Agents. Every resource lives under /api/v1 and follows REST conventions. Command-line automation uses restish or direct HTTP against this OpenAPI document; live browser task traffic uses the session socket and canonical session events.',
     },
     servers: [{ url: '/' }],
   })
@@ -130,10 +126,6 @@ export function createApp() {
       url: '/api/v1/openapi.json',
     }),
   )
-
-  // The runtime data-plane proxy mounts after the typed /api/v1/runtime
-  // sub-router so its catch-all only matches the session protocol paths.
-  registerRuntimeProxy(routes)
 
   routes.notFound((c) => c.json({ error: { type: 'not_found', message: 'Not found' } }, 404))
 

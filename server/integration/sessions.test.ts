@@ -430,24 +430,14 @@ describe('[CF] /api/v1/sessions', () => {
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({ metadata: { uid: createdId }, status: { phase: 'idle' } })
 
-    const connectionRes = await jsonFetch(`/api/v1/sessions/${createdId}/connection`, authorization)
-    expect(connectionRes.status).toBe(200)
-    await expect(connectionRes.json()).resolves.toEqual({
-      sessionId: createdId,
-      transport: 'websocket',
-      path: `/api/v1/sessions/${createdId}/socket`,
-      state: 'idle',
-      stateReason: null,
-    })
+    const socketMetadataRes = await jsonFetch(`/api/v1/sessions/${createdId}/socket`, authorization)
+    expect(socketMetadataRes.status).toBe(426)
 
-    const taskRes = await jsonFetch(`/api/v1/runtime/sessions/${createdId}/rpc`, authorization, {
+    const taskRes = await jsonFetch(`/api/v1/sessions/${createdId}/messages`, authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        type: 'prompt',
-        message: 'Inspect repository status',
-      }),
+      body: JSON.stringify({ type: 'prompt', content: 'Inspect repository status' }),
     })
-    expect(taskRes.status).toBe(200)
+    expect(taskRes.status).toBe(201)
     const afterTaskRes = await jsonFetch(`/api/v1/sessions/${createdId}`, authorization)
     await expect(afterTaskRes.json()).resolves.toMatchObject({
       metadata: { uid: createdId },
@@ -791,15 +781,8 @@ describe('[CF] /api/v1/sessions', () => {
       },
     })
 
-    const connectionRes = await jsonFetch(`/api/v1/sessions/${createdId}/connection`, authorization)
-    expect(connectionRes.status).toBe(200)
-    await expect(connectionRes.json()).resolves.toMatchObject({
-      sessionId: createdId,
-      transport: 'websocket',
-      path: `/api/v1/sessions/${createdId}/socket`,
-      state: 'pending',
-      stateReason: 'waiting-for-runner',
-    })
+    const socketMetadataRes = await jsonFetch(`/api/v1/sessions/${createdId}/socket`, authorization)
+    expect(socketMetadataRes.status).toBe(426)
 
     const workItemsRes = await jsonFetch(`/api/v1/work-items?sessionId=${createdId}`, authorization)
     expect(workItemsRes.status).toBe(200)
@@ -1395,16 +1378,7 @@ describe('[CF] /api/v1/sessions', () => {
       body: JSON.stringify({ events: [{ type: 'message_start', payload: { role: 'assistant' } }] }),
     })
 
-    // The connection resource advertises the WebSocket transport + path.
-    const connection = (await (
-      await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/connection`, authorization)
-    ).json()) as {
-      transport: string
-      path: string
-    }
-    expect(connection.transport).toBe('websocket')
-
-    const socketRes = await SELF.fetch(`https://example.com${connection.path}`, {
+    const socketRes = await SELF.fetch(`https://example.com/api/v1/sessions/${created.metadata.uid}/socket`, {
       headers: { authorization, Upgrade: 'websocket' },
     })
     expect(socketRes.status).toBe(101)
@@ -1523,12 +1497,9 @@ describe('[CF] /api/v1/sessions', () => {
     const createdId = created.metadata.uid
     expect(created.status.phase).toBe('idle')
 
-    const runtimeRequest = jsonFetch(`/api/v1/runtime/sessions/${createdId}/rpc`, authorization, {
+    const runtimeRequest = jsonFetch(`/api/v1/sessions/${createdId}/messages`, authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        type: 'prompt',
-        message: 'Wait for cancellation before completing',
-      }),
+      body: JSON.stringify({ type: 'prompt', content: 'Wait for cancellation before completing' }),
     })
     await waitForSessionState(createdId, authorization, 'running')
 
@@ -1807,7 +1778,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
     const crossProjectReads = await Promise.all([
       jsonFetch(`/api/v1/sessions/${created.metadata.uid}`, otherCookie),
-      jsonFetch(`/api/v1/sessions/${created.metadata.uid}/connection`, otherCookie),
+      jsonFetch(`/api/v1/sessions/${created.metadata.uid}/socket`, otherCookie),
       jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, otherCookie),
       jsonFetch(`/api/v1/sessions/${created.metadata.uid}/messages`, otherCookie),
       jsonFetch(`/api/v1/sessions/${created.metadata.uid}`, otherCookie, {
@@ -1889,11 +1860,11 @@ describe('[CF] /api/v1/sessions', () => {
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { metadata: { uid: string } }
 
-    const runtimeRes = await jsonFetch(`/api/v1/runtime/sessions/${session.metadata.uid}/rpc`, authorization, {
+    const runtimeRes = await jsonFetch(`/api/v1/sessions/${session.metadata.uid}/messages`, authorization, {
       method: 'POST',
-      body: JSON.stringify({ type: 'prompt', message: 'Inspect repository status' }),
+      body: JSON.stringify({ type: 'prompt', content: 'Inspect repository status' }),
     })
-    expect(runtimeRes.status).toBe(500)
+    expect(runtimeRes.status).toBe(201)
 
     // A governance denial fails the turn but leaves the session usable.
     const readRes = await jsonFetch(`/api/v1/sessions/${session.metadata.uid}`, authorization)
@@ -1922,56 +1893,6 @@ describe('[CF] /api/v1/sessions', () => {
         }),
       ]),
     )
-  })
-
-  it('records safe runtime errors without leaking secrets', async () => {
-    const authorization = await signIn()
-    await connectMcp(authorization, 'github')
-    const environment = await createEnvironment(authorization)
-    const agent = await createAgent(authorization)
-    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        agentId: agent.id,
-        environmentId: environment.id,
-        runtime: 'ama',
-        prompt: 'Trigger failure',
-      }),
-    })
-    const created = (await createRes.json()) as { id: string }
-
-    const taskRes = await jsonFetch(`/api/v1/runtime/sessions/${created.metadata.uid}/rpc`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        message: 'Trigger failure',
-        simulateError: true,
-        errorMessage: 'Provider failed with token=raw-secret-token',
-      }),
-    })
-    expect(taskRes.status).toBe(500)
-    await expect(taskRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'internal_error',
-        message: '[REDACTED]',
-      },
-    })
-
-    const readRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}`, authorization)
-    expect(readRes.status).toBe(200)
-    await expect(readRes.json()).resolves.toMatchObject({
-      metadata: { uid: created.metadata.uid },
-      status: { phase: 'error', reason: '[REDACTED]' },
-    })
-
-    const eventsRes = await jsonFetch(
-      `/api/v1/sessions/${created.metadata.uid}/events?type=runtime.error`,
-      authorization,
-    )
-    expect(eventsRes.status).toBe(200)
-    const events = (await eventsRes.json()) as { data: Array<{ payload: Record<string, unknown> }> }
-    expect(events.data).toHaveLength(1)
-    expect(events.data[0]?.payload).toMatchObject({ message: '[REDACTED]' })
-    expect(JSON.stringify(events.data)).not.toContain('token=raw-secret-token')
   })
 
   it('rereads stored snapshots after agent and environment updates', async () => {

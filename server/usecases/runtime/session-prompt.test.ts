@@ -45,7 +45,7 @@ function selfHostedSession(overrides: Partial<SessionRow> = {}): SessionRow {
     sandboxId: null,
     piRuntimeId: null,
     piProcessId: null,
-    runtimeEndpointPath: '/api/v1/runtime/sessions/sess_1/rpc',
+    runtimeEndpointPath: null,
     modelProvider: 'openai',
     modelConfig: null,
     state: 'running',

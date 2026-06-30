@@ -639,7 +639,6 @@ describe('QuickstartIntegrationStep', () => {
             agentId: 'agent_123',
             environmentId: 'env_456',
             sessionId: 'sess_789',
-            runtimePath: null,
           }}
         />
       </MemoryRouter>,

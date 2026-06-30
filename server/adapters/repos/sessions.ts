@@ -18,7 +18,7 @@ import type { drizzle } from 'drizzle-orm/d1'
 import type { RuntimeName } from '../../contracts/environment-contracts'
 import { leases, runners, sessionApprovals, sessionEvents, sessionMessages, sessions, workItems } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
-import { runtimePlacement, sessionSocketPath } from '../../domain/runtime/driver'
+import { runtimePlacement } from '../../domain/runtime/driver'
 import {
   type ApprovalState,
   hostingModeFromSnapshot,
@@ -27,7 +27,6 @@ import {
   type Session,
   type SessionAgentSnapshot,
   type SessionApproval,
-  type SessionConnection,
   type SessionEnvironmentSnapshot,
   type SessionEvent,
   type SessionMessage,
@@ -179,21 +178,6 @@ function serializeSession(row: SessionRow): Session {
       startedAt: row.startedAt,
       stoppedAt: row.stoppedAt,
     },
-  }
-}
-
-function serializeConnection(row: SessionRow): SessionConnection {
-  // Browser session transport is a single WebSocket to the per-session Session DO
-  // (live events server→browser, backfill replay on request, and inbound
-  // prompt/abort/steer/approval). SSE + POST /messages remain as REST fallbacks.
-  // The schema already carries transport/path, so this is the advertised value
-  // change only — no contract reshape.
-  return {
-    sessionId: row.id,
-    transport: 'websocket',
-    path: sessionSocketPath(row.id),
-    state: sessionState(row.state),
-    stateReason: row.stateReason,
   }
 }
 
@@ -389,15 +373,6 @@ export function createSessionRepo(db: Db): SessionRepo {
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId)))
         .get()
       return row ? runtimeRow(row) : null
-    },
-
-    async readConnection(projectId, sessionId) {
-      const row = await db
-        .select()
-        .from(sessions)
-        .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId)))
-        .get()
-      return row ? serializeConnection(row) : null
     },
 
     async resolveRunnerEnvironmentId(sessionId) {

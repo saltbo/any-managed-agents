@@ -1180,33 +1180,6 @@ func (e SessionConditionType) Valid() bool {
 	}
 }
 
-// Defines values for SessionConnectionState.
-const (
-	SessionConnectionStateError   SessionConnectionState = "error"
-	SessionConnectionStateIdle    SessionConnectionState = "idle"
-	SessionConnectionStatePending SessionConnectionState = "pending"
-	SessionConnectionStateRunning SessionConnectionState = "running"
-	SessionConnectionStateStopped SessionConnectionState = "stopped"
-)
-
-// Valid indicates whether the value is a known member of the SessionConnectionState enum.
-func (e SessionConnectionState) Valid() bool {
-	switch e {
-	case SessionConnectionStateError:
-		return true
-	case SessionConnectionStateIdle:
-		return true
-	case SessionConnectionStatePending:
-		return true
-	case SessionConnectionStateRunning:
-		return true
-	case SessionConnectionStateStopped:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for SessionEventType.
 const (
 	SessionEventTypeAgentEnd            SessionEventType = "agent_end"
@@ -2301,19 +2274,19 @@ func (e ListVaultCredentialsParamsState) Valid() bool {
 
 // Defines values for ListVaultCredentialVersionsParamsState.
 const (
-	Active     ListVaultCredentialVersionsParamsState = "active"
-	Revoked    ListVaultCredentialVersionsParamsState = "revoked"
-	Superseded ListVaultCredentialVersionsParamsState = "superseded"
+	ListVaultCredentialVersionsParamsStateActive     ListVaultCredentialVersionsParamsState = "active"
+	ListVaultCredentialVersionsParamsStateRevoked    ListVaultCredentialVersionsParamsState = "revoked"
+	ListVaultCredentialVersionsParamsStateSuperseded ListVaultCredentialVersionsParamsState = "superseded"
 )
 
 // Valid indicates whether the value is a known member of the ListVaultCredentialVersionsParamsState enum.
 func (e ListVaultCredentialVersionsParamsState) Valid() bool {
 	switch e {
-	case Active:
+	case ListVaultCredentialVersionsParamsStateActive:
 		return true
-	case Revoked:
+	case ListVaultCredentialVersionsParamsStateRevoked:
 		return true
-	case Superseded:
+	case ListVaultCredentialVersionsParamsStateSuperseded:
 		return true
 	default:
 		return false
@@ -3579,21 +3552,6 @@ type SessionConditionStatus string
 
 // SessionConditionType defines model for SessionCondition.Type.
 type SessionConditionType string
-
-// SessionConnection defines model for SessionConnection.
-type SessionConnection struct {
-	// Path Public runtime proxy path to reconnect to; null while no runtime endpoint is attached.
-	Path        *string                `json:"path"`
-	SessionId   string                 `json:"sessionId"`
-	State       SessionConnectionState `json:"state"`
-	StateReason *string                `json:"stateReason"`
-
-	// Transport Runtime protocol the connection path speaks.
-	Transport *string `json:"transport"`
-}
-
-// SessionConnectionState defines model for SessionConnection.State.
-type SessionConnectionState string
 
 // SessionCreateMetadata defines model for SessionCreateMetadata.
 type SessionCreateMetadata struct {
@@ -5538,9 +5496,6 @@ type ClientInterface interface {
 
 	DecideSessionApproval(ctx context.Context, sessionId string, approvalId string, body DecideSessionApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ReadSessionConnection request
-	ReadSessionConnection(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// ListSessionEvents request
 	ListSessionEvents(ctx context.Context, sessionId string, params *ListSessionEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -6617,18 +6572,6 @@ func (c *APIClient) DecideSessionApprovalWithBody(ctx context.Context, sessionId
 
 func (c *APIClient) DecideSessionApproval(ctx context.Context, sessionId string, approvalId string, body DecideSessionApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDecideSessionApprovalRequest(c.Server, sessionId, approvalId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReadSessionConnection(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReadSessionConnectionRequest(c.Server, sessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -10203,40 +10146,6 @@ func NewDecideSessionApprovalRequestWithBody(server string, sessionId string, ap
 	return req, nil
 }
 
-// NewReadSessionConnectionRequest generates requests for ReadSessionConnection
-func NewReadSessionConnectionRequest(server string, sessionId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sessionId", sessionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/sessions/%s/connection", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewListSessionEventsRequest generates requests for ListSessionEvents
 func NewListSessionEventsRequest(server string, sessionId string, params *ListSessionEventsParams) (*http.Request, error) {
 	var err error
@@ -12554,9 +12463,6 @@ type ClientWithResponsesInterface interface {
 
 	DecideSessionApprovalWithResponse(ctx context.Context, sessionId string, approvalId string, body DecideSessionApprovalJSONRequestBody, reqEditors ...RequestEditorFn) (*DecideSessionApprovalResponse, error)
 
-	// ReadSessionConnectionWithResponse request
-	ReadSessionConnectionWithResponse(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*ReadSessionConnectionResponse, error)
-
 	// ListSessionEventsWithResponse request
 	ListSessionEventsWithResponse(ctx context.Context, sessionId string, params *ListSessionEventsParams, reqEditors ...RequestEditorFn) (*ListSessionEventsResponse, error)
 
@@ -14645,38 +14551,6 @@ func (r DecideSessionApprovalResponse) ContentType() string {
 	return ""
 }
 
-type ReadSessionConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SessionConnection
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReadSessionConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReadSessionConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReadSessionConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 type ListSessionEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -14847,7 +14721,6 @@ func (r ReadSessionMessageResponse) ContentType() string {
 type ConnectSessionSocketResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *SessionConnection
 	JSON401      *ErrorResponse
 	JSON404      *ErrorResponse
 	JSON426      *ErrorResponse
@@ -16401,15 +16274,6 @@ func (c *ClientWithResponses) DecideSessionApprovalWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseDecideSessionApprovalResponse(rsp)
-}
-
-// ReadSessionConnectionWithResponse request returning *ReadSessionConnectionResponse
-func (c *ClientWithResponses) ReadSessionConnectionWithResponse(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*ReadSessionConnectionResponse, error) {
-	rsp, err := c.ReadSessionConnection(ctx, sessionId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReadSessionConnectionResponse(rsp)
 }
 
 // ListSessionEventsWithResponse request returning *ListSessionEventsResponse
@@ -19365,46 +19229,6 @@ func ParseDecideSessionApprovalResponse(rsp *http.Response) (*DecideSessionAppro
 	return response, nil
 }
 
-// ParseReadSessionConnectionResponse parses an HTTP response from a ReadSessionConnectionWithResponse call
-func ParseReadSessionConnectionResponse(rsp *http.Response) (*ReadSessionConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReadSessionConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest SessionConnection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseListSessionEventsResponse parses an HTTP response from a ListSessionEventsWithResponse call
 func ParseListSessionEventsResponse(rsp *http.Response) (*ListSessionEventsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -19671,13 +19495,6 @@ func ParseConnectSessionSocketResponse(rsp *http.Response) (*ConnectSessionSocke
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest SessionConnection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

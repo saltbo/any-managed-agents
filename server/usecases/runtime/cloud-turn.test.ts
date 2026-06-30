@@ -396,7 +396,6 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     startSessionRuntimeMock.mockReset()
     startSessionRuntimeMock.mockResolvedValue({
       sandboxId: 'sandbox_1',
-      runtimeEndpointPath: '/runtime/session_1',
       metadata: { runtimeMode: 'test' },
     })
     stopSessionRuntimeMock.mockReset()

@@ -63,7 +63,7 @@ Common control-plane workflows map to these OpenAPI operations:
 | Health | `getHealth` | `GET /api/v1/health` |
 | Agents | `listAgents`, `createAgent`, `readAgent`, `updateAgent`, `listAgentVersions`, `readAgentVersion`, `readAgentMemory`, `replaceAgentMemory`, `listAgentHandoffCandidates` | `/api/v1/agents` |
 | Environments | `listEnvironments`, `createEnvironment`, `readEnvironment`, `updateEnvironment`, `listEnvironmentVersions`, `readEnvironmentVersion` | `/api/v1/environments` |
-| Sessions | `listSessions`, `createSession`, `readSession`, `updateSession`, `readSessionConnection`, `connectSessionSocket`, `listSessionMessages`, `createSessionMessage`, `readSessionMessage`, `listSessionEvents`, approval operations | `/api/v1/sessions` |
+| Sessions | `listSessions`, `createSession`, `readSession`, `updateSession`, `connectSessionSocket`, `listSessionMessages`, `createSessionMessage`, `readSessionMessage`, `listSessionEvents`, approval operations | `/api/v1/sessions` |
 | Providers | `listProviders`, `listModels`, `refreshCatalog`, `readProvider`, `listProviderModels` | `/api/v1/providers` |
 | Vaults | `listVaults`, `createVault`, `readVault`, `updateVault`, credential and version operations | `/api/v1/vaults` |
 | Budgets | budget operations | `/api/v1/budgets` |
@@ -126,7 +126,7 @@ The stable facade is split by audience:
 - `createAmaClient` / `ama.New` / `create_ama_client` expose public control-plane resources.
 - `createAmaRunnerClient` / `ama.NewRunner` / `create_ama_runner_client` expose runner protocol resources: runner channel, runner heartbeat, work items, leases, and runner-side session event ingestion.
 
-Runtime task interaction is separate from restish control-plane automation. Use the session connection resource (`readSessionConnection`) and AMA runtime helpers. Do not define a new CLI-level runtime protocol.
+Runtime task interaction is separate from restish control-plane automation. Use the session socket operation (`connectSessionSocket`) or the generated SDK stream helper. Do not define a new CLI-level runtime protocol.
 
 Regenerate repo-local SDK scaffolds from the Hono-generated OpenAPI document before publishing SDK changes:
 

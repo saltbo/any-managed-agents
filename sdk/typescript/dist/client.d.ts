@@ -52,9 +52,6 @@ export declare function createAmaClient(config: AmaClientConfig): {
         create: (body: types.CreateAgentRequest) => Promise<types.Agent>;
         get: (agentId: string) => Promise<types.Agent>;
         update: (agentId: string, body: types.UpdateAgentRequest) => Promise<types.Agent>;
-        listHandoffCandidates: (agentId: string, query?: types.ListAgentHandoffCandidatesData["query"]) => Promise<types.AgentHandoffCandidateListResponse>;
-        getMemory: (agentId: string) => Promise<types.AgentMemory>;
-        replaceMemory: (agentId: string, body: types.ReplaceAgentMemoryRequest) => Promise<types.AgentMemory>;
         listVersions: (agentId: string) => Promise<types.AgentVersionListResponse>;
         getVersion: (agentId: string, version: number) => Promise<types.AgentVersion>;
     };
@@ -111,7 +108,6 @@ export declare function createAmaClient(config: AmaClientConfig): {
         create: (body: types.CreateSessionRequest) => Promise<types.Session>;
         get: (sessionId: string) => Promise<types.Session>;
         update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
-        getConnection: (sessionId: string) => Promise<types.SessionConnection>;
         stream: (sessionId: string) => SessionStream;
         listMessages: (sessionId: string, query?: types.ListSessionMessagesData["query"]) => Promise<types.SessionMessageListResponse>;
         createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;

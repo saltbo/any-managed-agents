@@ -168,7 +168,7 @@ export async function startSessionRuntimeForRow(
       sandboxId,
       piRuntimeId: null,
       piProcessId: null,
-      runtimeEndpointPath: startedRuntime.runtimeEndpointPath,
+      runtimeEndpointPath: null,
       state: 'idle',
       metadata: stringify(metadata),
       startedAt,
@@ -188,7 +188,7 @@ export async function startSessionRuntimeForRow(
       resourceId: sessionId,
       outcome: 'success',
       sessionId,
-      metadata: { sandboxId: startedRuntime.sandboxId, runtimeEndpointPath: startedRuntime.runtimeEndpointPath },
+      metadata: { sandboxId: startedRuntime.sandboxId },
     })
     if (prompt) {
       await dispatchPrompt(

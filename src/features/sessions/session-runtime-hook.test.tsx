@@ -1,9 +1,8 @@
 /**
  * Tests for useSessionRuntimeSession hook.
  *
- * Uses MSW for the GET /api/v1/sessions/:id/connection endpoint, and a
- * MockWebSocket to exercise the live runtime socket path. No vi.spyOn/vi.mock
- * of @/lib/amarpc.
+ * Uses a MockWebSocket to exercise the live session socket path.
+ * No vi.spyOn/vi.mock of @/lib/amarpc.
  *
  * ROOT CAUSE OF OOM: The hook's two useEffects both depend on props that can
  * change reference on every re-render, causing infinite loops:
@@ -30,7 +29,6 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, SessionEvent } from '@/lib/amarpc'
 import * as oidcModule from '@/lib/oidc'
-import { HttpResponse, http, server } from '@/test/msw'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { useSessionRuntimeSession } from './use-session-runtime'
 
@@ -117,19 +115,6 @@ function buildEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
   }
 }
 
-// MSW handler for connection endpoint
-function connectionHandler(sessionId = 'session_1') {
-  return http.get(`*/api/v1/sessions/${sessionId}/connection`, () =>
-    HttpResponse.json({
-      sessionId,
-      transport: null,
-      path: `/api/sessions/${sessionId}/runtime/rpc`,
-      state: 'running',
-      stateReason: null,
-    }),
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Test Harness
 //
@@ -154,7 +139,7 @@ function RuntimeHarness({
 }) {
   const onEventsChanged = useCallback(() => onEventsChangedRef.current(), [onEventsChangedRef])
 
-  const { state, sendPrompt, sendFollowUp, sendSteer, abort } = useSessionRuntimeSession({
+  const { state, sendPrompt, sendSteer, abort } = useSessionRuntimeSession({
     session,
     events,
     onEventsChanged,
@@ -167,9 +152,6 @@ function RuntimeHarness({
       <span data-testid="messageCount">{state.messages.length}</span>
       <button type="button" onClick={() => sendPrompt('Test prompt')}>
         Send Prompt
-      </button>
-      <button type="button" onClick={() => sendFollowUp('follow up')}>
-        Send Follow Up
       </button>
       <button type="button" onClick={() => sendSteer('steer message')}>
         Steer
@@ -186,7 +168,6 @@ function makeCallbackRef(fn: () => void = () => {}): React.MutableRefObject<() =
 }
 
 async function renderLive(sessionState: Session['status']['phase'] = 'idle', cbRef = makeCallbackRef()) {
-  server.use(connectionHandler())
   const queryClient = makeQueryClient()
   const result = render(
     <QueryClientProvider client={queryClient}>
@@ -264,15 +245,41 @@ describe('useSessionRuntimeSession — live session open', () => {
   })
 
   it('connects WebSocket for running session', async () => {
-    server.use(connectionHandler())
     await renderLive('running')
     expect(screen.getByTestId('connection').textContent).toBe('open')
   })
 
-  it('dispatches message_end event into messages state', async () => {
+  it('dispatches browser socket live event frames into messages state', async () => {
     await renderLive()
 
-    lastSocket!.emit({ type: 'message_end', id: 'msg1', message: { role: 'assistant', content: 'Hi', id: 'msg1' } })
+    lastSocket!.emit({
+      type: 'event',
+      event: buildEvent({
+        id: 'event_live',
+        sequence: 2,
+        payload: { type: 'message_end', message: { role: 'assistant', content: 'Live frame', id: 'msg_live' } },
+      }),
+    })
+
+    await waitFor(() => expect(screen.getByTestId('messageCount').textContent).toBe('1'), { timeout: 5000 })
+  })
+
+  it('dispatches browser socket backfill frames into messages state', async () => {
+    await renderLive()
+
+    lastSocket!.emit({
+      type: 'backfill',
+      requestId: null,
+      events: [
+        buildEvent({
+          id: 'event_backfill',
+          sequence: 2,
+          payload: { type: 'message_end', message: { role: 'assistant', content: 'Backfill', id: 'msg_backfill' } },
+        }),
+      ],
+      nextCursor: null,
+      hasMore: false,
+    })
 
     await waitFor(() => expect(screen.getByTestId('messageCount').textContent).toBe('1'), { timeout: 5000 })
   })
@@ -283,7 +290,7 @@ describe('useSessionRuntimeSession — live session open', () => {
     lastSocket!.triggerError()
 
     await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('error'), { timeout: 5000 })
-    expect(screen.getByTestId('error').textContent).toBe('Runtime WebSocket failed')
+    expect(screen.getByTestId('error').textContent).toBe('Session socket failed')
   })
 
   it('sets error state for invalid JSON message', async () => {
@@ -302,13 +309,12 @@ describe('useSessionRuntimeSession — live session open', () => {
     await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('error'), { timeout: 5000 })
   })
 
-  it('does not set error for non-string data (treated as synthetic message)', async () => {
+  it('sets error for non-string WebSocket data', async () => {
     await renderLive()
 
     lastSocket!.emitRaw(42)
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    expect(screen.getByTestId('connection').textContent).toBe('open')
+    await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('error'), { timeout: 5000 })
   })
 })
 
@@ -334,17 +340,7 @@ describe('useSessionRuntimeSession — send commands', () => {
     await waitFor(() => expect(lastSocket!.sent).toHaveLength(1), { timeout: 5000 })
     const cmd = JSON.parse(lastSocket!.sent[0] ?? '{}') as Record<string, unknown>
     expect(cmd.type).toBe('prompt')
-    expect(cmd.message).toBe('Test prompt')
-  })
-
-  it('sends follow_up command', async () => {
-    await renderLive()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Send Follow Up' }))
-
-    await waitFor(() => expect(lastSocket!.sent).toHaveLength(1), { timeout: 5000 })
-    const cmd = JSON.parse(lastSocket!.sent[0] ?? '{}') as Record<string, unknown>
-    expect(cmd.type).toBe('follow_up')
+    expect(cmd.content).toBe('Test prompt')
   })
 
   it('sends steer command', async () => {
@@ -365,7 +361,7 @@ describe('useSessionRuntimeSession — send commands', () => {
     await waitFor(() => expect(lastSocket!.sent).toHaveLength(1), { timeout: 5000 })
     const cmd = JSON.parse(lastSocket!.sent[0] ?? '{}') as Record<string, unknown>
     expect(cmd.type).toBe('abort')
-    expect(cmd.message).toBeUndefined()
+    expect(cmd.content).toBeUndefined()
   })
 
   it('sets error when sendPrompt is called while socket is CONNECTING', async () => {
@@ -380,7 +376,6 @@ describe('useSessionRuntimeSession — send commands', () => {
       },
     )
 
-    server.use(connectionHandler())
     const cbRef = makeCallbackRef()
     const queryClient = makeQueryClient()
     render(
@@ -396,7 +391,7 @@ describe('useSessionRuntimeSession — send commands', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send Prompt' }))
 
     await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('error'), { timeout: 5000 })
-    expect(screen.getByTestId('error').textContent).toBe('Runtime WebSocket is not open')
+    expect(screen.getByTestId('error').textContent).toBe('Session socket is not open')
   })
 })
 
@@ -405,7 +400,7 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'turn_end' })
+    lastSocket!.emit({ type: 'event', event: buildEvent({ type: 'turn_end', payload: { type: 'turn_end' } }) })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
@@ -414,7 +409,10 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'runtime.error', message: 'crashed' })
+    lastSocket!.emit({
+      type: 'event',
+      event: buildEvent({ type: 'runtime.error', payload: { type: 'runtime.error', message: 'crashed' } }),
+    })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
@@ -423,7 +421,13 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'tool_execution_end', toolCallId: 'tc_1', toolName: 'exec', result: {}, isError: false })
+    lastSocket!.emit({
+      type: 'event',
+      event: buildEvent({
+        type: 'tool_execution_end',
+        payload: { type: 'tool_execution_end', toolCallId: 'tc_1', toolName: 'exec', result: {}, isError: false },
+      }),
+    })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
@@ -432,7 +436,7 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
-    lastSocket!.emit({ type: 'agent_end', messages: [] })
+    lastSocket!.emit({ type: 'event', event: buildEvent({ type: 'agent_end', payload: { type: 'agent_end' } }) })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
@@ -440,7 +444,6 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
 
 describe('useSessionRuntimeSession — session change (reset)', () => {
   it('resets state when session id changes (line 42 — sessionIdRef update)', async () => {
-    server.use(connectionHandler('session_1'))
     const cbRef = makeCallbackRef()
     const queryClient = makeQueryClient()
 

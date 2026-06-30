@@ -122,38 +122,6 @@ export const readAgentVersion = (options) => (options.client ?? client).get({
     ...options
 });
 /**
- * List handoff candidate agents
- *
- * Resolves live agents in the same project that match the requested role or capability, or the agent handoff policy targets. AMA only resolves candidates; the requesting product decides how a handoff affects its own workflow records.
- */
-export const listAgentHandoffCandidates = (options) => (options.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/agents/{agentId}/handoff-candidates',
-    ...options
-});
-/**
- * Read agent memory
- */
-export const readAgentMemory = (options) => (options.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/agents/{agentId}/memory',
-    ...options
-});
-/**
- * Replace agent memory
- *
- * Idempotent whole replacement of the agent memory singleton.
- */
-export const replaceAgentMemory = (options) => (options.client ?? client).put({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/agents/{agentId}/memory',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-/**
  * List environments
  */
 export const listEnvironments = (options) => (options?.client ?? client).get({
@@ -610,14 +578,6 @@ export const updateSession = (options) => (options.client ?? client).patch({
         'Content-Type': 'application/json',
         ...options.headers
     }
-});
-/**
- * Read session runtime connection details
- */
-export const readSessionConnection = (options) => (options.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/sessions/{sessionId}/connection',
-    ...options
 });
 /**
  * Open the session browser WebSocket (live events + backfill + input)

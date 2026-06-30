@@ -19,13 +19,6 @@ export {
 export { appendRuntimeEvent, loadRuntimeMessages, markPromptFailed } from './events'
 export { mcpConnectorIds, resolveMcpServers, validateRuntimeProviderModel } from './provisioning'
 export {
-  denyRuntimePolicy,
-  evaluateRuntimeSandboxOperations,
-  markRuntimeExecutionFailed,
-  recordRuntimeMessageOutcome,
-  recordRuntimeMessageSubmission,
-} from './proxy'
-export {
   decideRelayPermissionRequest,
   type RunnerChannelDeps,
   type SessionCommandReply,

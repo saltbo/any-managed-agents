@@ -177,7 +177,7 @@ schema：删 `hasCredential`、`credentialSecretRef`；增 `credentialRef`；
 GET|POST         /api/v1/sessions
 GET|PATCH        /api/v1/sessions/{sessionId}             PATCH 可改 name/metadata/
                                                           state(→stopped)/archived
-GET              /api/v1/sessions/{sessionId}/connection  运行时连接信息（原 reconnect）
+GET              /api/v1/sessions/{sessionId}/socket      浏览器 WebSocket upgrade
 GET|POST         /api/v1/sessions/{sessionId}/messages    原 commands；POST → 201
 GET              /api/v1/sessions/{sessionId}/messages/{messageId}   投递状态可查
 GET              /api/v1/sessions/{sessionId}/events      Accept: application/json |

@@ -274,7 +274,7 @@ export function QuickstartIntegrationStep({ input }: { input: QuickstartIntegrat
         <FieldLabel>curl</FieldLabel>
         <JsonBlock value={examples.curl} />
         <FieldDescription>
-          Control-plane calls plus the AMA session runtime endpoint for live session traffic.
+          Control-plane calls plus the AMA session socket for live session traffic.
         </FieldDescription>
       </Field>
       <Field>

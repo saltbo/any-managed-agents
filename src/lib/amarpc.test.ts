@@ -531,14 +531,6 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       expect(result.metadata.uid).toBe('sess_1')
     })
 
-    it('readSessionConnection calls the connection sub-resource', async () => {
-      const conn = { sessionId: 'sess_1', transport: null, path: null, state: 'running' as const, stateReason: null }
-      const fetchMock = makeJsonFetch(conn)
-      vi.stubGlobal('fetch', fetchMock)
-      const result = await api.readSessionConnection('sess_1')
-      expect(result.sessionId).toBe('sess_1')
-    })
-
     it('stopSession patches with state:stopped', async () => {
       const fetchMock = makeJsonFetch({
         ...sessionFixture,

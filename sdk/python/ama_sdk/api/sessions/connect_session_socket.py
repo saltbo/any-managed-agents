@@ -9,7 +9,6 @@ from ...types import Response, UNSET
 from ... import errors
 
 from ...models.error_response import ErrorResponse
-from ...models.session_connection import SessionConnection
 from typing import cast
 
 
@@ -34,17 +33,10 @@ def _get_kwargs(
 
 
 
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Any | ErrorResponse | SessionConnection | None:
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Any | ErrorResponse | None:
     if response.status_code == 101:
         response_101 = cast(Any, None)
         return response_101
-
-    if response.status_code == 200:
-        response_200 = SessionConnection.from_dict(response.json())
-
-
-
-        return response_200
 
     if response.status_code == 401:
         response_401 = ErrorResponse.from_dict(response.json())
@@ -73,7 +65,7 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Any | ErrorResponse | SessionConnection]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[Any | ErrorResponse]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -87,7 +79,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
 
-) -> Response[Any | ErrorResponse | SessionConnection]:
+) -> Response[Any | ErrorResponse]:
     """ Open the session browser WebSocket (live events + backfill + input)
 
     Args:
@@ -98,7 +90,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | ErrorResponse | SessionConnection]
+        Response[Any | ErrorResponse]
      """
 
 
@@ -118,7 +110,7 @@ def sync(
     *,
     client: AuthenticatedClient,
 
-) -> Any | ErrorResponse | SessionConnection | None:
+) -> Any | ErrorResponse | None:
     """ Open the session browser WebSocket (live events + backfill + input)
 
     Args:
@@ -129,7 +121,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | ErrorResponse | SessionConnection
+        Any | ErrorResponse
      """
 
 
@@ -144,7 +136,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
 
-) -> Response[Any | ErrorResponse | SessionConnection]:
+) -> Response[Any | ErrorResponse]:
     """ Open the session browser WebSocket (live events + backfill + input)
 
     Args:
@@ -155,7 +147,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any | ErrorResponse | SessionConnection]
+        Response[Any | ErrorResponse]
      """
 
 
@@ -175,7 +167,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient,
 
-) -> Any | ErrorResponse | SessionConnection | None:
+) -> Any | ErrorResponse | None:
     """ Open the session browser WebSocket (live events + backfill + input)
 
     Args:
@@ -186,7 +178,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Any | ErrorResponse | SessionConnection
+        Any | ErrorResponse
      """
 
 

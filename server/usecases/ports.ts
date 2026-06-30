@@ -11,7 +11,6 @@ import type {
   MessageState,
   Session,
   SessionApproval,
-  SessionConnection,
   SessionEvent,
   SessionMessage,
   SessionState,
@@ -36,7 +35,7 @@ export type {
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
 
-export type { Session, SessionApproval, SessionConnection, SessionEvent, SessionMessage }
+export type { Session, SessionApproval, SessionEvent, SessionMessage }
 
 // A port-level error so the http layer can map orchestration validation
 // failures to a 400 without importing usecases internals or adapters. The
@@ -1591,7 +1590,6 @@ export interface SandboxRuntimeStartInput {
 
 export interface SandboxRuntimeStartResult {
   sandboxId: string
-  runtimeEndpointPath: string
   metadata: Record<string, unknown>
 }
 
@@ -1968,7 +1966,6 @@ export interface SessionRepo {
   // The raw row (with internal columns) for runtime operations. Used by write
   // paths that hand the session to the runtime gateway.
   findRuntimeRow(projectId: string, sessionId: string): Promise<RuntimeSessionHandle | null>
-  readConnection(projectId: string, sessionId: string): Promise<SessionConnection | null>
   resolveRunnerEnvironmentId(sessionId: string): Promise<string | null>
   // The sandbox executor backend for a cloud-loop session. Null means the
   // default Cloudflare Sandbox backend.

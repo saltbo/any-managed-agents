@@ -777,7 +777,7 @@ export function createLeaseRepo(db: Db): LeaseRepo {
         .set({
           state: 'running',
           stateReason: null,
-          runtimeEndpointPath: `/api/v1/runtime/sessions/${workItem.sessionId}/rpc`,
+          runtimeEndpointPath: null,
           startedAt: timestamp,
           updatedAt: timestamp,
         })

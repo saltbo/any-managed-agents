@@ -148,11 +148,6 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
       return terminal && hasAssistantMessage ? false : 1000
     },
   })
-  const connectionQuery = useQuery({
-    queryKey: ['sessions', 'detail', sessionId, 'connection'],
-    queryFn: () => api.readSessionConnection(sessionId),
-    enabled: sessionQuery.data?.status.phase === 'idle' || sessionQuery.data?.status.phase === 'running',
-  })
   const onEventsChanged = useCallback(() => {
     /* v8 ignore start -- called by the runtime hook which is mocked in tests */
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.events(sessionId) })
@@ -193,7 +188,6 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
       </div>
       <MetaGrid>
         <Meta label="Session id" value={session.metadata.uid} />
-        <Meta label="Runtime endpoint" value={connectionQuery.data?.path ?? 'Pending runtime endpoint'} />
       </MetaGrid>
       <Tabs defaultValue="transcript">
         <TabsList>

@@ -1332,20 +1332,6 @@ export type SessionUpdateMetadata = {
     };
 };
 
-export type SessionConnection = {
-    sessionId: string;
-    /**
-     * Runtime protocol the connection path speaks.
-     */
-    transport: string | null;
-    /**
-     * Public runtime proxy path to reconnect to; null while no runtime endpoint is attached.
-     */
-    path: string | null;
-    state: 'pending' | 'running' | 'idle' | 'stopped' | 'error';
-    stateReason: string | null;
-};
-
 export type SessionMessageListResponse = {
     data: Array<SessionMessage>;
     pagination: ListPagination;
@@ -3733,37 +3719,6 @@ export type UpdateSessionResponses = {
 
 export type UpdateSessionResponse = UpdateSessionResponses[keyof UpdateSessionResponses];
 
-export type ReadSessionConnectionData = {
-    body?: never;
-    path: {
-        sessionId: string;
-    };
-    query?: never;
-    url: '/api/v1/sessions/{sessionId}/connection';
-};
-
-export type ReadSessionConnectionErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Session not found
-     */
-    404: ErrorResponse;
-};
-
-export type ReadSessionConnectionError = ReadSessionConnectionErrors[keyof ReadSessionConnectionErrors];
-
-export type ReadSessionConnectionResponses = {
-    /**
-     * Connection details
-     */
-    200: SessionConnection;
-};
-
-export type ReadSessionConnectionResponse = ReadSessionConnectionResponses[keyof ReadSessionConnectionResponses];
-
 export type ConnectSessionSocketData = {
     body?: never;
     path: {
@@ -3789,15 +3744,6 @@ export type ConnectSessionSocketErrors = {
 };
 
 export type ConnectSessionSocketError = ConnectSessionSocketErrors[keyof ConnectSessionSocketErrors];
-
-export type ConnectSessionSocketResponses = {
-    /**
-     * Session connection metadata for OpenAPI clients (no WebSocket upgrade requested)
-     */
-    200: SessionConnection;
-};
-
-export type ConnectSessionSocketResponse = ConnectSessionSocketResponses[keyof ConnectSessionSocketResponses];
 
 export type ListSessionMessagesData = {
     body?: never;

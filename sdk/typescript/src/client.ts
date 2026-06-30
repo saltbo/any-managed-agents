@@ -300,7 +300,6 @@ export function createAmaClient(config: AmaClientConfig) {
       create: (body: types.CreateSessionRequest) => unwrap(ops.createSession({ client, body })),
       get: (sessionId: string) => unwrap(ops.readSession({ client, path: { sessionId } })),
       update: (sessionId: string, body: types.UpdateSessionRequest) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
-      getConnection: (sessionId: string) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
       stream: (sessionId: string): SessionStream => createSessionStream(config, sessionId),
       listMessages: (sessionId: string, query?: types.ListSessionMessagesData['query']) => unwrap(ops.listSessionMessages({ client, path: { sessionId }, query })),
       createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),

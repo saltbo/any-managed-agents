@@ -16,7 +16,6 @@ type SessionRpc = SessionsRpc[':sessionId']
 
 export type SessionListResponse = RpcResponseType<SessionsRpc['$get'], 200>
 export type Session = RpcResponseType<SessionRpc['$get'], 200>
-export type SessionConnection = RpcResponseType<SessionRpc['connection']['$get'], 200>
 export type SessionMessage = RpcResponseType<SessionRpc['messages']['$post'], 201>
 export type SessionEventListResponse = JsonListResponse<RpcResponseType<SessionRpc['events']['$get'], 200>>
 export type SessionEvent = ArrayItem<SessionEventListResponse['data']>
@@ -56,8 +55,6 @@ export const sessionsApi = {
   createSession: (input: SessionInput) =>
     rpcRequest<Session>(v1.sessions.$post(jsonArg<typeof v1.sessions.$post>(input))),
   readSession: (id: string) => rpcRequest<Session>(v1.sessions[':sessionId'].$get({ param: { sessionId: id } })),
-  readSessionConnection: (id: string) =>
-    rpcRequest<SessionConnection>(v1.sessions[':sessionId'].connection.$get({ param: { sessionId: id } })),
   stopSession: (id: string) =>
     rpcRequest<Session>(v1.sessions[':sessionId'].$patch({ param: { sessionId: id }, json: { state: 'stopped' } })),
   archiveSession: (id: string) =>

@@ -132,14 +132,6 @@ export interface SessionEnvironmentSnapshot {
   createdAt: string
 }
 
-export interface SessionConnection {
-  sessionId: string
-  transport: string | null
-  path: string | null
-  state: SessionState
-  stateReason: string | null
-}
-
 export interface SessionMessage {
   id: string
   sessionId: string

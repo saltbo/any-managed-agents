@@ -3,7 +3,7 @@
   "info": {
     "title": "Any Managed Agents API",
     "version": "1.0.0",
-    "description": "Control-plane API for Any Managed Agents. Every resource lives under /api/v1 and follows REST conventions. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic flows through the /api/v1/runtime protocol-adapter endpoints and canonical session events."
+    "description": "Control-plane API for Any Managed Agents. Every resource lives under /api/v1 and follows REST conventions. Command-line automation uses restish or direct HTTP against this OpenAPI document; live browser task traffic uses the session socket and canonical session events."
   },
   "servers": [
     {
@@ -5507,49 +5507,6 @@
           }
         },
         "additionalProperties": false
-      },
-      "SessionConnection": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": "string",
-            "example": "session_abc123"
-          },
-          "transport": {
-            "type": "string",
-            "nullable": true,
-            "example": "ama-runtime-rpc",
-            "description": "Runtime protocol the connection path speaks."
-          },
-          "path": {
-            "type": "string",
-            "nullable": true,
-            "example": "/api/v1/runtime/sessions/session_abc123/rpc",
-            "description": "Public runtime proxy path to reconnect to; null while no runtime endpoint is attached."
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "running",
-              "idle",
-              "stopped",
-              "error"
-            ],
-            "example": "idle"
-          },
-          "stateReason": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "sessionId",
-          "transport",
-          "path",
-          "state",
-          "stateReason"
-        ]
       },
       "SessionMessageListResponse": {
         "type": "object",
@@ -11251,63 +11208,6 @@
         }
       }
     },
-    "/api/v1/sessions/{sessionId}/connection": {
-      "get": {
-        "operationId": "readSessionConnection",
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Read session runtime connection details",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "session_abc123"
-            },
-            "required": true,
-            "name": "sessionId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Connection details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionConnection"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Session not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/sessions/{sessionId}/socket": {
       "get": {
         "operationId": "connectSessionSocket",
@@ -11334,16 +11234,6 @@
         "responses": {
           "101": {
             "description": "Session browser socket accepted as a WebSocket upgrade"
-          },
-          "200": {
-            "description": "Session connection metadata for OpenAPI clients (no WebSocket upgrade requested)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionConnection"
-                }
-              }
-            }
           },
           "401": {
             "description": "Authentication required",

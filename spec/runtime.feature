@@ -14,13 +14,6 @@ Feature: Runtime
     Then it picks the canonical cloud or self-hosted driver and rejects unknown runtimes
     And persisted runtime driver metadata is preserved over defaults
 
-  @runtime/endpoints @domain
-  Scenario: Expose runtime only through AMA session endpoints
-    Given a session runs in any supported runtime
-    When a client sends commands or subscribes to events
-    Then the client uses only AMA session runtime endpoints derived from the session id
-    And sandbox-owned or runner-owned runtime process endpoints are never exposed
-
   # ── Turn engine (usecase: model + tool + sandbox orchestration) ──
 
   @runtime/turn @usecase

@@ -16,7 +16,7 @@
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { amaMemoryRef, memoryStoreIdFromRef } from '@server/domain/memory-store'
-import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
+import { runtimeDriverName } from '@server/domain/runtime/driver'
 import type {
   EnvFromEntry,
   GitRepositoryVolume,
@@ -702,7 +702,7 @@ export async function createSessionForAgent(
     sandboxId,
     piRuntimeId: null,
     piProcessId: null,
-    runtimeEndpointPath: usesCloudLoop ? runtimeEndpointPath(id) : null,
+    runtimeEndpointPath: null,
     modelProvider: providerId,
     modelConfig: stringify({ provider: providerId, ...(agentSnapshot.model ? { model: agentSnapshot.model } : {}) }),
     state: 'pending',

@@ -721,14 +721,6 @@ func (s SessionsService) Update(ctx context.Context, sessionID string, body Upda
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404, response.JSON409)
 }
 
-func (s SessionsService) GetConnection(ctx context.Context, sessionID string) (*SessionConnection, error) {
-	response, err := s.client.raw.ReadSessionConnectionWithResponse(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
-}
-
 func (s SessionsService) Stream(ctx context.Context, sessionID string) (JSONChannel, error) {
 	return s.client.dialWebSocket(ctx, "/api/v1/sessions/"+url.PathEscape(sessionID)+"/socket")
 }

@@ -63,7 +63,7 @@ function requestBodyType(operation) {
 
 function successResponse(operation) {
   const entries = Object.entries(operation.responses ?? {})
-    .filter(([status]) => Number(status) >= 200 && Number(status) < 300)
+    .filter(([status]) => status === '101' || (Number(status) >= 200 && Number(status) < 300))
     .sort(([a], [b]) => Number(a) - Number(b))
   const withBody = entries.find(([, response]) => schemaRefName(response.content?.['application/json']?.schema))
   if (withBody) {

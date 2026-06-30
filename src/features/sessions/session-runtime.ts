@@ -10,12 +10,12 @@ import { getStoredAccessToken } from '@/lib/oidc'
 export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
 export type SessionRuntimeRunState = 'idle' | 'running' | 'error'
 
-export type RuntimeRpcCommandType = 'get_state' | 'prompt' | 'steer' | 'follow_up' | 'abort'
+export type SessionSocketCommandType = 'prompt' | 'steer' | 'abort'
 
-export interface RuntimeRpcCommand {
+export interface SessionSocketCommand {
   id: string
-  type: RuntimeRpcCommandType
-  message?: string
+  type: SessionSocketCommandType
+  content?: string
 }
 
 export interface SessionRuntimeMessage {
@@ -60,7 +60,7 @@ export interface SessionRuntimeState {
 export type SessionRuntimeAction =
   | { type: 'reset' }
   | { type: 'connection'; state: SessionRuntimeConnectionState; error?: string | null }
-  | { type: 'command_sent'; command: RuntimeRpcCommand; at: string }
+  | { type: 'command_sent'; command: SessionSocketCommand; at: string }
   | { type: 'event'; event: Record<string, unknown>; at: string }
   | { type: 'persisted_events'; events: SessionEvent[] }
 
@@ -89,7 +89,7 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
     return mergePersistedEvents(state, action.events)
   }
   if (action.type === 'command_sent') {
-    if (!action.command.message) {
+    if (!action.command.content) {
       return state
     }
     return {
@@ -98,7 +98,7 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
       messages: upsertMessage(state.messages, {
         id: action.command.id,
         role: 'user',
-        content: action.command.message,
+        content: action.command.content,
         status: 'complete',
         createdAt: action.at,
       }),
@@ -191,11 +191,8 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
   }
 }
 
-export function runtimeWebSocketUrl(runtimeEndpointPath: string) {
-  const runtimePath = runtimeEndpointPath.endsWith('/rpc')
-    ? runtimeEndpointPath.replace(/\/rpc$/, '/ws')
-    : `${runtimeEndpointPath.replace(/\/$/, '')}/ws`
-  const url = new URL(runtimePath, window.location.href)
+export function sessionSocketUrl(socketPath: string) {
+  const url = new URL(socketPath, window.location.href)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   const accessToken = getStoredAccessToken()
   if (accessToken) {

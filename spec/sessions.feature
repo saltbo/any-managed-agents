@@ -104,11 +104,11 @@ Feature: Sessions
     Then the request is rejected and no cross-project data is returned
 
   @sessions/connection @api
-  Scenario: Expose runtime only through AMA session connection endpoints
+  Scenario: Expose live browser traffic only through the AMA session socket
     Given a session exists in cloud or self-hosted hosting
-    When a client reads the session connection
-    Then it returns an AMA transport and path for live sessions and null while waiting for a runner
-    And sandbox-owned or runner-owned runtime endpoints are never exposed
+    When a browser opens the session socket
+    Then the request upgrades to the AMA session WebSocket after auth and tenancy checks
+    And non-WebSocket requests are rejected instead of returning runtime discovery metadata
 
   # ── Canonical events (api + domain: protocol normalization) ──
 

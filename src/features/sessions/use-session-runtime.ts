@@ -1,11 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { api, type Session, type SessionEvent } from '@/lib/amarpc'
+import type { Session, SessionEvent } from '@/lib/amarpc'
 import {
   initialSessionRuntimeState,
-  type RuntimeRpcCommand,
-  type RuntimeRpcCommandType,
-  runtimeWebSocketUrl,
+  type SessionSocketCommand,
+  type SessionSocketCommandType,
+  sessionSocketUrl,
   sessionRuntimeReducer,
 } from './session-runtime'
 
@@ -24,19 +23,14 @@ export function useSessionRuntimeSession({
   const refreshTimerRef = useRef<number | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const sessionIdRef = useRef<string | null>(null)
-  // The runtime connection details (transport + path) come from the dedicated
-  // connection resource, fetched only while the runtime is actually active.
   const live = session !== null && (session.status.phase === 'idle' || session.status.phase === 'running')
   const sessionId = session?.metadata.uid ?? ''
-  const connectionQuery = useQuery({
-    queryKey: ['sessions', 'detail', sessionId, 'connection'],
-    queryFn: () => api.readSessionConnection(sessionId),
-    enabled: live,
-  })
-  const runtimePath = connectionQuery.data?.path ?? null
   // Persisted events stay inspectable for any session; the live socket only
   // connects while the runtime is actually active.
-  const endpoint = useMemo(() => (live && runtimePath ? runtimeWebSocketUrl(runtimePath) : null), [live, runtimePath])
+  const endpoint = useMemo(
+    () => (live && sessionId ? sessionSocketUrl(`/api/v1/sessions/${sessionId}/socket`) : null),
+    [live, sessionId],
+  )
 
   useEffect(() => {
     if (sessionIdRef.current !== (session?.metadata.uid ?? null)) {
@@ -70,25 +64,24 @@ export function useSessionRuntimeSession({
       /* v8 ignore start -- guard fires only in stale-socket race conditions */
       if (socketRef.current !== socket) return
       /* v8 ignore stop */
-      const payload = parseRuntimeMessage(message.data)
-      if (payload instanceof Error) {
-        dispatch({ type: 'connection', state: 'error', error: payload.message })
+      const frame = parseRuntimeMessage(message.data)
+      if (frame instanceof Error) {
+        dispatch({ type: 'connection', state: 'error', error: frame.message })
         return
       }
-      dispatch({ type: 'event', event: payload, at: new Date().toISOString() })
-      if (
-        payload.type === 'agent_end' ||
-        payload.type === 'turn_end' ||
-        payload.type === 'tool_execution_end' ||
-        payload.type === 'runtime.error'
-      ) {
+      if (frame.type === 'backfill') {
+        dispatch({ type: 'persisted_events', events: frame.events })
+      } else {
+        dispatch({ type: 'persisted_events', events: [frame.event] })
+      }
+      if (shouldRefreshAfterFrame(frame)) {
         window.clearTimeout(refreshTimerRef.current ?? undefined)
         refreshTimerRef.current = window.setTimeout(onEventsChanged, 150)
       }
     })
     socket.addEventListener('error', () => {
       if (socketRef.current !== socket) return
-      dispatch({ type: 'connection', state: 'error', error: 'Runtime WebSocket failed' })
+      dispatch({ type: 'connection', state: 'error', error: 'Session socket failed' })
     })
     socket.addEventListener('close', () => {
       if (socketRef.current !== socket) return
@@ -109,13 +102,13 @@ export function useSessionRuntimeSession({
     }
   }, [endpoint, onEventsChanged, connectionAttempt])
 
-  const sendCommand = useCallback((type: RuntimeRpcCommandType, message?: string) => {
+  const sendCommand = useCallback((type: SessionSocketCommandType, content?: string) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      dispatch({ type: 'connection', state: 'error', error: 'Runtime WebSocket is not open' })
+      dispatch({ type: 'connection', state: 'error', error: 'Session socket is not open' })
       return false
     }
-    const nextCommand = command(type, message)
+    const nextCommand = command(type, content)
     dispatch({ type: 'command_sent', command: nextCommand, at: new Date().toISOString() })
     socket.send(JSON.stringify(nextCommand))
     return true
@@ -125,33 +118,80 @@ export function useSessionRuntimeSession({
     endpoint,
     state,
     sendPrompt: (message: string) => sendCommand('prompt', message),
-    sendFollowUp: (message: string) => sendCommand('follow_up', message),
     sendSteer: (message: string) => sendCommand('steer', message),
     abort: () => sendCommand('abort'),
   }
 }
 
-function command(type: RuntimeRpcCommandType, message?: string): RuntimeRpcCommand {
+function command(type: SessionSocketCommandType, content?: string): SessionSocketCommand {
   return {
     id: crypto.randomUUID(),
     type,
-    ...(message ? { message } : {}),
+    ...(content ? { content } : {}),
   }
 }
 
-function parseRuntimeMessage(data: unknown): Record<string, unknown> | Error {
+type RuntimeSocketFrame =
+  | { type: 'backfill'; events: SessionEvent[] }
+  | { type: 'event'; event: SessionEvent }
+
+function parseRuntimeMessage(data: unknown): RuntimeSocketFrame | Error {
   if (typeof data !== 'string') {
-    return { type: 'message', data: String(data) }
+    return new Error('Session socket emitted non-text data')
   }
   try {
     const parsed = JSON.parse(data) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return new Error('Runtime WebSocket emitted a non-object JSON message')
+      return new Error('Session socket emitted a non-object JSON message')
     }
-    return parsed as Record<string, unknown>
+    return socketFrameFrom(parsed as Record<string, unknown>)
   } catch (error) {
     /* v8 ignore start -- JSON.parse always throws SyntaxError (an Error); the non-Error branch is unreachable */
-    return error instanceof Error ? error : new Error('Runtime WebSocket emitted invalid JSON')
+    return error instanceof Error ? error : new Error('Session socket emitted invalid JSON')
     /* v8 ignore stop */
   }
+}
+
+function socketFrameFrom(parsed: Record<string, unknown>): RuntimeSocketFrame | Error {
+  if (parsed.type === 'backfill') {
+    return Array.isArray(parsed.events)
+      ? { type: 'backfill', events: parsed.events.filter(isSessionEvent) }
+      : new Error('Session socket emitted invalid backfill frame')
+  }
+  if (parsed.type === 'event') {
+    return isSessionEvent(parsed.event)
+      ? { type: 'event', event: parsed.event }
+      : new Error('Session socket emitted invalid event frame')
+  }
+  return new Error('Session socket emitted an unsupported frame')
+}
+
+function isSessionEvent(value: unknown): value is SessionEvent {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const event = value as Partial<SessionEvent>
+  return (
+    typeof event.id === 'string' &&
+    typeof event.sessionId === 'string' &&
+    typeof event.sequence === 'number' &&
+    typeof event.type === 'string' &&
+    typeof event.createdAt === 'string' &&
+    Boolean(event.payload) &&
+    typeof event.payload === 'object' &&
+    !Array.isArray(event.payload)
+  )
+}
+
+function shouldRefreshAfterFrame(frame: RuntimeSocketFrame) {
+  if (frame.type === 'backfill') {
+    return false
+  }
+  const eventType = frame.event.type
+  return (
+    eventType === 'agent_end' ||
+    eventType === 'turn_end' ||
+    eventType === 'tool_execution_end' ||
+    eventType === 'runtime.error'
+  )
 }

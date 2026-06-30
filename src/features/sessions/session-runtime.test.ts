@@ -7,7 +7,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@/lib/amarpc'
 import * as oidcModule from '@/lib/oidc'
-import { initialSessionRuntimeState, runtimeWebSocketUrl, sessionRuntimeReducer } from './session-runtime'
+import { initialSessionRuntimeState, sessionRuntimeReducer, sessionSocketUrl } from './session-runtime'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -564,19 +564,18 @@ describe('sessionRuntimeReducer', () => {
     expect(replayed.messages[0]?.content).toBe('History loaded')
   })
 
-  it('handles command_sent with abort type without changing run state to running', () => {
+  it('handles command_sent with abort type without changing local transcript', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'command_sent',
-      command: { id: 'cmd_1', type: 'abort', message: 'abort now' },
+      command: { id: 'cmd_1', type: 'abort' },
       at: new Date(1000).toISOString(),
     })
 
-    // abort command should NOT set runState to 'running'
     expect(state.runState).toBe('idle')
-    expect(state.messages[0]?.content).toBe('abort now')
+    expect(state.messages).toHaveLength(0)
   })
 
-  it('handles command_sent with no message by returning unchanged state', () => {
+  it('handles command_sent with no content by returning unchanged state', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'command_sent',
       command: { id: 'cmd_1', type: 'prompt' },
@@ -872,26 +871,16 @@ describe('sessionRuntimeReducer', () => {
 })
 
 // ---------------------------------------------------------------------------
-// runtimeWebSocketUrl — URL construction branches
+// sessionSocketUrl — URL construction branches
 // ---------------------------------------------------------------------------
 
-describe('runtimeWebSocketUrl', () => {
-  it('converts /rpc suffix to /ws', () => {
+describe('sessionSocketUrl', () => {
+  it('keeps the advertised session socket path', () => {
     vi.stubGlobal('window', { location: { href: 'https://example.com/app' } })
     vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
 
-    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/rpc')
-    expect(url).toContain('/ws')
-    expect(url).not.toContain('/rpc')
-    expect(url.startsWith('wss:')).toBe(true)
-  })
-
-  it('appends /ws for non-/rpc paths', () => {
-    vi.stubGlobal('window', { location: { href: 'https://example.com/' } })
-    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
-
-    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime')
-    expect(url).toContain('/ws')
+    const url = sessionSocketUrl('/api/v1/sessions/s1/socket')
+    expect(url).toContain('/api/v1/sessions/s1/socket')
     expect(url.startsWith('wss:')).toBe(true)
   })
 
@@ -899,7 +888,7 @@ describe('runtimeWebSocketUrl', () => {
     vi.stubGlobal('window', { location: { href: 'http://localhost:3000/' } })
     vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
 
-    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/ws')
+    const url = sessionSocketUrl('/api/v1/sessions/s1/socket')
     expect(url.startsWith('ws:')).toBe(true)
     expect(url.startsWith('wss:')).toBe(false)
   })
@@ -908,18 +897,8 @@ describe('runtimeWebSocketUrl', () => {
     vi.stubGlobal('window', { location: { href: 'https://example.com/' } })
     vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue('test_token_xyz')
 
-    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/rpc')
+    const url = sessionSocketUrl('/api/v1/sessions/s1/socket')
     expect(url).toContain('access_token=test_token_xyz')
-  })
-
-  it('strips trailing slash before appending /ws', () => {
-    vi.stubGlobal('window', { location: { href: 'https://example.com/' } })
-    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
-
-    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/')
-    expect(url).toContain('/ws')
-    // Should not have double slash: /runtime//ws
-    expect(url).not.toContain('//ws')
   })
 })
 

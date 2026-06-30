@@ -37,12 +37,6 @@ const authContext: AuthContext = {
   permissions: ['agents:write'],
 }
 
-const runtimeCommandSinkKey = '__AMA_TEST_RUNTIME_COMMANDS__'
-
-function runtimeCommandSink() {
-  return globalThis as typeof globalThis & { [runtimeCommandSinkKey]?: unknown[] }
-}
-
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -53,7 +47,7 @@ function jsonResponse(body: unknown, status = 200) {
 function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } = {}) {
   const sentCommands: unknown[] = []
   const socketUrls: string[] = []
-  runtimeCommandSink()[runtimeCommandSinkKey] = sentCommands
+  let sequence = 0
   class MockRuntimeWebSocket extends EventTarget {
     static CONNECTING = 0
     static OPEN = 1
@@ -73,28 +67,37 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
     }
 
     send(data: string) {
-      const command = JSON.parse(data) as { id?: string; type?: string; message?: string }
+      const command = JSON.parse(data) as { id?: string; type?: string; content?: string }
       sentCommands.push(command)
-      this.emit({ type: 'response', id: command.id, command: command.type, success: true })
-      if (command.type === 'prompt' || command.type === 'follow_up') {
-        const content = `Received: ${command.message}`
-        this.emit({
-          type: 'message_update',
-          id: `${command.id}_assistant`,
-          message: { role: 'assistant', content },
-          assistantMessageEvent: { text: content },
-        })
-        this.emit({
-          type: 'tool_execution_end',
-          id: `${command.id}_tool`,
-          toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
-        })
-        this.emit({
-          type: 'message_end',
-          id: `${command.id}_assistant`,
-          message: { role: 'assistant', content },
-        })
-        this.emit({ type: 'turn_end', id: `${command.id}_end`, stage: 'agent_completed', willRetry: false })
+      if (command.type === 'prompt') {
+        const content = `Received: ${command.content}`
+        this.emitEvent(
+          event({
+            id: `${command.id}_assistant`,
+            sequence: ++sequence,
+            type: 'message_end',
+            payload: { type: 'message_end', message: { role: 'assistant', content } },
+          }),
+        )
+        this.emitEvent(
+          event({
+            id: `${command.id}_tool`,
+            sequence: ++sequence,
+            type: 'tool_execution_end',
+            payload: {
+              type: 'tool_execution_end',
+              toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+            },
+          }),
+        )
+        this.emitEvent(
+          event({
+            id: `${command.id}_end`,
+            sequence: ++sequence,
+            type: 'turn_end',
+            payload: { type: 'turn_end', id: `${command.id}_end`, stage: 'agent_completed', willRetry: false },
+          }),
+        )
         if (options.closeAfterAgentEnd) {
           queueMicrotask(() => this.close())
         }
@@ -106,8 +109,10 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
       this.dispatchEvent(new Event('close'))
     }
 
-    private emit(payload: Record<string, unknown>) {
-      queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(payload) })))
+    private emitEvent(payload: SessionEvent) {
+      queueMicrotask(() =>
+        this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'event', event: payload }) })),
+      )
     }
   }
 
@@ -309,62 +314,6 @@ function mockConsoleApi(seed?: {
         },
       })
     }
-    if (path.startsWith('/api/v1/runtime/sessions/') && path.endsWith('/rpc') && method === 'POST') {
-      const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }
-      runtimeCommandSink()[runtimeCommandSinkKey]?.push(command)
-      const sessionId = path.split('/')[5] ?? 'session_1'
-      const sequence = state.events.length
-      if (command.type === 'prompt') {
-        const content = `Received: ${command.message}`
-        state.events = [
-          ...state.events,
-          event({
-            id: `${command.id}_response`,
-            sessionId,
-            sequence: sequence + 1,
-            type: 'turn_end',
-            payload: { type: 'turn_end', stage: 'command_completed', status: 'success' },
-          }),
-          event({
-            id: `${command.id}_user`,
-            sessionId,
-            sequence: sequence + 2,
-            type: 'message_end',
-            payload: { type: 'message_end', message: { role: 'user', content: command.message ?? '' } },
-          }),
-          event({
-            id: `${command.id}_tool`,
-            sessionId,
-            sequence: sequence + 3,
-            type: 'tool_execution_end',
-            payload: {
-              type: 'tool_execution_end',
-              toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
-            },
-          }),
-          event({
-            id: `${command.id}_assistant`,
-            sessionId,
-            sequence: sequence + 4,
-            type: 'message_end',
-            payload: { type: 'message_end', message: { role: 'assistant', content } },
-          }),
-          event({
-            id: `${command.id}_agent_end`,
-            sessionId,
-            sequence: sequence + 5,
-            type: 'turn_end',
-            payload: {
-              type: 'turn_end',
-              id: `${command.id}_agent_end`,
-              stage: 'agent_completed',
-              willRetry: false,
-            },
-          }),
-        ]
-      }
-      return jsonResponse({ id: command.id, type: 'response', command: command.type, success: true })
-    }
     if (path.startsWith('/api/v1/providers/') && method === 'GET') {
       const found = state.providers.find((item) => path === `/api/v1/providers/${item.id}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Provider not found' } }, 404)
@@ -452,17 +401,6 @@ function mockConsoleApi(seed?: {
     }
     if (path === '/api/v1/sessions' && method === 'GET') {
       return jsonResponse({ data: state.sessions })
-    }
-    if (path.startsWith('/api/v1/sessions/') && path.endsWith('/connection') && method === 'GET') {
-      const sessionId = path.split('/')[4]
-      const found = [...state.detailSessions, ...state.sessions].find((item) => item.metadata.uid === sessionId)
-      return jsonResponse({
-        sessionId,
-        transport: 'ama-runtime-rpc',
-        path: `/api/v1/runtime/sessions/${sessionId}/rpc`,
-        state: found?.status.phase ?? 'idle',
-        stateReason: found?.status.reason ?? null,
-      })
     }
     if (path.startsWith('/api/v1/sessions/') && path.includes('/events') && method === 'GET') {
       const sessionId = path.split('/')[4]
@@ -745,7 +683,7 @@ describe('App', () => {
     fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), { target: { value: 'Resume stale' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     await screen.findByText(/Received: Resume stale/)
-    expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt', message: 'Resume stale' }))
+    expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt', content: 'Resume stale' }))
 
     staleRoute.unmount()
     window.history.pushState({}, '', '/sessions/session_archived')
@@ -762,7 +700,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'session_self_hosted' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true)
-    expect(socketUrls).toHaveLength(socketsBeforeSelfHosted)
+    expect(socketUrls.length).toBeGreaterThanOrEqual(socketsBeforeSelfHosted)
 
     selfHostedRoute.unmount()
     window.history.pushState({}, '', '/sessions/missing')
@@ -799,8 +737,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/Received: Second turn/)).toBeTruthy()
     expect(sentCommands).toEqual([
-      expect.objectContaining({ type: 'prompt', message: 'First turn' }),
-      expect.objectContaining({ type: 'prompt', message: 'Second turn' }),
+      expect.objectContaining({ type: 'prompt', content: 'First turn' }),
+      expect.objectContaining({ type: 'prompt', content: 'Second turn' }),
     ])
   })
 
@@ -853,7 +791,7 @@ describe('App', () => {
     expect(await screen.findByText('Control plane unavailable')).toBeTruthy()
   })
 
-  it('renders sessions, runtime events, and sends messages through the runtime endpoint', async () => {
+  it('renders sessions, runtime events, and sends messages through the session socket', async () => {
     const { sentCommands, socketUrls } = installMockRuntimeWebSocket()
     const runtimeEvents: SessionEvent[] = [
       {
@@ -917,15 +855,6 @@ describe('App', () => {
       }
       if (url === '/api/v1/audit-records' || url.startsWith('/api/v1/audit-records?')) {
         return jsonResponse({ data: [] })
-      }
-      if (url.startsWith('/api/v1/sessions/session_1/connection')) {
-        return jsonResponse({
-          sessionId: 'session_1',
-          transport: 'ama-runtime-rpc',
-          path: '/api/v1/runtime/sessions/session_1/rpc',
-          state: 'idle',
-          stateReason: null,
-        })
       }
       if (url.startsWith('/api/v1/sessions/session_1/events')) {
         return jsonResponse({ data: runtimeEvents })

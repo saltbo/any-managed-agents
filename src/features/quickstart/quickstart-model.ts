@@ -152,7 +152,6 @@ export interface QuickstartIntegrationInput {
   agentId: string
   environmentId: string | null
   sessionId: string
-  runtimePath: string | null
 }
 
 export function quickstartIntegrationExamples(input: QuickstartIntegrationInput) {
@@ -165,9 +164,7 @@ export function quickstartIntegrationExamples(input: QuickstartIntegrationInput)
     },
     prompt: SAFE_EXAMPLE_PROMPT,
   })
-  const liveSessionUrl = input.runtimePath
-    ? `${input.origin}${input.runtimePath}`
-    : `${input.origin}/api/v1/sessions/${input.sessionId}/events`
+  const liveSessionUrl = `${input.origin}/api/v1/sessions/${input.sessionId}/socket`
   const curl = [
     `curl -X POST "${input.origin}/api/v1/sessions" \\`,
     `  ${authHeader} \\`,

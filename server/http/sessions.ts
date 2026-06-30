@@ -18,7 +18,7 @@ import {
 } from '../contracts/execution-spec'
 import { ResourceMetadataSchema } from '../contracts/resource-contracts'
 import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
-import type { Session, SessionApproval, SessionConnection, SessionEvent, SessionMessage } from '../domain/session'
+import type { Session, SessionApproval, SessionEvent, SessionMessage } from '../domain/session'
 import type { Env } from '../env'
 import { type ErrorType, errorResponse } from '../errors'
 import {
@@ -288,22 +288,6 @@ const UpdateSessionSchema = z
   })
   .openapi('UpdateSessionRequest')
 
-const SessionConnectionSchema = z
-  .object({
-    sessionId: z.string().openapi({ example: 'session_abc123' }),
-    transport: z.string().nullable().openapi({
-      example: 'ama-runtime-rpc',
-      description: 'Runtime protocol the connection path speaks.',
-    }),
-    path: z.string().nullable().openapi({
-      example: '/api/v1/runtime/sessions/session_abc123/rpc',
-      description: 'Public runtime proxy path to reconnect to; null while no runtime endpoint is attached.',
-    }),
-    state: z.enum(SESSION_STATES).openapi({ example: 'idle' }),
-    stateReason: z.string().nullable(),
-  })
-  .openapi('SessionConnection')
-
 const SessionMessageSchema = z
   .object({
     id: z.string().openapi({ example: 'msg_abc123' }),
@@ -500,10 +484,6 @@ function serializeSessionMetadata(metadata: Session['metadata']): z.infer<typeof
 
 function serializeAgentSnapshot(snapshot: Session['status']['bindings']['agent']['snapshot']) {
   return snapshot
-}
-
-function asSessionConnectionResponse(record: SessionConnection): z.infer<typeof SessionConnectionSchema> {
-  return record as z.infer<typeof SessionConnectionSchema>
 }
 
 // Forwards an authorised browser WebSocket upgrade to the Session DO, carrying the
@@ -773,21 +753,6 @@ const updateSessionRoute = createRoute({
   },
 })
 
-const readSessionConnectionRoute = createRoute({
-  method: 'get',
-  path: '/{sessionId}/connection',
-  operationId: 'readSessionConnection',
-  tags: ['Sessions'],
-  summary: 'Read session runtime connection details',
-  ...AuthenticatedOperation,
-  request: { params: ParamsSchema },
-  responses: {
-    200: { description: 'Connection details', content: { 'application/json': { schema: SessionConnectionSchema } } },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-  },
-})
-
 const connectSessionSocketRoute = createRoute({
   method: 'get',
   path: '/{sessionId}/socket',
@@ -798,10 +763,6 @@ const connectSessionSocketRoute = createRoute({
   request: { params: ParamsSchema },
   responses: {
     101: { description: 'Session browser socket accepted as a WebSocket upgrade' },
-    200: {
-      description: 'Session connection metadata for OpenAPI clients (no WebSocket upgrade requested)',
-      content: { 'application/json': { schema: SessionConnectionSchema } },
-    },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     426: {
@@ -1112,35 +1073,22 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         return sessionValidationOr(c, error)
       }
     })
-    .openapi(readSessionConnectionRoute, async (c) => {
-      const { sessionId } = c.req.valid('param')
-      const deps = c.get('deps')
-      const auth = await requireAuth(c)
-      if (auth instanceof Response) {
-        return auth
-      }
-      const connection = await deps.sessions.readConnection(auth.project.id, sessionId)
-      if (!connection) {
-        return errorResponse(c, 404, 'not_found', 'Session not found')
-      }
-      return c.json(asSessionConnectionResponse(connection), 200)
-    })
     .openapi(connectSessionSocketRoute, async (c) => {
       // Authorise that the connecting user owns the session, then forward the
-      // upgrade to the per-session Session DO. Non-upgrade (OpenAPI/REST) callers
-      // get the connection metadata instead of a socket.
+      // upgrade to the per-session Session DO. This route is the browser socket,
+      // not a discovery resource; non-upgrade callers get an explicit 426.
       const { sessionId } = c.req.valid('param')
       const deps = c.get('deps')
       const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
-      const connection = await deps.sessions.readConnection(auth.project.id, sessionId)
-      if (!connection) {
+      const session = await deps.sessions.find(auth.project.id, sessionId)
+      if (!session) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
       if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
-        return c.json(asSessionConnectionResponse(connection), 200)
+        return errorResponse(c, 426, 'conflict', 'WebSocket upgrade required')
       }
       return upgradeSessionBrowserSocket(c.env, c.req.raw, sessionId, {
         sessionId,

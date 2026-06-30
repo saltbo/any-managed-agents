@@ -141,7 +141,6 @@ function fakeDeps(
     find: async () => sessionRecord(),
     findActiveHttpTriggerSession: async () => null,
     findRuntimeRow: async () => sessionRow(),
-    readConnection: async () => null,
     updateFields: async () => sessionRecord(),
     listMessages: async () => ({ rows: [], hasMore: false }),
     findMessage: async () => null,

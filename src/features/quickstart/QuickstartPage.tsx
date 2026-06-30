@@ -279,7 +279,6 @@ export function QuickstartPage() {
                 agentId: integrationSession.spec.agentId,
                 environmentId: integrationSession.spec.environmentId,
                 sessionId: integrationSession.metadata.uid,
-                runtimePath: null,
               }
             : /* v8 ignore start -- integration step only unlocked when sessions non-empty */ null
           /* v8 ignore stop */

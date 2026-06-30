@@ -79,7 +79,6 @@
           { "name": "create", "operationId": "createSession" },
           { "name": "get", "operationId": "readSession" },
           { "name": "update", "operationId": "updateSession" },
-          { "name": "getConnection", "operationId": "readSessionConnection" },
           { "name": "stream", "operationId": "connectSessionSocket" },
           { "name": "listMessages", "operationId": "listSessionMessages" },
           { "name": "createMessage", "operationId": "createSessionMessage" },

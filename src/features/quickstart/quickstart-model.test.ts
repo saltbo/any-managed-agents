@@ -157,7 +157,6 @@ describe('quickstart integration examples [spec: quickstart/integration-examples
     agentId: 'agent_123',
     environmentId: 'env_456',
     sessionId: 'sess_789',
-    runtimePath: '/runtime/sessions/sess_789/rpc',
   })
 
   it('targets the platform origin with the created resource ids', () => {
@@ -171,22 +170,15 @@ describe('quickstart integration examples [spec: quickstart/integration-examples
   })
 
   it('uses AMA session endpoints for live traffic and never embeds secrets or vendor URLs', () => {
-    expect(examples.curl).toContain('/runtime/sessions/sess_789/rpc')
+    expect(examples.curl).toContain('/api/v1/sessions/sess_789/socket')
     const combined = `${examples.curl}\n${examples.restish}\n${examples.sdk}`
     expect(combined).toContain('$AMA_ACCESS_TOKEN')
     expect(combined).not.toMatch(/Bearer [A-Za-z0-9]/)
     expect(combined).not.toMatch(/\b(?:api\.)?(?:openai|anthropic)\.com\b/)
   })
 
-  it('falls back to session events URL when runtimePath is null', () => {
-    const examplesNoPath = quickstartIntegrationExamples({
-      origin: 'https://ama.example.com',
-      agentId: 'agent_123',
-      environmentId: 'env_456',
-      sessionId: 'sess_789',
-      runtimePath: null,
-    })
-    expect(examplesNoPath.curl).toContain('/api/v1/sessions/sess_789/events')
-    expect(examplesNoPath.curl).not.toContain('/runtime/')
+  it('includes the session events URL for history', () => {
+    expect(examples.curl).toContain('/api/v1/sessions/sess_789/events')
+    expect(examples.curl).not.toContain('/runtime/')
   })
 })

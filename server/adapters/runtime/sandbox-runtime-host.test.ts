@@ -31,7 +31,6 @@ import {
   executeRuntimeToolCalls,
   RuntimeTurnCancelledError,
   runSessionTurn,
-  runtimeEndpointPath,
   runtimeMessagesFromEvents,
   runtimeToolCalls,
   startSessionRuntime,
@@ -49,10 +48,6 @@ describe('session-runtime', () => {
     mockSandbox.setEnvVars.mockReset()
     getSandboxMock.mockClear()
     toolExecutorMock.mockClear()
-  })
-
-  it('builds AMA runtime endpoint paths from the session id [spec: runtime/endpoints]', () => {
-    expect(runtimeEndpointPath('session_123')).toBe('/api/v1/runtime/sessions/session_123/rpc')
   })
 
   it('extracts only object tool calls from runtime command bodies', () => {
@@ -126,7 +121,6 @@ describe('session-runtime', () => {
       }),
     ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
-      runtimeEndpointPath: '/api/v1/runtime/sessions/session_123/rpc',
       metadata: expect.objectContaining({
         runtimeMode: 'test',
         runtimeDriver: 'ama-cloud',
@@ -536,7 +530,6 @@ describe('session-runtime', () => {
       }),
     ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
-      runtimeEndpointPath: '/api/v1/runtime/sessions/session_123/rpc',
       metadata: expect.objectContaining({
         runtimeMode: 'live',
         runtimeDriver: 'ama-cloud',

@@ -12,7 +12,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
-import type { Agent, Environment, Session, SessionConnection, SessionEvent } from '@/lib/amarpc'
+import type { Agent, Environment, Session, SessionEvent } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,
@@ -126,7 +126,6 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
     endpoint: null,
     state: fullState,
     sendPrompt: sendPromptFn,
-    sendFollowUp: vi.fn().mockReturnValue(false),
     sendSteer: vi.fn().mockReturnValue(false),
     abort: vi.fn().mockReturnValue(false),
   })
@@ -138,18 +137,13 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
 function sessionPreviewHandlers({
   session = buildSession() as Session,
   events = [] as SessionEvent[],
-  connection = null as SessionConnection | null,
 }: {
   session?: Session
   events?: SessionEvent[]
-  connection?: SessionConnection | null
 } = {}) {
   return [
     http.get('*/api/v1/sessions/:sessionId', () => HttpResponse.json(session)),
     http.get('*/api/v1/sessions/:sessionId/events', () => HttpResponse.json(listEnvelope(events))),
-    http.get('*/api/v1/sessions/:sessionId/connection', () =>
-      connection ? HttpResponse.json(connection) : new HttpResponse(null, { status: 404 }),
-    ),
   ]
 }
 
@@ -303,7 +297,7 @@ describe('QuickstartSessionStep — agent without sandbox execution', () => {
       onSessionCreated: vi.fn(),
       onContinue: vi.fn(),
     })
-    expect(screen.getByText('Sandbox execution enabled')).toBeTruthy()
+    expect(screen.getByText('Add sandbox execution')).toBeTruthy()
   })
 })
 
@@ -395,7 +389,6 @@ describe('QuickstartSessionStep — session preview loading', () => {
     server.use(
       http.get('*/api/v1/sessions/:sessionId', () => new Promise(() => {})),
       http.get('*/api/v1/sessions/:sessionId/events', () => new Promise(() => {})),
-      http.get('*/api/v1/sessions/:sessionId/connection', () => new Promise(() => {})),
     )
     renderStep({
       agent: buildAgent(),
@@ -470,20 +463,6 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
     expect(screen.getByText(/runtime connection:/i)).toBeTruthy()
   })
 
-  it('renders pending runtime endpoint when connection data is not loaded', async () => {
-    mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection: null }))
-    renderStep({
-      agent: buildAgent(),
-      environment: buildEnvironment(),
-      sessionId: 'session_1',
-      onSessionCreated: vi.fn(),
-      onContinue: vi.fn(),
-    })
-
-    await waitFor(() => expect(screen.getByText('Pending runtime endpoint')).toBeTruthy())
-  })
-
   it('renders Transcript tab as default', async () => {
     mockRuntime()
     server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
@@ -551,14 +530,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('Send first task button is disabled when prompt is empty', async () => {
     mockRuntime({ connection: 'open' })
-    const connection: SessionConnection = {
-      sessionId: 'session_1',
-      transport: 'websocket',
-      path: '/runtime/session_1',
-      state: 'idle',
-      stateReason: null,
-    }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -577,14 +549,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
   it('calls sendPrompt and clears textarea when Send first task is clicked', async () => {
     const { sendPromptFn } = mockRuntime({ connection: 'open' })
     sendPromptFn.mockReturnValue(true)
-    const connection: SessionConnection = {
-      sessionId: 'session_1',
-      transport: 'websocket',
-      path: '/runtime/session_1',
-      state: 'idle',
-      stateReason: null,
-    }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -602,14 +567,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('does not clear textarea when sendPrompt returns false', async () => {
     const { sendPromptFn } = mockRuntime({ connection: 'open' })
-    const connection: SessionConnection = {
-      sessionId: 'session_1',
-      transport: 'websocket',
-      path: '/runtime/session_1',
-      state: 'idle',
-      stateReason: null,
-    }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -628,14 +586,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('shows Agent is running label when runtime is in running state', async () => {
     mockRuntime({ connection: 'open', runState: 'running' })
-    const connection: SessionConnection = {
-      sessionId: 'session_1',
-      transport: 'websocket',
-      path: '/runtime/session_1',
-      state: 'idle',
-      stateReason: null,
-    }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'running' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'running' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),

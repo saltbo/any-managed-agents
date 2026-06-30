@@ -3,7 +3,6 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
 import { gitRepositoryMountPath } from '@server/domain/git-repository'
 import { memoryStoreIdFromRef, normalizeMemoryPath } from '@server/domain/memory-store'
-import { runtimeEndpointPath } from '@server/domain/runtime/driver'
 import {
   type MemoryVolume,
   type Volume,
@@ -71,7 +70,6 @@ export type SessionRuntimeStartInput = {
 
 export type SessionRuntimeStartResult = {
   sandboxId: string
-  runtimeEndpointPath: string
   metadata: Record<string, unknown>
 }
 
@@ -125,8 +123,6 @@ async function getSandboxBinding() {
   const { getSandbox } = await import('@cloudflare/sandbox')
   return getSandbox
 }
-
-export { runtimeEndpointPath }
 
 export function workspaceVolumeManifest(manifest: WorkspaceManifest = { root: '/workspace', mounts: [] }) {
   const volumes = manifest.mounts
@@ -306,7 +302,6 @@ export async function startSessionRuntime(
 
   return {
     sandboxId: input.sandboxId,
-    runtimeEndpointPath: runtimeEndpointPath(input.sessionId),
     metadata: {
       runtimeMode: env.AMA_RUNTIME_MODE === 'test' ? 'test' : 'live',
       runtimeDriver: 'ama-cloud',

@@ -132,14 +132,7 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
       },
     })
 
-    const sessionId = session.metadata.uid
-    const connectionRes = await jsonFetch(`/api/v1/sessions/${sessionId}/connection`, authorization)
-    expect(connectionRes.status).toBe(200)
-    expect(await connectionRes.json()).toMatchObject({
-      sessionId,
-      transport: 'websocket',
-      path: `/api/v1/sessions/${sessionId}/socket`,
-      state: 'idle',
-    })
+    const socketRes = await jsonFetch(`/api/v1/sessions/${session.metadata.uid}/socket`, authorization)
+    expect(socketRes.status).toBe(426)
   })
 })

@@ -71,17 +71,6 @@ export function runtimeDriverName(runtime: RuntimeName, hostingMode: RuntimeHost
   return hostingMode === 'cloud' ? runtimeDriver(runtime).cloudBackend : `${runtime}-self-hosted`
 }
 
-export function runtimeEndpointPath(sessionId: string) {
-  return `/api/v1/runtime/sessions/${sessionId}/rpc`
-}
-
-// The browser session transport: a single WebSocket to the per-session Session
-// DO (live events + backfill replay + inbound prompt/abort/steer/approval). The
-// /connection resource advertises this so the client knows where to connect.
-export function sessionSocketPath(sessionId: string) {
-  return `/api/v1/sessions/${sessionId}/socket`
-}
-
 export function runtimePlacement(values: {
   hostingMode: RuntimeHostingMode
   runtime: RuntimeName

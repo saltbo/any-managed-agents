@@ -257,8 +257,6 @@ from .session_bindings_environment import SessionBindingsEnvironment
 from .session_condition import SessionCondition
 from .session_condition_status import SessionConditionStatus
 from .session_condition_type import SessionConditionType
-from .session_connection import SessionConnection
-from .session_connection_state import SessionConnectionState
 from .session_create_metadata import SessionCreateMetadata
 from .session_create_metadata_annotations import SessionCreateMetadataAnnotations
 from .session_create_metadata_labels import SessionCreateMetadataLabels
@@ -659,8 +657,6 @@ __all__ = (
     "SessionCondition",
     "SessionConditionStatus",
     "SessionConditionType",
-    "SessionConnection",
-    "SessionConnectionState",
     "SessionCreateMetadata",
     "SessionCreateMetadataAnnotations",
     "SessionCreateMetadataLabels",

@@ -71,7 +71,6 @@ from .api.sessions import list_session_messages as list_session_messages_api
 from .api.sessions import list_sessions as list_sessions_api
 from .api.sessions import read_session as read_session_api
 from .api.sessions import read_session_approval as read_session_approval_api
-from .api.sessions import read_session_connection as read_session_connection_api
 from .api.sessions import read_session_message as read_session_message_api
 from .api.sessions import update_session as update_session_api
 from .api.system import get_health as get_health_api
@@ -576,9 +575,6 @@ class _SessionsResource:
 
     def update(self, session_id: str, body: Any) -> Any:
         return _unwrap(update_session_api.sync_detailed(session_id=session_id, client=self._client, body=body))
-
-    def get_connection(self, session_id: str) -> Any:
-        return _unwrap(read_session_connection_api.sync_detailed(session_id=session_id, client=self._client))
 
     def stream(self, session_id: str) -> SessionStream:
         return SessionStream(

@@ -211,14 +211,14 @@ describe('[CF] generated SDK contract', () => {
     expect(placement.hostingMode).toBe('cloud')
     expect(placement.provider).toBeTruthy()
 
-    // Stable id/status/runtime + the canonical event endpoint advertised on the connection resource.
+    // Stable id/status/runtime + canonical session event and socket operations.
     expect(typeof obj(created.metadata).uid === 'string' && (obj(created.metadata).uid as string).length > 0).toBe(true)
     const fetched = await readSession(ama, String(obj(created.metadata).uid))
     expect(obj(fetched.metadata).uid).toBe(obj(created.metadata).uid)
     expect('reason' in obj(fetched.status)).toBe(true)
-    const connection = (await ama.sessions.getConnection(String(obj(created.metadata).uid))) as Json
-    expect(connection.transport).toBe('websocket')
-    expect(connection.path).toBe(`/api/v1/sessions/${obj(created.metadata).uid}/socket`)
+    expect(typeof ama.sessions.stream).toBe('function')
+    const socketOperation = operations.find((op) => op.operationId === 'connectSessionSocket')
+    expect(socketOperation?.path).toBe('/api/v1/sessions/{sessionId}/socket')
     const eventsOperation = operations.find((op) => op.operationId === 'listSessionEvents')
     expect(eventsOperation?.path).toBe('/api/v1/sessions/{sessionId}/events')
 
