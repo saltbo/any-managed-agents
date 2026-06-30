@@ -4,45 +4,31 @@
 // (pre-migration cloud sessions, self-hosted CLI sessions).
 export const SESSION_DO_EVENT_STORE = 'session-do'
 
-export const AMA_SESSION_EVENT_DEFINITIONS = {
-  agent_start: { category: 'lifecycle', label: 'Agent started' },
-  agent_end: { category: 'lifecycle', label: 'Agent completed' },
-  turn_start: { category: 'lifecycle', label: 'Turn started' },
-  turn_end: { category: 'lifecycle', label: 'Turn completed' },
-  session_stop: { category: 'lifecycle', label: 'Session stopped' },
-  session_checkpoint: { category: 'lifecycle', label: 'Checkpoint recorded' },
-  session_resume: { category: 'lifecycle', label: 'Session resumed' },
-  message_start: { category: 'transcript', label: 'Message started' },
-  message_update: { category: 'transcript', label: 'Message updated' },
-  message_end: { category: 'transcript', label: 'Message completed' },
-  tool_execution_start: { category: 'tool', label: 'Tool execution started' },
-  tool_execution_update: { category: 'tool', label: 'Tool execution updated' },
-  tool_execution_end: { category: 'tool', label: 'Tool execution completed' },
-  'usage.recorded': { category: 'usage', label: 'Usage recorded' },
-  'policy.decision': { category: 'policy', label: 'Policy decision' },
-  'permission.request': { category: 'policy', label: 'Permission requested' },
-  'runtime.error': { category: 'error', label: 'Runtime error' },
-  'runtime.metadata': { category: 'metadata', label: 'Runtime metadata' },
-  'runtime.output': { category: 'output', label: 'Runtime output' },
-  'runner.metadata': { category: 'metadata', label: 'Runner metadata' },
-} as const
+export const AMA_SESSION_EVENT_TYPES = [
+  'agent_start',
+  'agent_end',
+  'turn_start',
+  'turn_end',
+  'session_stop',
+  'session_checkpoint',
+  'session_resume',
+  'message_start',
+  'message_update',
+  'message_end',
+  'tool_execution_start',
+  'tool_execution_update',
+  'tool_execution_end',
+  'usage.recorded',
+  'policy.decision',
+  'permission.request',
+  'runtime.error',
+  'runtime.metadata',
+  'runtime.output',
+  'runner.metadata',
+] as const
 
-export type AmaSessionEventType = keyof typeof AMA_SESSION_EVENT_DEFINITIONS
-export type AmaSessionEventCategory = (typeof AMA_SESSION_EVENT_DEFINITIONS)[AmaSessionEventType]['category']
-
-export const AMA_SESSION_EVENT_TYPES = Object.keys(AMA_SESSION_EVENT_DEFINITIONS) as AmaSessionEventType[]
-export const AMA_SESSION_EVENT_CATEGORIES = [
-  'transcript',
-  'tool',
-  'lifecycle',
-  'usage',
-  'policy',
-  'error',
-  'metadata',
-  'output',
-] as const satisfies readonly Exclude<AmaSessionEventCategory, 'unknown'>[]
-
-export type AmaSessionEventFilterCategory = AmaSessionEventCategory | 'unknown'
+export type AmaSessionEventType = (typeof AMA_SESSION_EVENT_TYPES)[number]
+const AMA_SESSION_EVENT_TYPE_SET = new Set<string>(AMA_SESSION_EVENT_TYPES)
 
 export type EventMetadata = {
   sourceEventType?: string
@@ -206,15 +192,7 @@ export type EventRecord = {
 }
 
 export function isAmaSessionEventType(value: string): value is AmaSessionEventType {
-  return Object.hasOwn(AMA_SESSION_EVENT_DEFINITIONS, value)
-}
-
-export function amaSessionEventCategory(type: string): AmaSessionEventFilterCategory {
-  return isAmaSessionEventType(type) ? AMA_SESSION_EVENT_DEFINITIONS[type].category : 'unknown'
-}
-
-export function amaSessionEventLabel(type: string): string {
-  return isAmaSessionEventType(type) ? AMA_SESSION_EVENT_DEFINITIONS[type].label : type
+  return AMA_SESSION_EVENT_TYPE_SET.has(value)
 }
 
 export function amaSessionEventTypeFromPayload(event: Record<string, unknown>): string {

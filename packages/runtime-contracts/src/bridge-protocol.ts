@@ -1,12 +1,8 @@
 import { z } from 'zod'
 import { EXTERNAL_RUNTIME_NAMES } from './runtime-names'
-import type { AmaEvent, AmaSessionEventType } from './session-events'
-import { AMA_SESSION_EVENT_DEFINITIONS } from './session-events'
+import { AMA_SESSION_EVENT_TYPES, type AmaEvent, type AmaSessionEventType } from './session-events'
 
-const AmaSessionEventTypeValues = Object.keys(AMA_SESSION_EVENT_DEFINITIONS) as [
-  AmaSessionEventType,
-  ...AmaSessionEventType[],
-]
+const AmaSessionEventTypeValues = [...AMA_SESSION_EVENT_TYPES] as [AmaSessionEventType, ...AmaSessionEventType[]]
 
 export const JsonObjectSchema = z.record(z.string(), z.unknown())
 export const StringMapSchema = z.record(z.string(), z.string())

@@ -1,7 +1,6 @@
 import {
   AMA_SESSION_EVENT_TYPES,
   type AmaSessionEventType,
-  amaSessionEventCategory,
   amaSessionEventTypeFromPayload,
 } from '@shared/session-events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -108,15 +107,11 @@ describe('sessionRuntimeReducer', () => {
     expect(state.messages.some((message) => message.content.includes('Hello'))).toBe(true)
     expect(state.messages.some((message) => message.content === 'Runtime failed')).toBe(true)
     expect(state.tools).toHaveLength(1)
-    expect(new Set(AMA_SESSION_EVENT_TYPES.map((type) => amaSessionEventCategory(type)))).toEqual(
-      new Set(['transcript', 'tool', 'lifecycle', 'usage', 'policy', 'error', 'metadata', 'output']),
-    )
     for (const [type, payload] of Object.entries(canonicalEventPayloads)) {
       expect(amaSessionEventTypeFromPayload(payload)).toBe(type)
     }
     expect(amaSessionEventTypeFromPayload({ content: 'line without a type' })).toBe('unknown')
     expect(amaSessionEventTypeFromPayload({ type: 'future_event', content: 'debug only' })).toBe('future_event')
-    expect(amaSessionEventCategory('toString')).toBe('unknown')
   })
 
   it('keeps prior tool output when updates carry empty values', () => {

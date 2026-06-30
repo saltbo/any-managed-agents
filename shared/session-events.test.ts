@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  AMA_SESSION_EVENT_CATEGORIES,
   AMA_SESSION_EVENT_TYPES,
   amaEventFromRuntimeEvent,
-  amaSessionEventCategory,
-  amaSessionEventLabel,
   amaSessionEventTypeFromPayload,
   isAmaSessionEventType,
   isPiAgentSessionEventType,
@@ -92,7 +89,7 @@ describe('[spec: sessions/events-hierarchy] amaEventFromRuntimeEvent', () => {
 // ── isAmaSessionEventType ─────────────────────────────────────────────────────
 
 describe('isAmaSessionEventType', () => {
-  it('returns true for every key in AMA_SESSION_EVENT_DEFINITIONS', () => {
+  it('returns true for every canonical AMA event type', () => {
     for (const type of AMA_SESSION_EVENT_TYPES) {
       expect(isAmaSessionEventType(type)).toBe(true)
     }
@@ -124,46 +121,6 @@ describe('isPiAgentSessionEventType', () => {
 
   it('returns false for unknown strings', () => {
     expect(isPiAgentSessionEventType('unknown_event')).toBe(false)
-  })
-})
-
-// ── amaSessionEventCategory ───────────────────────────────────────────────────
-
-describe('amaSessionEventCategory', () => {
-  it('returns the correct category for known event types', () => {
-    expect(amaSessionEventCategory('agent_start')).toBe('lifecycle')
-    expect(amaSessionEventCategory('message_start')).toBe('transcript')
-    expect(amaSessionEventCategory('tool_execution_start')).toBe('tool')
-    expect(amaSessionEventCategory('usage.recorded')).toBe('usage')
-    expect(amaSessionEventCategory('policy.decision')).toBe('policy')
-    expect(amaSessionEventCategory('runtime.error')).toBe('error')
-    expect(amaSessionEventCategory('runtime.metadata')).toBe('metadata')
-    expect(amaSessionEventCategory('runtime.output')).toBe('output')
-  })
-
-  it('returns unknown for an unrecognized event type', () => {
-    expect(amaSessionEventCategory('not_real')).toBe('unknown')
-  })
-
-  it('covers every category in AMA_SESSION_EVENT_CATEGORIES', () => {
-    const covered = new Set(AMA_SESSION_EVENT_TYPES.map((t) => amaSessionEventCategory(t)))
-    for (const cat of AMA_SESSION_EVENT_CATEGORIES) {
-      expect(covered.has(cat)).toBe(true)
-    }
-  })
-})
-
-// ── amaSessionEventLabel ──────────────────────────────────────────────────────
-
-describe('amaSessionEventLabel', () => {
-  it('returns the human-readable label for known event types', () => {
-    expect(amaSessionEventLabel('agent_start')).toBe('Agent started')
-    expect(amaSessionEventLabel('session_stop')).toBe('Session stopped')
-    expect(amaSessionEventLabel('runtime.error')).toBe('Runtime error')
-  })
-
-  it('returns the raw type string for unknown event types', () => {
-    expect(amaSessionEventLabel('completely_unknown')).toBe('completely_unknown')
   })
 })
 

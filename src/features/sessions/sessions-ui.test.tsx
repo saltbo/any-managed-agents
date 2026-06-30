@@ -1,4 +1,4 @@
-import { AMA_SESSION_EVENT_CATEGORIES, AMA_SESSION_EVENT_TYPES, amaSessionEventLabel } from '@shared/session-events'
+import { AMA_SESSION_EVENT_TYPES } from '@shared/session-events'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -451,11 +451,8 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     await waitFor(() => expect(debugTab.getAttribute('aria-selected')).toBe('true'))
 
     for (const type of AMA_SESSION_EVENT_TYPES) {
-      expect(screen.getByText(amaSessionEventLabel(type))).toBeTruthy()
+      expect(screen.getAllByText(type).length).toBeGreaterThan(0)
       expect(screen.getByText(`debug_${type}`)).toBeTruthy()
-    }
-    for (const category of AMA_SESSION_EVENT_CATEGORIES) {
-      expect(screen.getAllByText(category).length).toBeGreaterThan(0)
     }
     expect(screen.getByText(/payload_runtime.error/)).toBeTruthy()
   })
@@ -560,11 +557,14 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     expect(onSend).toHaveBeenCalledWith('Ship it')
     expect(setMessage).toHaveBeenCalledWith('')
 
-    expect(eventFilter('unknown')).toBe('all')
-    expect(eventFilter('transcript')).toBe('transcript')
-    expect(eventFilter('not-a-filter')).toBe('all')
-    expect(transcriptFilter('messages')).toBe('messages')
-    expect(transcriptFilter('tools')).toBe('tools')
+    expect(eventFilter('runtime.error')).toBe('runtime.error')
+    expect(eventFilter('message_end')).toBe('message_end')
+    expect(eventFilter('')).toBe('all')
+    expect(transcriptFilter('user')).toBe('user')
+    expect(transcriptFilter('agent')).toBe('agent')
+    expect(transcriptFilter('tool')).toBe('tool')
+    expect(transcriptFilter('error')).toBe('error')
+    expect(transcriptFilter('system')).toBe('system')
     expect(transcriptFilter('bad')).toBe('all')
   })
 
@@ -591,11 +591,32 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         runtime={buildRuntimeState({
           messages: [
             {
+              id: 'message_user',
+              role: 'user',
+              content: 'User request',
+              status: 'complete',
+              createdAt: '2026-05-23T00:00:00.000Z',
+            },
+            {
               id: 'message_1',
               role: 'assistant',
               content: 'Only message text',
               status: 'complete',
-              createdAt: '2026-05-23T00:00:00.000Z',
+              createdAt: '2026-05-23T00:00:01.000Z',
+            },
+            {
+              id: 'message_system',
+              role: 'system',
+              content: 'System note',
+              status: 'complete',
+              createdAt: '2026-05-23T00:00:02.000Z',
+            },
+            {
+              id: 'message_error',
+              role: 'assistant',
+              content: 'Runtime failed',
+              status: 'error',
+              createdAt: '2026-05-23T00:00:03.000Z',
             },
           ],
           tools: [
@@ -608,8 +629,8 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
               output: 'ok',
               error: null,
               durationMs: 5,
-              createdAt: '2026-05-23T00:00:01.000Z',
-              updatedAt: '2026-05-23T00:00:01.000Z',
+              createdAt: '2026-05-23T00:00:04.000Z',
+              updatedAt: '2026-05-23T00:00:04.000Z',
               eventType: 'tool_execution_end',
             },
           ],
@@ -625,7 +646,10 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       />,
     )
 
+    expect(screen.getByText('User request')).toBeTruthy()
     expect(screen.getByText('Only message text')).toBeTruthy()
+    expect(screen.getByText('System note')).toBeTruthy()
+    expect(screen.getByText('Runtime failed')).toBeTruthy()
     expect(screen.getByText('read_file')).toBeTruthy()
 
     const filter = screen.getByRole('combobox', { name: 'Filter transcript' })
@@ -633,22 +657,28 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     fireEvent.pointerDown(filter, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(filter)
     fireEvent.keyDown(filter, { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByRole('option', { name: 'Tools' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Tool' }))
 
+    expect(screen.queryByText('User request')).toBeNull()
     expect(screen.queryByText('Only message text')).toBeNull()
+    expect(screen.queryByText('System note')).toBeNull()
+    expect(screen.queryByText('Runtime failed')).toBeNull()
     expect(screen.getByText('read_file')).toBeTruthy()
 
     filter.focus()
     fireEvent.pointerDown(filter, { button: 0, ctrlKey: false, pointerId: 2, pointerType: 'mouse' })
     fireEvent.mouseDown(filter)
     fireEvent.keyDown(filter, { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByRole('option', { name: 'Messages' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Agent' }))
 
     expect(screen.getByText('Only message text')).toBeTruthy()
+    expect(screen.getByText('Runtime failed')).toBeTruthy()
+    expect(screen.queryByText('User request')).toBeNull()
+    expect(screen.queryByText('System note')).toBeNull()
     expect(screen.queryByText('read_file')).toBeNull()
   })
 
-  it('filters canonical debug events through the debug category menu', async () => {
+  it('filters canonical debug events through the debug event type menu', async () => {
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
       value: vi.fn(() => false),
       configurable: true,
@@ -708,7 +738,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     fireEvent.pointerDown(filter, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(filter)
     fireEvent.keyDown(filter, { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByRole('option', { name: 'error' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'runtime.error' }))
 
     expect(screen.getByText('debug_error')).toBeTruthy()
     expect(screen.queryByText('debug_message')).toBeNull()

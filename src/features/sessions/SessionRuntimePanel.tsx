@@ -1,4 +1,3 @@
-import { AMA_SESSION_EVENT_CATEGORIES, amaSessionEventCategory, amaSessionEventLabel } from '@shared/session-events'
 import { Copy, Download, RefreshCw, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -16,10 +15,9 @@ import { formatTime, stringifyJson } from '@/console/format'
 import type { EventRecord } from '@/lib/amarpc'
 import type { SessionRuntimeState } from './session-runtime'
 
-const EVENT_FILTERS = AMA_SESSION_EVENT_CATEGORIES
-type EventFilter = 'all' | (typeof EVENT_FILTERS)[number]
+type EventFilter = 'all' | string
 type RuntimeTab = 'transcript' | 'debug'
-type TranscriptFilter = 'all' | 'messages' | 'tools'
+type TranscriptFilter = 'all' | 'user' | 'agent' | 'tool' | 'error' | 'system'
 
 export function SessionRuntimePanel({
   runtime,
@@ -52,8 +50,13 @@ export function SessionRuntimePanel({
     }))
     return [...persisted, ...runtime.debugEvents.filter((record) => !persisted.some((item) => item.id === record.id))]
   }, [persistedEvents, runtime.debugEvents])
+  const debugEventTypes = useMemo<string[]>(
+    () => [...new Set(debugEvents.map((event) => event.type))].sort((left, right) => left.localeCompare(right)),
+    [debugEvents],
+  )
+  const selectedEventType = eventType === 'all' || debugEventTypes.includes(eventType) ? eventType : 'all'
   const filteredDebugEvents =
-    eventType === 'all' ? debugEvents : debugEvents.filter((event) => amaSessionEventCategory(event.type) === eventType)
+    selectedEventType === 'all' ? debugEvents : debugEvents.filter((event) => event.type === selectedEventType)
   const eventExport = stringifyJson([...persistedEvents].sort((a, b) => a.sequence - b.sequence))
   const transcriptItems = useMemo(
     () =>
@@ -66,8 +69,13 @@ export function SessionRuntimePanel({
   const filteredTranscriptItems = useMemo(
     () =>
       transcriptItems.filter((item) => {
-        if (transcriptType === 'messages') return item.type === 'message'
-        if (transcriptType === 'tools') return item.type === 'tool'
+        if (transcriptType === 'user') return item.type === 'message' && item.message.role === 'user'
+        if (transcriptType === 'agent') return item.type === 'message' && item.message.role === 'assistant'
+        if (transcriptType === 'tool') return item.type === 'tool'
+        if (transcriptType === 'error') {
+          return item.type === 'message' ? item.message.status === 'error' : item.tool.status === 'error'
+        }
+        if (transcriptType === 'system') return item.type === 'message' && item.message.role === 'system'
         return true
       }),
     [transcriptItems, transcriptType],
@@ -115,23 +123,26 @@ export function SessionRuntimePanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="all">All transcript</SelectItem>
-                  <SelectItem value="messages">Messages</SelectItem>
-                  <SelectItem value="tools">Tools</SelectItem>
+                  <SelectItem value="all">All events</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="tool">Tool</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="system">System</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
           ) : (
-            <Select value={eventType} onValueChange={(value) => setEventType(eventFilter(value))}>
+            <Select value={selectedEventType} onValueChange={(value) => setEventType(eventFilter(value))}>
               <SelectTrigger className="h-9 w-44" aria-label="Filter debug events">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectItem value="all">All events</SelectItem>
-                  {EVENT_FILTERS.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
+                  {debugEventTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -222,11 +233,7 @@ export function SessionRuntimePanel({
               {filteredDebugEvents.map((event) => (
                 <details key={event.id} className="group p-3">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3">
-                    <StatusBadge
-                      value={amaSessionEventLabel(event.type)}
-                      detail={event.type === 'runtime.error' ? stringifyJson(event.payload) : null}
-                    />
-                    <Badge variant="outline">{amaSessionEventCategory(event.type)}</Badge>
+                    <StatusBadge value={event.type} />
                     <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
                     <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
                   </summary>
@@ -244,13 +251,18 @@ export function SessionRuntimePanel({
 }
 
 export function eventFilter(value: string): EventFilter {
-  return value === 'all' || EVENT_FILTERS.includes(value as (typeof EVENT_FILTERS)[number])
-    ? (value as EventFilter)
-    : 'all'
+  return value || 'all'
 }
 
 export function transcriptFilter(value: string): TranscriptFilter {
-  return value === 'all' || value === 'messages' || value === 'tools' ? value : 'all'
+  return value === 'all' ||
+    value === 'user' ||
+    value === 'agent' ||
+    value === 'tool' ||
+    value === 'error' ||
+    value === 'system'
+    ? value
+    : 'all'
 }
 
 function runtimeTab(value: string): RuntimeTab {

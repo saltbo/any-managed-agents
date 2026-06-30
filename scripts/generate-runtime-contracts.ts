@@ -14,7 +14,7 @@ import {
   RuntimeUsageWindowSchema,
 } from '../packages/runtime-contracts/src/bridge-protocol'
 import { EXTERNAL_RUNTIME_NAMES } from '../packages/runtime-contracts/src/runtime-names'
-import { AMA_SESSION_EVENT_DEFINITIONS } from '../packages/runtime-contracts/src/session-events'
+import { AMA_SESSION_EVENT_TYPES } from '../packages/runtime-contracts/src/session-events'
 
 type JSONSchema = Record<string, unknown>
 type OpenApiDocument = {
@@ -39,7 +39,7 @@ const SESSION_EVENT_CONFIG = path.join(ROOT, 'cmd/ama-runner/pkg/sessionevent/oa
 const RUNTIME_BRIDGE_GO = path.join(ROOT, 'cmd/ama-runner/pkg/runtimebridge/protocol_gen.go')
 const SESSION_EVENT_GO = path.join(ROOT, 'cmd/ama-runner/pkg/sessionevent/session_events_gen.go')
 
-const SESSION_EVENT_TYPES = Object.keys(AMA_SESSION_EVENT_DEFINITIONS)
+const SESSION_EVENT_TYPES = [...AMA_SESSION_EVENT_TYPES]
 
 async function main() {
   const check = process.argv.includes('--check')

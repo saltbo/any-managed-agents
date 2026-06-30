@@ -1,5 +1,5 @@
 import type { SessionSocketClientMessage } from '@ama/runtime-contracts/session-socket'
-import { type AmaSessionEventType, amaSessionEventCategory } from '@shared/session-events'
+import type { AmaSessionEventType } from '@shared/session-events'
 import type { EventRecord } from '@/lib/amarpc'
 import { getStoredAccessToken } from '@/lib/oidc'
 
@@ -233,7 +233,7 @@ function sessionEventType(stored: EventRecord, _payload: Record<string, unknown>
 }
 
 function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
-  if (amaSessionEventCategory(eventType) !== 'transcript') {
+  if (!isTranscriptEvent(eventType)) {
     return null
   }
   const message = objectValue(event.message)
@@ -465,7 +465,13 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
 }
 
 function isToolEvent(eventType: string) {
-  return amaSessionEventCategory(eventType) === 'tool'
+  return (
+    eventType === 'tool_execution_start' || eventType === 'tool_execution_update' || eventType === 'tool_execution_end'
+  )
+}
+
+function isTranscriptEvent(eventType: string) {
+  return eventType === 'message_start' || eventType === 'message_update' || eventType === 'message_end'
 }
 
 function mergeEventKeys(left: string[], right: string[]) {
