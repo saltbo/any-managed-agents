@@ -28,7 +28,7 @@ test.describe('console (real browser)', () => {
 
     await page.getByRole('button', { name: 'Create environment' }).click()
     const name = `ui-env-${runId}`
-    const nameField = page.getByLabel('Name')
+    const nameField = page.getByRole('textbox', { name: 'Name', exact: true })
     await nameField.fill(name)
     await page.getByRole('button', { name: 'Save environment' }).click()
 
