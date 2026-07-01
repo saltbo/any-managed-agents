@@ -10,7 +10,12 @@ test('lists a seeded agent and opens its detail page [spec: web-console/routed-p
   runId,
 }) => {
   const name = `ui-agent-${runId}`
-  const res = await api.post('/api/v1/agents', { data: { name, systemPrompt: 'E2E view journey' } })
+  const res = await api.post('/api/v1/agents', {
+    data: {
+      metadata: { name },
+      spec: { systemPrompt: 'E2E view journey' },
+    },
+  })
   expect(res.status(), 'seed agent').toBe(201)
   const agent = (await res.json()) as { metadata: { uid: string } }
 

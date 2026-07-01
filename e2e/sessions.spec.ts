@@ -13,27 +13,31 @@ test('lists a seeded session and opens its detail page [spec: web-console/routed
   await api.post('/api/v1/e2e/catalog/seed', { data: {} })
   const agentRes = await api.post('/api/v1/agents', {
     data: {
-      name: `s-agent-${runId}`,
-      systemPrompt: 'x',
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
+      metadata: { name: `s-agent-${runId}` },
+      spec: {
+        systemPrompt: 'x',
+        provider: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
+      },
     },
   })
   expect(agentRes.status(), 'seed session agent').toBe(201)
   const agent = (await agentRes.json()) as { metadata: { uid: string } }
   const environmentRes = await api.post('/api/v1/environments', {
-    data: { name: `s-env-${runId}` },
+    data: { metadata: { name: `s-env-${runId}` }, spec: {} },
   })
   expect(environmentRes.status(), 'seed session environment').toBe(201)
   const environment = (await environmentRes.json()) as { metadata: { uid: string } }
   const title = `ui-session-${runId}`
   const res = await api.post('/api/v1/sessions', {
     data: {
-      agentId: agent.metadata.uid,
-      environmentId: environment.metadata.uid,
-      runtime: 'ama',
-      name: title,
       prompt: `Open seeded session ${runId}`,
+      metadata: { name: title },
+      spec: {
+        agentId: agent.metadata.uid,
+        environmentId: environment.metadata.uid,
+        runtime: 'ama',
+      },
     },
   })
   expect(res.status(), 'seed session').toBe(201)
