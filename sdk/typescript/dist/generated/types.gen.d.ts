@@ -1175,6 +1175,7 @@ export type CreateTriggerRequest = {
                 promptTemplate: string;
             };
         };
+        nextDueAt?: string;
     };
 };
 export type TriggerCreateMetadata = {
@@ -1218,6 +1219,7 @@ export type UpdateTriggerRequest = {
                 promptTemplate?: string;
             };
         };
+        nextDueAt?: string;
     };
     archived?: boolean;
 };

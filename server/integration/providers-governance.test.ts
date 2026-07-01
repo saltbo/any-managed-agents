@@ -2,6 +2,10 @@ import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
+function createResourceBody(metadata: { name: string; description?: string }, spec: Record<string, unknown> = {}) {
+  return { metadata, spec }
+}
+
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
@@ -51,7 +55,12 @@ describe('[CF] providers', () => {
     // A null provider defers resolution to session start (docs §Agents).
     const deferredAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Deferred provider agent' }),
+      body: JSON.stringify(
+        createResourceBody(
+          { name: 'Deferred provider agent' },
+          { systemPrompt: 'Defer model provider selection until session start.' },
+        ),
+      ),
     })
     expect(deferredAgentRes.status).toBe(201)
     await expect(deferredAgentRes.json()).resolves.toMatchObject({ spec: { provider: null } })
@@ -59,11 +68,16 @@ describe('[CF] providers', () => {
     // Binding to an enabled vendor + available model succeeds.
     const boundAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Workers AI agent',
-        provider: 'workers-ai',
-        model: '@cf/moonshotai/kimi-k2.6',
-      }),
+      body: JSON.stringify(
+        createResourceBody(
+          { name: 'Workers AI agent' },
+          {
+            systemPrompt: 'Use the configured Workers AI provider.',
+            provider: 'workers-ai',
+            model: '@cf/moonshotai/kimi-k2.6',
+          },
+        ),
+      ),
     })
     expect(boundAgentRes.status).toBe(201)
     await expect(boundAgentRes.json()).resolves.toMatchObject({ spec: { provider: 'workers-ai' } })
@@ -71,7 +85,16 @@ describe('[CF] providers', () => {
     // Binding to a disabled vendor is rejected at agent creation.
     const disabledAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Disabled vendor agent', provider: disabledProviderId, model: disabledModelId }),
+      body: JSON.stringify(
+        createResourceBody(
+          { name: 'Disabled vendor agent' },
+          {
+            systemPrompt: 'Attempt to bind a disabled provider.',
+            provider: disabledProviderId,
+            model: disabledModelId,
+          },
+        ),
+      ),
     })
     expect(disabledAgentRes.status).toBe(400)
     await expect(disabledAgentRes.json()).resolves.toMatchObject({

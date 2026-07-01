@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedPlatformProvider, setupOidcProvider, signIn, signInUser } from './auth'
 
 const AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
+const EMPTY_PACKAGES = { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] } as const
+
+function createResourceBody(metadata: { name: string; description?: string }, spec: Record<string, unknown> = {}) {
+  return { metadata, spec }
+}
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -19,12 +24,18 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
 async function createEnvironment(authorization: string) {
   const res = await jsonFetch('/api/v1/environments', authorization, {
     method: 'POST',
-    body: JSON.stringify({
-      name: `Trigger workspace ${crypto.randomUUID()}`,
-      type: 'cloud',
-      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
-      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
-    }),
+    body: JSON.stringify(
+      createResourceBody(
+        {
+          name: `Trigger workspace ${crypto.randomUUID()}`,
+        },
+        {
+          type: 'cloud',
+          networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+          packages: EMPTY_PACKAGES,
+        },
+      ),
+    ),
   })
   expect(res.status).toBe(201)
   const environment = (await res.json()) as { metadata: { uid: string } }
@@ -34,12 +45,18 @@ async function createEnvironment(authorization: string) {
 async function createAgent(authorization: string) {
   const res = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
-    body: JSON.stringify({
-      name: `Trigger agent ${crypto.randomUUID()}`,
-      systemPrompt: 'Run scheduled work.',
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-    }),
+    body: JSON.stringify(
+      createResourceBody(
+        {
+          name: `Trigger agent ${crypto.randomUUID()}`,
+        },
+        {
+          systemPrompt: 'Run scheduled work.',
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
+        },
+      ),
+    ),
   })
   expect(res.status).toBe(201)
   const agent = (await res.json()) as { metadata: { uid: string } }
@@ -49,7 +66,7 @@ async function createAgent(authorization: string) {
 async function createRuntimeCredential(authorization: string) {
   const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
-    body: JSON.stringify({ name: `Trigger runtime secrets ${crypto.randomUUID()}` }),
+    body: JSON.stringify(createResourceBody({ name: `Trigger runtime secrets ${crypto.randomUUID()}` })),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { metadata: { uid: string } }
@@ -105,24 +122,26 @@ async function createTrigger(
   const res = await jsonFetch('/api/v1/triggers', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      name,
-      source: source ?? { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
-      ...(suspend === undefined ? {} : { suspend }),
-      template: template ?? {
-        metadata: { labels: {}, annotations: {} },
-        spec: {
-          agentId,
-          environmentId,
-          runtime: 'ama',
-          promptTemplate: 'Run scheduled work.',
-          env: {},
-          envFrom: [],
-          volumes: [],
-          volumeMounts: [],
+      metadata: { name },
+      spec: {
+        source: source ?? { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
+        ...(suspend === undefined ? {} : { suspend }),
+        ...(hasNextDueAt ? (nextDueAt === undefined ? {} : { nextDueAt }) : { nextDueAt: '2026-05-26T12:00:00.000Z' }),
+        template: template ?? {
+          metadata: { labels: {}, annotations: {} },
+          spec: {
+            agentId,
+            environmentId,
+            runtime: 'ama',
+            promptTemplate: 'Run scheduled work.',
+            env: {},
+            envFrom: [],
+            volumes: [],
+            volumeMounts: [],
+          },
         },
+        ...rest,
       },
-      ...(hasNextDueAt ? (nextDueAt === undefined ? {} : { nextDueAt }) : { nextDueAt: '2026-05-26T12:00:00.000Z' }),
-      ...rest,
     }),
   })
   expect(res.status).toBe(201)
@@ -250,11 +269,13 @@ describe('[CF] /api/v1/triggers', () => {
     const patchRes = await jsonFetch(`/api/v1/triggers/${secondId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({
-        name: 'Beta heartbeat updated',
-        suspend: false,
-        source: { type: 'schedule', schedule: { intervalSeconds: 1800, windowSeconds: 60 } },
-        nextDueAt: '2026-05-26T13:00:00.000Z',
-        template: { metadata: { annotations: { lane: 'beta', updated: 'true' } } },
+        metadata: { name: 'Beta heartbeat updated' },
+        spec: {
+          suspend: false,
+          source: { type: 'schedule', schedule: { intervalSeconds: 1800, windowSeconds: 60 } },
+          nextDueAt: '2026-05-26T13:00:00.000Z',
+          template: { metadata: { annotations: { lane: 'beta', updated: 'true' } } },
+        },
       }),
     })
     expect(patchRes.status).toBe(200)
@@ -270,7 +291,7 @@ describe('[CF] /api/v1/triggers', () => {
 
     const invalidPatchRes = await jsonFetch(`/api/v1/triggers/${firstId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ source: { type: 'schedule', schedule: { intervalSeconds: 30 } } }),
+      body: JSON.stringify({ spec: { source: { type: 'schedule', schedule: { intervalSeconds: 30 } } } }),
     })
     expect(invalidPatchRes.status).toBe(400)
 
@@ -301,7 +322,7 @@ describe('[CF] /api/v1/triggers', () => {
 
     const updateArchivedRes = await jsonFetch(`/api/v1/triggers/${firstId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ name: 'Cannot touch this' }),
+      body: JSON.stringify({ metadata: { name: 'Cannot touch this' } }),
     })
     expect(updateArchivedRes.status).toBe(409)
     await expect(updateArchivedRes.json()).resolves.toMatchObject({
@@ -335,19 +356,21 @@ describe('[CF] /api/v1/triggers', () => {
     const createRes = await jsonFetch('/api/v1/triggers', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Rejected secret metadata heartbeat',
-        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
-        template: {
-          metadata: { labels: {}, annotations: { private_key: 'raw-private-key-value' } },
-          spec: {
-            agentId: agent.id,
-            environmentId: environment.id,
-            runtime: 'ama',
-            promptTemplate: 'Should not persist.',
-            env: {},
-            envFrom: [],
-            volumes: [],
-            volumeMounts: [],
+        metadata: { name: 'Rejected secret metadata heartbeat' },
+        spec: {
+          source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
+          template: {
+            metadata: { labels: {}, annotations: { private_key: 'raw-private-key-value' } },
+            spec: {
+              agentId: agent.id,
+              environmentId: environment.id,
+              runtime: 'ama',
+              promptTemplate: 'Should not persist.',
+              env: {},
+              envFrom: [],
+              volumes: [],
+              volumeMounts: [],
+            },
           },
         },
       }),
@@ -371,19 +394,21 @@ describe('[CF] /api/v1/triggers', () => {
     const envCreateRes = await jsonFetch('/api/v1/triggers', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Rejected envFrom heartbeat',
-        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
-        template: {
-          metadata: { labels: {}, annotations: {} },
-          spec: {
-            agentId: agent.id,
-            environmentId: environment.id,
-            runtime: 'ama',
-            promptTemplate: 'Should not persist either.',
-            env: { AK_API_TOKEN: 'raw-token-value' },
-            envFrom: [],
-            volumes: [],
-            volumeMounts: [],
+        metadata: { name: 'Rejected envFrom heartbeat' },
+        spec: {
+          source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
+          template: {
+            metadata: { labels: {}, annotations: {} },
+            spec: {
+              agentId: agent.id,
+              environmentId: environment.id,
+              runtime: 'ama',
+              promptTemplate: 'Should not persist either.',
+              env: { AK_API_TOKEN: 'raw-token-value' },
+              envFrom: [],
+              volumes: [],
+              volumeMounts: [],
+            },
           },
         },
       }),
@@ -420,10 +445,12 @@ describe('[CF] /api/v1/triggers', () => {
     const updateRes = await jsonFetch(`/api/v1/triggers/${triggerId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({
-        template: {
-          metadata: {
-            annotations: {
-              privateKey: 'raw-private-key-value',
+        spec: {
+          template: {
+            metadata: {
+              annotations: {
+                privateKey: 'raw-private-key-value',
+              },
             },
           },
         },
@@ -460,28 +487,30 @@ describe('[CF] /api/v1/triggers', () => {
     const createRes = await jsonFetch('/api/v1/triggers', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Banking bonus heartbeat',
-        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
-        template: {
-          metadata: { labels: {}, annotations: { externalRunGroup: 'banking-bonus' } },
-          spec: {
-            agentId: agent.id,
-            environmentId: environment.id,
-            runtime: 'ama',
-            promptTemplate: 'Research current Canadian banking bonus offers.',
-            volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
-            volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
-            env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
-            envFrom: [
-              {
-                type: 'secret',
-                name: 'AK_AGENT_KEY',
-                secretRef: credential.activeVersion.secretRef,
-              },
-            ],
+        metadata: { name: 'Banking bonus heartbeat' },
+        spec: {
+          source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
+          nextDueAt: dueAt,
+          template: {
+            metadata: { labels: {}, annotations: { externalRunGroup: 'banking-bonus' } },
+            spec: {
+              agentId: agent.id,
+              environmentId: environment.id,
+              runtime: 'ama',
+              promptTemplate: 'Research current Canadian banking bonus offers.',
+              volumes: [{ name: 'repo', type: 'git_repository', url: 'https://github.com/saltbo/agent-kanban.git' }],
+              volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
+              env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
+              envFrom: [
+                {
+                  type: 'secret',
+                  name: 'AK_AGENT_KEY',
+                  secretRef: credential.activeVersion.secretRef,
+                },
+              ],
+            },
           },
         },
-        nextDueAt: dueAt,
       }),
     })
     expect(createRes.status).toBe(201)
@@ -562,10 +591,8 @@ describe('[CF] /api/v1/triggers', () => {
         spec: {
           triggerId: string
           scheduledFor: string
-          correlationId: string
-          idempotencyKey: string
         }
-        status: { sessionId: string; phase: string; triggeredAt: string }
+        status: { sessionId: string; phase: string; triggeredAt: string; correlationId: string; idempotencyKey: string }
       }>
     }
     expect(runs.data).toHaveLength(1)
@@ -573,10 +600,14 @@ describe('[CF] /api/v1/triggers', () => {
       spec: {
         triggerId,
         scheduledFor: dueAt,
+      },
+      status: {
+        sessionId,
+        phase: 'dispatched',
+        triggeredAt: heartbeatAt,
         correlationId: `schedule:${triggerId}:${dueAt}`,
         idempotencyKey: `${triggerId}:${dueAt}`,
       },
-      status: { sessionId, phase: 'dispatched', triggeredAt: heartbeatAt },
     })
 
     const runItemRes = await jsonFetch(`/api/v1/triggers/${triggerId}/runs/${runs.data[0].metadata.uid}`, authorization)
@@ -646,12 +677,18 @@ describe('[CF] /api/v1/triggers', () => {
     expect(runRes.status).toBe(201)
     const run = (await runRes.json()) as {
       metadata: { uid: string }
-      spec: { triggerId: string; scheduledFor: string | null; idempotencyKey: string }
-      status: { phase: string; sessionId: string | null; heartbeatAt: string | null; triggeredAt: string }
+      spec: { triggerId: string; scheduledFor: string | null }
+      status: {
+        phase: string
+        sessionId: string | null
+        heartbeatAt: string | null
+        triggeredAt: string
+        idempotencyKey: string
+      }
     }
     expect(run).toMatchObject({
-      spec: { triggerId, scheduledFor: null, idempotencyKey: `http:${triggerId}:ticket-123` },
-      status: { phase: 'dispatched', heartbeatAt: null },
+      spec: { triggerId, scheduledFor: null },
+      status: { phase: 'dispatched', heartbeatAt: null, idempotencyKey: `http:${triggerId}:ticket-123` },
     })
     expect(run.status.sessionId).toEqual(expect.any(String))
     expect(run.status.triggeredAt).toEqual(expect.any(String))
@@ -798,22 +835,24 @@ describe('[CF] /api/v1/triggers', () => {
     const createRes = await jsonFetch('/api/v1/triggers', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Unpinned heartbeat',
-        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
-        template: {
-          metadata: { labels: {}, annotations: {} },
-          spec: {
-            agentId: agent.id,
-            environmentId: null,
-            runtime: 'ama',
-            promptTemplate: 'Run scheduled work.',
-            env: {},
-            envFrom: [],
-            volumes: [],
-            volumeMounts: [],
+        metadata: { name: 'Unpinned heartbeat' },
+        spec: {
+          source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
+          nextDueAt: dueAt,
+          template: {
+            metadata: { labels: {}, annotations: {} },
+            spec: {
+              agentId: agent.id,
+              environmentId: null,
+              runtime: 'ama',
+              promptTemplate: 'Run scheduled work.',
+              env: {},
+              envFrom: [],
+              volumes: [],
+              volumeMounts: [],
+            },
           },
         },
-        nextDueAt: dueAt,
       }),
     })
     expect(createRes.status).toBe(201)
@@ -851,22 +890,24 @@ describe('[CF] /api/v1/triggers', () => {
     const createRes = await jsonFetch('/api/v1/triggers', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Unrunnable heartbeat',
-        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
-        template: {
-          metadata: { labels: {}, annotations: {} },
-          spec: {
-            agentId: agent.id,
-            environmentId: null,
-            runtime: 'ama',
-            promptTemplate: 'Run scheduled work.',
-            env: {},
-            envFrom: [],
-            volumes: [],
-            volumeMounts: [],
+        metadata: { name: 'Unrunnable heartbeat' },
+        spec: {
+          source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 3600 } },
+          nextDueAt: dueAt,
+          template: {
+            metadata: { labels: {}, annotations: {} },
+            spec: {
+              agentId: agent.id,
+              environmentId: null,
+              runtime: 'ama',
+              promptTemplate: 'Run scheduled work.',
+              env: {},
+              envFrom: [],
+              volumes: [],
+              volumeMounts: [],
+            },
           },
         },
-        nextDueAt: dueAt,
       }),
     })
     expect(createRes.status).toBe(201)

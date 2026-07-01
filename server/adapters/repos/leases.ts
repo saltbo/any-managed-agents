@@ -191,10 +191,13 @@ function payloadWithResumeToken(workItem: WorkItemRow, resumeToken: string | und
     return null
   }
   const payload = parseJson<Record<string, unknown>>(workItem.payload)
-  if (!payload || payload.resumeToken === resumeToken) {
+  if (!payload) {
     return null
   }
-  return stringify({ ...payload, resumeToken })
+  if (payload.resume === true && payload.resumeToken === resumeToken) {
+    return null
+  }
+  return stringify({ ...payload, resume: true, resumeToken })
 }
 
 // Re-queues a work item whose runner stopped mid-flight so the session can be
@@ -248,8 +251,11 @@ async function requeueWorkItemForRecovery(
   let payloadJson = workItem.payload
   let runnerStarted = false
   if (workItem.sessionId) {
-    runnerStarted = await sessionHasRunnerStarted(db, projectId, workItem.sessionId)
     const payload = parseJson<Record<string, unknown>>(workItem.payload)
+    runnerStarted =
+      payload?.resume === true ||
+      (typeof payload?.resumeToken === 'string' && payload.resumeToken.length > 0) ||
+      (await sessionHasRunnerStarted(db, projectId, workItem.sessionId))
     if (payload?.type === 'session.start' && !payload.resume && runnerStarted) {
       // Resume the runtime in place. claude-code resumes from its own session id
       // (the AMA session id), so a null token still continues the conversation;

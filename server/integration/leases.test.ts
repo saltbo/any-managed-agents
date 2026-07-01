@@ -5,6 +5,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
+const EMPTY_PACKAGES = { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] } as const
+
+function createResourceBody(metadata: { name: string; description?: string }, spec: Record<string, unknown> = {}) {
+  return { metadata, spec }
+}
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -20,11 +25,18 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
 async function createSelfHostedEnvironment(authorization: string) {
   const res = await jsonFetch('/api/v1/environments', authorization, {
     method: 'POST',
-    body: JSON.stringify({
-      name: `Self-hosted workspace ${crypto.randomUUID()}`,
-      type: 'self_hosted',
-      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
-    }),
+    body: JSON.stringify(
+      createResourceBody(
+        {
+          name: `Self-hosted workspace ${crypto.randomUUID()}`,
+        },
+        {
+          type: 'self_hosted',
+          networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+          packages: EMPTY_PACKAGES,
+        },
+      ),
+    ),
   })
   expect(res.status).toBe(201)
   const environment = (await res.json()) as { metadata: { uid: string } }
@@ -34,13 +46,19 @@ async function createSelfHostedEnvironment(authorization: string) {
 async function createAgent(authorization: string) {
   const res = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
-    body: JSON.stringify({
-      name: `Runner-backed agent ${crypto.randomUUID()}`,
-      systemPrompt: 'Use AMA-owned self-hosted runner work.',
-      tools: [{ name: 'bash' }],
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-    }),
+    body: JSON.stringify(
+      createResourceBody(
+        {
+          name: `Runner-backed agent ${crypto.randomUUID()}`,
+        },
+        {
+          systemPrompt: 'Use AMA-owned self-hosted runner work.',
+          allowedTools: ['bash'],
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
+        },
+      ),
+    ),
   })
   expect(res.status).toBe(201)
   const agent = (await res.json()) as { metadata: { uid: string } }
@@ -50,7 +68,7 @@ async function createAgent(authorization: string) {
 async function createSessionEnvFrom(authorization: string) {
   const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
-    body: JSON.stringify({ name: `Runner runtime secrets ${crypto.randomUUID()}` }),
+    body: JSON.stringify(createResourceBody({ name: `Runner runtime secrets ${crypto.randomUUID()}` })),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { metadata: { uid: string } }
@@ -76,11 +94,13 @@ async function createSelfHostedSession(
   const res = await jsonFetch('/api/v1/sessions', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      agentId,
-      environmentId,
       prompt: 'Run the first queued self-hosted task.',
-      runtime: 'ama',
-      ...executionOverrides,
+      spec: {
+        agentId,
+        environmentId,
+        runtime: 'ama',
+        ...executionOverrides,
+      },
     }),
   })
   const body = await res.clone().text()
@@ -244,7 +264,7 @@ describe('[CF] /api/v1/leases', () => {
     const agent = await createAgent(authorization)
     const memoryStoreRes = await jsonFetch('/api/v1/memory-stores', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: `Maintainer memory ${crypto.randomUUID()}` }),
+      body: JSON.stringify(createResourceBody({ name: `Maintainer memory ${crypto.randomUUID()}` })),
     })
     expect(memoryStoreRes.status).toBe(201)
     const memoryStore = (await memoryStoreRes.json()) as { metadata: { uid: string } }
@@ -298,7 +318,7 @@ describe('[CF] /api/v1/leases', () => {
     const agent = await createAgent(authorization)
     const memoryStoreRes = await jsonFetch('/api/v1/memory-stores', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: `Archived maintainer memory ${crypto.randomUUID()}` }),
+      body: JSON.stringify(createResourceBody({ name: `Archived maintainer memory ${crypto.randomUUID()}` })),
     })
     expect(memoryStoreRes.status).toBe(201)
     const memoryStore = (await memoryStoreRes.json()) as { metadata: { uid: string } }

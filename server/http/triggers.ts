@@ -152,6 +152,7 @@ const CreateTriggerSchema = z
         ]),
         suspend: z.boolean().optional().openapi({ example: false }),
         template: CreateTriggerTemplateSchema,
+        nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-26T12:00:00.000Z' }),
       })
       .strict(),
   })
@@ -178,6 +179,7 @@ const UpdateTriggerSchema = z
           .optional(),
         suspend: z.boolean().optional().openapi({ example: true }),
         template: UpdateTriggerTemplateSchema.optional(),
+        nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-26T13:00:00.000Z' }),
       })
       .strict()
       .optional(),
@@ -432,7 +434,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
                 volumeMounts: spec.template.spec.volumeMounts ?? [],
               },
             },
-            nextDueAt: null,
+            nextDueAt: spec.nextDueAt ?? null,
           },
         })
         await deps.audit.record(scope, {
@@ -683,6 +685,7 @@ function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTrigger
         }
       : {}),
     ...(spec?.suspend !== undefined ? { suspend: spec.suspend } : {}),
+    ...(spec?.nextDueAt !== undefined ? { nextDueAt: spec.nextDueAt } : {}),
     ...(spec?.template !== undefined
       ? {
           template: {

@@ -303,7 +303,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('EnvironmentHostingMode')
     expect(doc.components?.schemas).toHaveProperty('EnvironmentNetworking')
     expect(doc.components?.schemas).toHaveProperty('EnvironmentPackages')
-    expect(doc.components?.schemas).toHaveProperty('Runtime')
+    expect(doc.components?.schemas).toHaveProperty('RuntimeName')
     expect(doc.components?.schemas).toHaveProperty('Session')
     expect(doc.components?.schemas).toHaveProperty('SessionEnvironmentSnapshot')
     expect(doc.components?.schemas).toHaveProperty('SessionPlacement')
@@ -474,8 +474,8 @@ describe('[CF] OpenAPI documentation', () => {
       source: { oneOf: expect.any(Array) },
       suspend: { type: 'boolean' },
       template: { type: 'object' },
+      nextDueAt: { type: 'string' },
     })
-    expect(createTriggerSpec?.properties).not.toHaveProperty('nextDueAt')
     const template = createTriggerSpec?.properties?.template as
       | { properties?: Record<string, { type?: string; properties?: Record<string, unknown> }> }
       | undefined
@@ -491,7 +491,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(templateSpec?.properties).toMatchObject({
       agentId: { type: 'string', minLength: 1 },
       environmentId: { type: 'string', nullable: true, minLength: 1 },
-      runtime: { $ref: '#/components/schemas/Runtime' },
+      runtime: { $ref: '#/components/schemas/RuntimeName' },
       promptTemplate: { type: 'string', minLength: 1, maxLength: 16000 },
       volumes: { type: 'array' },
       volumeMounts: { type: 'array' },

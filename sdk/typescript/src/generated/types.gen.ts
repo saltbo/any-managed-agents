@@ -1324,6 +1324,7 @@ export type CreateTriggerRequest = {
                 promptTemplate: string;
             };
         };
+        nextDueAt?: string;
     };
 };
 
@@ -1370,6 +1371,7 @@ export type UpdateTriggerRequest = {
                 promptTemplate?: string;
             };
         };
+        nextDueAt?: string;
     };
     archived?: boolean;
 };

@@ -12,6 +12,11 @@ interface OpenApiDocument {
 }
 
 const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
+const EMPTY_PACKAGES = { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] } as const
+
+function createResourceBody(metadata: { name: string; description?: string }, spec: Record<string, unknown> = {}) {
+  return { metadata, spec }
+}
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -73,16 +78,20 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
 
     const environmentRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Restish e2e environment',
-        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['tsx@latest'], pip: [] },
-        networking: {
-          type: 'limited',
-          allowMcpServers: false,
-          allowPackageManagers: true,
-          allowedHosts: ['registry.npmjs.org'],
-        },
-      }),
+      body: JSON.stringify(
+        createResourceBody(
+          { name: 'Restish e2e environment' },
+          {
+            packages: { ...EMPTY_PACKAGES, npm: ['tsx@latest'] },
+            networking: {
+              type: 'limited',
+              allowMcpServers: false,
+              allowPackageManagers: true,
+              allowedHosts: ['registry.npmjs.org'],
+            },
+          },
+        ),
+      ),
     })
     expect(environmentRes.status).toBe(201)
     const environment = (await environmentRes.json()) as {
@@ -93,12 +102,16 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
 
     const agentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Restish e2e agent',
-        systemPrompt: 'Run e2e checks through documented control-plane operations.',
-        provider: 'workers-ai',
-        model: '@cf/moonshotai/kimi-k2.6',
-      }),
+      body: JSON.stringify(
+        createResourceBody(
+          { name: 'Restish e2e agent' },
+          {
+            systemPrompt: 'Run e2e checks through documented control-plane operations.',
+            provider: 'workers-ai',
+            model: '@cf/moonshotai/kimi-k2.6',
+          },
+        ),
+      ),
     })
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { metadata: { uid: string }; status: { currentVersionId: string } }
@@ -106,7 +119,10 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
 
     const sessionRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId, environmentId, runtime: 'ama', prompt: 'Run restish contract test' }),
+      body: JSON.stringify({
+        prompt: 'Run restish contract test',
+        spec: { agentId, environmentId, runtime: 'ama' },
+      }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {

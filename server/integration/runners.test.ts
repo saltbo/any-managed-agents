@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { expectAuthRequired, setupOidcProvider, signIn, signInUser } from './auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
+const EMPTY_PACKAGES = { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] } as const
+
+function createResourceBody(metadata: { name: string; description?: string }, spec: Record<string, unknown> = {}) {
+  return { metadata, spec }
+}
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -19,11 +24,18 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
 async function createSelfHostedEnvironment(authorization: string) {
   const res = await jsonFetch('/api/v1/environments', authorization, {
     method: 'POST',
-    body: JSON.stringify({
-      name: `Self-hosted workspace ${crypto.randomUUID()}`,
-      type: 'self_hosted',
-      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
-    }),
+    body: JSON.stringify(
+      createResourceBody(
+        {
+          name: `Self-hosted workspace ${crypto.randomUUID()}`,
+        },
+        {
+          type: 'self_hosted',
+          networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+          packages: EMPTY_PACKAGES,
+        },
+      ),
+    ),
   })
   expect(res.status).toBe(201)
   const environment = (await res.json()) as { metadata: { uid: string } }
@@ -33,7 +45,7 @@ async function createSelfHostedEnvironment(authorization: string) {
 async function createRunnerCredential(authorization: string) {
   const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
-    body: JSON.stringify({ name: `Runner credentials ${crypto.randomUUID()}` }),
+    body: JSON.stringify(createResourceBody({ name: `Runner credentials ${crypto.randomUUID()}` })),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { metadata: { uid: string } }

@@ -3132,9 +3132,10 @@ type CreateSessionRequest struct {
 type CreateTriggerRequest struct {
 	Metadata TriggerCreateMetadata `json:"metadata"`
 	Spec     struct {
-		Source   CreateTriggerRequest_Spec_Source `json:"source"`
-		Suspend  *bool                            `json:"suspend,omitempty"`
-		Template struct {
+		NextDueAt *time.Time                       `json:"nextDueAt,omitempty"`
+		Source    CreateTriggerRequest_Spec_Source `json:"source"`
+		Suspend   *bool                            `json:"suspend,omitempty"`
+		Template  struct {
 			Metadata *struct {
 				Annotations *map[string]string `json:"annotations,omitempty"`
 				Labels      *map[string]string `json:"labels,omitempty"`
@@ -4681,9 +4682,10 @@ type UpdateTriggerRequest struct {
 	Archived *bool                  `json:"archived,omitempty"`
 	Metadata *TriggerUpdateMetadata `json:"metadata,omitempty"`
 	Spec     *struct {
-		Source   *UpdateTriggerRequest_Spec_Source `json:"source,omitempty"`
-		Suspend  *bool                             `json:"suspend,omitempty"`
-		Template *struct {
+		NextDueAt *time.Time                        `json:"nextDueAt,omitempty"`
+		Source    *UpdateTriggerRequest_Spec_Source `json:"source,omitempty"`
+		Suspend   *bool                             `json:"suspend,omitempty"`
+		Template  *struct {
 			Metadata *struct {
 				Annotations *map[string]string `json:"annotations,omitempty"`
 				Labels      *map[string]string `json:"labels,omitempty"`

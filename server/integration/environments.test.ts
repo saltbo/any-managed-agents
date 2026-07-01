@@ -2,6 +2,15 @@ import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupOidcProvider, signIn } from './auth'
 
+const EMPTY_PACKAGES = { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] } as const
+
+function createEnvironmentBody(metadata: { name: string; description?: string }, spec: Record<string, unknown> = {}) {
+  return {
+    metadata,
+    spec,
+  }
+}
+
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
@@ -42,7 +51,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const res = await SELF.fetch('https://example.com/api/v1/environments', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Node workspace' }),
+      body: JSON.stringify(createEnvironmentBody({ name: 'Node workspace' })),
     })
 
     expect(res.status).toBe(401)
@@ -76,18 +85,24 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
 
     const createRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Node workspace',
-        description: 'Default Node.js environment.',
-        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['tsx@latest'], pip: [] },
-        variables: { NODE_ENV: { description: 'Runtime mode' } },
-        networking: {
-          type: 'limited',
-          allowMcpServers: false,
-          allowPackageManagers: true,
-          allowedHosts: ['registry.npmjs.org'],
-        },
-      }),
+      body: JSON.stringify(
+        createEnvironmentBody(
+          {
+            name: 'Node workspace',
+            description: 'Default Node.js environment.',
+          },
+          {
+            packages: { ...EMPTY_PACKAGES, npm: ['tsx@latest'] },
+            variables: { NODE_ENV: { description: 'Runtime mode' } },
+            networking: {
+              type: 'limited',
+              allowMcpServers: false,
+              allowPackageManagers: true,
+              allowedHosts: ['registry.npmjs.org'],
+            },
+          },
+        ),
+      ),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
@@ -121,7 +136,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const updateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({
-        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['vite'], pip: [] },
+        spec: { packages: { ...EMPTY_PACKAGES, npm: ['vite'] } },
       }),
     })
     expect(updateRes.status).toBe(200)
@@ -132,7 +147,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     // Renames do not touch runtime configuration, so the version is kept.
     const renameRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ name: 'Renamed workspace' }),
+      body: JSON.stringify({ metadata: { name: 'Renamed workspace' } }),
     })
     expect(renameRes.status).toBe(200)
     await expect(renameRes.json()).resolves.toMatchObject({
@@ -200,7 +215,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const archivedUpdateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({
-        packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: ['esbuild'], pip: [] },
+        spec: { packages: { ...EMPTY_PACKAGES, npm: ['esbuild'] } },
       }),
     })
     expect(archivedUpdateRes.status).toBe(409)
@@ -224,7 +239,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
 
     const unarchivedUpdateRes = await jsonFetch(`/api/v1/environments/${createdId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ description: 'Updatable again' }),
+      body: JSON.stringify({ metadata: { description: 'Updatable again' } }),
     })
     expect(unarchivedUpdateRes.status).toBe(200)
   })
@@ -233,13 +248,13 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const authorization = await signIn()
     const alphaRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Alpha workspace' }),
+      body: JSON.stringify(createEnvironmentBody({ name: 'Alpha workspace' })),
     })
     const alpha = (await alphaRes.json()) as { metadata: { uid: string; createdAt: string } }
     const alphaId = alpha.metadata.uid
     const betaRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Beta workspace' }),
+      body: JSON.stringify(createEnvironmentBody({ name: 'Beta workspace' })),
     })
     const beta = (await betaRes.json()) as { metadata: { uid: string; createdAt: string } }
     const betaId = beta.metadata.uid
@@ -278,7 +293,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
 
     await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Gamma workspace' }),
+      body: JSON.stringify(createEnvironmentBody({ name: 'Gamma workspace' })),
     })
     const firstPageRes = await jsonFetch('/api/v1/environments?limit=1', authorization)
     const firstPage = (await firstPageRes.json()) as {
@@ -310,17 +325,19 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
 
     const invalidNetworkRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Invalid network workspace',
-        networking: { type: 'limited', allowMcpServers: false, allowPackageManagers: true },
-      }),
+      body: JSON.stringify(
+        createEnvironmentBody(
+          { name: 'Invalid network workspace' },
+          { networking: { type: 'limited', allowMcpServers: false, allowPackageManagers: true } },
+        ),
+      ),
     })
     expect(invalidNetworkRes.status).toBe(400)
 
     const oldMcpPolicyRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Old MCP policy workspace',
+        ...createEnvironmentBody({ name: 'Old MCP policy workspace' }),
         mcpPolicy: { allowedConnectors: ['missing-connector'] },
       }),
     })
@@ -331,10 +348,12 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
 
     const secretVariableRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Secret variable workspace',
-        variables: { apiKey: { description: 'raw-secret' } },
-      }),
+      body: JSON.stringify(
+        createEnvironmentBody(
+          { name: 'Secret variable workspace' },
+          { variables: { apiKey: { description: 'raw-secret' } } },
+        ),
+      ),
     })
     expect(secretVariableRes.status).toBe(400)
     await expect(secretVariableRes.json()).resolves.toMatchObject({
@@ -344,7 +363,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const oldRuntimeConfigRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Old runtime config workspace',
+        ...createEnvironmentBody({ name: 'Old runtime config workspace' }),
         runtimeConfig: { npmToken: 'raw-secret' },
       }),
     })
@@ -358,7 +377,7 @@ describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
     const authorization = await signIn()
     const createRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Tenant workspace' }),
+      body: JSON.stringify(createEnvironmentBody({ name: 'Tenant workspace' })),
     })
     expect(createRes.status).toBe(201)
     const environment = (await createRes.json()) as { metadata: { uid: string } }

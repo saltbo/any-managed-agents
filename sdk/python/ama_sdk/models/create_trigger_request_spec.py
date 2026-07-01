@@ -10,6 +10,7 @@ from ..types import UNSET, Unset
 
 from ..types import UNSET, Unset
 from typing import cast
+import datetime
 
 if TYPE_CHECKING:
   from ..models.create_trigger_request_spec_source_type_0 import CreateTriggerRequestSpecSourceType0
@@ -31,11 +32,13 @@ class CreateTriggerRequestSpec:
             source (CreateTriggerRequestSpecSourceType0 | CreateTriggerRequestSpecSourceType1):
             template (CreateTriggerRequestSpecTemplate):
             suspend (bool | Unset):
+            next_due_at (datetime.datetime | Unset):  Example: 2026-05-26T12:00:00.000Z.
      """
 
     source: CreateTriggerRequestSpecSourceType0 | CreateTriggerRequestSpecSourceType1
     template: CreateTriggerRequestSpecTemplate
     suspend: bool | Unset = UNSET
+    next_due_at: datetime.datetime | Unset = UNSET
 
 
 
@@ -56,6 +59,10 @@ class CreateTriggerRequestSpec:
 
         suspend = self.suspend
 
+        next_due_at: str | Unset = UNSET
+        if not isinstance(self.next_due_at, Unset):
+            next_due_at = self.next_due_at.isoformat()
+
 
         field_dict: dict[str, Any] = {}
 
@@ -65,6 +72,8 @@ class CreateTriggerRequestSpec:
         })
         if suspend is not UNSET:
             field_dict["suspend"] = suspend
+        if next_due_at is not UNSET:
+            field_dict["nextDueAt"] = next_due_at
 
         return field_dict
 
@@ -105,10 +114,21 @@ class CreateTriggerRequestSpec:
 
         suspend = d.pop("suspend", UNSET)
 
+        _next_due_at = d.pop("nextDueAt", UNSET)
+        next_due_at: datetime.datetime | Unset
+        if isinstance(_next_due_at,  Unset):
+            next_due_at = UNSET
+        else:
+            next_due_at = datetime.datetime.fromisoformat(_next_due_at)
+
+
+
+
         create_trigger_request_spec = cls(
             source=source,
             template=template,
             suspend=suspend,
+            next_due_at=next_due_at,
         )
 
         return create_trigger_request_spec

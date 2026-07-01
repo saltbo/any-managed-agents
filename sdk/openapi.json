@@ -5417,6 +5417,11 @@
                   "spec"
                 ],
                 "additionalProperties": false
+              },
+              "nextDueAt": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2026-05-26T12:00:00.000Z"
               }
             },
             "required": [
@@ -5620,6 +5625,11 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "nextDueAt": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2026-05-26T13:00:00.000Z"
               }
             },
             "additionalProperties": false

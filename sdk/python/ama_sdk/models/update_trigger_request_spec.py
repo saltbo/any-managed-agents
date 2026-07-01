@@ -10,6 +10,7 @@ from ..types import UNSET, Unset
 
 from ..types import UNSET, Unset
 from typing import cast
+import datetime
 
 if TYPE_CHECKING:
   from ..models.update_trigger_request_spec_source_type_0 import UpdateTriggerRequestSpecSourceType0
@@ -31,11 +32,13 @@ class UpdateTriggerRequestSpec:
             source (Unset | UpdateTriggerRequestSpecSourceType0 | UpdateTriggerRequestSpecSourceType1):
             suspend (bool | Unset):  Example: True.
             template (UpdateTriggerRequestSpecTemplate | Unset):
+            next_due_at (datetime.datetime | Unset):  Example: 2026-05-26T13:00:00.000Z.
      """
 
     source: Unset | UpdateTriggerRequestSpecSourceType0 | UpdateTriggerRequestSpecSourceType1 = UNSET
     suspend: bool | Unset = UNSET
     template: UpdateTriggerRequestSpecTemplate | Unset = UNSET
+    next_due_at: datetime.datetime | Unset = UNSET
 
 
 
@@ -60,6 +63,10 @@ class UpdateTriggerRequestSpec:
         if not isinstance(self.template, Unset):
             template = self.template.to_dict()
 
+        next_due_at: str | Unset = UNSET
+        if not isinstance(self.next_due_at, Unset):
+            next_due_at = self.next_due_at.isoformat()
+
 
         field_dict: dict[str, Any] = {}
 
@@ -71,6 +78,8 @@ class UpdateTriggerRequestSpec:
             field_dict["suspend"] = suspend
         if template is not UNSET:
             field_dict["template"] = template
+        if next_due_at is not UNSET:
+            field_dict["nextDueAt"] = next_due_at
 
         return field_dict
 
@@ -118,10 +127,21 @@ class UpdateTriggerRequestSpec:
 
 
 
+        _next_due_at = d.pop("nextDueAt", UNSET)
+        next_due_at: datetime.datetime | Unset
+        if isinstance(_next_due_at,  Unset):
+            next_due_at = UNSET
+        else:
+            next_due_at = datetime.datetime.fromisoformat(_next_due_at)
+
+
+
+
         update_trigger_request_spec = cls(
             source=source,
             suspend=suspend,
             template=template,
+            next_due_at=next_due_at,
         )
 
         return update_trigger_request_spec
