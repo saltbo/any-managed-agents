@@ -78,7 +78,11 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
             type: 'message.completed',
             payload: {
               type: 'message.completed',
-              message: { id: `${command.id}_assistant_msg`, role: 'assistant', content: [{ type: 'text', text: content }] },
+              message: {
+                id: `${command.id}_assistant_msg`,
+                role: 'assistant',
+                content: [{ type: 'text', text: content }],
+              },
             },
           }),
         )

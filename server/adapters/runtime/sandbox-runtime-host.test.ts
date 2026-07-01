@@ -230,12 +230,7 @@ describe('session-runtime', () => {
       expect.any(AbortSignal),
     )
     expect(events.map((event) => event.type)).toEqual(
-      expect.arrayContaining([
-        'runtime.started',
-        'message.completed',
-        'usage.recorded',
-        'runtime.completed',
-      ]),
+      expect.arrayContaining(['runtime.started', 'message.completed', 'usage.recorded', 'runtime.completed']),
     )
     expect(JSON.stringify(events)).toContain('"type":"tool_call"')
     expect(JSON.stringify(events)).toContain('"type":"tool_result"')

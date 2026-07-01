@@ -448,11 +448,11 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
     return `${eventType}:${timestamp ?? ''}:${stableStringify(message.content)}`
   }
   if (
-	    eventType === 'message.started' ||
-	    eventType === 'message.completed' ||
-	    eventType === 'runtime.started' ||
-	    eventType === 'runtime.completed' ||
-	    eventType === 'turn.started' ||
+    eventType === 'message.started' ||
+    eventType === 'message.completed' ||
+    eventType === 'runtime.started' ||
+    eventType === 'runtime.completed' ||
+    eventType === 'turn.started' ||
     eventType === 'turn.completed'
   ) {
     if (!timestamp) {
@@ -593,8 +593,4 @@ function stringField(record: Record<string, unknown>, field: string) {
 function scalarField(record: Record<string, unknown>, field: string) {
   const value = record[field]
   return typeof value === 'string' || typeof value === 'number' ? String(value) : null
-}
-
-function numberField(record: Record<string, unknown>, field: string) {
-  return typeof record[field] === 'number' ? record[field] : null
 }

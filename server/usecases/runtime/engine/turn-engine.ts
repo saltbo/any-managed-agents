@@ -620,7 +620,6 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
     }
   }
   const { model } = input
-  const provider = input.providerLabel
   const modelId = input.modelLabel
   let status: TurnStatus = { kind: 'idle' }
   let providerError: RuntimeProviderError | null = null

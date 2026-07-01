@@ -94,7 +94,10 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
     const callbacks = build()
 
     gate.shouldSuppressEvent.mockReturnValueOnce(true)
-    await callbacks.onEvent({ type: 'message.updated', payload: { message: { id: 'msg_1', role: 'assistant', content: [] } } })
+    await callbacks.onEvent({
+      type: 'message.updated',
+      payload: { message: { id: 'msg_1', role: 'assistant', content: [] } },
+    })
     expect(store.appendEvent).not.toHaveBeenCalled()
 
     await callbacks.onEvent({

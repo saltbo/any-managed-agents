@@ -317,16 +317,6 @@ async function runtimeFailureStateReason(db: Db, sessionId: string | null): Prom
   return null
 }
 
-function workItemRuntimeMetadata(workItem: WorkItemRow) {
-  const payload = parseJson<Record<string, unknown>>(workItem.payload) ?? {}
-  return {
-    workItemId: workItem.id,
-    ...(typeof payload.runtime === 'string' ? { runtime: payload.runtime } : {}),
-    ...(typeof payload.provider === 'string' ? { provider: payload.provider } : {}),
-    ...(typeof payload.model === 'string' ? { model: payload.model } : {}),
-  }
-}
-
 async function findWorkItemRow(db: Db, projectId: string, workItemId: string): Promise<WorkItemRow | null> {
   return (
     (await db
@@ -515,7 +505,6 @@ export function createLeaseRepo(db: Db): LeaseRepo {
       ) {
         return null
       }
-      const scope = { organizationId: input.organizationId, projectId: input.projectId }
       if (input.state === 'active') {
         const expiresAt =
           input.expiresAt ??

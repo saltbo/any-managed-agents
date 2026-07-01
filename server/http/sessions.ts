@@ -1369,7 +1369,6 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
 
-      let runnerLeaseMetadata: Record<string, unknown> | null = null
       if (isRunnerOidcAuth(c.env, auth)) {
         const ownedLease = await deps.sessions.activeSessionLeaseForRunner(auth.project.id, sessionId, {
           runnerId: auth.oidc.runnerId,
@@ -1378,7 +1377,6 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         if (!ownedLease) {
           return errorResponse(c, 403, 'forbidden', 'Runner token does not hold an active lease for this session')
         }
-        runnerLeaseMetadata = ownedLease
       }
 
       const accepted = await deps.sessionEventStore.insertEvents(

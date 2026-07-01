@@ -2,7 +2,7 @@ import { computeModelCostMicros, isProviderErrorCategory, providerFamily } from 
 import { and, asc, desc, eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import type { AmaEvent, ToolCall } from '../../../shared/session-events'
-import { providerModels, providers, sessions, sessionEvents, usageRecords } from '../../db/schema'
+import { providerModels, providers, sessionEvents, sessions, usageRecords } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 

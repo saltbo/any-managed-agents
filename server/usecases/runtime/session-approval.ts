@@ -191,7 +191,7 @@ export async function decideSessionApproval(
           id: crypto.randomUUID(),
           role: 'tool',
           parentToolCallId: pending.toolCallId,
-	          content: [
+          content: [
             {
               type: 'tool_result',
               toolCallId: pending.toolCallId,
@@ -199,11 +199,11 @@ export async function decideSessionApproval(
               ...(resultIsError
                 ? { error: { message: resultText || 'Tool execution failed', details: resultOutput } }
                 : {}),
-	            },
-	          ],
-	        },
-	      },
-	    },
+            },
+          ],
+        },
+      },
+    },
   })
   await store.updateSession(auth.project.id, session.id, { state: 'running', stateReason: null, updatedAt: now() })
   const resumed = await store.findSession(auth.project.id, session.id)

@@ -113,70 +113,86 @@ function codexToolStructuredContent(item: Record<string, unknown>) {
   return Object.keys(structured).length > 0 ? structured : undefined
 }
 
-function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
-  switch (event.type) {
-    case 'thread.started':
-      yield runtimeEvent('runtime.started')
-      return
-    case 'turn.started':
-      yield runtimeEvent('turn.started')
-      return
-    case 'item.started': {
-      const item = objectValue(event.item)
-      const shape = codexToolShape(item)
-      const id = itemId(item)
-      if (shape && id) {
-        yield messageEvent({
-          id: randomId('msg'),
-          role: 'assistant',
-          content: [toolCallBlock({ id, name: shape.toolName, input: shape.args })],
-        })
-      }
-      return
-    }
-    case 'item.completed': {
-      const item = objectValue(event.item)
-      if (item.type === 'agent_message' && typeof item.text === 'string' && item.text) {
-        yield runtimeEvent('message.completed', {
-          message: textMessage('assistant', item.text, typeof item.id === 'string' ? item.id : undefined),
-        })
+class CodexEventMapper {
+  private turnIndex = 0
+  private readonly toolCallIds = new Map<string, string>();
+
+  *map(event: ThreadEvent): Generator<AmaRuntimeEvent> {
+    switch (event.type) {
+      case 'thread.started':
+        yield runtimeEvent('runtime.started')
+        return
+      case 'turn.started':
+        this.turnIndex += 1
+        yield runtimeEvent('turn.started')
+        return
+      case 'item.started': {
+        const item = objectValue(event.item)
+        const shape = codexToolShape(item)
+        const id = itemId(item)
+        if (shape && id) {
+          yield messageEvent({
+            id: randomId('msg'),
+            role: 'assistant',
+            content: [toolCallBlock({ id: this.toolCallId(id), name: shape.toolName, input: shape.args })],
+          })
+        }
         return
       }
-      if (item.type === 'reasoning' && typeof item.text === 'string' && item.text) {
-        yield messageEvent({
-          id: typeof item.id === 'string' ? item.id : randomId('msg'),
-          role: 'assistant',
-          content: [reasoningBlock(item.text)],
-        })
+      case 'item.completed': {
+        const item = objectValue(event.item)
+        if (item.type === 'agent_message' && typeof item.text === 'string' && item.text) {
+          yield runtimeEvent('message.completed', {
+            message: textMessage('assistant', item.text, typeof item.id === 'string' ? item.id : undefined),
+          })
+          return
+        }
+        if (item.type === 'reasoning' && typeof item.text === 'string' && item.text) {
+          yield messageEvent({
+            id: typeof item.id === 'string' ? item.id : randomId('msg'),
+            role: 'assistant',
+            content: [reasoningBlock(item.text)],
+          })
+          return
+        }
+        const shape = codexToolShape(item)
+        const id = itemId(item)
+        if (shape && id)
+          yield messageEvent(toolResultMessage(this.toolCallId(id), toolResult(item), Boolean(item.error)))
         return
       }
-      const shape = codexToolShape(item)
-      const id = itemId(item)
-      if (shape && id) yield messageEvent(toolResultMessage(id, toolResult(item), Boolean(item.error)))
-      return
+      case 'turn.completed': {
+        // TODO(codex-usage): @openai/codex-sdk 0.142.5 exposes token usage here
+        // but not the actual model used for the turn. The raw Codex JSONL has it
+        // under turn_context.payload.model. Do not emit usage.recorded until the
+        // bridge can read that confirmed source or the SDK exposes an equivalent
+        // field; falling back to request.model would misattribute sessions where
+        // Codex resolves or switches models itself.
+        yield turnEnd()
+        return
+      }
+      case 'turn.failed':
+        yield runtimeError(
+          String(objectValue(event.error).message ?? JSON.stringify(event)),
+          String(objectValue(event.error).code ?? 'codex_error'),
+          event,
+        )
+        return
+      case 'error':
+        yield runtimeError(String(event.message ?? JSON.stringify(event)), 'codex_error', event)
+        return
+      default:
+        return
     }
-    case 'turn.completed': {
-      // TODO(codex-usage): @openai/codex-sdk 0.142.5 exposes token usage here
-      // but not the actual model used for the turn. The raw Codex JSONL has it
-      // under turn_context.payload.model. Do not emit usage.recorded until the
-      // bridge can read that confirmed source or the SDK exposes an equivalent
-      // field; falling back to request.model would misattribute sessions where
-      // Codex resolves or switches models itself.
-      yield turnEnd()
-      return
-    }
-    case 'turn.failed':
-      yield runtimeError(
-        String(objectValue(event.error).message ?? JSON.stringify(event)),
-        String(objectValue(event.error).code ?? 'codex_error'),
-        event,
-      )
-      return
-    case 'error':
-      yield runtimeError(String(event.message ?? JSON.stringify(event)), 'codex_error', event)
-      return
-    default:
-      return
+  }
+
+  private toolCallId(providerToolCallId: string) {
+    const key = `${this.turnIndex}:${providerToolCallId}`
+    const existing = this.toolCallIds.get(key)
+    if (existing) return existing
+    const id = `codex:${key}`
+    this.toolCallIds.set(key, id)
+    return id
   }
 }
 
@@ -211,6 +227,7 @@ export const codexProvider: RuntimeProvider = {
     const thread =
       request.resume && resumeToken ? codex.resumeThread(resumeToken, threadOptions) : codex.startThread(threadOptions)
     const idleKeepAliveMs = positiveNumber(request.runtimeConfig?.codexIdleKeepAliveMs)
+    const mapper = new CodexEventMapper()
     const nextPrompt = async (): Promise<string | undefined> => {
       const queued = queuedPrompts.shift()
       if (queued !== undefined) return queued
@@ -234,7 +251,7 @@ export const codexProvider: RuntimeProvider = {
         const streamed = await thread.runStreamed(prompt, { signal: abortController.signal })
         for await (const event of streamed.events) {
           if (event.type === 'thread.started') resumeToken = event.thread_id
-          yield* mapThreadEvent(event)
+          yield* mapper.map(event)
         }
       }
     })()

@@ -64,6 +64,7 @@ async function* usageEvents() {
 }
 
 async function* commandEvents() {
+  yield { type: 'turn.started' }
   yield {
     type: 'item.started',
     item: {
@@ -85,6 +86,12 @@ async function* commandEvents() {
       status: 'completed',
     },
   }
+}
+
+async function* repeatedCommandEvents() {
+  yield* commandEvents()
+  yield { type: 'turn.completed' }
+  yield* commandEvents()
 }
 
 afterEach(() => {
@@ -162,7 +169,7 @@ describe('codexProvider', () => {
               content: [
                 {
                   type: 'tool_call',
-                  toolCall: { id: 'item_1', name: 'bash', input: { command: "printf 'ok'" } },
+                  toolCall: { id: 'codex:1:item_1', name: 'bash', input: { command: "printf 'ok'" } },
                 },
               ],
             }),
@@ -173,11 +180,11 @@ describe('codexProvider', () => {
           payload: {
             message: expect.objectContaining({
               role: 'tool',
-              parentToolCallId: 'item_1',
+              parentToolCallId: 'codex:1:item_1',
               content: [
                 {
                   type: 'tool_result',
-                  toolCallId: 'item_1',
+                  toolCallId: 'codex:1:item_1',
                   result: {
                     content: [{ type: 'text', text: 'ok' }],
                     structuredContent: { aggregatedOutput: 'ok' },
@@ -190,6 +197,28 @@ describe('codexProvider', () => {
         }),
       ]),
     )
+  })
+
+  it('scopes reused Codex item ids by turn', async () => {
+    runStreamedMock.mockResolvedValue({ events: repeatedCommandEvents() })
+    startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
+
+    const handle = await codexProvider.execute(request())
+    const events = []
+    for await (const event of handle.events) {
+      events.push(event)
+    }
+
+    const toolCallIds = events
+      .flatMap((event) => (event.payload as { message?: { content?: unknown[] } }).message?.content ?? [])
+      .flatMap((block) => {
+        const value = block as { type?: string; toolCall?: { id?: string }; toolCallId?: string }
+        if (value.type === 'tool_call') return [value.toolCall?.id]
+        if (value.type === 'tool_result') return [value.toolCallId]
+        return []
+      })
+
+    expect(toolCallIds).toEqual(['codex:1:item_1', 'codex:1:item_1', 'codex:2:item_1', 'codex:2:item_1'])
   })
 
   it('does not emit model usage when Codex SDK events do not report the actual model', async () => {

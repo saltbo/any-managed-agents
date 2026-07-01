@@ -63,7 +63,10 @@ function toolEnd(toolCallId: string, overrides: EventRecordOverrides = {}) {
           {
             type: 'tool_result',
             toolCallId,
-            result: overridePayload.result ?? { content: [{ type: 'text', text: 'clean tree' }], structuredContent: {} },
+            result: overridePayload.result ?? {
+              content: [{ type: 'text', text: 'clean tree' }],
+              structuredContent: {},
+            },
             ...(failed ? { error: overridePayload.error } : {}),
           },
         ],
