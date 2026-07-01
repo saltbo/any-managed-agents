@@ -106,10 +106,11 @@ export function sessionSocketUrl(socketPath: string) {
 }
 
 function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[]) {
-  const runtimeEvents = uniquePersistedRuntimeEvents(events).filter(({ stored, payload }) => {
-    const key = runtimeEventKey(payload, sessionEventType(stored, payload))
-    return !key || !state.eventKeys.includes(key)
-  })
+  const runtimeEvents = uniquePersistedRuntimeEvents(events, runtimeEventContext(state.eventRecords)).filter(
+    ({ key }) => {
+      return !key || !state.eventKeys.includes(key)
+    },
+  )
   const messages = dedupeRuntimeMessages(
     runtimeEvents
       .map(({ stored, payload }) => {
@@ -144,9 +145,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
     )
     .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
     .reduce<SessionRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
-  const eventKeys = runtimeEvents
-    .map(({ stored, payload }) => runtimeEventKey(payload, sessionEventType(stored, payload)))
-    .filter((key): key is string => Boolean(key))
+  const eventKeys = runtimeEvents.map(({ key }) => key).filter((key): key is string => Boolean(key))
   const hasTerminalEvent = runtimeEvents.some(({ stored, payload }) => {
     const type = sessionEventType(stored, payload)
     return type === 'runtime.completed' || type === 'turn.completed'
@@ -172,12 +171,21 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
 type StoredRuntimeEvent = {
   stored: EventRecord
   payload: Record<string, unknown>
+  key: string | null
 }
 
-function uniquePersistedRuntimeEvents(events: EventRecord[]): StoredRuntimeEvent[] {
+type RuntimeEventContext = {
+  turnIndex: number
+  turnKey: string | null
+}
+
+function uniquePersistedRuntimeEvents(
+  events: EventRecord[],
+  initialContext: RuntimeEventContext = { turnIndex: 0, turnKey: null },
+): StoredRuntimeEvent[] {
   const seen = new Set<string>()
-  let turnKey: string | null = null
-  let turnIndex = 0
+  let turnKey = initialContext.turnKey
+  let turnIndex = initialContext.turnIndex
   const uniqueEvents: StoredRuntimeEvent[] = []
   events
     .sort((left, right) => left.sequence - right.sequence)
@@ -188,7 +196,7 @@ function uniquePersistedRuntimeEvents(events: EventRecord[]): StoredRuntimeEvent
         turnIndex += 1
         turnKey = `turn:${turnIndex}`
       }
-      const nextTurnKey = runtimeTurnKey(payload, type)
+      const nextTurnKey = isUserMessage(payload, type) ? runtimeTurnKey(payload, type) : null
       if (nextTurnKey) {
         turnKey = nextTurnKey
       }
@@ -199,9 +207,31 @@ function uniquePersistedRuntimeEvents(events: EventRecord[]): StoredRuntimeEvent
       if (key) {
         seen.add(key)
       }
-      uniqueEvents.push({ stored, payload })
+      uniqueEvents.push({ stored, payload, key })
     })
   return uniqueEvents
+}
+
+function runtimeEventContext(events: EventRecord[]): RuntimeEventContext {
+  return events
+    .slice()
+    .sort((left, right) => left.sequence - right.sequence)
+    .reduce<RuntimeEventContext>(
+      (context, stored) => {
+        const payload = objectValue(stored.event.payload)
+        const type = sessionEventType(stored, payload)
+        if (type === 'turn.started' || isUserMessage(payload, type)) {
+          context.turnIndex += 1
+          context.turnKey = `turn:${context.turnIndex}`
+        }
+        const nextTurnKey = isUserMessage(payload, type) ? runtimeTurnKey(payload, type) : null
+        if (nextTurnKey) {
+          context.turnKey = nextTurnKey
+        }
+        return context
+      },
+      { turnIndex: 0, turnKey: null },
+    )
 }
 
 function isUserMessage(event: Record<string, unknown>, eventType: string) {

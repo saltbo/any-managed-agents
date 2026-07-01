@@ -169,7 +169,7 @@ describe('codexProvider', () => {
               content: [
                 {
                   type: 'tool_call',
-                  toolCall: { id: 'codex:1:item_1', name: 'bash', input: { command: "printf 'ok'" } },
+                  toolCall: { id: 'item_1', name: 'bash', input: { command: "printf 'ok'" } },
                 },
               ],
             }),
@@ -180,11 +180,11 @@ describe('codexProvider', () => {
           payload: {
             message: expect.objectContaining({
               role: 'tool',
-              parentToolCallId: 'codex:1:item_1',
+              parentToolCallId: 'item_1',
               content: [
                 {
                   type: 'tool_result',
-                  toolCallId: 'codex:1:item_1',
+                  toolCallId: 'item_1',
                   result: {
                     content: [{ type: 'text', text: 'ok' }],
                     structuredContent: { aggregatedOutput: 'ok' },
@@ -199,7 +199,7 @@ describe('codexProvider', () => {
     )
   })
 
-  it('scopes reused Codex item ids by turn', async () => {
+  it('preserves reused Codex item ids from the SDK', async () => {
     runStreamedMock.mockResolvedValue({ events: repeatedCommandEvents() })
     startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
 
@@ -218,7 +218,7 @@ describe('codexProvider', () => {
         return []
       })
 
-    expect(toolCallIds).toEqual(['codex:1:item_1', 'codex:1:item_1', 'codex:2:item_1', 'codex:2:item_1'])
+    expect(toolCallIds).toEqual(['item_1', 'item_1', 'item_1', 'item_1'])
   })
 
   it('does not emit model usage when Codex SDK events do not report the actual model', async () => {

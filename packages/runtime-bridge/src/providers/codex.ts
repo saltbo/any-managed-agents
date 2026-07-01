@@ -114,16 +114,12 @@ function codexToolStructuredContent(item: Record<string, unknown>) {
 }
 
 class CodexEventMapper {
-  private turnIndex = 0
-  private readonly toolCallIds = new Map<string, string>();
-
   *map(event: ThreadEvent): Generator<AmaRuntimeEvent> {
     switch (event.type) {
       case 'thread.started':
         yield runtimeEvent('runtime.started')
         return
       case 'turn.started':
-        this.turnIndex += 1
         yield runtimeEvent('turn.started')
         return
       case 'item.started': {
@@ -134,7 +130,7 @@ class CodexEventMapper {
           yield messageEvent({
             id: randomId('msg'),
             role: 'assistant',
-            content: [toolCallBlock({ id: this.toolCallId(id), name: shape.toolName, input: shape.args })],
+            content: [toolCallBlock({ id, name: shape.toolName, input: shape.args })],
           })
         }
         return
@@ -157,8 +153,7 @@ class CodexEventMapper {
         }
         const shape = codexToolShape(item)
         const id = itemId(item)
-        if (shape && id)
-          yield messageEvent(toolResultMessage(this.toolCallId(id), toolResult(item), Boolean(item.error)))
+        if (shape && id) yield messageEvent(toolResultMessage(id, toolResult(item), Boolean(item.error)))
         return
       }
       case 'turn.completed': {
@@ -184,15 +179,6 @@ class CodexEventMapper {
       default:
         return
     }
-  }
-
-  private toolCallId(providerToolCallId: string) {
-    const key = `${this.turnIndex}:${providerToolCallId}`
-    const existing = this.toolCallIds.get(key)
-    if (existing) return existing
-    const id = `codex:${key}`
-    this.toolCallIds.set(key, id)
-    return id
   }
 }
 

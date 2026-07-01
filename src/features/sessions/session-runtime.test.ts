@@ -425,6 +425,42 @@ describe('sessionRuntimeReducer', () => {
     ])
   })
 
+  it('keeps repeated Codex tool item ids when socket events arrive one by one', () => {
+    const events = [
+      event(1, 'turn.started', { type: 'turn.started' }),
+      event(2, 'test.tool_call', {
+        type: 'test.tool_call',
+        toolCall: { id: 'item_1', name: 'bash', input: { command: 'pwd' } },
+      }),
+      event(3, 'test.tool_result.completed', {
+        type: 'test.tool_result.completed',
+        toolCall: { id: 'item_1', name: 'bash', input: { command: 'pwd' } },
+        result: { content: [{ type: 'text', text: '/workspace\n' }] },
+      }),
+      event(4, 'turn.completed', { type: 'turn.completed' }),
+      event(5, 'turn.started', { type: 'turn.started' }),
+      event(6, 'test.tool_call', {
+        type: 'test.tool_call',
+        toolCall: { id: 'item_1', name: 'bash', input: { command: 'git status' } },
+      }),
+      event(7, 'test.tool_result.completed', {
+        type: 'test.tool_result.completed',
+        toolCall: { id: 'item_1', name: 'bash', input: { command: 'git status' } },
+        result: { content: [{ type: 'text', text: 'clean\n' }] },
+      }),
+      event(8, 'turn.completed', { type: 'turn.completed' }),
+    ]
+
+    const state = events.reduce(
+      (next, item) => sessionRuntimeReducer(next, { type: 'event_records', events: [item] }),
+      initialSessionRuntimeState,
+    )
+
+    expect(state.tools).toHaveLength(2)
+    expect(state.tools.map((tool) => tool.input)).toEqual([{ command: 'pwd' }, { command: 'git status' }])
+    expect(state.tools.map((tool) => tool.output)).toEqual(['/workspace\n', 'clean\n'])
+  })
+
   it('dedupes replayed persisted Pi events with the same runtime timestamps', () => {
     const turn = [
       event(1, 'message.completed', {
