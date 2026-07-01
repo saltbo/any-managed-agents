@@ -413,7 +413,10 @@ class PiAgentEventMapper {
             type: 'message.updated',
             payload: {
               message: amaToolResultMessage(
-                { ...event, result: event.partialResult },
+                {
+                  toolCallId: event.toolCallId,
+                  result: agentToolResult(event.partialResult),
+                },
                 this.toolMessageId(event.toolCallId),
               ),
             },
@@ -563,6 +566,17 @@ function amaToolResultFromAgentResult(result: AgentToolResult<unknown>): ToolRes
     }),
     ...(result.details !== undefined ? { structuredContent: result.details } : {}),
   }
+}
+
+function agentToolResult(result: unknown): AgentToolResult<unknown> {
+  if (!isAgentToolResult(result)) {
+    throw new TypeError('tool execution update partialResult must be an AgentToolResult')
+  }
+  return result
+}
+
+function isAgentToolResult(result: unknown): result is AgentToolResult<unknown> {
+  return result !== null && typeof result === 'object' && Array.isArray((result as { content?: unknown }).content)
 }
 
 function toolResultText(result: ToolResult) {

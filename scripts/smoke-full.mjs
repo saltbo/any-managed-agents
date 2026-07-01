@@ -348,11 +348,35 @@ function frameContains(frame, marker) {
   return JSON.stringify(frame).includes(marker)
 }
 
+function eventRecord(value) {
+  return value?.record ?? value
+}
+
+function hasAssistantText(value, marker) {
+  const record = eventRecord(value)
+  const message = record?.event?.payload?.message
+  return (
+    message?.role === 'assistant' &&
+    Array.isArray(message.content) &&
+    message.content.some((block) => block?.type === 'text' && typeof block.text === 'string' && block.text.includes(marker))
+  )
+}
+
 function eventTypes(frames) {
   return frames
     .filter((frame) => frame.type === 'event')
     .map((frame) => frame.record?.event?.type)
     .filter(Boolean)
+}
+
+function assertToolEvents(label, value) {
+  const serialized = typeof value === 'string' ? value : JSON.stringify(value)
+  if (!serialized.includes('"type":"tool_call"')) {
+    fail(`${label} is missing a tool_call content block`, serialized)
+  }
+  if (!serialized.includes('"type":"tool_result"')) {
+    fail(`${label} is missing a tool_result content block`, serialized)
+  }
 }
 
 function workspacePaths(workDir, sessionId) {
@@ -400,6 +424,7 @@ function assertWorkspace(workDir, sessionId) {
   if (!eventLog.includes(DONE_MARKER)) {
     fail('runner local event log does not include the final assistant marker', paths.eventLog)
   }
+  assertToolEvents('runner local event log', eventLog)
 }
 
 function recentOutput(output) {
@@ -499,12 +524,13 @@ async function main() {
 
     socket = watchSocket(await openSocket(socketURL(origin, token, sessionId)))
     runner = startRunner(runnerBinary, origin, token, environmentId, stateDir, workDir)
-	    await waitForRunner(origin, token, environmentId)
-	    await socket.waitFor(
-	      (frame) => frame.type === 'event' && frame.record?.event?.type === 'runtime.started',
-	      'runtime.started',
-	    )
-    await socket.waitFor((frame) => frame.type === 'event' && frameContains(frame, DONE_MARKER), DONE_MARKER)
+    await waitForRunner(origin, token, environmentId)
+    await socket.waitFor(
+      (frame) => frame.type === 'event' && frame.record?.event?.type === 'runtime.started',
+      'runtime.started',
+    )
+    await socket.waitFor((frame) => frame.type === 'event' && hasAssistantText(frame, DONE_MARKER), DONE_MARKER)
+    assertToolEvents('live browser socket events', socket.frames)
 
     const completedSession = await waitFor(async () => {
       const current = await api(origin, token, `/api/v1/sessions/${sessionId}`)
@@ -523,9 +549,10 @@ async function main() {
       (frame) => frame.type === 'backfill' && frame.requestId === BACKFILL_REQUEST_ID,
       'initial completed-session backfill',
     )
-    if (!Array.isArray(firstBackfill.events) || !firstBackfill.events.some((event) => frameContains(event, DONE_MARKER))) {
+    if (!Array.isArray(firstBackfill.events) || !firstBackfill.events.some((event) => hasAssistantText(event, DONE_MARKER))) {
       fail('browser socket backfill does not include the completed runtime event', JSON.stringify(firstBackfill, null, 2))
     }
+    assertToolEvents('initial completed-session backfill', firstBackfill.events)
 
     await stopProcess(runner.child)
     runner = null
@@ -540,18 +567,21 @@ async function main() {
     if (reconnectBackfill.type === 'runner_unavailable') {
       fail('completed session backfill reported runner_unavailable after runner reconnect')
     }
-    if (!Array.isArray(reconnectBackfill.events) || !reconnectBackfill.events.some((event) => frameContains(event, DONE_MARKER))) {
+    if (!Array.isArray(reconnectBackfill.events) || !reconnectBackfill.events.some((event) => hasAssistantText(event, DONE_MARKER))) {
       secondSocket.requestBackfill()
       const explicitBackfill = await secondSocket.waitFor(
         (frame) => frame.type === 'backfill' && frame.requestId === BACKFILL_REQUEST_ID,
         'explicit backfill after runner reconnect',
       )
-      if (!Array.isArray(explicitBackfill.events) || !explicitBackfill.events.some((event) => frameContains(event, DONE_MARKER))) {
+      if (!Array.isArray(explicitBackfill.events) || !explicitBackfill.events.some((event) => hasAssistantText(event, DONE_MARKER))) {
         fail(
           'completed session backfill after runner reconnect does not include the runtime event',
           JSON.stringify({ automatic: reconnectBackfill, explicit: explicitBackfill }, null, 2),
         )
       }
+      assertToolEvents('explicit backfill after runner reconnect', explicitBackfill.events)
+    } else {
+      assertToolEvents('automatic backfill after runner reconnect', reconnectBackfill.events)
     }
 
     const types = eventTypes(socket.frames)
