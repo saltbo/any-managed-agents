@@ -4794,17 +4794,18 @@ type UsageRecordListResponse struct {
 
 // UsageRecordedPayload defines model for UsageRecordedPayload.
 type UsageRecordedPayload struct {
-	CachedInputTokens *float32                `json:"cachedInputTokens,omitempty"`
-	CompletionTokens  *float32                `json:"completionTokens,omitempty"`
-	CostMicros        *float32                `json:"costMicros,omitempty"`
-	Details           *map[string]interface{} `json:"details,omitempty"`
-	InputTokens       *float32                `json:"inputTokens,omitempty"`
-	Model             *string                 `json:"model,omitempty"`
-	OutputTokens      *float32                `json:"outputTokens,omitempty"`
-	PromptTokens      *float32                `json:"promptTokens,omitempty"`
-	ReasoningTokens   *float32                `json:"reasoningTokens,omitempty"`
-	ToolTokens        *float32                `json:"toolTokens,omitempty"`
-	TotalTokens       *float32                `json:"totalTokens,omitempty"`
+	CacheCreationInputTokens *float32                `json:"cacheCreationInputTokens,omitempty"`
+	CachedInputTokens        *float32                `json:"cachedInputTokens,omitempty"`
+	CompletionTokens         *float32                `json:"completionTokens,omitempty"`
+	CostMicros               *float32                `json:"costMicros,omitempty"`
+	Details                  *map[string]interface{} `json:"details,omitempty"`
+	InputTokens              *float32                `json:"inputTokens,omitempty"`
+	Model                    string                  `json:"model"`
+	OutputTokens             *float32                `json:"outputTokens,omitempty"`
+	PromptTokens             *float32                `json:"promptTokens,omitempty"`
+	ReasoningTokens          *float32                `json:"reasoningTokens,omitempty"`
+	ToolTokens               *float32                `json:"toolTokens,omitempty"`
+	TotalTokens              *float32                `json:"totalTokens,omitempty"`
 }
 
 // UsageSummary defines model for UsageSummary.

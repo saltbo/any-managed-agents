@@ -669,6 +669,9 @@
           "cachedInputTokens": {
             "type": "number"
           },
+          "cacheCreationInputTokens": {
+            "type": "number"
+          },
           "reasoningTokens": {
             "type": "number"
           },
@@ -685,6 +688,9 @@
             }
           }
         },
+        "required": [
+          "model"
+        ],
         "additionalProperties": false
       },
       "PermissionRequestPayload": {

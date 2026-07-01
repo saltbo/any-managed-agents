@@ -27,7 +27,7 @@ T = TypeVar("T", bound="ToolResult")
 
 @_attrs_define
 class ToolResult:
-    """
+    """ 
         Attributes:
             content (list[FileContentBlock | ImageContentBlock | JsonContentBlock | TextContentBlock]):
             structured_content (Any | Unset):
@@ -147,3 +147,4 @@ class ToolResult:
         )
 
         return tool_result
+

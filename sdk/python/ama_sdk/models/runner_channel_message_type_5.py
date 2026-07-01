@@ -21,7 +21,7 @@ T = TypeVar("T", bound="RunnerChannelMessageType5")
 
 @_attrs_define
 class RunnerChannelMessageType5:
-    """
+    """ 
         Attributes:
             type_ (RunnerChannelMessageType5Type):
             event_id (str):
@@ -75,3 +75,4 @@ class RunnerChannelMessageType5:
         )
 
         return runner_channel_message_type_5
+

@@ -20,7 +20,7 @@ T = TypeVar("T", bound="RunnerSessionCommand")
 
 @_attrs_define
 class RunnerSessionCommand:
-    """
+    """ 
      """
 
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -30,7 +30,7 @@ class RunnerSessionCommand:
 
 
     def to_dict(self) -> dict[str, Any]:
-
+        
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
 

@@ -25,7 +25,7 @@ T = TypeVar("T", bound="RunnerChannelMessageType2")
 
 @_attrs_define
 class RunnerChannelMessageType2:
-    """
+    """ 
         Attributes:
             type_ (RunnerChannelMessageType2Type):
             session_id (str):  Example: session_abc123.
@@ -93,3 +93,4 @@ class RunnerChannelMessageType2:
         )
 
         return runner_channel_message_type_2
+

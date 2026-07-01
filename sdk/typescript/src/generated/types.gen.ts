@@ -167,13 +167,14 @@ export type MessageEventPayload = {
 };
 
 export type UsageRecordedPayload = {
-    model?: string;
+    model: string;
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
     inputTokens?: number;
     outputTokens?: number;
     cachedInputTokens?: number;
+    cacheCreationInputTokens?: number;
     reasoningTokens?: number;
     toolTokens?: number;
     costMicros?: number;

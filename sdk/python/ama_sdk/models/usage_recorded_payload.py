@@ -26,26 +26,28 @@ T = TypeVar("T", bound="UsageRecordedPayload")
 class UsageRecordedPayload:
     """ 
         Attributes:
-            model (str | Unset):
+            model (str):
             prompt_tokens (float | Unset):
             completion_tokens (float | Unset):
             total_tokens (float | Unset):
             input_tokens (float | Unset):
             output_tokens (float | Unset):
             cached_input_tokens (float | Unset):
+            cache_creation_input_tokens (float | Unset):
             reasoning_tokens (float | Unset):
             tool_tokens (float | Unset):
             cost_micros (float | Unset):
             details (UsageRecordedPayloadDetails | Unset):
      """
 
-    model: str | Unset = UNSET
+    model: str
     prompt_tokens: float | Unset = UNSET
     completion_tokens: float | Unset = UNSET
     total_tokens: float | Unset = UNSET
     input_tokens: float | Unset = UNSET
     output_tokens: float | Unset = UNSET
     cached_input_tokens: float | Unset = UNSET
+    cache_creation_input_tokens: float | Unset = UNSET
     reasoning_tokens: float | Unset = UNSET
     tool_tokens: float | Unset = UNSET
     cost_micros: float | Unset = UNSET
@@ -71,6 +73,8 @@ class UsageRecordedPayload:
 
         cached_input_tokens = self.cached_input_tokens
 
+        cache_creation_input_tokens = self.cache_creation_input_tokens
+
         reasoning_tokens = self.reasoning_tokens
 
         tool_tokens = self.tool_tokens
@@ -85,9 +89,8 @@ class UsageRecordedPayload:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
+            "model": model,
         })
-        if model is not UNSET:
-            field_dict["model"] = model
         if prompt_tokens is not UNSET:
             field_dict["promptTokens"] = prompt_tokens
         if completion_tokens is not UNSET:
@@ -100,6 +103,8 @@ class UsageRecordedPayload:
             field_dict["outputTokens"] = output_tokens
         if cached_input_tokens is not UNSET:
             field_dict["cachedInputTokens"] = cached_input_tokens
+        if cache_creation_input_tokens is not UNSET:
+            field_dict["cacheCreationInputTokens"] = cache_creation_input_tokens
         if reasoning_tokens is not UNSET:
             field_dict["reasoningTokens"] = reasoning_tokens
         if tool_tokens is not UNSET:
@@ -117,7 +122,7 @@ class UsageRecordedPayload:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.usage_recorded_payload_details import UsageRecordedPayloadDetails
         d = dict(src_dict)
-        model = d.pop("model", UNSET)
+        model = d.pop("model")
 
         prompt_tokens = d.pop("promptTokens", UNSET)
 
@@ -130,6 +135,8 @@ class UsageRecordedPayload:
         output_tokens = d.pop("outputTokens", UNSET)
 
         cached_input_tokens = d.pop("cachedInputTokens", UNSET)
+
+        cache_creation_input_tokens = d.pop("cacheCreationInputTokens", UNSET)
 
         reasoning_tokens = d.pop("reasoningTokens", UNSET)
 
@@ -155,6 +162,7 @@ class UsageRecordedPayload:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cached_input_tokens=cached_input_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
             reasoning_tokens=reasoning_tokens,
             tool_tokens=tool_tokens,
             cost_micros=cost_micros,

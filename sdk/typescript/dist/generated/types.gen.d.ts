@@ -139,22 +139,20 @@ export type EventError = {
     category?: string;
     retryable?: boolean;
     retryAfterSeconds?: number;
-    provider?: string;
-    model?: string;
     details?: unknown;
 };
 export type MessageEventPayload = {
     message: EventMessage;
 };
 export type UsageRecordedPayload = {
-    provider?: string;
-    model?: string;
+    model: string;
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
     inputTokens?: number;
     outputTokens?: number;
     cachedInputTokens?: number;
+    cacheCreationInputTokens?: number;
     reasoningTokens?: number;
     toolTokens?: number;
     costMicros?: number;
