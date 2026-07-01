@@ -470,8 +470,8 @@ function amaMessage(message: AgentMessage, id?: string): Message {
 }
 
 function messageId(message: AgentMessage, fallback?: string) {
-  const record = message as unknown as Record<string, unknown>
-  return typeof record.id === 'string' && record.id ? record.id : (fallback ?? crypto.randomUUID())
+  const id = 'id' in message ? message.id : undefined
+  return typeof id === 'string' && id ? id : (fallback ?? crypto.randomUUID())
 }
 
 function amaContentBlocks(message: AgentMessage): MessageContentBlock[] {
