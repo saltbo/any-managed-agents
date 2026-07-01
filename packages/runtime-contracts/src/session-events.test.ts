@@ -161,6 +161,76 @@ describe('EventRecordSchema', () => {
       }).success,
     ).toBe(false)
   })
+
+  it('[spec: sessions/events-hierarchy] preserves record order and message/tool relationships', () => {
+    const records = [
+      EventRecordSchema.parse({
+        id: 'evt_turn_started',
+        sessionId: 'session_1',
+        sequence: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        event: {
+          type: 'turn.started',
+          payload: {
+            message: {
+              id: 'msg_user_1',
+              role: 'user',
+              content: [{ type: 'text', text: 'whoami' }],
+            },
+          },
+        },
+      }),
+      EventRecordSchema.parse({
+        id: 'evt_tool_call',
+        sessionId: 'session_1',
+        sequence: 2,
+        createdAt: '2026-01-01T00:00:01.000Z',
+        event: {
+          type: 'message.completed',
+          payload: {
+            message: {
+              id: 'msg_assistant_1',
+              role: 'assistant',
+              parentMessageId: 'msg_user_1',
+              content: [{ type: 'tool_call', toolCall }],
+            },
+          },
+        },
+      }),
+      EventRecordSchema.parse({
+        id: 'evt_tool_result',
+        sessionId: 'session_1',
+        sequence: 3,
+        createdAt: '2026-01-01T00:00:02.000Z',
+        event: {
+          type: 'message.completed',
+          payload: {
+            message: {
+              id: 'msg_tool_result_1',
+              role: 'tool',
+              parentMessageId: 'msg_assistant_1',
+              parentToolCallId: toolCall.id,
+              content: [{ type: 'tool_result', toolCallId: toolCall.id, result: toolResult }],
+            },
+          },
+        },
+      }),
+    ]
+
+    expect(records.map((record) => record.sequence)).toEqual([1, 2, 3])
+    expect(new Set(records.map((record) => record.id)).size).toBe(records.length)
+
+    const toolCallBlock = records[1].event.payload.message.content[0]
+    const toolResultMessage = records[2].event.payload.message
+    const toolResultBlock = toolResultMessage.content[0]
+
+    expect(records.every((record) => record.sessionId === 'session_1')).toBe(true)
+    expect(records[1].event.payload.message.parentMessageId).toBe('msg_user_1')
+    expect(toolCallBlock.type === 'tool_call' ? toolCallBlock.toolCall.id : null).toBe(toolCall.id)
+    expect(toolResultMessage.parentMessageId).toBe('msg_assistant_1')
+    expect(toolResultMessage.parentToolCallId).toBe(toolCall.id)
+    expect(toolResultBlock.type === 'tool_result' ? toolResultBlock.toolCallId : null).toBe(toolCall.id)
+  })
 })
 
 describe('event helpers', () => {

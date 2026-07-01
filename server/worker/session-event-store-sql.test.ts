@@ -14,7 +14,7 @@ function raw(id: string, sequence: number, type: string, payload: Record<string,
 }
 
 describe('stepRelayEvent', () => {
-  it('preserves runner event identity and payload without adding transport-only threading fields', () => {
+  it('[spec: sessions/events-hierarchy] preserves runner event identity, order, and nested relationships', () => {
     const events = [
       raw('ts', 1, 'turn.started'),
       raw('ms', 2, 'message.started', { message: { id: 'msg_1', role: 'assistant', content: [] } }),
@@ -24,6 +24,7 @@ describe('stepRelayEvent', () => {
         message: {
           id: 'msg_tool_call_1',
           role: 'assistant',
+          parentMessageId: 'msg_1',
           content: [{ type: 'tool_call', toolCall: { id: 'call-1', name: 'bash', input: {} } }],
         },
       }),
@@ -31,6 +32,7 @@ describe('stepRelayEvent', () => {
         message: {
           id: 'msg_tool_result_1',
           role: 'tool',
+          parentMessageId: 'msg_tool_call_1',
           parentToolCallId: 'call-1',
           content: [{ type: 'tool_result', toolCallId: 'call-1', result: { content: [] } }],
         },
@@ -45,9 +47,20 @@ describe('stepRelayEvent', () => {
     expect(byId.get('t1s')?.event.payload).toMatchObject({
       message: {
         id: 'msg_tool_call_1',
+        parentMessageId: 'msg_1',
         content: [{ type: 'tool_call', toolCall: { id: 'call-1', name: 'bash', input: {} } }],
       },
     })
+    expect(byId.get('t1e')?.event.payload).toMatchObject({
+      message: {
+        id: 'msg_tool_result_1',
+        parentMessageId: 'msg_tool_call_1',
+        parentToolCallId: 'call-1',
+        content: [{ type: 'tool_result', toolCallId: 'call-1', result: { content: [] } }],
+      },
+    })
+    expect(rows.map((row) => row.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7])
+    expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length)
   })
 
   it("carries the runner's own id + sequence straight onto the fanned row", () => {
