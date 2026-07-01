@@ -9,7 +9,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent, Environment, EventRecord, ListResponse, MemoryStore, Session } from '@/lib/amarpc'
 import { ApiError } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
@@ -41,6 +41,47 @@ const listOf = <T,>(data: T[] = []): ListResponse<T> => ({
 
 const _emptyList = <T,>() => listOf<T>()
 
+class MockSessionWebSocket extends EventTarget {
+  static OPEN = 1
+  readyState = MockSessionWebSocket.OPEN
+  readonly sent: string[] = []
+
+  constructor(readonly url: string) {
+    super()
+    Promise.resolve().then(() => this.dispatchEvent(new Event('open')))
+  }
+
+  emit(payload: Record<string, unknown>) {
+    this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(payload) }))
+  }
+
+  send(data: string) {
+    this.sent.push(data)
+  }
+
+  close() {
+    this.readyState = 3
+  }
+}
+
+function stubSessionSocket() {
+  const sockets: MockSessionWebSocket[] = []
+  vi.stubGlobal(
+    'WebSocket',
+    class extends MockSessionWebSocket {
+      constructor(url: string) {
+        super(url)
+        sockets.push(this)
+      }
+    },
+  )
+  return sockets
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -71,7 +112,7 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
     runState: 'idle',
     messages: [],
     tools: [],
-    debugEvents: [],
+    eventRecords: [],
     eventKeys: [],
     error: null,
     ...overrides,
@@ -158,10 +199,6 @@ function agentDetail(agent: Agent) {
 
 function environmentDetail(env: Environment) {
   return http.get(`*/api/v1/environments/${env.metadata.uid}`, () => HttpResponse.json(env))
-}
-
-function sessionEventsList(sessionId: string, events: EventRecord[] = []) {
-  return http.get(`*/api/v1/sessions/${sessionId}/events`, () => HttpResponse.json(listOf(events)))
 }
 
 function agentsList(agents: Agent[] = []) {
@@ -509,7 +546,6 @@ describe('SessionDetailView', () => {
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          events={[]}
           runtime={buildRuntimeState(runtimeOverrides)}
           onStop={vi.fn()}
           onArchive={vi.fn()}
@@ -549,7 +585,6 @@ describe('SessionDetailView', () => {
           session={session}
           agentName={undefined}
           environmentName={undefined}
-          events={[]}
           runtime={buildRuntimeState()}
           onStop={vi.fn()}
           onArchive={vi.fn()}
@@ -641,7 +676,6 @@ describe('SessionDetailView', () => {
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          events={[]}
           runtime={buildRuntimeState()}
           onStop={onStop}
           onArchive={vi.fn()}
@@ -690,7 +724,6 @@ describe('SessionDetailView', () => {
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          events={[]}
           runtime={buildRuntimeState()}
           onStop={vi.fn()}
           onArchive={onArchive}
@@ -743,7 +776,6 @@ describe('SessionDetailView', () => {
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          events={[]}
           runtime={buildRuntimeState()}
           onStop={vi.fn()}
           onArchive={vi.fn()}
@@ -939,7 +971,6 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
     render(
       <SessionRuntimePanel
         runtime={buildRuntimeState({ connection: 'connecting', runState: 'running' })}
-        persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -957,7 +988,6 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
     render(
       <SessionRuntimePanel
         runtime={buildRuntimeState({ connection: 'open' })}
-        persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -976,7 +1006,6 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
     render(
       <SessionRuntimePanel
         runtime={buildRuntimeState()}
-        persistedEvents={[]}
         message="   "
         setMessage={vi.fn()}
         onSend={onSend}
@@ -994,7 +1023,6 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
     render(
       <SessionRuntimePanel
         runtime={buildRuntimeState()}
-        persistedEvents={[]}
         message="hello"
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -1013,7 +1041,6 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
     render(
       <SessionRuntimePanel
         runtime={buildRuntimeState({ connection: 'error' })}
-        persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -1056,8 +1083,7 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
 
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState()}
-        persistedEvents={persistedEvents}
+        runtime={buildRuntimeState({ eventRecords: persistedEvents })}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -1106,8 +1132,7 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
 
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState()}
-        persistedEvents={persistedEvents}
+        runtime={buildRuntimeState({ eventRecords: persistedEvents })}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -1127,7 +1152,7 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
     expect(screen.getByText('transcript_only_ev')).toBeTruthy()
   })
 
-  it('deduplicates runtime debug events that also appear in persisted events', async () => {
+  it('renders event records from the runtime state once', async () => {
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
       value: vi.fn(() => false),
       configurable: true,
@@ -1153,21 +1178,11 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
         createdAt: now,
       },
     ]
-    const runtimeWithSameEvent = buildRuntimeState({
-      debugEvents: [
-        {
-          id: 'shared_event_1',
-          type: 'message.completed',
-          payload: { type: 'message.completed' },
-          createdAt: now,
-        },
-      ],
-    })
+    const runtimeWithSameEvent = buildRuntimeState({ eventRecords: persistedEvents })
 
     render(
       <SessionRuntimePanel
         runtime={runtimeWithSameEvent}
-        persistedEvents={persistedEvents}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -1884,13 +1899,9 @@ describe('SessionDetailPage', () => {
   })
 
   it('renders session detail view for a stopped session (agentId and environmentId present)', async () => {
+    stubSessionSocket()
     const stoppedSession = buildSession({ id: 'session_stopped', phase: 'stopped', stoppedAt: now })
-    server.use(
-      sessionDetail(stoppedSession),
-      agentDetail(buildAgent()),
-      environmentDetail(buildEnvironment()),
-      sessionEventsList('session_stopped'),
-    )
+    server.use(sessionDetail(stoppedSession), agentDetail(buildAgent()), environmentDetail(buildEnvironment()))
 
     const queryClient = makeQueryClient()
     render(
@@ -1907,28 +1918,10 @@ describe('SessionDetailPage', () => {
     expect(screen.getAllByText('stopped').length).toBeGreaterThan(0)
   })
 
-  it('loads complete session event history with ascending cursor pagination', async () => {
+  it('loads complete session event history through socket backfill pagination', async () => {
+    const sockets = stubSessionSocket()
     const stoppedSession = buildSession({ id: 'session_history', phase: 'stopped', stoppedAt: now })
-    const eventRequests: URL[] = []
-    server.use(
-      sessionDetail(stoppedSession),
-      agentDetail(buildAgent()),
-      environmentDetail(buildEnvironment()),
-      http.get('*/api/v1/sessions/session_history/events', ({ request }) => {
-        const url = new URL(request.url)
-        eventRequests.push(url)
-        if (url.searchParams.get('cursor') === '1') {
-          return HttpResponse.json({
-            data: [buildMessageEvent('session_history', 2, 'Second page reply')],
-            pagination: { limit: 200, hasMore: false, nextCursor: null },
-          })
-        }
-        return HttpResponse.json({
-          data: [buildMessageEvent('session_history', 1, 'First page reply')],
-          pagination: { limit: 200, hasMore: true, nextCursor: '1' },
-        })
-      }),
-    )
+    server.use(sessionDetail(stoppedSession), agentDetail(buildAgent()), environmentDetail(buildEnvironment()))
 
     const queryClient = makeQueryClient()
     render(
@@ -1941,27 +1934,32 @@ describe('SessionDetailPage', () => {
       </QueryClientProvider>,
     )
 
+    await waitFor(() => expect(sockets[0]).toBeTruthy(), { timeout: 5000 })
+    sockets[0]!.emit({
+      type: 'backfill',
+      requestId: null,
+      events: [buildMessageEvent('session_history', 1, 'First page reply')],
+      hasMore: true,
+      nextCursor: 1,
+    })
+    await waitFor(() => expect(sockets[0]!.sent).toHaveLength(1), { timeout: 5000 })
+    expect(JSON.parse(sockets[0]!.sent[0] ?? '{}')).toMatchObject({ type: 'backfill', cursor: 1, limit: 200 })
+    sockets[0]!.emit({
+      type: 'backfill',
+      requestId: null,
+      events: [buildMessageEvent('session_history', 2, 'Second page reply')],
+      hasMore: false,
+      nextCursor: null,
+    })
+
     await waitFor(() => expect(screen.getByText('First page reply')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText('Second page reply')).toBeTruthy()
-    expect(eventRequests).toHaveLength(2)
-    expect(eventRequests[0]?.searchParams.get('order')).toBe('asc')
-    expect(eventRequests[0]?.searchParams.get('limit')).toBe('200')
-    expect(eventRequests[0]?.searchParams.has('cursor')).toBe(false)
-    expect(eventRequests[1]?.searchParams.get('cursor')).toBe('1')
   })
 
-  it('renders view with EMPTY_EVENTS while events query is still pending (covers data?.data ?? EMPTY_EVENTS branch)', async () => {
-    // Session responds immediately; events endpoint never responds.
-    // This exercises the `eventsQuery.data?.data ?? EMPTY_EVENTS` branch (line 67)
-    // where data is undefined while the events query is still loading.
+  it('renders view while socket backfill has not arrived yet', async () => {
+    stubSessionSocket()
     const stoppedSession = buildSession({ id: 'session_events_pending', phase: 'stopped', stoppedAt: now })
-    server.use(
-      sessionDetail(stoppedSession),
-      agentDetail(buildAgent()),
-      environmentDetail(buildEnvironment()),
-      // Events endpoint never resolves → eventsQuery.data stays undefined
-      http.get('*/api/v1/sessions/session_events_pending/events', () => new Promise(() => {})),
-    )
+    server.use(sessionDetail(stoppedSession), agentDetail(buildAgent()), environmentDetail(buildEnvironment()))
 
     const queryClient = makeQueryClient()
     render(
@@ -1974,15 +1972,13 @@ describe('SessionDetailPage', () => {
       </QueryClientProvider>,
     )
 
-    // Session loads and the detail view renders — while events are still pending
     await waitFor(() => expect(screen.getByText('Test session')).toBeTruthy(), { timeout: 5000 })
   })
 
   it('renders loading state when sessionId param is undefined (covers sessionId ?? "" branches)', () => {
     // Mounting the component outside a :sessionId route means useParams() returns {}
     // and sessionId is undefined. This exercises the `sessionId ?? ''` null-coalescing
-    // branch (lines 19, 42) and the `eventsQuery.data?.data ?? EMPTY_EVENTS` branch
-    // (line 67) where the query is disabled and data is always undefined.
+    // branch where the query is disabled and data is always undefined.
     const queryClient = makeQueryClient()
     render(
       <QueryClientProvider client={queryClient}>
@@ -1999,6 +1995,7 @@ describe('SessionDetailPage', () => {
   })
 
   it('renders session detail view with no agentId/environmentId (enabled=false branches)', async () => {
+    stubSessionSocket()
     const minimalSession = buildSession({
       id: 'session_minimal',
       phase: 'stopped',
@@ -2008,7 +2005,7 @@ describe('SessionDetailPage', () => {
       environmentVersionId: null,
       environmentSnapshot: null,
     })
-    server.use(sessionDetail(minimalSession), sessionEventsList('session_minimal'))
+    server.use(sessionDetail(minimalSession))
 
     const queryClient = makeQueryClient()
     render(

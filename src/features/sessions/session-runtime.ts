@@ -5,7 +5,6 @@ import { getStoredAccessToken } from '@/lib/oidc'
 
 export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
 export type SessionRuntimeRunState = 'idle' | 'running' | 'error'
-type AmaEvent = EventRecord['event']
 
 export type SessionRuntimeCommand = Extract<SessionSocketClientMessage, { type: 'prompt' | 'steer' | 'abort' }>
 export type SessionSocketClientMessageType = SessionRuntimeCommand['type']
@@ -32,19 +31,12 @@ export interface SessionRuntimeToolTrace {
   eventType: string
 }
 
-export interface SessionRuntimeDebugEvent {
-  id: string
-  type: AmaSessionEventType
-  payload: Record<string, unknown>
-  createdAt: string
-}
-
 export interface SessionRuntimeState {
   connection: SessionRuntimeConnectionState
   runState: SessionRuntimeRunState
   messages: SessionRuntimeMessage[]
   tools: SessionRuntimeToolTrace[]
-  debugEvents: SessionRuntimeDebugEvent[]
+  eventRecords: EventRecord[]
   eventKeys: string[]
   error: string | null
 }
@@ -53,15 +45,15 @@ export type SessionRuntimeAction =
   | { type: 'reset' }
   | { type: 'connection'; state: SessionRuntimeConnectionState; error?: string | null }
   | { type: 'command_sent'; command: SessionRuntimeCommand; at: string }
-  | { type: 'event'; item: AmaEvent | EventRecord; at: string }
-  | { type: 'persisted_events'; events: EventRecord[] }
+  | { type: 'event'; item: EventRecord; at?: string }
+  | { type: 'event_records'; events: EventRecord[] }
 
 export const initialSessionRuntimeState: SessionRuntimeState = {
   connection: 'connecting',
   runState: 'idle',
   messages: [],
   tools: [],
-  debugEvents: [],
+  eventRecords: [],
   eventKeys: [],
   error: null,
 }
@@ -77,11 +69,11 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
       error: action.error ?? (action.state === 'error' ? state.error : null),
     }
   }
-  if (action.type === 'persisted_events') {
+  if (action.type === 'event_records') {
     return mergePersistedEvents(state, action.events)
   }
   if (action.type === 'event') {
-    return mergePersistedEvents(state, [eventRecordFromAction(action.item, action.at, state)])
+    return mergePersistedEvents(state, [action.item])
   }
   if (action.type === 'command_sent') {
     if (action.command.type === 'abort' || !action.command.content) {
@@ -110,23 +102,6 @@ export function sessionSocketUrl(socketPath: string) {
     url.searchParams.set('access_token', accessToken)
   }
   return url.toString()
-}
-
-function eventRecordFromAction(event: AmaEvent | EventRecord, at: string, state: SessionRuntimeState): EventRecord {
-  if (isEventRecord(event)) {
-    return event
-  }
-  return {
-    id: `${event.type}_${at}_${state.debugEvents.length + 1}`,
-    sessionId: '',
-    sequence: state.eventKeys.length + 1,
-    event,
-    createdAt: at,
-  }
-}
-
-function isEventRecord(value: AmaEvent | EventRecord): value is EventRecord {
-  return 'event' in value
 }
 
 function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[]) {
@@ -165,14 +140,6 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
     )
     .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
     .reduce<SessionRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
-  const debugEvents = runtimeEvents.map(
-    ({ stored, payload }): SessionRuntimeDebugEvent => ({
-      id: stored.id,
-      type: sessionEventType(stored, payload),
-      payload,
-      createdAt: stored.createdAt,
-    }),
-  )
   const eventKeys = runtimeEvents
     .map(({ stored, payload }) => runtimeEventKey(payload, sessionEventType(stored, payload)))
     .filter((key): key is string => Boolean(key))
@@ -190,10 +157,10 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
     error: latestError ? runtimeErrorMessage(latestError.payload) : state.error,
     messages: messages.reduce((next, message) => upsertMessage(next, message), state.messages),
     tools: state.tools.length === 0 ? tools : tools.reduce((next, tool) => upsertTool(next, tool), state.tools),
-    debugEvents: [
-      ...state.debugEvents.filter((item) => !debugEvents.some((event) => event.id === item.id)),
-      ...debugEvents,
-    ],
+    eventRecords: mergeEventRecords(
+      state.eventRecords,
+      runtimeEvents.map(({ stored }) => stored),
+    ),
     eventKeys: mergeEventKeys(eventKeys, state.eventKeys),
   }
 }
@@ -489,6 +456,16 @@ function isTranscriptEvent(eventType: string) {
 
 function mergeEventKeys(left: string[], right: string[]) {
   return [...new Set([...left, ...right])].slice(-800)
+}
+
+function mergeEventRecords(existing: EventRecord[], incoming: EventRecord[]) {
+  const byId = new Map(existing.map((record) => [record.id, record]))
+  for (const record of incoming) {
+    byId.set(record.id, record)
+  }
+  return [...byId.values()].sort(
+    (left, right) => left.sequence - right.sequence || Date.parse(left.createdAt) - Date.parse(right.createdAt),
+  )
 }
 
 function stableStringify(value: unknown): string {

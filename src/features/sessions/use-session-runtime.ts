@@ -11,11 +11,9 @@ import {
 
 export function useSessionRuntimeSession({
   session,
-  events,
   onEventsChanged,
 }: {
   session: Session | null
-  events: EventRecord[]
   onEventsChanged: () => void
 }) {
   const [state, dispatch] = useReducer(sessionRuntimeReducer, initialSessionRuntimeState)
@@ -24,13 +22,10 @@ export function useSessionRuntimeSession({
   const refreshTimerRef = useRef<number | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const sessionIdRef = useRef<string | null>(null)
-  const live = session !== null && (session.status.phase === 'idle' || session.status.phase === 'running')
   const sessionId = session?.metadata.uid ?? ''
-  // Persisted events stay inspectable for any session; the live socket only
-  // connects while the runtime is actually active.
   const endpoint = useMemo(
-    () => (live && sessionId ? sessionSocketUrl(`/api/v1/sessions/${sessionId}/socket`) : null),
-    [live, sessionId],
+    () => (sessionId ? sessionSocketUrl(`/api/v1/sessions/${sessionId}/socket`) : null),
+    [sessionId],
   )
 
   useEffect(() => {
@@ -38,11 +33,7 @@ export function useSessionRuntimeSession({
       sessionIdRef.current = session?.metadata.uid ?? null
       dispatch({ type: 'reset' })
     }
-    dispatch({
-      type: 'persisted_events',
-      events: session ? events.filter((event) => event.sessionId === session.metadata.uid) : [],
-    })
-  }, [events, session])
+  }, [session])
 
   useEffect(() => {
     void connectionAttempt
@@ -82,9 +73,19 @@ export function useSessionRuntimeSession({
         return
       }
       if (socketMessage.type === 'backfill') {
-        dispatch({ type: 'persisted_events', events: socketMessage.events as EventRecord[] })
+        dispatch({ type: 'event_records', events: socketMessage.events as EventRecord[] })
+        if (socketMessage.hasMore && typeof socketMessage.nextCursor === 'number') {
+          socket.send(
+            JSON.stringify({
+              id: crypto.randomUUID(),
+              type: 'backfill',
+              cursor: socketMessage.nextCursor,
+              limit: 200,
+            }),
+          )
+        }
       } else {
-        dispatch({ type: 'persisted_events', events: [socketMessage.record as EventRecord] })
+        dispatch({ type: 'event_records', events: [socketMessage.record as EventRecord] })
       }
       if (shouldRefreshAfterMessage(socketMessage)) {
         window.clearTimeout(refreshTimerRef.current ?? undefined)

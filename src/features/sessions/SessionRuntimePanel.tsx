@@ -11,7 +11,6 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, StatusBadge } from '@/console/components'
 import { formatTime, stringifyJson } from '@/console/format'
-import type { EventRecord } from '@/lib/amarpc'
 import type { SessionRuntimeState } from './session-runtime'
 
 type EventFilter = 'all' | string
@@ -20,7 +19,6 @@ type TranscriptFilter = 'all' | 'user' | 'agent' | 'tool' | 'error' | 'system'
 
 export function SessionRuntimePanel({
   runtime,
-  persistedEvents,
   message,
   setMessage,
   onSend,
@@ -29,7 +27,6 @@ export function SessionRuntimePanel({
   canSend,
 }: {
   runtime: SessionRuntimeState
-  persistedEvents: EventRecord[]
   message: string
   setMessage: (value: string) => void
   onSend: (message: string) => void
@@ -41,23 +38,25 @@ export function SessionRuntimePanel({
   const [transcriptType, setTranscriptType] = useState<TranscriptFilter>('all')
   const [eventType, setEventType] = useState<EventFilter>('all')
   const [selectedTranscriptEventId, setSelectedTranscriptEventId] = useState<string | null>(null)
-  const debugEvents = useMemo(() => {
-    const persisted = persistedEvents.map((record) => ({
-      id: record.id,
-      type: record.event.type,
-      payload: record.event.payload,
-      createdAt: record.createdAt,
-    }))
-    return [...persisted, ...runtime.debugEvents.filter((record) => !persisted.some((item) => item.id === record.id))]
-  }, [persistedEvents, runtime.debugEvents])
+  const eventRecords = runtime.eventRecords
+  const eventRows = useMemo(
+    () =>
+      eventRecords.map((record) => ({
+        id: record.id,
+        type: record.event.type,
+        payload: record.event.payload,
+        createdAt: record.createdAt,
+      })),
+    [eventRecords],
+  )
   const debugEventTypes = useMemo<string[]>(
-    () => [...new Set(debugEvents.map((event) => event.type))].sort((left, right) => left.localeCompare(right)),
-    [debugEvents],
+    () => [...new Set(eventRows.map((event) => event.type))].sort((left, right) => left.localeCompare(right)),
+    [eventRows],
   )
   const selectedEventType = eventType === 'all' || debugEventTypes.includes(eventType) ? eventType : 'all'
   const filteredDebugEvents =
-    selectedEventType === 'all' ? debugEvents : debugEvents.filter((event) => event.type === selectedEventType)
-  const eventExport = stringifyJson(exportableEvents(persistedEvents, debugEvents))
+    selectedEventType === 'all' ? eventRows : eventRows.filter((event) => event.type === selectedEventType)
+  const eventExport = stringifyJson(eventRecords)
   const transcriptItems = useMemo(
     () =>
       [
@@ -80,10 +79,7 @@ export function SessionRuntimePanel({
       }),
     [transcriptItems, transcriptType],
   )
-  const transcriptEventsById = useMemo(
-    () => new Map(persistedEvents.map((event) => [event.id, event])),
-    [persistedEvents],
-  )
+  const transcriptEventsById = useMemo(() => new Map(eventRecords.map((event) => [event.id, event])), [eventRecords])
   const selectedTranscriptEvent = selectedTranscriptEventId
     ? (transcriptEventsById.get(selectedTranscriptEventId) ?? null)
     : null
@@ -328,26 +324,4 @@ export function transcriptFilter(value: string): TranscriptFilter {
 
 function runtimeTab(value: string): RuntimeTab {
   return value === 'debug' ? 'debug' : 'transcript'
-}
-
-function exportableEvents(
-  persistedEvents: EventRecord[],
-  debugEvents: Array<{ id: string; type: EventRecord['event']['type']; payload: unknown; createdAt: string }>,
-) {
-  const persistedById = new Map(persistedEvents.map((event) => [event.id, event]))
-  return debugEvents
-    .map((event, index) => {
-      const persisted = persistedById.get(event.id)
-      if (persisted) {
-        return persisted
-      }
-      return {
-        id: event.id,
-        sessionId: '',
-        sequence: persistedEvents.length + index + 1,
-        event: { type: event.type, payload: event.payload as EventRecord['event']['payload'] },
-        createdAt: event.createdAt,
-      } satisfies EventRecord
-    })
-    .sort((left, right) => left.sequence - right.sequence || Date.parse(left.createdAt) - Date.parse(right.createdAt))
 }

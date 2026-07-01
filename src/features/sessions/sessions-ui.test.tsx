@@ -91,15 +91,13 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
       },
     ],
     tools: [],
-    debugEvents: [
-      {
-        id: 'debug_1',
+    eventRecords: [
+      buildPersistedEvent({
         type: 'runtime.error',
         payload: {
           message: 'Runtime failed to start',
         },
-        createdAt: '2026-05-23T00:00:00.000Z',
-      },
+      }),
     ],
     eventKeys: [],
     error: 'Runtime failed to start',
@@ -298,8 +296,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          events={[]}
-          runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
+          runtime={buildRuntimeState({ messages: [], tools: [], eventRecords: [], error: null })}
           onStop={vi.fn()}
           onArchive={vi.fn()}
           onReconnectRuntime={vi.fn()}
@@ -345,8 +342,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          events={[]}
-          runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
+          runtime={buildRuntimeState({ messages: [], tools: [], eventRecords: [], error: null })}
           onStop={vi.fn()}
           onArchive={vi.fn()}
           onReconnectRuntime={vi.fn()}
@@ -366,12 +362,10 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
 
   it('renders transcript timestamps in message metadata without exposing raw payloads in transcript mode', () => {
     const runtime = buildRuntimeState()
-    const persistedEvents = [buildPersistedEvent()]
 
     render(
       <SessionRuntimePanel
         runtime={runtime}
-        persistedEvents={persistedEvents}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -414,14 +408,13 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         },
       ],
       tools: [],
-      debugEvents: [],
+      eventRecords: persistedEvents,
       error: null,
     })
 
     render(
       <SessionRuntimePanel
         runtime={runtime}
-        persistedEvents={persistedEvents}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -465,20 +458,20 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           eventType: 'tool_result',
         },
       ],
-      debugEvents: [
-        ...AMA_SESSION_EVENT_TYPES.map((type, index) => ({
+      eventRecords: AMA_SESSION_EVENT_TYPES.map((type, index) =>
+        buildPersistedEvent({
           id: `debug_${type}`,
+          sequence: index + 1,
           type,
           payload: { type, safe: true, marker: `payload_${type}` },
           createdAt: new Date((index + 1) * 1000).toISOString(),
-        })),
-      ],
+        }),
+      ),
     })
 
     render(
       <SessionRuntimePanel
         runtime={runtime}
-        persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -509,8 +502,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
   it('renders transcript and debug empty states', async () => {
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
-        persistedEvents={[]}
+        runtime={buildRuntimeState({ messages: [], tools: [], eventRecords: [], error: null })}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -550,21 +542,22 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       }
       return element
     })
-    const persistedEvents = [buildPersistedEvent()]
+    const eventRecords = [
+      buildPersistedEvent(),
+      buildPersistedEvent({
+        id: 'live_only_event',
+        sequence: 2,
+        type: 'runtime.error',
+        payload: { message: 'live_only_payload' },
+        createdAt: '2026-05-23T00:00:01.000Z',
+      }),
+    ]
 
     render(
       <SessionRuntimePanel
         runtime={buildRuntimeState({
-          debugEvents: [
-            {
-              id: 'live_only_event',
-              type: 'runtime.error',
-              payload: { message: 'live_only_payload' },
-              createdAt: '2026-05-23T00:00:01.000Z',
-            },
-          ],
+          eventRecords,
         })}
-        persistedEvents={persistedEvents}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -594,16 +587,16 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         runtime={buildRuntimeState({
           messages: [],
           tools: [],
-          debugEvents: [
-            {
+          eventRecords: [
+            buildPersistedEvent({
               id: 'debug_message',
+              sequence: 1,
               type: 'message.completed',
               payload: { type: 'message.completed', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
-            },
+            }),
           ],
         })}
-        persistedEvents={[]}
         message="  Ship it  "
         setMessage={setMessage}
         onSend={onSend}
@@ -694,9 +687,8 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
               eventType: 'tool_result',
             },
           ],
-          debugEvents: [],
+          eventRecords: [],
         })}
-        persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -761,22 +753,23 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         runtime={buildRuntimeState({
           messages: [],
           tools: [],
-          debugEvents: [
-            {
+          eventRecords: [
+            buildPersistedEvent({
               id: 'debug_message',
+              sequence: 1,
               type: 'message.completed',
               payload: { type: 'message.completed', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
-            },
-            {
+            }),
+            buildPersistedEvent({
               id: 'debug_error',
+              sequence: 2,
               type: 'runtime.error',
               payload: { type: 'runtime.error', marker: 'payload_error' },
               createdAt: '2026-05-23T00:00:01.000Z',
-            },
+            }),
           ],
         })}
-        persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}

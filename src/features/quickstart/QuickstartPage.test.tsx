@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
-import type { Agent, Environment, EventRecord, Provider, Session, SessionAgentSnapshot } from '@/lib/amarpc'
+import type { Agent, Environment, Provider, Session, SessionAgentSnapshot } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,
@@ -86,7 +86,6 @@ function handlers({
   createdEnvironment = null as Environment | null,
   createdSession = null as Session | null,
   sessionDetail = null as Session | null,
-  sessionEvents = [] as EventRecord[],
   agentError = null as { message: string; status: number } | null,
   environmentError = null as { message: string; status: number } | null,
   sessionError = null as { message: string; status: number } | null,
@@ -128,7 +127,6 @@ function handlers({
       const session = sessionDetail ?? sessions.find((s) => s.metadata.uid === params.sessionId) ?? null
       return session ? HttpResponse.json(session) : new HttpResponse(null, { status: 404 })
     }),
-    http.get('*/api/v1/sessions/:sessionId/events', () => HttpResponse.json(listEnvelope(sessionEvents))),
     // Provider models are queried by CoreStep when a draft has a provider set
     http.get('*/api/v1/providers/:providerId/models', () => HttpResponse.json(listEnvelope([]))),
   ]
@@ -142,7 +140,7 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
     runState: 'idle',
     messages: [],
     tools: [],
-    debugEvents: [],
+    eventRecords: [],
     eventKeys: [],
     error: null,
     ...state,

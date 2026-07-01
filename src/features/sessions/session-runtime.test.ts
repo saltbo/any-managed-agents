@@ -11,7 +11,10 @@ import { initialSessionRuntimeState, sessionRuntimeReducer, sessionSocketUrl } f
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  syntheticEventSequence = 0
 })
+
+let syntheticEventSequence = 0
 
 function stubWindowLocation(href: string) {
   vi.stubGlobal('window', { location: { href }, localStorage: window.localStorage })
@@ -70,12 +73,10 @@ function normalizeTestPayload(sequence: number, type: string, payload: Record<st
   return { type, payload }
 }
 
-function amaEvent(payload: Record<string, unknown>): EventRecord['event'] {
+function amaEvent(payload: Record<string, unknown>): EventRecord {
   const normalized = normalizeTestPayload(0, typeof payload.type === 'string' ? payload.type : '', payload)
-  return {
-    type: normalized.type as AmaSessionEventType,
-    payload: normalized.payload,
-  } as EventRecord['event']
+  syntheticEventSequence += 1
+  return event(syntheticEventSequence, normalized.type as AmaSessionEventType, normalized.payload)
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
@@ -146,7 +147,7 @@ describe('sessionRuntimeReducer', () => {
       initialSessionRuntimeState,
     )
 
-    expect(state.debugEvents.map((item) => item.type)).toEqual(AMA_SESSION_EVENT_TYPES)
+    expect(state.eventRecords.map((item) => item.event.type)).toEqual(AMA_SESSION_EVENT_TYPES)
     expect(state.messages.some((message) => message.content.includes('Hello'))).toBe(true)
     expect(state.messages.some((message) => message.content === 'Runtime failed')).toBe(true)
     expect(state.tools).toHaveLength(1)
@@ -211,7 +212,7 @@ describe('sessionRuntimeReducer', () => {
 
   it('replays persisted runtime errors as an error run state', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [event(1, 'runtime.error', { type: 'runtime.error', message: 'persisted failure' })],
     })
 
@@ -238,7 +239,7 @@ describe('sessionRuntimeReducer', () => {
     })
   })
 
-  it('dedupes live debug events by id', () => {
+  it('dedupes live event records by id', () => {
     const first = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       item: amaEvent({ type: 'usage.recorded', id: 'usage_1', model: 'test-model', totalTokens: 1 }),
@@ -250,7 +251,7 @@ describe('sessionRuntimeReducer', () => {
       at: new Date(2000).toISOString(),
     })
 
-    expect(second.debugEvents).toHaveLength(1)
+    expect(second.eventRecords).toHaveLength(1)
   })
 
   it('omits non-transcript message content blocks', () => {
@@ -274,7 +275,7 @@ describe('sessionRuntimeReducer', () => {
 
   it('replays persisted streaming updates into the final completed message', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [
         event(1, 'message.updated', {
           type: 'message.updated',
@@ -299,7 +300,7 @@ describe('sessionRuntimeReducer', () => {
 
   it('collapses persisted tool updates and keeps tool results out of messages', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [
         event(1, 'message.completed', {
           type: 'message.completed',
@@ -399,7 +400,7 @@ describe('sessionRuntimeReducer', () => {
     ]
 
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [...firstTurn, ...secondTurn],
     })
 
@@ -448,20 +449,22 @@ describe('sessionRuntimeReducer', () => {
     }))
 
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [...turn, ...replay, event(200, 'turn.completed', { type: 'turn.completed' })],
     })
 
     expect(state.tools).toHaveLength(1)
     expect(state.messages.map((message) => message.content)).toEqual(['run whoami', 'You are running as `root`.'])
     expect(
-      state.debugEvents.filter((item) =>
-        Array.isArray((item.payload.message as { content?: unknown } | undefined)?.content)
-          ? ((item.payload.message as { content: Array<{ type?: unknown }> }).content ?? []).some(
+      state.eventRecords.filter((item) => {
+        const payload = item.event.payload
+        const message = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload.message : undefined
+        return Array.isArray((message as { content?: unknown } | undefined)?.content)
+          ? ((message as { content: Array<{ type?: unknown }> }).content ?? []).some(
               (block) => block.type === 'tool_call',
             )
-          : false,
-      ),
+          : false
+      }),
     ).toHaveLength(1)
   })
 
@@ -522,7 +525,7 @@ describe('sessionRuntimeReducer', () => {
     ]
 
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [...firstTurn, ...secondTurn, event(24, 'turn.completed', { type: 'turn.completed' })],
     })
 
@@ -537,7 +540,7 @@ describe('sessionRuntimeReducer', () => {
 
   it('keeps persisted messages when a runtime reuses provider-local message ids', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [
         event(1, 'message.completed', {
           type: 'message.completed',
@@ -577,7 +580,7 @@ describe('sessionRuntimeReducer', () => {
       },
     }
     const loaded = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [event(1, 'message.completed', messagePayload), event(2, 'turn.completed', { type: 'turn.completed' })],
     })
     const replayed = sessionRuntimeReducer(loaded, {
@@ -655,7 +658,7 @@ describe('sessionRuntimeReducer', () => {
       at: new Date(1000).toISOString(),
     })
 
-    expect(state.debugEvents.map((e) => e.type)).toEqual(['runtime.error'])
+    expect(state.eventRecords.map((e) => e.event.type)).toEqual(['runtime.error'])
     expect(state.messages).toMatchObject([{ role: 'assistant', status: 'error', content: 'runtime failed' }])
     expect(state.runState).toBe('error')
   })
@@ -673,8 +676,8 @@ describe('sessionRuntimeReducer', () => {
       at: new Date(1000).toISOString(),
     })
 
-    expect(state.debugEvents).toHaveLength(1)
-    expect(state.debugEvents[0]?.type).toBe('permission.requested')
+    expect(state.eventRecords).toHaveLength(1)
+    expect(state.eventRecords[0]?.event.type).toBe('permission.requested')
     expect(state.messages).toHaveLength(0)
   })
 
@@ -682,7 +685,7 @@ describe('sessionRuntimeReducer', () => {
     const state = sessionRuntimeReducer(
       { ...initialSessionRuntimeState, runState: 'running' },
       {
-        type: 'persisted_events',
+        type: 'event_records',
         events: [
           {
             id: 'ev_checkpoint',
@@ -699,7 +702,7 @@ describe('sessionRuntimeReducer', () => {
     )
 
     expect(state.runState).toBe('error')
-    expect(state.debugEvents).toHaveLength(1)
+    expect(state.eventRecords).toHaveLength(1)
     expect(state.messages).toMatchObject([{ role: 'assistant', status: 'error', content: 'runtime failed' }])
   })
 
@@ -817,7 +820,7 @@ describe('sessionRuntimeReducer', () => {
       durationMs: 12,
     }
     const loaded = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [event(1, 'test.tool_call', startPayload), event(2, 'test.tool_result.completed', endPayload)],
     })
     const replayedStart = sessionRuntimeReducer(loaded, {
@@ -898,19 +901,19 @@ describe('sessionRuntimeReducer — extractText edge cases (line 594)', () => {
 
 describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () => {
   // These tests exercise the .filter() callbacks inside mergePersistedEvents
-  // that only run when state.messages/tools/debugEvents are already non-empty.
+  // that only run when state.messages/tools/eventRecords are already non-empty.
   // Coverage target: the anonymous lambdas at lines 254-262 of session-runtime.ts.
 
-  it('deduplicates a message that already exists in state when persisted_events is dispatched twice', () => {
+  it('deduplicates a message that already exists in state when event_records is dispatched twice', () => {
     const msgEvent = event(1, 'message.completed', {
       type: 'message.completed',
       message: { role: 'assistant', content: [{ type: 'text', text: 'Existing message' }] },
     })
     const termEvent = event(2, 'turn.completed', { type: 'turn.completed' })
 
-    // First dispatch: state gains 1 message, 1 debugEvent
+    // First dispatch: state gains 1 message and records the source events.
     const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [msgEvent, termEvent],
     })
     expect(afterFirst.messages).toHaveLength(1)
@@ -918,7 +921,7 @@ describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () 
     // Second dispatch with the SAME event: the filter predicate runs against
     // state.messages (now non-empty) and deduplicates by id/sameRuntimeMessage.
     const afterSecond = sessionRuntimeReducer(afterFirst, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [msgEvent, termEvent],
     })
 
@@ -927,7 +930,7 @@ describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () 
     expect(afterSecond.messages[0]?.content).toBe('Existing message')
   })
 
-  it('deduplicates a tool that already exists in state when persisted_events is dispatched twice', () => {
+  it('deduplicates a tool that already exists in state when event_records is dispatched twice', () => {
     const toolStart = event(1, 'test.tool_call', {
       type: 'test.tool_call',
       toolCall: { id: 'tool_dedup', name: 'bash', input: { command: 'ls' } },
@@ -939,14 +942,14 @@ describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () 
     })
 
     const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [toolStart, toolEnd],
     })
     expect(afterFirst.tools).toHaveLength(1)
 
     // Second dispatch: state.tools.filter(...) predicate runs to avoid duplication.
     const afterSecond = sessionRuntimeReducer(afterFirst, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [toolStart, toolEnd],
     })
 
@@ -954,23 +957,23 @@ describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () 
     expect(afterSecond.tools[0]?.callId).toBe('tool_dedup')
   })
 
-  it('deduplicates debug events that already exist in state when persisted_events is dispatched twice', () => {
+  it('deduplicates event records that already exist in state when event_records is dispatched twice', () => {
     const debugEvent = event(1, 'runtime.started', { type: 'runtime.started' })
 
     const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [debugEvent],
     })
-    expect(afterFirst.debugEvents).toHaveLength(1)
+    expect(afterFirst.eventRecords).toHaveLength(1)
 
-    // Second dispatch: state.debugEvents.filter(...) predicate runs to avoid duplication.
+    // Second dispatch: state.eventRecords.filter(...) predicate runs to avoid duplication.
     const afterSecond = sessionRuntimeReducer(afterFirst, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [debugEvent],
     })
 
-    expect(afterSecond.debugEvents).toHaveLength(1)
-    expect(afterSecond.debugEvents[0]?.type).toBe('runtime.started')
+    expect(afterSecond.eventRecords).toHaveLength(1)
+    expect(afterSecond.eventRecords[0]?.event.type).toBe('runtime.started')
   })
 
   it('appends new items while deduplicating existing ones in all three collections', () => {
@@ -984,7 +987,7 @@ describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () 
     })
 
     const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [existingMsg, existingTool],
     })
 
@@ -996,7 +999,7 @@ describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () 
 
     // Second dispatch: existing events deduplicated, new events appended.
     const afterSecond = sessionRuntimeReducer(afterFirst, {
-      type: 'persisted_events',
+      type: 'event_records',
       events: [existingMsg, existingTool, newMsg, newDebug],
     })
 
@@ -1004,8 +1007,8 @@ describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () 
     expect(afterSecond.messages.map((m) => m.content)).toEqual(['First', 'Second'])
     // Tools: same tool deduplicated.
     expect(afterSecond.tools).toHaveLength(1)
-    // Debug events: new runtime.started appended.
-    const types = afterSecond.debugEvents.map((d) => d.type)
+    // Event records: new runtime.started appended.
+    const types = afterSecond.eventRecords.map((d) => d.event.type)
     expect(types.filter((t) => t === 'runtime.started')).toHaveLength(1)
   })
 })

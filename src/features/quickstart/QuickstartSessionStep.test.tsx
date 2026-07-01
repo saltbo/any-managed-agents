@@ -12,7 +12,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
-import type { Agent, Environment, EventRecord, Session } from '@/lib/amarpc'
+import type { Agent, Environment, Session } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,
@@ -69,32 +69,6 @@ function buildSession(overrides: TestSessionOverrides = {}): Session {
   return buildTestSession({ agentSnapshot: defaultAgentSnapshot, name: 'Quickstart session', ...overrides })
 }
 
-type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
-  type?: EventRecord['event']['type']
-  payload?: Record<string, unknown>
-  metadata?: Record<string, unknown>
-  event?: EventRecord['event']
-}
-
-function buildEventRecord(overrides: EventRecordOverrides = {}): EventRecord {
-  const {
-    type = overrides.event?.type ?? 'message.completed',
-    payload = overrides.event?.payload ?? {
-      message: { role: 'assistant', content: 'Hello from the agent' },
-    },
-    event: eventOverride,
-    ...recordOverrides
-  } = overrides
-  return {
-    id: 'event_1',
-    sessionId: 'session_1',
-    sequence: 1,
-    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
-    createdAt: now,
-    ...recordOverrides,
-  }
-}
-
 // ─── Render helper ───
 
 function renderStep(props: React.ComponentProps<typeof QuickstartSessionStep>) {
@@ -122,7 +96,7 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
     runState: 'idle',
     messages: [],
     tools: [],
-    debugEvents: [],
+    eventRecords: [],
     eventKeys: [],
     error: null,
     ...state,
@@ -141,17 +115,8 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
 
 // ─── Session preview MSW helpers ───
 
-function sessionPreviewHandlers({
-  session = buildSession() as Session,
-  events = [] as EventRecord[],
-}: {
-  session?: Session
-  events?: EventRecord[]
-} = {}) {
-  return [
-    http.get('*/api/v1/sessions/:sessionId', () => HttpResponse.json(session)),
-    http.get('*/api/v1/sessions/:sessionId/events', () => HttpResponse.json(listEnvelope(events))),
-  ]
+function sessionPreviewHandlers({ session = buildSession() as Session }: { session?: Session } = {}) {
+  return [http.get('*/api/v1/sessions/:sessionId', () => HttpResponse.json(session))]
 }
 
 // ─── No agent / no environment ───
@@ -393,10 +358,7 @@ describe('QuickstartSessionStep — create session flow', () => {
 describe('QuickstartSessionStep — session preview loading', () => {
   it('renders loading placeholder when session is loading', () => {
     mockRuntime()
-    server.use(
-      http.get('*/api/v1/sessions/:sessionId', () => new Promise(() => {})),
-      http.get('*/api/v1/sessions/:sessionId/events', () => new Promise(() => {})),
-    )
+    server.use(http.get('*/api/v1/sessions/:sessionId', () => new Promise(() => {})))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -625,7 +587,7 @@ describe('QuickstartSessionStep — session preview with messages', () => {
         },
       ],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildEventRecord()] }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -702,7 +664,15 @@ describe('QuickstartSessionStep — debug tab', () => {
 
   it('renders debug events list when runtime has debug events', async () => {
     mockRuntime({
-      debugEvents: [{ id: 'dbg_1', type: 'runtime.started', payload: {}, createdAt: now }],
+      eventRecords: [
+        {
+          id: 'dbg_1',
+          sessionId: 'session_1',
+          sequence: 1,
+          event: { type: 'runtime.started', payload: { type: 'runtime.started' } },
+          createdAt: now,
+        },
+      ],
     })
     server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
@@ -785,7 +755,7 @@ describe('QuickstartSessionStep — session preview with mixed transcript', () =
         },
       ],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildEventRecord()] }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),

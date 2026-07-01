@@ -138,27 +138,13 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
     refetchInterval: (query) =>
       query.state.data && ['pending', 'running'].includes(query.state.data.status.phase) ? 750 : false,
   })
-  const eventsQuery = useQuery({
-    queryKey: queryKeys.sessions.events(sessionId),
-    queryFn: () => api.listSessionEvents(sessionId, { limit: 200, order: 'asc' }),
-    refetchInterval: (query) => {
-      const hasAssistantMessage = (query.state.data?.data ?? []).some(
-        (record) => record.event.type === 'message.completed',
-      )
-      const state = sessionQuery.data?.status.phase
-      const terminal = state !== undefined && !['pending', 'running'].includes(state)
-      return terminal && hasAssistantMessage ? false : 1000
-    },
-  })
   const onEventsChanged = useCallback(() => {
     /* v8 ignore start -- called by the runtime hook which is mocked in tests */
-    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.events(sessionId) })
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.detail(sessionId) })
     /* v8 ignore stop */
   }, [queryClient, sessionId])
   const runtime = useSessionRuntimeSession({
     session: sessionQuery.data ?? null,
-    events: eventsQuery.data?.data ?? [],
     onEventsChanged,
   })
   const session = sessionQuery.data ?? null
@@ -219,18 +205,18 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
           )}
         </TabsContent>
         <TabsContent value="debug" className="mt-2">
-          {runtime.state.debugEvents.length === 0 ? (
+          {runtime.state.eventRecords.length === 0 ? (
             <p className="text-sm text-muted-foreground">Runtime diagnostics appear here as the agent runs.</p>
           ) : (
             <ul className="grid gap-2" aria-label="Quickstart session debug events">
-              {runtime.state.debugEvents.map((event) => (
-                <li key={event.id} className="rounded-md bg-muted/40 px-3 py-2">
+              {runtime.state.eventRecords.map((record) => (
+                <li key={record.id} className="rounded-md bg-muted/40 px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge value={event.type} />
-                    <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
+                    <StatusBadge value={record.event.type} />
+                    <span className="font-mono text-xs text-muted-foreground">{record.id}</span>
                   </div>
                   <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">
-                    {stringifyJson(event.payload)}
+                    {stringifyJson(record.event.payload)}
                   </pre>
                 </li>
               ))}

@@ -2,13 +2,13 @@
  * AgentBuilderPage — integration tests via MSW + real api client.
  * Fetches: GET /api/v1/providers, GET /api/v1/connectors, GET /api/v1/environments,
  *           GET /api/v1/providers/models, POST /api/v1/agents, PATCH /api/v1/agents/:id,
- *           POST /api/v1/sessions, GET /api/v1/sessions/:id, GET /api/v1/sessions/:id/events
+ *           POST /api/v1/sessions, GET /api/v1/sessions/:id
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { beforeEach, describe, expect, it } from 'vitest'
-import type { Agent, Environment, EventRecord, Session } from '@/lib/amarpc'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Agent, Environment, Session } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
   type AgentOverrides,
@@ -35,18 +35,32 @@ function buildSession(overrides: TestSessionOverrides = {}): Session {
 
 const emptyList = { data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }
 
+class MockSessionWebSocket extends EventTarget {
+  static OPEN = 1
+  readyState = MockSessionWebSocket.OPEN
+  readonly sent: string[] = []
+
+  constructor(readonly url: string) {
+    super()
+    Promise.resolve().then(() => this.dispatchEvent(new Event('open')))
+  }
+
+  send(data: string) {
+    this.sent.push(data)
+  }
+
+  close() {
+    this.readyState = 3
+  }
+}
+
 function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
 }
 
 /** Registers the standard peripheral handlers the builder always queries. */
 function setupDefaultHandlers(
-  overrides: {
-    environments?: Environment[]
-    agentResponse?: Agent | null
-    sessionResponse?: Session | null
-    eventsResponse?: EventRecord[]
-  } = {},
+  overrides: { environments?: Environment[]; agentResponse?: Agent | null; sessionResponse?: Session | null } = {},
 ) {
   server.use(
     http.get('*/api/v1/providers', () => HttpResponse.json(emptyList)),
@@ -63,16 +77,11 @@ function setupDefaultHandlers(
         ? HttpResponse.json(overrides.sessionResponse)
         : HttpResponse.json({ error: { type: 'not_found', message: 'Not found' } }, { status: 404 }),
     ),
-    http.get('*/api/v1/sessions/:id/events', () =>
-      HttpResponse.json({
-        data: overrides.eventsResponse ?? [],
-        pagination: { limit: 50, hasMore: false, nextCursor: null },
-      }),
-    ),
   )
 }
 
 beforeEach(() => {
+  vi.stubGlobal('WebSocket', MockSessionWebSocket)
   Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
     value: () => false,
     configurable: true,
@@ -130,12 +139,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     setupDefaultHandlers()
     renderBuilderPage('?step=sandbox')
     expect(screen.getByText('Sandbox access')).toBeInTheDocument()
-  })
-
-  it('renders roles step when step=roles is in the URL', () => {
-    setupDefaultHandlers()
-    renderBuilderPage('?step=roles')
-    expect(screen.getByText('Roles and memory')).toBeInTheDocument()
   })
 
   it('renders test step when step=test is in the URL', () => {
@@ -245,8 +248,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Sandbox access')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    await waitFor(() => expect(screen.getByText('Roles and memory')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Publish agent' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Publish agent' }))
     await waitFor(() => expect(screen.getByText('Equivalent curl call')).toBeInTheDocument())
@@ -268,8 +269,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Sandbox access')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    await waitFor(() => expect(screen.getByText('Roles and memory')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Publish agent' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Publish agent' }))
@@ -302,8 +301,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Sandbox access')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    await waitFor(() => expect(screen.getByText('Roles and memory')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Publish agent' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Publish agent' }))
     await waitFor(() => expect(screen.getByText('Name must be unique')).toBeInTheDocument())
@@ -320,8 +317,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Sandbox access')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    await waitFor(() => expect(screen.getByText('Roles and memory')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Publish agent' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Publish agent' }))
@@ -365,8 +360,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Sandbox access')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    await waitFor(() => expect(screen.getByText('Roles and memory')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Test and publish')).toBeInTheDocument())
     const envTrigger = screen.getByRole('combobox', { name: 'Test environment' })
     envTrigger.focus()
@@ -393,8 +386,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Sandbox access')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    await waitFor(() => expect(screen.getByText('Roles and memory')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Test and publish')).toBeInTheDocument())
     const envTrigger = screen.getByRole('combobox', { name: 'Test environment' })
@@ -439,8 +430,6 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     await waitFor(() => expect(screen.getByText('Tools and approvals')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Sandbox access')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
-    await waitFor(() => expect(screen.getByText('Roles and memory')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await waitFor(() => expect(screen.getByText('Test and publish')).toBeInTheDocument())
     const envTrigger = screen.getByRole('combobox', { name: 'Test environment' })

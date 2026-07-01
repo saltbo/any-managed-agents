@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Play, Rocket } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { DetailSection, PageHeader, StatusBadge } from '@/console/components'
 import { archivedLabel } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
-import { initialSessionRuntimeState, sessionRuntimeReducer } from '@/features/sessions/session-runtime'
+import { useSessionRuntimeSession } from '@/features/sessions/use-session-runtime'
 import { type Agent, api } from '@/lib/amarpc'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
@@ -70,27 +70,15 @@ export function AgentBuilderPage() {
     refetchInterval: (query) =>
       query.state.data && ['pending', 'running'].includes(query.state.data.status.phase) ? 750 : false,
   })
-  const testEventsQuery = useQuery({
-    queryKey: queryKeys.sessions.events(testSessionId ?? ''),
-    queryFn: () => api.listSessionEvents(testSessionId as string, { limit: 200, order: 'asc' }),
-    enabled: Boolean(testSessionId),
-    refetchInterval: (query) => {
-      const hasAssistantMessage = (query.state.data?.data ?? []).some(
-        (record) => record.event.type === 'message.completed',
-      )
-      const state = testSessionQuery.data?.status.phase
-      const terminal = state !== undefined && !['pending', 'running'].includes(state)
-      return terminal && hasAssistantMessage ? false : 1000
-    },
+  const refreshTestSession = useCallback(() => {
+    if (!testSessionId) return
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.detail(testSessionId) })
+  }, [queryClient, testSessionId])
+  const testRuntime = useSessionRuntimeSession({
+    session: testSessionQuery.data ?? null,
+    onEventsChanged: refreshTestSession,
   })
-  const transcript = useMemo(
-    () =>
-      sessionRuntimeReducer(initialSessionRuntimeState, {
-        type: 'persisted_events',
-        events: testEventsQuery.data?.data ?? EMPTY_LIST,
-      }).messages,
-    [testEventsQuery.data],
-  )
+  const transcript = testRuntime.state.messages
 
   const goToStep = (next: BuilderStep) => setSearchParams({ step: next })
   const setField = <K extends keyof AgentBuilderDraft>(field: K, value: AgentBuilderDraft[K]) => {

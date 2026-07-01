@@ -28,7 +28,6 @@ export const queryKeys = {
     all: ['sessions'] as const,
     list: (includeArchived = false) => ['sessions', 'list', { includeArchived }] as const,
     detail: (id: string) => ['sessions', 'detail', id] as const,
-    events: (id: string) => ['sessions', 'detail', id, 'events'] as const,
   },
   providers: {
     all: ['providers'] as const,

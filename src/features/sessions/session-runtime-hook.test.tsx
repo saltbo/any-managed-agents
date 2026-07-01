@@ -4,21 +4,15 @@
  * Uses a MockWebSocket to exercise the live session socket path.
  * No vi.spyOn/vi.mock of @/lib/amarpc.
  *
- * ROOT CAUSE OF OOM: The hook's two useEffects both depend on props that can
+ * ROOT CAUSE OF OOM: The hook's socket effect depends on props that can
  * change reference on every re-render, causing infinite loops:
  *
  *   1. useEffect([endpoint, onEventsChanged, connectionAttempt])
  *      If onEventsChanged is a new function on each render (e.g. vi.fn() inline),
  *      the effect runs → dispatch → new state → re-render → new fn → repeat.
  *
- *   2. useEffect([events, session])
- *      If events is a new array on each render (e.g. `events={[]}` default),
- *      the effect runs → dispatch persisted_events → new state → re-render →
- *      new [] → repeat.
- *
  * FIXES:
  *   - Pass onEventsChanged as a stable ref via useCallback([stableRef])
- *   - Pass events as a module-level constant (never re-created)
  *
  * MockWebSocket.close() is silent so useEffect cleanup doesn't start reconnect.
  */
@@ -91,8 +85,6 @@ class MockWebSocket extends EventTarget {
 
 const now = '2026-05-23T00:00:00.000Z'
 
-const NO_EVENTS: EventRecord[] = []
-
 function buildSession(overrides: TestSessionOverrides = {}): Session {
   return buildTestSession({ name: 'Test session', ...overrides })
 }
@@ -139,18 +131,15 @@ function makeQueryClient() {
 
 function RuntimeHarness({
   session,
-  events,
   onEventsChangedRef,
 }: {
   session: Session | null
-  events: EventRecord[] // MUST be a stable reference — never inline []
   onEventsChangedRef: React.MutableRefObject<() => void>
 }) {
   const onEventsChanged = useCallback(() => onEventsChangedRef.current(), [onEventsChangedRef])
 
   const { state, reconnect, sendPrompt, sendSteer, abort } = useSessionRuntimeSession({
     session,
-    events,
     onEventsChanged,
   })
   return (
@@ -184,7 +173,7 @@ async function renderLive(sessionState: Session['status']['phase'] = 'idle', cbR
   const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <RuntimeHarness session={buildSession({ phase: sessionState })} events={NO_EVENTS} onEventsChangedRef={cbRef} />
+        <RuntimeHarness session={buildSession({ phase: sessionState })} onEventsChangedRef={cbRef} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -219,15 +208,14 @@ describe('useSessionRuntimeSession — null/stopped session', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <RuntimeHarness session={null} events={NO_EVENTS} onEventsChangedRef={cbRef} />
+          <RuntimeHarness session={null} onEventsChangedRef={cbRef} />
         </MemoryRouter>
       </QueryClientProvider>,
     )
     await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('closed'), { timeout: 5000 })
   })
 
-  it('dispatches persisted message.completed events for a stopped session', async () => {
-    // Define events OUTSIDE render — stable reference
+  it('connects a stopped session socket and dispatches backfilled message.completed events', async () => {
     const events: EventRecord[] = [
       buildEvent(),
       buildEvent({ id: 'event_2', sequence: 2, type: 'turn.completed', payload: { type: 'turn.completed' } }),
@@ -237,10 +225,12 @@ describe('useSessionRuntimeSession — null/stopped session', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <RuntimeHarness session={buildSession({ phase: 'stopped' })} events={events} onEventsChangedRef={cbRef} />
+          <RuntimeHarness session={buildSession({ phase: 'stopped' })} onEventsChangedRef={cbRef} />
         </MemoryRouter>
       </QueryClientProvider>,
     )
+    await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('open'), { timeout: 5000 })
+    lastSocket!.emit({ type: 'backfill', requestId: null, events, nextCursor: null, hasMore: false })
     await waitFor(() => expect(screen.getByTestId('messageCount').textContent).toBe('1'), { timeout: 5000 })
     expect(screen.getByTestId('runState').textContent).toBe('idle')
   })
@@ -410,7 +400,7 @@ describe('useSessionRuntimeSession — send commands', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <RuntimeHarness session={buildSession({ phase: 'idle' })} events={NO_EVENTS} onEventsChangedRef={cbRef} />
+          <RuntimeHarness session={buildSession({ phase: 'idle' })} onEventsChangedRef={cbRef} />
         </MemoryRouter>
       </QueryClientProvider>,
     )
@@ -494,7 +484,7 @@ describe('useSessionRuntimeSession — session change (reset)', () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <RuntimeHarness session={session1} events={NO_EVENTS} onEventsChangedRef={cbRef} />
+          <RuntimeHarness session={session1} onEventsChangedRef={cbRef} />
         </MemoryRouter>
       </QueryClientProvider>,
     )
@@ -507,7 +497,7 @@ describe('useSessionRuntimeSession — session change (reset)', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <RuntimeHarness session={session2} events={NO_EVENTS} onEventsChangedRef={cbRef} />
+          <RuntimeHarness session={session2} onEventsChangedRef={cbRef} />
         </MemoryRouter>
       </QueryClientProvider>,
     )

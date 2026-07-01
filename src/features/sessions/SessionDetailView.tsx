@@ -11,13 +11,12 @@ import { formatDuration, formatRelativeTime, stringifyJson } from '@/console/for
 import { JsonBlock } from '@/features/console/json-block'
 import { SessionRuntimePanel } from '@/features/sessions/SessionRuntimePanel'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
-import type { EventRecord, Session } from '@/lib/amarpc'
+import type { Session } from '@/lib/amarpc'
 
 export function SessionDetailView({
   session,
   agentName: agentDisplayName,
   environmentName: environmentDisplayName,
-  events,
   runtime,
   onStop,
   onArchive,
@@ -30,7 +29,6 @@ export function SessionDetailView({
   session: Session
   agentName: string | undefined
   environmentName: string | undefined
-  events: EventRecord[]
   runtime: SessionRuntimeState
   onStop: (id: string) => void
   onArchive: (id: string) => void
@@ -160,7 +158,6 @@ export function SessionDetailView({
 
       <SessionRuntimePanel
         runtime={runtime}
-        persistedEvents={events}
         message={chatMessage}
         setMessage={setChatMessage}
         onSend={onSendMessage}

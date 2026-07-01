@@ -220,16 +220,21 @@ describe('EventRecordSchema', () => {
     expect(records.map((record) => record.sequence)).toEqual([1, 2, 3])
     expect(new Set(records.map((record) => record.id)).size).toBe(records.length)
 
-    const toolCallBlock = records[1].event.payload.message.content[0]
-    const toolResultMessage = records[2].event.payload.message
+    const toolCallEvent = records[1]?.event
+    const toolResultEvent = records[2]?.event
+    if (toolCallEvent?.type !== 'message.completed' || toolResultEvent?.type !== 'message.completed') {
+      throw new Error('Expected message.completed tool events')
+    }
+    const toolCallBlock = toolCallEvent.payload.message.content[0]
+    const toolResultMessage = toolResultEvent.payload.message
     const toolResultBlock = toolResultMessage.content[0]
 
     expect(records.every((record) => record.sessionId === 'session_1')).toBe(true)
-    expect(records[1].event.payload.message.parentMessageId).toBe('msg_user_1')
-    expect(toolCallBlock.type === 'tool_call' ? toolCallBlock.toolCall.id : null).toBe(toolCall.id)
+    expect(toolCallEvent.payload.message.parentMessageId).toBe('msg_user_1')
+    expect(toolCallBlock).toMatchObject({ type: 'tool_call', toolCall: { id: toolCall.id } })
     expect(toolResultMessage.parentMessageId).toBe('msg_assistant_1')
     expect(toolResultMessage.parentToolCallId).toBe(toolCall.id)
-    expect(toolResultBlock.type === 'tool_result' ? toolResultBlock.toolCallId : null).toBe(toolCall.id)
+    expect(toolResultBlock).toMatchObject({ type: 'tool_result', toolCallId: toolCall.id })
   })
 })
 
