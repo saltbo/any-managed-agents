@@ -109,7 +109,7 @@ function buildEvent(overrides: EventRecordOverrides = {}): EventRecord {
     type = overrides.event?.type ?? 'message.completed',
     payload = overrides.event?.payload ?? {
       type: 'message.completed',
-      message: { role: 'assistant', content: 'Hello' },
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Hello' }] },
     },
     event: eventOverride,
     ...recordOverrides
@@ -148,7 +148,7 @@ function RuntimeHarness({
 }) {
   const onEventsChanged = useCallback(() => onEventsChangedRef.current(), [onEventsChangedRef])
 
-  const { state, sendPrompt, sendSteer, abort } = useSessionRuntimeSession({
+  const { state, reconnect, sendPrompt, sendSteer, abort } = useSessionRuntimeSession({
     session,
     events,
     onEventsChanged,
@@ -167,6 +167,9 @@ function RuntimeHarness({
       </button>
       <button type="button" onClick={() => abort()}>
         Abort
+      </button>
+      <button type="button" onClick={() => reconnect()}>
+        Reconnect
       </button>
     </div>
   )
@@ -266,7 +269,10 @@ describe('useSessionRuntimeSession — live session open', () => {
       record: buildEvent({
         id: 'event_live',
         sequence: 2,
-        payload: { type: 'message.completed', message: { role: 'assistant', content: 'Live frame', id: 'msg_live' } },
+        payload: {
+          type: 'message.completed',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'Live frame' }], id: 'msg_live' },
+        },
       }),
     })
 
@@ -285,7 +291,7 @@ describe('useSessionRuntimeSession — live session open', () => {
           sequence: 2,
           payload: {
             type: 'message.completed',
-            message: { role: 'assistant', content: 'Backfill', id: 'msg_backfill' },
+            message: { role: 'assistant', content: [{ type: 'text', text: 'Backfill' }], id: 'msg_backfill' },
           },
         }),
       ],
@@ -340,6 +346,17 @@ describe('useSessionRuntimeSession — close event', () => {
     // Unmount so clearTimeout in useEffect cleanup cancels the 750ms reconnect.
     unmount()
     await new Promise((resolve) => setTimeout(resolve, 100))
+  })
+
+  it('reconnects on explicit reconnect request', async () => {
+    await renderLive()
+    const firstSocket = lastSocket
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }))
+
+    await waitFor(() => expect(lastSocket).not.toBe(firstSocket), { timeout: 5000 })
+    expect(firstSocket?.readyState).toBe(MockWebSocket.CLOSED)
+    await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('open'), { timeout: 5000 })
   })
 })
 

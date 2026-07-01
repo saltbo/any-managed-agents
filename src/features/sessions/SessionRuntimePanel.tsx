@@ -5,7 +5,6 @@ import { Conversation, ConversationContent } from '@/components/ai-elements/conv
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 import { PromptInput } from '@/components/ai-elements/prompt-input'
 import { Tool } from '@/components/ai-elements/tool'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
@@ -26,7 +25,7 @@ export function SessionRuntimePanel({
   setMessage,
   onSend,
   onAbort,
-  onRefreshEvents,
+  onReconnect,
   canSend,
 }: {
   runtime: SessionRuntimeState
@@ -35,12 +34,13 @@ export function SessionRuntimePanel({
   setMessage: (value: string) => void
   onSend: (message: string) => void
   onAbort: () => void
-  onRefreshEvents: () => void
+  onReconnect: () => void
   canSend: boolean
 }) {
   const [activeTab, setActiveTab] = useState<RuntimeTab>('transcript')
   const [transcriptType, setTranscriptType] = useState<TranscriptFilter>('all')
   const [eventType, setEventType] = useState<EventFilter>('all')
+  const [selectedTranscriptEventId, setSelectedTranscriptEventId] = useState<string | null>(null)
   const debugEvents = useMemo(() => {
     const persisted = persistedEvents.map((record) => ({
       id: record.id,
@@ -80,6 +80,13 @@ export function SessionRuntimePanel({
       }),
     [transcriptItems, transcriptType],
   )
+  const transcriptEventsById = useMemo(
+    () => new Map(persistedEvents.map((event) => [event.id, event])),
+    [persistedEvents],
+  )
+  const selectedTranscriptEvent = selectedTranscriptEventId
+    ? (transcriptEventsById.get(selectedTranscriptEventId) ?? null)
+    : null
   const sendMessage = () => {
     const trimmed = message.trim()
     if (!trimmed) {
@@ -152,20 +159,9 @@ export function SessionRuntimePanel({
           <Button type="button" variant="ghost" size="icon" aria-label="Search events">
             <Search data-icon="inline-start" />
           </Button>
-          <Badge
-            variant={runtime.connection === 'open' ? 'secondary' : 'outline'}
-            className="min-w-24 justify-center capitalize"
-          >
-            {runtime.connection}
-          </Badge>
-          <Badge variant={runtime.runState === 'running' ? 'secondary' : 'outline'} className="capitalize">
-            {runtime.runState}
-          </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon" onClick={onRefreshEvents} aria-label="Refresh events">
-            <RefreshCw data-icon="inline-start" />
-          </Button>
+          <ConnectionStatusControl connection={runtime.connection} onReconnect={onReconnect} />
           <Separator orientation="vertical" className="h-8" />
           <Button type="button" variant="ghost" size="icon" onClick={copyEvents} aria-label="Copy events">
             <Copy data-icon="inline-start" />
@@ -177,41 +173,75 @@ export function SessionRuntimePanel({
       </div>
 
       <TabsContent value="transcript" className="mt-0 flex min-h-0 flex-1 flex-col">
-        <Conversation className="bg-background">
-          <ConversationContent className="pb-4">
-            {filteredTranscriptItems.length === 0 ? (
-              <div className="pt-8">
-                <EmptyState title="No messages yet" body="Send a message to start the session transcript." />
+        <div
+          className={
+            selectedTranscriptEvent
+              ? 'grid min-h-0 flex-1 grid-cols-1 bg-background lg:grid-cols-[minmax(0,1fr)_28rem]'
+              : 'flex min-h-0 flex-1 bg-background'
+          }
+        >
+          <Conversation>
+            <ConversationContent className="pb-4">
+              {filteredTranscriptItems.length === 0 ? (
+                <div className="pt-8">
+                  <EmptyState title="No messages yet" body="Send a message to start the session transcript." />
+                </div>
+              ) : null}
+              {filteredTranscriptItems.map((item) =>
+                item.type === 'message' ? (
+                  <Message
+                    key={`message:${item.message.id}`}
+                    role={item.message.role}
+                    timestamp={formatTime(item.message.createdAt)}
+                    status={item.message.status}
+                    statusDetail={item.message.status === 'error' ? item.message.content : null}
+                    onClick={
+                      transcriptEventsById.has(item.message.id)
+                        ? () => {
+                            setSelectedTranscriptEventId(item.message.id)
+                          }
+                        : undefined
+                    }
+                    className={
+                      selectedTranscriptEventId === item.message.id && selectedTranscriptEvent
+                        ? 'bg-muted/50 ring-1 ring-border'
+                        : undefined
+                    }
+                  >
+                    <MessageContent>
+                      <MessageResponse>{item.message.content}</MessageResponse>
+                    </MessageContent>
+                  </Message>
+                ) : (
+                  <Tool
+                    key={`tool:${item.tool.id}`}
+                    name={item.tool.name}
+                    status={item.tool.status}
+                    input={item.tool.input}
+                    output={item.tool.output}
+                    error={item.tool.error}
+                    durationMs={item.tool.durationMs}
+                    createdAt={item.tool.createdAt}
+                  />
+                ),
+              )}
+            </ConversationContent>
+          </Conversation>
+          {selectedTranscriptEvent ? (
+            <aside className="min-h-0 overflow-y-auto border-t bg-muted/20 p-4 lg:border-t-0 lg:border-l">
+              <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
+                <StatusBadge value={selectedTranscriptEvent.event.type} />
+                <span className="font-mono text-xs text-muted-foreground">{selectedTranscriptEvent.id}</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {formatTime(selectedTranscriptEvent.createdAt)}
+                </span>
               </div>
-            ) : null}
-            {filteredTranscriptItems.map((item) =>
-              item.type === 'message' ? (
-                <Message
-                  key={`message:${item.message.id}`}
-                  role={item.message.role}
-                  timestamp={formatTime(item.message.createdAt)}
-                  status={item.message.status}
-                  statusDetail={item.message.status === 'error' ? item.message.content : null}
-                >
-                  <MessageContent>
-                    <MessageResponse>{item.message.content}</MessageResponse>
-                  </MessageContent>
-                </Message>
-              ) : (
-                <Tool
-                  key={`tool:${item.tool.id}`}
-                  name={item.tool.name}
-                  status={item.tool.status}
-                  input={item.tool.input}
-                  output={item.tool.output}
-                  error={item.tool.error}
-                  durationMs={item.tool.durationMs}
-                  createdAt={item.tool.createdAt}
-                />
-              ),
-            )}
-          </ConversationContent>
-        </Conversation>
+              <pre className="max-h-[calc(100vh-18rem)] overflow-auto rounded-md border bg-background p-3 text-xs whitespace-pre-wrap">
+                {stringifyJson(selectedTranscriptEvent)}
+              </pre>
+            </aside>
+          ) : null}
+        </div>
         <div className="border-t bg-background">
           <PromptInput
             value={message}
@@ -248,6 +278,37 @@ export function SessionRuntimePanel({
       </TabsContent>
     </Tabs>
   )
+}
+
+function ConnectionStatusControl({
+  connection,
+  onReconnect,
+}: {
+  connection: SessionRuntimeState['connection']
+  onReconnect: () => void
+}) {
+  if (connection === 'open') {
+    return (
+      <span
+        role="img"
+        aria-label="Session socket connected"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-md"
+      >
+        <span className="size-2.5 rounded-full bg-emerald-500" />
+      </span>
+    )
+  }
+  if (connection === 'error') {
+    return (
+      <Button type="button" variant="ghost" size="icon" onClick={onReconnect} aria-label="Reconnect session socket">
+        <RefreshCw data-icon="inline-start" />
+      </Button>
+    )
+  }
+  if (connection === 'connecting') {
+    return <span className="inline-flex h-9 items-center px-2 text-xs text-muted-foreground">Connecting</span>
+  }
+  return <span className="h-9 w-9" aria-hidden="true" />
 }
 
 export function eventFilter(value: string): EventFilter {

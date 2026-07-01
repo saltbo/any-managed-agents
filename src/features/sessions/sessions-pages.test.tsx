@@ -85,7 +85,9 @@ function buildMessageEvent(sessionId: string, sequence: number, content: string)
     sequence,
     event: {
       type: 'message.completed',
-      payload: { message: { id: `message_${sequence}`, role: 'assistant', content } },
+      payload: {
+        message: { id: `message_${sequence}`, role: 'assistant', content: [{ type: 'text', text: content }] },
+      },
     },
     createdAt: new Date(sequence * 1000).toISOString(),
   }
@@ -511,7 +513,7 @@ describe('SessionDetailView', () => {
           runtime={buildRuntimeState(runtimeOverrides)}
           onStop={vi.fn()}
           onArchive={vi.fn()}
-          onRefreshEvents={vi.fn()}
+          onReconnectRuntime={vi.fn()}
           chatMessage=""
           setChatMessage={vi.fn()}
           onSendMessage={vi.fn()}
@@ -551,7 +553,7 @@ describe('SessionDetailView', () => {
           runtime={buildRuntimeState()}
           onStop={vi.fn()}
           onArchive={vi.fn()}
-          onRefreshEvents={vi.fn()}
+          onReconnectRuntime={vi.fn()}
           chatMessage=""
           setChatMessage={vi.fn()}
           onSendMessage={vi.fn()}
@@ -643,7 +645,7 @@ describe('SessionDetailView', () => {
           runtime={buildRuntimeState()}
           onStop={onStop}
           onArchive={vi.fn()}
-          onRefreshEvents={vi.fn()}
+          onReconnectRuntime={vi.fn()}
           chatMessage=""
           setChatMessage={vi.fn()}
           onSendMessage={vi.fn()}
@@ -692,7 +694,7 @@ describe('SessionDetailView', () => {
           runtime={buildRuntimeState()}
           onStop={vi.fn()}
           onArchive={onArchive}
-          onRefreshEvents={vi.fn()}
+          onReconnectRuntime={vi.fn()}
           chatMessage=""
           setChatMessage={vi.fn()}
           onSendMessage={vi.fn()}
@@ -745,7 +747,7 @@ describe('SessionDetailView', () => {
           runtime={buildRuntimeState()}
           onStop={vi.fn()}
           onArchive={vi.fn()}
-          onRefreshEvents={vi.fn()}
+          onReconnectRuntime={vi.fn()}
           chatMessage="hello"
           setChatMessage={vi.fn()}
           onSendMessage={vi.fn()}
@@ -929,76 +931,44 @@ describe('SessionDetailView', () => {
 })
 
 // ---------------------------------------------------------------------------
-// SessionRuntimePanel — connection badges, busy state, canSend
+// SessionRuntimePanel — toolbar, busy state, canSend
 // ---------------------------------------------------------------------------
 
-describe('SessionRuntimePanel — connection and state badges', () => {
-  it('renders closed connection badge', () => {
+describe('SessionRuntimePanel — toolbar and busy state', () => {
+  it('renders connecting socket state without run state labels', () => {
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState({ connection: 'closed' })}
+        runtime={buildRuntimeState({ connection: 'connecting', runState: 'running' })}
         persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
 
-    expect(screen.getByText('closed')).toBeTruthy()
+    expect(screen.getByText('Connecting')).toBeTruthy()
+    expect(screen.queryByText('running')).toBeNull()
   })
 
-  it('renders connecting badge', () => {
+  it('renders connected socket as a green status dot', () => {
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState({ connection: 'connecting' })}
+        runtime={buildRuntimeState({ connection: 'open' })}
         persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
 
-    expect(screen.getByText('connecting')).toBeTruthy()
-  })
-
-  it('renders error connection badge', () => {
-    render(
-      <SessionRuntimePanel
-        runtime={buildRuntimeState({ connection: 'error' })}
-        persistedEvents={[]}
-        message=""
-        setMessage={vi.fn()}
-        onSend={vi.fn()}
-        onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
-        canSend
-      />,
-    )
-
-    expect(screen.getByText('error')).toBeTruthy()
-  })
-
-  it('renders running runState badge', () => {
-    render(
-      <SessionRuntimePanel
-        runtime={buildRuntimeState({ runState: 'running' })}
-        persistedEvents={[]}
-        message=""
-        setMessage={vi.fn()}
-        onSend={vi.fn()}
-        onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
-        canSend
-      />,
-    )
-
-    expect(screen.getByText('running')).toBeTruthy()
+    expect(screen.getByLabelText('Session socket connected')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reconnect session socket' })).toBeNull()
   })
 
   it('does not call onSend when message is whitespace only', () => {
@@ -1011,7 +981,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         setMessage={vi.fn()}
         onSend={onSend}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -1029,7 +999,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend={false}
       />,
     )
@@ -1038,23 +1008,23 @@ describe('SessionRuntimePanel — connection and state badges', () => {
     expect(sendButton.hasAttribute('disabled')).toBe(true)
   })
 
-  it('calls onRefreshEvents on Refresh events button click', () => {
-    const onRefreshEvents = vi.fn()
+  it('calls onReconnect from the socket failure button', () => {
+    const onReconnect = vi.fn()
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState()}
+        runtime={buildRuntimeState({ connection: 'error' })}
         persistedEvents={[]}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={onRefreshEvents}
+        onReconnect={onReconnect}
         canSend
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh events' }))
-    expect(onRefreshEvents).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect session socket' }))
+    expect(onReconnect).toHaveBeenCalledTimes(1)
   })
 
   it('shows persisted non-transcript events in debug panel', async () => {
@@ -1092,7 +1062,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -1142,7 +1112,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -1202,7 +1172,7 @@ describe('SessionRuntimePanel — connection and state badges', () => {
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -1978,34 +1948,6 @@ describe('SessionDetailPage', () => {
     expect(eventRequests[0]?.searchParams.get('limit')).toBe('200')
     expect(eventRequests[0]?.searchParams.has('cursor')).toBe(false)
     expect(eventRequests[1]?.searchParams.get('cursor')).toBe('1')
-  })
-
-  it('invokes refreshEvents when Refresh events button is clicked', async () => {
-    const stoppedSession = buildSession({ id: 'session_stopped2', phase: 'stopped', stoppedAt: now })
-    server.use(
-      sessionDetail(stoppedSession),
-      agentDetail(buildAgent()),
-      environmentDetail(buildEnvironment()),
-      sessionEventsList('session_stopped2'),
-    )
-
-    const queryClient = makeQueryClient()
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/sessions/session_stopped2']}>
-          <Routes>
-            <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('Test session')).toBeTruthy(), { timeout: 5000 })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh events' }))
-    expect(invalidateSpy).toHaveBeenCalled()
   })
 
   it('renders view with EMPTY_EVENTS while events query is still pending (covers data?.data ?? EMPTY_EVENTS branch)', async () => {

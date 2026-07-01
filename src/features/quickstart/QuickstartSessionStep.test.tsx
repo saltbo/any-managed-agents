@@ -131,6 +131,7 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
   vi.spyOn(sessionRuntimeModule, 'useSessionRuntimeSession').mockReturnValue({
     endpoint: null,
     state: fullState,
+    reconnect: vi.fn(),
     sendPrompt: sendPromptFn,
     sendSteer: vi.fn().mockReturnValue(false),
     abort: vi.fn().mockReturnValue(false),

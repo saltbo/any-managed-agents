@@ -11,13 +11,15 @@ export function Message({
   status,
   statusDetail,
   className,
+  onClick,
   children,
 }: {
   role: 'user' | 'assistant' | 'system'
   timestamp?: string
   status?: 'streaming' | 'complete' | 'error'
   statusDetail?: string | null
-  className?: string
+  className?: string | undefined
+  onClick?: (() => void) | undefined
   children: ReactNode
 }) {
   return (
@@ -56,7 +58,26 @@ export function Message({
           </TooltipProvider>
         ) : null}
       </div>
-      <div className="min-w-0">{children}</div>
+      {onClick ? (
+        // biome-ignore lint/a11y/useSemanticElements: message bodies can contain links, so a native button would create nested interactive content.
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onClick}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+              return
+            }
+            event.preventDefault()
+            onClick()
+          }}
+          className="min-w-0 cursor-pointer rounded-md border-0 bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {children}
+        </div>
+      ) : (
+        <div className="min-w-0">{children}</div>
+      )}
     </article>
   )
 }

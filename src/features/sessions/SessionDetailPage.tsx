@@ -83,7 +83,7 @@ export function SessionDetailPage() {
         runtime={runtime.state}
         onStop={actions.stopSession}
         onArchive={actions.archiveSession}
-        onRefreshEvents={refreshEvents}
+        onReconnectRuntime={runtime.reconnect}
         chatMessage={message}
         setChatMessage={setMessage}
         onSendMessage={sendMessage}

@@ -302,7 +302,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
           onStop={vi.fn()}
           onArchive={vi.fn()}
-          onRefreshEvents={vi.fn()}
+          onReconnectRuntime={vi.fn()}
           chatMessage=""
           setChatMessage={vi.fn()}
           onSendMessage={vi.fn()}
@@ -349,7 +349,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
           onStop={vi.fn()}
           onArchive={vi.fn()}
-          onRefreshEvents={vi.fn()}
+          onReconnectRuntime={vi.fn()}
           chatMessage=""
           setChatMessage={vi.fn()}
           onSendMessage={vi.fn()}
@@ -376,7 +376,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -386,6 +386,57 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     expect(within(article as HTMLElement).getByText(formatTime(runtime.messages[0]?.createdAt ?? null))).toBeTruthy()
     expect(within(article as HTMLElement).getByLabelText('Error: Runtime failed to start')).toBeTruthy()
     expect(screen.queryByText(/"message":/)).toBeNull()
+  })
+
+  it('shows the selected transcript event beside the message list', () => {
+    const persistedEvents = [
+      buildPersistedEvent({
+        id: 'event_1',
+        payload: {
+          type: 'message.completed',
+          debugOnly: 'selected_event_marker',
+          message: {
+            id: 'runtime_message_1',
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Open workspace' }],
+          },
+        },
+      }),
+    ]
+    const runtime = buildRuntimeState({
+      messages: [
+        {
+          id: 'event_1',
+          role: 'assistant',
+          content: 'Open workspace',
+          status: 'complete',
+          createdAt: '2026-05-23T00:00:00.000Z',
+        },
+      ],
+      tools: [],
+      debugEvents: [],
+      error: null,
+    })
+
+    render(
+      <SessionRuntimePanel
+        runtime={runtime}
+        persistedEvents={persistedEvents}
+        message=""
+        setMessage={vi.fn()}
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        onReconnect={vi.fn()}
+        canSend
+      />,
+    )
+
+    expect(screen.queryByText(/selected_event_marker/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Open workspace/ }))
+
+    expect(screen.getByText('event_1')).toBeTruthy()
+    expect(screen.getByText(/selected_event_marker/)).toBeTruthy()
   })
 
   it('keeps canonical payload JSON in debug while transcript renders structured message, tool, lifecycle, usage, error, and metadata rows', async () => {
@@ -432,7 +483,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -464,7 +515,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -505,12 +556,12 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       <SessionRuntimePanel
         runtime={buildRuntimeState({
           debugEvents: [
-	            {
-	              id: 'live_only_event',
-	              type: 'runtime.error',
-	              payload: { message: 'live_only_payload' },
-	              createdAt: '2026-05-23T00:00:01.000Z',
-	            },
+            {
+              id: 'live_only_event',
+              type: 'runtime.error',
+              payload: { message: 'live_only_payload' },
+              createdAt: '2026-05-23T00:00:01.000Z',
+            },
           ],
         })}
         persistedEvents={persistedEvents}
@@ -518,7 +569,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -557,7 +608,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         setMessage={setMessage}
         onSend={onSend}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -650,7 +701,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )
@@ -730,7 +781,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         setMessage={vi.fn()}
         onSend={vi.fn()}
         onAbort={vi.fn()}
-        onRefreshEvents={vi.fn()}
+        onReconnect={vi.fn()}
         canSend
       />,
     )

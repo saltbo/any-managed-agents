@@ -125,10 +125,23 @@ export function useSessionRuntimeSession({
     socket.send(JSON.stringify(nextCommand))
     return true
   }, [])
+  const reconnect = useCallback(() => {
+    window.clearTimeout(reconnectTimerRef.current ?? undefined)
+    const socket = socketRef.current
+    socketRef.current = null
+    socket?.close()
+    if (!endpoint) {
+      dispatch({ type: 'connection', state: 'closed' })
+      return
+    }
+    dispatch({ type: 'connection', state: 'connecting' })
+    setConnectionAttempt((attempt) => attempt + 1)
+  }, [endpoint])
 
   return {
     endpoint,
     state,
+    reconnect,
     sendPrompt: (message: string) => sendCommand('prompt', message),
     sendSteer: (message: string) => sendCommand('steer', message),
     abort: () => sendCommand('abort'),
@@ -165,9 +178,9 @@ function shouldRefreshAfterMessage(message: SessionSocketServerMessage) {
     return false
   }
   const eventType = message.record.event.type
-	  return (
-	    eventType === 'runtime.completed' ||
-	    eventType === 'turn.completed' ||
+  return (
+    eventType === 'runtime.completed' ||
+    eventType === 'turn.completed' ||
     hasToolResult(message.record.event.payload) ||
     eventType === 'runtime.error'
   )
@@ -178,5 +191,8 @@ function hasToolResult(payload: unknown) {
   const message = (payload as { message?: unknown }).message
   if (!message || typeof message !== 'object' || Array.isArray(message)) return false
   const content = (message as { content?: unknown }).content
-  return Array.isArray(content) && content.some((item) => item && typeof item === 'object' && (item as { type?: unknown }).type === 'tool_result')
+  return (
+    Array.isArray(content) &&
+    content.some((item) => item && typeof item === 'object' && (item as { type?: unknown }).type === 'tool_result')
+  )
 }

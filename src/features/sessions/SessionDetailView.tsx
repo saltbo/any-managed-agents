@@ -21,7 +21,7 @@ export function SessionDetailView({
   runtime,
   onStop,
   onArchive,
-  onRefreshEvents,
+  onReconnectRuntime,
   chatMessage,
   setChatMessage,
   onSendMessage,
@@ -34,7 +34,7 @@ export function SessionDetailView({
   runtime: SessionRuntimeState
   onStop: (id: string) => void
   onArchive: (id: string) => void
-  onRefreshEvents: () => void
+  onReconnectRuntime: () => void
   chatMessage: string
   setChatMessage: (value: string) => void
   onSendMessage: (message: string) => void
@@ -165,7 +165,7 @@ export function SessionDetailView({
         setMessage={setChatMessage}
         onSend={onSendMessage}
         onAbort={onAbortRuntime}
-        onRefreshEvents={onRefreshEvents}
+        onReconnect={onReconnectRuntime}
         canSend={phase === 'idle'}
       />
       <Sheet
