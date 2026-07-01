@@ -11,6 +11,7 @@ export type SessionSocketClientMessageType = SessionRuntimeCommand['type']
 
 export interface SessionRuntimeMessage {
   id: string
+  sourceEventId?: string
   role: 'user' | 'assistant' | 'system'
   content: string
   status: 'streaming' | 'complete' | 'error'
@@ -126,6 +127,9 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
         if (type === 'message.completed') {
           return messageFromStoredSessionEvent(stored, payload, 'complete')
         }
+        if (type === 'turn.completed') {
+          return messageFromStoredSessionEvent(stored, payload, 'complete')
+        }
         if (type === 'runtime.error') {
           return messageFromRuntimeError(payload, stored.createdAt, stored.id)
         }
@@ -225,23 +229,35 @@ function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
 
 function messageFromSessionEvent(event: Record<string, unknown>, at: string, status: SessionRuntimeMessage['status']) {
   const message = objectValue(event.message)
+  if (Object.keys(message).length === 0) {
+    return null
+  }
   const rawRole = stringField(message, 'role') ?? 'assistant'
   if (rawRole === 'tool') {
     return null
   }
   const role: SessionRuntimeMessage['role'] =
     rawRole === 'user' || rawRole === 'assistant' || rawRole === 'system' ? rawRole : 'assistant'
-  const content = extractText(message.content)
+  const content = renderMessageContent(message.content)
   if (!content) {
     return null
   }
   return {
-    id: stringField(message, 'id') ?? scalarField(message, 'timestamp') ?? `${role}_${at}`,
+    id: messageRenderId(message, role, at),
     role,
     content,
     status,
     createdAt: at,
   }
+}
+
+function messageRenderId(message: Record<string, unknown>, role: SessionRuntimeMessage['role'], at: string) {
+  const id = stringField(message, 'id')
+  const timestamp = scalarField(message, 'timestamp')
+  if (id && timestamp) {
+    return `${id}:${timestamp}`
+  }
+  return id ?? timestamp ?? `${role}_${at}`
 }
 
 function messageFromStoredSessionEvent(
@@ -250,7 +266,7 @@ function messageFromStoredSessionEvent(
   status: SessionRuntimeMessage['status'],
 ) {
   const message = messageFromSessionEvent(event, stored.createdAt, status)
-  return message ? { ...message, id: stored.id } : null
+  return message ? { ...message, sourceEventId: stored.id } : null
 }
 
 function messageFromRuntimeError(
@@ -489,14 +505,29 @@ function runtimeErrorMessage(event: Record<string, unknown>) {
   return readableContent(event.message ?? 'Runtime error')
 }
 
-function extractText(value: unknown): string {
-  if (Array.isArray(value)) {
+function renderMessageContent(value: unknown): string {
+  if (typeof value === 'string') {
     return value
-      .map((item) => {
-        const record = objectValue(item)
-        return record.type === 'text' && typeof record.text === 'string' ? record.text : ''
-      })
-      .join('')
+  }
+  if (Array.isArray(value)) {
+    return value.map(messageContentBlockText).filter(Boolean).join('\n')
+  }
+  return ''
+}
+
+function messageContentBlockText(value: unknown): string {
+  const record = objectValue(value)
+  if ((record.type === 'text' || record.type === 'reasoning') && typeof record.text === 'string') {
+    return record.text
+  }
+  if (record.type === 'json') {
+    return JSON.stringify(record.value) ?? ''
+  }
+  if (record.type === 'image') {
+    return [record.url, record.mediaType].filter((item) => typeof item === 'string' && item).join(' ')
+  }
+  if (record.type === 'file') {
+    return [record.path, record.name, record.mediaType].filter((item) => typeof item === 'string' && item).join(' ')
   }
   return ''
 }
@@ -549,7 +580,7 @@ function hasToolValue(value: unknown) {
     const record = value as Record<string, unknown>
     if (Array.isArray(record.content)) {
       return (
-        record.content.some((item) => Boolean(extractText(item))) ||
+        record.content.some((item) => Boolean(messageContentBlockText(item))) ||
         record.structuredContent !== undefined ||
         record.exitCode !== undefined
       )

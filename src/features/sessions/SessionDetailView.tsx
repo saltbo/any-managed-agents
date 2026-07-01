@@ -49,13 +49,9 @@ export function SessionDetailView({
   const duration = formatDuration(session.status.startedAt, session.status.stoppedAt)
   const agentName = agentDisplayName || agentSnapshot.systemPrompt || session.spec.agentId
   const environmentName = String(environmentDisplayName ?? session.spec.environmentId ?? 'Environment')
-  const agentProviderModel = `${agentSnapshot.provider} / ${agentSnapshot.model ?? 'None'}`
-  const hostingRuntime = environmentSnapshot
-    ? `${hostingModeLabel(environmentSnapshot.type)} / ${session.status.bindings.runtime}`
-    : 'No environment snapshot'
   return (
-    <div className="flex min-h-[calc(100dvh-5rem)] flex-col bg-background lg:min-h-screen">
-      <header className="border-b px-4 py-4 lg:px-6">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <header className="shrink-0 border-b px-4 py-4 lg:px-6">
         <div className="flex flex-col gap-5">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <nav className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground" aria-label="Breadcrumb">
@@ -142,16 +138,6 @@ export function SessionDetailView({
               />
               <span className="shrink-0">{formatRelativeTime(session.metadata.updatedAt)}</span>
             </div>
-            <div className="sr-only">
-              <span className="truncate font-mono">Agent provider/model {agentProviderModel}</span>
-              <span className="truncate font-mono">Hosting / runtime {hostingRuntime}</span>
-            </div>
-            <dl className="grid gap-2 pt-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-              <SessionFact label="Agent provider/model" value={agentProviderModel} />
-              <SessionFact label="Hosting / runtime" value={hostingRuntime} />
-              <SessionFact label="Environment type" value={environmentSnapshot?.type ?? 'None'} />
-              <SessionFact label="Runtime status" value={session.status.reason ?? phase} />
-            </dl>
           </div>
         </div>
       </header>
@@ -260,19 +246,6 @@ export function SessionDetailView({
       />
     </div>
   )
-}
-
-function SessionFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-md border bg-muted/30 px-3 py-2">
-      <dt className="font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1 truncate font-mono text-[11px] text-foreground">{value}</dd>
-    </div>
-  )
-}
-
-function hostingModeLabel(value: string) {
-  return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
 }
 
 function environmentPackageSummary(packages: {

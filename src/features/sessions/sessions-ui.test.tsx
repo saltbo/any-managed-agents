@@ -276,7 +276,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     expect(screen.queryByText(/legacy-provider|legacy-model/)).toBeNull()
   })
 
-  it('renders session detail facts from agent and environment snapshots instead of legacy model fields', () => {
+  it('renders compact session header metadata without the old fact cards', () => {
     const session = buildSession({
       phase: 'pending',
       reason: 'waiting-for-runner',
@@ -308,14 +308,13 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Agent provider/model')).toBeTruthy()
-    expect(screen.getByText('workers-ai / @cf/moonshotai/kimi-k2.6')).toBeTruthy()
-    expect(screen.getByText('Hosting / runtime')).toBeTruthy()
-    expect(screen.getByText('Self-hosted / codex')).toBeTruthy()
-    expect(screen.getByText('Environment type')).toBeTruthy()
-    expect(screen.getByText('self_hosted')).toBeTruthy()
-    expect(screen.getByText('Runtime status')).toBeTruthy()
-    expect(screen.getByText('waiting-for-runner')).toBeTruthy()
+    expect(screen.getAllByText('Coding agent').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Node workspace').length).toBeGreaterThan(0)
+    expect(screen.getByText('pending')).toBeTruthy()
+    expect(screen.queryByText('Agent provider/model')).toBeNull()
+    expect(screen.queryByText('Hosting / runtime')).toBeNull()
+    expect(screen.queryByText('Environment type')).toBeNull()
+    expect(screen.queryByText('Runtime status')).toBeNull()
     expect(screen.queryByText(/legacy-provider|legacy-model/)).toBeNull()
   })
 
@@ -400,7 +399,8 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     const runtime = buildRuntimeState({
       messages: [
         {
-          id: 'event_1',
+          id: 'runtime_message_1',
+          sourceEventId: 'event_1',
           role: 'assistant',
           content: 'Open workspace',
           status: 'complete',
@@ -496,6 +496,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       expect(screen.getAllByText(type).length).toBeGreaterThan(0)
       expect(screen.getByText(`debug_${type}`)).toBeTruthy()
     }
+    fireEvent.click(screen.getByText('debug_runtime.error').closest('button')!)
     expect(screen.getByText(/payload_runtime.error/)).toBeTruthy()
   })
 
@@ -795,5 +796,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
 
     expect(screen.getByText('debug_error')).toBeTruthy()
     expect(screen.queryByText('debug_message')).toBeNull()
+    fireEvent.click(screen.getByText('debug_error').closest('button')!)
+    expect(screen.getByText(/payload_error/)).toBeTruthy()
   })
 })

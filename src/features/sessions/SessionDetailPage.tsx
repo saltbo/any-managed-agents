@@ -58,7 +58,7 @@ export function SessionDetailPage() {
   if (sessionQuery.isPending) return <EmptyState title="Loading session" body="Reading the requested session." />
   if (!session) return <EmptyState title="Session not found" body="The requested session is not in this project." />
   return (
-    <div className="min-h-[calc(100dvh-8rem)]">
+    <div className="h-[calc(100dvh-8rem)] min-h-0 overflow-hidden">
       <SessionDetailView
         session={session}
         agentName={agentQuery.data?.metadata.name}

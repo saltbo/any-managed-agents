@@ -603,7 +603,10 @@ describe('SessionDetailView', () => {
 
   it('shows No environment snapshot when environmentSnapshot is null', () => {
     renderDetailView({ environmentSnapshot: null })
-    expect(screen.getByText('No environment snapshot')).toBeTruthy()
+    expect(screen.queryByText('No environment snapshot')).toBeNull()
+    for (const button of screen.getAllByRole('button', { name: 'Open environment details' })) {
+      expect(button).toBeDisabled()
+    }
   })
 
   it('opens agent resource sheet on meta button click', async () => {
@@ -888,8 +891,6 @@ describe('SessionDetailView', () => {
         createdAt: now,
       },
     })
-
-    expect(screen.getAllByText(/None/).length).toBeGreaterThan(0)
 
     const agentButtons = screen.getAllByRole('button', { name: 'Open agent details' })
     fireEvent.click(agentButtons[0]!)

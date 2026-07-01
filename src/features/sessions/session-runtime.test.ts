@@ -254,15 +254,17 @@ describe('sessionRuntimeReducer', () => {
     expect(second.eventRecords).toHaveLength(1)
   })
 
-  it('omits non-transcript message content blocks', () => {
+  it('renders non-tool message content blocks without dropping agent feedback', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       item: amaEvent({
         type: 'message.completed',
         message: {
+          id: 'msg_reasoning',
           role: 'assistant',
           content: [
-            { type: 'reasoning', text: 'hidden' },
+            { type: 'reasoning', text: 'thinking through the task' },
+            { type: 'json', value: { next: 'done' } },
             { type: 'tool_call', toolCall: { id: 'call_1', name: 'bash', input: {} } },
           ],
         },
@@ -270,7 +272,12 @@ describe('sessionRuntimeReducer', () => {
       at: new Date(1000).toISOString(),
     })
 
-    expect(state.messages).toHaveLength(0)
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0]).toMatchObject({
+      id: 'msg_reasoning',
+      content: 'thinking through the task\n{"next":"done"}',
+    })
+    expect(state.tools).toHaveLength(1)
   })
 
   it('replays persisted streaming updates into the final completed message', () => {
@@ -285,7 +292,10 @@ describe('sessionRuntimeReducer', () => {
           type: 'message.completed',
           message: { role: 'assistant', content: [{ type: 'text', text: 'AMA proxy ok' }] },
         }),
-        event(3, 'turn.completed', { type: 'turn.completed' }),
+        event(3, 'turn.completed', {
+          type: 'turn.completed',
+          message: { id: 'message_1', role: 'assistant', content: [{ type: 'text', text: 'AMA proxy ok' }] },
+        }),
       ],
     })
 
@@ -296,6 +306,8 @@ describe('sessionRuntimeReducer', () => {
       content: 'AMA proxy ok',
       status: 'complete',
     })
+    expect(state.messages[0]?.id).toBe('message_1')
+    expect(state.messages[0]?.sourceEventId).toBe('event_3')
   })
 
   it('collapses persisted tool updates and keeps tool results out of messages', () => {
@@ -563,7 +575,8 @@ describe('sessionRuntimeReducer', () => {
       ],
     })
 
-    expect(state.messages.map((message) => message.id)).toEqual(['event_1', 'event_20'])
+    expect(state.messages.map((message) => message.id)).toEqual(['item_9:1782799218294', 'item_9:1782800260407'])
+    expect(state.messages.map((message) => message.sourceEventId)).toEqual(['event_1', 'event_20'])
     expect(state.messages.map((message) => message.content)).toEqual([
       'I am waiting for a task.',
       'Nothing active right now.',

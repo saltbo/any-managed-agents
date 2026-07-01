@@ -37,8 +37,9 @@ export function SessionRuntimePanel({
   const [activeTab, setActiveTab] = useState<RuntimeTab>('transcript')
   const [transcriptType, setTranscriptType] = useState<TranscriptFilter>('all')
   const [eventType, setEventType] = useState<EventFilter>('all')
-  const [selectedTranscriptEventId, setSelectedTranscriptEventId] = useState<string | null>(null)
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const eventRecords = runtime.eventRecords
+  const eventsById = useMemo(() => new Map(eventRecords.map((event) => [event.id, event])), [eventRecords])
   const eventRows = useMemo(
     () =>
       eventRecords.map((record) => ({
@@ -79,10 +80,7 @@ export function SessionRuntimePanel({
       }),
     [transcriptItems, transcriptType],
   )
-  const transcriptEventsById = useMemo(() => new Map(eventRecords.map((event) => [event.id, event])), [eventRecords])
-  const selectedTranscriptEvent = selectedTranscriptEventId
-    ? (transcriptEventsById.get(selectedTranscriptEventId) ?? null)
-    : null
+  const selectedEvent = selectedEventId ? (eventsById.get(selectedEventId) ?? null) : null
   const sendMessage = () => {
     const trimmed = message.trim()
     if (!trimmed) {
@@ -171,9 +169,9 @@ export function SessionRuntimePanel({
       <TabsContent value="transcript" className="mt-0 flex min-h-0 flex-1 flex-col">
         <div
           className={
-            selectedTranscriptEvent
-              ? 'grid min-h-0 flex-1 grid-cols-1 bg-background lg:grid-cols-[minmax(0,1fr)_28rem]'
-              : 'flex min-h-0 flex-1 bg-background'
+            selectedEvent
+              ? 'grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background lg:grid-cols-[minmax(0,1fr)_28rem]'
+              : 'flex min-h-0 flex-1 overflow-hidden bg-background'
           }
         >
           <Conversation>
@@ -192,14 +190,14 @@ export function SessionRuntimePanel({
                     status={item.message.status}
                     statusDetail={item.message.status === 'error' ? item.message.content : null}
                     onClick={
-                      transcriptEventsById.has(item.message.id)
+                      item.message.sourceEventId && eventsById.has(item.message.sourceEventId)
                         ? () => {
-                            setSelectedTranscriptEventId(item.message.id)
+                            setSelectedEventId(item.message.sourceEventId ?? null)
                           }
                         : undefined
                     }
                     className={
-                      selectedTranscriptEventId === item.message.id && selectedTranscriptEvent
+                      selectedEventId === item.message.sourceEventId && selectedEvent
                         ? 'bg-muted/50 ring-1 ring-border'
                         : undefined
                     }
@@ -223,20 +221,7 @@ export function SessionRuntimePanel({
               )}
             </ConversationContent>
           </Conversation>
-          {selectedTranscriptEvent ? (
-            <aside className="min-h-0 overflow-y-auto border-t bg-muted/20 p-4 lg:border-t-0 lg:border-l">
-              <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-                <StatusBadge value={selectedTranscriptEvent.event.type} />
-                <span className="font-mono text-xs text-muted-foreground">{selectedTranscriptEvent.id}</span>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {formatTime(selectedTranscriptEvent.createdAt)}
-                </span>
-              </div>
-              <pre className="max-h-[calc(100vh-18rem)] overflow-auto rounded-md border bg-background p-3 text-xs whitespace-pre-wrap">
-                {stringifyJson(selectedTranscriptEvent)}
-              </pre>
-            </aside>
-          ) : null}
+          {selectedEvent ? <EventDetailAside event={selectedEvent} /> : null}
         </div>
         <div className="border-t bg-background">
           <PromptInput
@@ -250,29 +235,59 @@ export function SessionRuntimePanel({
         </div>
       </TabsContent>
 
-      <TabsContent value="debug" className="mt-0 min-h-0 flex-1 overflow-y-auto py-5">
-        <div className="mx-auto w-full max-w-5xl">
-          {filteredDebugEvents.length === 0 ? (
-            <EmptyState title="No debug events" body="Runtime diagnostics will appear here as the agent runs." />
-          ) : (
-            <div className="divide-y rounded-lg border">
-              {filteredDebugEvents.map((event) => (
-                <details key={event.id} className="group p-3">
-                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3">
-                    <StatusBadge value={event.type} />
-                    <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
-                  </summary>
-                  <pre className="mt-3 max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
-                    {stringifyJson(event.payload)}
-                  </pre>
-                </details>
-              ))}
+      <TabsContent value="debug" className="mt-0 flex min-h-0 flex-1 overflow-hidden">
+        <div
+          className={
+            selectedEvent
+              ? 'grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-background lg:grid-cols-[minmax(0,1fr)_28rem]'
+              : 'flex min-h-0 flex-1 overflow-hidden bg-background'
+          }
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto py-5">
+            <div className="mx-auto w-full max-w-5xl px-4">
+              {filteredDebugEvents.length === 0 ? (
+                <EmptyState title="No debug events" body="Runtime diagnostics will appear here as the agent runs." />
+              ) : (
+                <div className="divide-y rounded-lg border">
+                  {filteredDebugEvents.map((event) => (
+                    <button
+                      type="button"
+                      key={event.id}
+                      onClick={() => setSelectedEventId(event.id)}
+                      className={
+                        selectedEventId === event.id
+                          ? 'flex w-full flex-wrap items-center gap-3 bg-muted/50 p-3 text-left ring-1 ring-inset ring-border'
+                          : 'flex w-full flex-wrap items-center gap-3 p-3 text-left hover:bg-muted/40'
+                      }
+                    >
+                      <StatusBadge value={event.type} />
+                      <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+          {selectedEvent ? <EventDetailAside event={selectedEvent} /> : null}
         </div>
       </TabsContent>
     </Tabs>
+  )
+}
+
+function EventDetailAside({ event }: { event: SessionRuntimeState['eventRecords'][number] }) {
+  return (
+    <aside className="min-h-0 overflow-y-auto border-t bg-muted/20 p-4 lg:border-t-0 lg:border-l">
+      <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
+        <StatusBadge value={event.event.type} />
+        <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
+      </div>
+      <pre className="max-h-[calc(100vh-18rem)] overflow-auto rounded-md border bg-background p-3 text-xs whitespace-pre-wrap">
+        {stringifyJson(event)}
+      </pre>
+    </aside>
   )
 }
 
