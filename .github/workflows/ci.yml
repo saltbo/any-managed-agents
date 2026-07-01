@@ -73,7 +73,7 @@ jobs:
               text=True,
           )
           print(result.stdout)
-          match = re.search(r"total:\\s+\\(statements\\)\\s+([0-9.]+)%", result.stdout)
+          match = re.search(r"total:\s+\(statements\)\s+([0-9.]+)%", result.stdout)
           if not match:
               print("failed to parse ama-runner coverage total", file=sys.stderr)
               sys.exit(1)
