@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,8 +17,58 @@ import (
 	runnerconfig "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/config"
 )
 
+func TestLoginPerformsHealthCheckAndDeviceFlow(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	server := loginTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/health":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status":         "ok",
+				"name":           "Any Managed Agents",
+				"runtime":        "cloudflare-workers",
+				"timestamp":      time.Now().UTC().Format(time.RFC3339),
+				"oidcIssuer":     "http://" + r.Host,
+				"runnerClientId": "runner-client",
+				"runnerScopes":   "openid offline_access",
+			})
+		case "/device":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"device_code":      "device",
+				"user_code":        "ABCD-EFGH",
+				"verification_uri": "https://issuer.example.test/device",
+				"expires_in":       60,
+			})
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "access-token",
+				"refresh_token": "refresh-token",
+				"id_token":      testIDToken("user_1", "runner@example.test", "Runner"),
+				"token_type":    "Bearer",
+			})
+		default:
+			t.Fatalf("unexpected request %s", r.URL.Path)
+		}
+	})
+	defer server.Close()
+
+	var output bytes.Buffer
+	if err := Login(context.Background(), LoginCommand{APIServer: server.URL, CredentialPath: credentialPath}, &output); err != nil {
+		t.Fatalf("expected login success, got %v", err)
+	}
+	if !strings.Contains(output.String(), "authenticated") || strings.Contains(output.String(), "access-token") {
+		t.Fatalf("unexpected login output: %s", output.String())
+	}
+	profile, err := runnerconfig.LoadActiveCredentialProfile(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile == nil || profile.AccountID != "user_1" || profile.AccessToken != "access-token" {
+		t.Fatalf("expected saved profile, got %#v", profile)
+	}
+}
+
 func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "ama-runner", "config.json")
+	credentialPath := filepath.Join(t.TempDir(), "ama-runner", "credentials.json")
 	polls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -47,6 +98,7 @@ func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) 
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token":  "access-token-secret",
 				"refresh_token": "refresh-token-secret",
+				"id_token":      testIDToken("user_1", "runner@example.test", "Runner User"),
 				"token_type":    "Bearer",
 				"expires_in":    3600,
 				"scope":         "openid profile email offline_access",
@@ -59,18 +111,18 @@ func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) 
 
 	var output bytes.Buffer
 	result, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
-		Origin:       "https://ama.example.test",
-		Issuer:       server.URL,
-		ClientID:     "runner-client",
-		Scopes:       "openid profile email offline_access",
-		ConfigPath:   configPath,
-		Output:       &output,
-		PollInterval: time.Millisecond,
+		APIServer:      "https://ama.example.test",
+		Issuer:         server.URL,
+		ClientID:       "runner-client",
+		Scopes:         "openid profile email offline_access",
+		CredentialPath: credentialPath,
+		Output:         &output,
+		PollInterval:   time.Millisecond,
 	})
 	if err != nil {
 		t.Fatalf("expected login to succeed, got %v", err)
 	}
-	if result.ConfigPath != configPath || polls != 1 {
+	if result.CredentialPath != credentialPath || polls != 1 {
 		t.Fatalf("unexpected result %#v polls=%d", result, polls)
 	}
 	if strings.Contains(output.String(), "access-token-secret") || strings.Contains(output.String(), "refresh-token-secret") {
@@ -80,24 +132,25 @@ func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) 
 		t.Fatalf("login output omitted device instructions: %s", output.String())
 	}
 
-	info, err := os.Stat(configPath)
+	info, err := os.Stat(credentialPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("expected 0600 config permissions, got %v", info.Mode().Perm())
+		t.Fatalf("expected 0600 credential permissions, got %v", info.Mode().Perm())
 	}
-	saved, err := runnerconfig.LoadSavedRunnerConfig(configPath)
+	saved, err := runnerconfig.LoadActiveCredentialProfile(credentialPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.AccessToken != "access-token-secret" || saved.RefreshToken != "refresh-token-secret" {
-		t.Fatalf("unexpected saved token config: %#v", saved)
+	if saved.AccountID != "user_1" || saved.Email != "runner@example.test" || saved.Name != "Runner User" ||
+		saved.AccessToken != "access-token-secret" || saved.RefreshToken != "refresh-token-secret" {
+		t.Fatalf("unexpected saved credentials: %#v", saved)
 	}
 }
 
 func TestLoginWithDeviceAuthorizationFallsBackToJSONDeviceEndpoint(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "ama-runner", "config.json")
+	credentialPath := filepath.Join(t.TempDir(), "ama-runner", "credentials.json")
 	deviceRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -137,6 +190,7 @@ func TestLoginWithDeviceAuthorizationFallsBackToJSONDeviceEndpoint(t *testing.T)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token":  "access-token-secret",
 				"refresh_token": "refresh-token-secret",
+				"id_token":      testIDToken("user_1", "runner@example.test", "Runner User"),
 				"token_type":    "Bearer",
 				"expires_in":    3600,
 				"scope":         "openid profile email offline_access",
@@ -148,13 +202,13 @@ func TestLoginWithDeviceAuthorizationFallsBackToJSONDeviceEndpoint(t *testing.T)
 	defer server.Close()
 
 	_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
-		Origin:       "https://ama.example.test",
-		Issuer:       server.URL,
-		ClientID:     "runner-client",
-		Scopes:       "openid profile email offline_access",
-		ConfigPath:   configPath,
-		Output:       io.Discard,
-		PollInterval: time.Millisecond,
+		APIServer:      "https://ama.example.test",
+		Issuer:         server.URL,
+		ClientID:       "runner-client",
+		Scopes:         "openid profile email offline_access",
+		CredentialPath: credentialPath,
+		Output:         io.Discard,
+		PollInterval:   time.Millisecond,
 	})
 	if err != nil {
 		t.Fatalf("expected login to succeed with JSON device fallback, got %v", err)
@@ -162,20 +216,20 @@ func TestLoginWithDeviceAuthorizationFallsBackToJSONDeviceEndpoint(t *testing.T)
 	if deviceRequests != 2 {
 		t.Fatalf("expected form attempt followed by JSON fallback, got %d requests", deviceRequests)
 	}
-	saved, err := runnerconfig.LoadSavedRunnerConfig(configPath)
+	saved, err := runnerconfig.LoadActiveCredentialProfile(credentialPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.AccessToken != "access-token-secret" {
-		t.Fatalf("unexpected saved token config: %#v", saved)
+	if saved.AccountID != "user_1" || saved.AccessToken != "access-token-secret" {
+		t.Fatalf("unexpected saved credentials: %#v", saved)
 	}
 }
 
 func TestLoginWithDeviceAuthorizationErrors(t *testing.T) {
 	t.Run("missing metadata", func(t *testing.T) {
 		_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{}, DeviceLoginOptions{
-			Origin:     "https://ama.example.test",
-			ConfigPath: filepath.Join(t.TempDir(), "config.json"),
+			APIServer:      "https://ama.example.test",
+			CredentialPath: filepath.Join(t.TempDir(), "credentials.json"),
 		})
 		if err == nil || !strings.Contains(err.Error(), "OIDC metadata") {
 			t.Fatalf("expected metadata error, got %v", err)
@@ -188,10 +242,10 @@ func TestLoginWithDeviceAuthorizationErrors(t *testing.T) {
 		}))
 		defer server.Close()
 		_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
-			Origin:     "https://ama.example.test",
-			Issuer:     server.URL,
-			ClientID:   "runner-client",
-			ConfigPath: filepath.Join(t.TempDir(), "config.json"),
+			APIServer:      "https://ama.example.test",
+			Issuer:         server.URL,
+			ClientID:       "runner-client",
+			CredentialPath: filepath.Join(t.TempDir(), "credentials.json"),
 		})
 		if err == nil || !strings.Contains(err.Error(), "device and token endpoints") {
 			t.Fatalf("expected discovery error, got %v", err)
@@ -209,10 +263,10 @@ func TestLoginWithDeviceAuthorizationErrors(t *testing.T) {
 		})
 		defer server.Close()
 		_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
-			Origin:     "https://ama.example.test",
-			Issuer:     server.URL,
-			ClientID:   "runner-client",
-			ConfigPath: filepath.Join(t.TempDir(), "config.json"),
+			APIServer:      "https://ama.example.test",
+			Issuer:         server.URL,
+			ClientID:       "runner-client",
+			CredentialPath: filepath.Join(t.TempDir(), "credentials.json"),
 		})
 		if err == nil || !strings.Contains(err.Error(), "runner client rejected") {
 			t.Fatalf("expected device start error, got %v", err)
@@ -238,11 +292,11 @@ func TestLoginWithDeviceAuthorizationErrors(t *testing.T) {
 		})
 		defer server.Close()
 		_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
-			Origin:       "https://ama.example.test",
-			Issuer:       server.URL,
-			ClientID:     "runner-client",
-			ConfigPath:   filepath.Join(t.TempDir(), "config.json"),
-			PollInterval: time.Millisecond,
+			APIServer:      "https://ama.example.test",
+			Issuer:         server.URL,
+			ClientID:       "runner-client",
+			CredentialPath: filepath.Join(t.TempDir(), "credentials.json"),
+			PollInterval:   time.Millisecond,
 		})
 		if err == nil || !strings.Contains(err.Error(), "denied") {
 			t.Fatalf("expected poll error, got %v", err)
@@ -260,20 +314,90 @@ func TestLoginWithDeviceAuthorizationErrors(t *testing.T) {
 					"expires_in":       60,
 				})
 			case "/token":
-				_, _ = w.Write([]byte(`{"access_token":"token","refresh_token":"refresh","token_type":"Bearer"}`))
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token":  "token",
+					"refresh_token": "refresh",
+					"id_token":      testIDToken("user_1", "runner@example.test", "Runner User"),
+					"token_type":    "Bearer",
+				})
 			default:
 				t.Fatalf("unexpected request %s", r.URL.Path)
 			}
 		})
 		defer server.Close()
 		_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
-			Origin:       "https://ama.example.test",
+			APIServer:    "https://ama.example.test",
 			Issuer:       server.URL,
 			ClientID:     "runner-client",
 			PollInterval: time.Millisecond,
 		})
-		if err == nil || !strings.Contains(err.Error(), "config path") {
-			t.Fatalf("expected save config error, got %v", err)
+		if err == nil || !strings.Contains(err.Error(), "credential path") {
+			t.Fatalf("expected save credential error, got %v", err)
+		}
+	})
+
+	t.Run("missing refresh token", func(t *testing.T) {
+		server := loginTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/device":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"device_code":      "device-code",
+					"user_code":        "ABCD-EFGH",
+					"verification_uri": "https://issuer.example.test/device",
+					"expires_in":       60,
+				})
+			case "/token":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token": "token",
+					"id_token":     testIDToken("user_1", "runner@example.test", "Runner User"),
+				})
+			default:
+				t.Fatalf("unexpected request %s", r.URL.Path)
+			}
+		})
+		defer server.Close()
+		_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
+			APIServer:      "https://ama.example.test",
+			Issuer:         server.URL,
+			ClientID:       "runner-client",
+			CredentialPath: filepath.Join(t.TempDir(), "credentials.json"),
+			PollInterval:   time.Millisecond,
+		})
+		if err == nil || !strings.Contains(err.Error(), "refresh token") {
+			t.Fatalf("expected missing refresh token error, got %v", err)
+		}
+	})
+
+	t.Run("invalid identity token", func(t *testing.T) {
+		server := loginTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/device":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"device_code":      "device-code",
+					"user_code":        "ABCD-EFGH",
+					"verification_uri": "https://issuer.example.test/device",
+					"expires_in":       60,
+				})
+			case "/token":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token":  "token",
+					"refresh_token": "refresh",
+					"id_token":      "bad.payload.",
+				})
+			default:
+				t.Fatalf("unexpected request %s", r.URL.Path)
+			}
+		})
+		defer server.Close()
+		_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
+			APIServer:      "https://ama.example.test",
+			Issuer:         server.URL,
+			ClientID:       "runner-client",
+			CredentialPath: filepath.Join(t.TempDir(), "credentials.json"),
+			PollInterval:   time.Millisecond,
+		})
+		if err == nil || !strings.Contains(err.Error(), "id token claims") {
+			t.Fatalf("expected invalid identity token error, got %v", err)
 		}
 	})
 }
@@ -426,6 +550,21 @@ func TestDeviceTokenPollingHandlesPendingSlowDownExpiredAndErrors(t *testing.T) 
 			t.Fatalf("expected local expiry error, got %v", err)
 		}
 	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := (DeviceAuthClient{}).PollDeviceToken(
+			ctx,
+			"https://issuer.example.test/token",
+			"runner-client",
+			deviceAuthorizationResponse{DeviceCode: "device", ExpiresIn: 60},
+			time.Millisecond,
+		)
+		if err == nil || !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("expected context cancellation, got %v", err)
+		}
+	})
 }
 
 func TestDeviceAuthorizationStartAndDiscoveryErrors(t *testing.T) {
@@ -474,62 +613,108 @@ func TestDeviceAuthorizationStartAndDiscoveryErrors(t *testing.T) {
 	})
 }
 
-func TestLoadLoginCommandValidation(t *testing.T) {
-	_, err := runnerconfig.LoadLoginCommand(nil, func(string) string { return "" })
+func TestLoginCommandValidation(t *testing.T) {
+	_, err := ValidateLoginCommand(LoginCommand{})
 	if err == nil || !strings.Contains(err.Error(), "AMA API server URL is required") {
 		t.Fatalf("expected missing API server error, got %v", err)
 	}
-	_, err = runnerconfig.LoadLoginCommand([]string{"--api-server", "://bad"}, func(string) string { return "" })
+	_, err = ValidateLoginCommand(LoginCommand{APIServer: "://bad", CredentialPath: "/tmp/credentials.json"})
 	if err == nil || !strings.Contains(err.Error(), "absolute URL") {
 		t.Fatalf("expected malformed API server error, got %v", err)
 	}
-	command, err := runnerconfig.LoadLoginCommand(
-		[]string{"--api-server", "https://ama.example.test", "--config", "/tmp/runner.json"},
-		func(string) string { return "" },
-	)
+	command, err := ValidateLoginCommand(LoginCommand{
+		APIServer:      "https://ama.example.test",
+		CredentialPath: "/tmp/credentials.json",
+	})
 	if err != nil {
 		t.Fatalf("expected login command config, got %v", err)
 	}
-	if command.Origin != "https://ama.example.test" || command.ConfigPath != "/tmp/runner.json" {
+	if command.APIServer != "https://ama.example.test" || command.CredentialPath != "/tmp/credentials.json" {
 		t.Fatalf("unexpected login command: %#v", command)
 	}
 }
 
-func TestLoadSavedRunnerConfigRejectsExpiredToken(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := runnerconfig.SaveRunnerConfig(configPath, runnerconfig.SavedRunnerConfig{
-		Origin:      "https://ama.example.test",
+func TestTokenIdentityRejectsInvalidTokens(t *testing.T) {
+	cases := []string{
+		"",
+		"header..signature",
+		"header.not-base64.signature",
+		"header." + base64.RawURLEncoding.EncodeToString([]byte(`{`)) + ".signature",
+		"header." + base64.RawURLEncoding.EncodeToString([]byte(`{"email":"runner@example.test"}`)) + ".signature",
+	}
+	for _, token := range cases {
+		if _, err := tokenIdentity(token); err == nil {
+			t.Fatalf("expected invalid token error for %q", token)
+		}
+	}
+}
+
+func TestOIDCStatusErrorString(t *testing.T) {
+	err := oidcStatusError{Path: "/token", Status: http.StatusBadGateway}
+	if got := err.Error(); !strings.Contains(got, "/token") || !strings.Contains(got, "502") {
+		t.Fatalf("unexpected status error string %q", got)
+	}
+}
+
+func TestRefreshTokenValidationAndDefaults(t *testing.T) {
+	if _, err := (DeviceAuthClient{}).RefreshToken(context.Background(), "https://issuer.example.test/token", "runner-client", " "); err == nil {
+		t.Fatal("expected missing refresh token error")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"access_token":"fresh"}`))
+	}))
+	defer server.Close()
+	token, err := (DeviceAuthClient{HTTPClient: server.Client()}).RefreshToken(context.Background(), server.URL, "runner-client", "refresh")
+	if err != nil {
+		t.Fatalf("expected refresh success, got %v", err)
+	}
+	if token.AccessToken != "fresh" || token.TokenType != "Bearer" {
+		t.Fatalf("expected default bearer token, got %#v", token)
+	}
+}
+
+func TestLoadActiveCredentialProfileRejectsExpiredToken(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	if err := runnerconfig.SaveCredentialProfile(credentialPath, runnerconfig.CredentialProfile{
+		AccountID:   "acct_1",
+		APIServer:   "https://ama.example.test",
 		AccessToken: "expired-token",
 		TokenType:   "Bearer",
 		ExpiresAt:   time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := runnerconfig.LoadSavedRunnerConfig(configPath)
+	_, err := runnerconfig.LoadActiveCredentialProfile(credentialPath)
 	if err == nil || !strings.Contains(err.Error(), "expired") {
 		t.Fatalf("expected expired saved token error, got %v", err)
 	}
 }
 
 func TestRunnerConfigValidationHelpers(t *testing.T) {
-	if err := runnerconfig.SaveRunnerConfig("", runnerconfig.SavedRunnerConfig{AccessToken: "token"}); err == nil {
-		t.Fatal("expected missing config path error")
+	if err := runnerconfig.SaveCredentialProfile("", runnerconfig.CredentialProfile{AccessToken: "token"}); err == nil {
+		t.Fatal("expected missing credential path error")
 	}
-	if err := runnerconfig.SaveRunnerConfig(filepath.Join(t.TempDir(), "config.json"), runnerconfig.SavedRunnerConfig{}); err == nil {
+	if err := runnerconfig.SaveCredentialProfile(filepath.Join(t.TempDir(), "credentials.json"), runnerconfig.CredentialProfile{}); err == nil {
 		t.Fatal("expected missing access token error")
 	}
-	malformedPath := filepath.Join(t.TempDir(), "config.json")
+	malformedPath := filepath.Join(t.TempDir(), "credentials.json")
 	if err := os.WriteFile(malformedPath, []byte(`{`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runnerconfig.LoadSavedRunnerConfig(malformedPath); err == nil {
+	if _, err := runnerconfig.LoadActiveCredentialProfile(malformedPath); err == nil {
 		t.Fatal("expected malformed config error")
 	}
-	badDatePath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(badDatePath, []byte(`{"apiServer":"https://ama.example.test","accessToken":"token","expiresAt":"soon"}`), 0o600); err != nil {
+	badDatePath := filepath.Join(t.TempDir(), "credentials.json")
+	if err := runnerconfig.SaveCredentialProfile(badDatePath, runnerconfig.CredentialProfile{
+		AccountID:   "acct_1",
+		APIServer:   "https://ama.example.test",
+		AccessToken: "token",
+		TokenType:   "Bearer",
+		ExpiresAt:   "soon",
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runnerconfig.LoadSavedRunnerConfig(badDatePath); err == nil {
+	if _, err := runnerconfig.LoadActiveCredentialProfile(badDatePath); err == nil {
 		t.Fatal("expected malformed expiry error")
 	}
 	if expiresAt(0) != "" {
@@ -544,12 +729,16 @@ func TestRunnerConfigValidationHelpers(t *testing.T) {
 	if errorDescription(tokenResponse{}) != "provider_error" {
 		t.Fatal("expected provider fallback")
 	}
+	if (deviceTokenError{Code: "slow_down", Description: "wait"}).Error() != "wait" {
+		t.Fatal("expected device token error description")
+	}
 }
 
 func loginTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
 		if r.URL.Path == "/.well-known/openid-configuration" {
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"issuer":                        server.URL,
@@ -561,4 +750,17 @@ func loginTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 		handler(w, r)
 	}))
 	return server
+}
+
+func testIDToken(subject string, email string, name string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`))
+	payload, err := json.Marshal(map[string]string{
+		"sub":   subject,
+		"email": email,
+		"name":  name,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + "."
 }

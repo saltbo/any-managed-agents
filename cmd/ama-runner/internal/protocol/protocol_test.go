@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -208,4 +209,134 @@ func TestParseWorkPayloadRejectsUnsupportedSandboxTool(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unsupported sandbox tool") {
 		t.Fatalf("expected unsupported tool error, got %v", err)
 	}
+}
+
+func TestParseWorkPayloadMapsWorkspaceManifest(t *testing.T) {
+	prompt := "work"
+	description := "repo"
+	payload, err := ParseWorkPayload(ama.JSON{
+		"protocol":                 "ama-runner-work",
+		"type":                     "session.start",
+		"sessionId":                "session_1",
+		"hostingMode":              "self_hosted",
+		"runtime":                  "codex",
+		"provider":                 "openai",
+		"model":                    "gpt-5",
+		"runtimeDriver":            "external",
+		"runtimeConfig":            ama.JSON{"model": "gpt-5"},
+		"agentSnapshot":            ama.JSON{"name": "agent"},
+		"requiredRunnerCapability": "runtime:codex",
+		"env":                      map[string]string{"A": "B"},
+		"prompt":                   prompt,
+		"resume":                   true,
+		"resumeToken":              "resume-token",
+		"workspaceManifest": ama.JSON{
+			"root": "/workspace",
+			"mounts": []ama.JSON{
+				{
+					"type":        "git_repository",
+					"name":        "repo",
+					"mountPath":   "/workspace/repo",
+					"url":         "https://example.test/repo.git",
+					"ref":         "main",
+					"description": description,
+					"access":      "read_write",
+					"readOnly":    true,
+					"credential":  ama.JSON{"username": "user", "password": "pass"},
+					"files": []ama.JSON{
+						{"path": "README.md", "content": "hello"},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Model != "gpt-5" || payload.RuntimeDriver != "external" || payload.Env["A"] != "B" ||
+		payload.Prompt == nil || *payload.Prompt != prompt || !payload.Resume || payload.ResumeToken != "resume-token" {
+		t.Fatalf("unexpected session fields: %#v", payload)
+	}
+	mount := payload.WorkspaceManifest.Mounts[0]
+	if mount.Type != "git_repository" || mount.URL != "https://example.test/repo.git" || mount.Ref != "main" ||
+		mount.Credential == nil || mount.Credential.Username != "user" || mount.Files[0].Content != "hello" ||
+		mount.Description == nil || *mount.Description != description || !mount.ReadOnly {
+		t.Fatalf("unexpected workspace mount: %#v", mount)
+	}
+}
+
+func TestRunnerChannelMessageAccessors(t *testing.T) {
+	eventID := "event_1"
+	requestID := "request_1"
+	sessionID := "session_1"
+	toolCallID := "tool_1"
+	toolName := "sandbox.exec"
+	readOnly := true
+	input := map[string]any{"command": "true"}
+	volumes := []ama.RunnerVolume{
+		{
+			Type:      ama.RunnerVolumeTypeGitRepository,
+			Name:      "repo",
+			Url:       ptr("https://example.test/repo.git"),
+			Ref:       ptr("main"),
+			SecretRef: ptr("ama-secret://vault/git"),
+			Memories: &[]ama.RunnerMemorySnapshot{
+				{Path: "memory.md", Content: "memory"},
+			},
+		},
+	}
+	mounts := []ama.RunnerVolumeMount{{Name: "repo", MountPath: "/workspace/repo", ReadOnly: &readOnly}}
+	request := ama.RunnerSandboxRequest{
+		Type:         ama.SandboxExecute,
+		ToolCallId:   &toolCallID,
+		ToolName:     &toolName,
+		Input:        &input,
+		Volumes:      &volumes,
+		VolumeMounts: &mounts,
+	}
+	command := json.RawMessage(`{"type":"session.prompt"}`)
+	message := RunnerChannelMessage{
+		EventId:   &eventID,
+		RequestId: &requestID,
+		SessionId: &sessionID,
+		Command:   command,
+		Request:   &request,
+		Type:      "sandbox.request",
+	}
+	if MessageEventID(message) != eventID || MessageRequestID(message) != requestID || MessageSessionID(message) != sessionID {
+		t.Fatalf("unexpected ids from message: %#v", message)
+	}
+	if string(MessageCommand(message)) != string(command) {
+		t.Fatalf("unexpected command")
+	}
+	sandbox := MessageSandboxRequest(message)
+	if SandboxRequestType(sandbox) != "sandbox.execute" || SandboxRequestToolCallID(sandbox) != toolCallID ||
+		SandboxRequestToolName(sandbox) != toolName || SandboxRequestInput(sandbox)["command"] != "true" {
+		t.Fatalf("unexpected sandbox request: %#v", sandbox)
+	}
+	volume := SandboxRequestVolumes(sandbox)[0]
+	if volume.Name != "repo" || volume.URL != "https://example.test/repo.git" || volume.Memories[0].Content != "memory" {
+		t.Fatalf("unexpected volume: %#v", volume)
+	}
+	mount := SandboxRequestVolumeMounts(sandbox)[0]
+	if mount.Name != "repo" || mount.MountPath != "/workspace/repo" || !mount.ReadOnly {
+		t.Fatalf("unexpected volume mount: %#v", mount)
+	}
+}
+
+func TestRunnerChannelMessageAccessorsHandleMissingFields(t *testing.T) {
+	if MessageEventID(RunnerChannelMessage{}) != "" || MessageRequestID(RunnerChannelMessage{}) != "" ||
+		MessageSessionID(RunnerChannelMessage{}) != "" || MessageCommand(RunnerChannelMessage{}) != nil {
+		t.Fatal("expected empty message accessors to return zero values")
+	}
+	request := MessageSandboxRequest(RunnerChannelMessage{})
+	if SandboxRequestType(request) != "" || SandboxRequestToolCallID(request) != "" ||
+		SandboxRequestToolName(request) != "" || SandboxRequestInput(request) != nil ||
+		SandboxRequestVolumes(request) != nil || SandboxRequestVolumeMounts(request) != nil {
+		t.Fatalf("expected empty sandbox request accessors, got %#v", request)
+	}
+}
+
+func ptr(value string) *string {
+	return &value
 }

@@ -69,6 +69,33 @@ func TestRuntimeInventoryComesFromBridgeInventory(t *testing.T) {
 	}
 }
 
+func TestRuntimeInventoryDefaultsStateAndDetail(t *testing.T) {
+	got := runtimeInventory(&InventorySnapshot{Runtimes: []InventoryRuntime{
+		{Runtime: "codex", Installed: true},
+		{Runtime: "copilot", Installed: false},
+	}})
+	if got[0].State != RuntimeInventoryStateUnhealthy || got[0].Detail == "" {
+		t.Fatalf("expected installed runtime without status to be unhealthy with detail, got %#v", got[0])
+	}
+	if got[1].State != RuntimeInventoryStateMissing || got[1].Detail == "" {
+		t.Fatalf("expected missing runtime without status to be missing with detail, got %#v", got[1])
+	}
+	if runtimeInventory(nil) != nil || runtimeCapabilities(nil) != nil || runtimeBinaries(nil) != nil {
+		t.Fatal("expected nil snapshots to return nil derived values")
+	}
+}
+
+func TestRuntimeBinariesReturnsOnlyConfiguredBinaries(t *testing.T) {
+	got := runtimeBinaries(&InventorySnapshot{Runtimes: []InventoryRuntime{
+		{Runtime: "codex", Binary: "codex"},
+		{Runtime: "missing"},
+		{Runtime: "claude-code", Binary: "claude"},
+	}})
+	if strings.Join(got, ",") != "codex,claude" {
+		t.Fatalf("unexpected runtime binaries %v", got)
+	}
+}
+
 func TestInventoryRefreshCapabilitiesUsesInjectedInventory(t *testing.T) {
 	calls := 0
 	inv := &Inventory{
@@ -90,6 +117,50 @@ func TestInventoryRefreshCapabilitiesUsesInjectedInventory(t *testing.T) {
 	}
 	if strings.Join(got, ",") != "codex,runtime-provider-model:codex:*:gpt-5.3-codex-mini" {
 		t.Fatalf("unexpected capabilities %v", got)
+	}
+}
+
+func TestInventoryRefreshCapabilitiesStoresEmptySnapshotOnFailure(t *testing.T) {
+	inv := &Inventory{
+		Load: func(context.Context, bool) (*InventorySnapshot, error) {
+			return nil, errors.New("bridge failed")
+		},
+	}
+	if got := inv.RefreshCapabilities(); len(got) != 0 {
+		t.Fatalf("expected empty capabilities, got %#v", got)
+	}
+	if got := inv.CurrentCapabilities(); len(got) != 0 {
+		t.Fatalf("expected stored empty capabilities, got %#v", got)
+	}
+}
+
+func TestInventoryCurrentCapabilitiesRefreshesWhenUninitialized(t *testing.T) {
+	calls := 0
+	inv := &Inventory{
+		Load: func(context.Context, bool) (*InventorySnapshot, error) {
+			calls++
+			return &InventorySnapshot{Runtimes: []InventoryRuntime{{
+				Runtime:        "codex",
+				Installed:      true,
+				FallbackModels: []string{"gpt-5.3-codex"},
+			}}}, nil
+		},
+	}
+	if got := inv.CurrentCapabilities(); strings.Join(got, ",") != "codex,runtime-provider-model:codex:*:gpt-5.3-codex" {
+		t.Fatalf("unexpected current capabilities %v", got)
+	}
+	if calls != 1 {
+		t.Fatalf("expected lazy refresh, got %d calls", calls)
+	}
+}
+
+func TestInventoryCurrentCapabilitiesReturnsStoredCopy(t *testing.T) {
+	inv := &Inventory{}
+	inv.advertisedCapabilities = []string{"codex"}
+	got := inv.CurrentCapabilities()
+	got[0] = "mutated"
+	if inv.CurrentCapabilities()[0] != "codex" {
+		t.Fatal("current capabilities must return a copy")
 	}
 }
 
@@ -139,6 +210,65 @@ func TestInventoryRefreshUsageUsesBridgeInventory(t *testing.T) {
 	}}, inv.runtimeUsageLimits)
 	if gotInventory[0].State != RuntimeInventoryStateLimited {
 		t.Fatalf("expected limited inventory, got %#v", gotInventory)
+	}
+}
+
+func TestInventoryRefreshUsageClearsOnBridgeFailure(t *testing.T) {
+	inv := &Inventory{
+		Load: func(context.Context, bool) (*InventorySnapshot, error) {
+			return nil, errors.New("usage failed")
+		},
+	}
+	inv.SetUsageSnapshot(&UsageSnapshot{
+		Usage:   []RuntimeUsage{{Runtime: "codex"}},
+		Limited: map[string]string{"codex": "limited"},
+	})
+	inv.RefreshUsage(context.Background())
+	if got := inv.Usage(); len(got) != 0 {
+		t.Fatalf("expected usage cleared on refresh failure, got %#v", got)
+	}
+}
+
+func TestInventoryRefreshUsageIgnoresCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	inv := &Inventory{
+		Load: func(context.Context, bool) (*InventorySnapshot, error) {
+			return nil, ctx.Err()
+		},
+	}
+	inv.SetUsageSnapshot(&UsageSnapshot{Usage: []RuntimeUsage{{Runtime: "codex"}}})
+	inv.RefreshUsage(ctx)
+	if got := inv.Usage(); len(got) != 1 || got[0].Runtime != "codex" {
+		t.Fatalf("expected cancelled refresh to keep existing usage, got %#v", got)
+	}
+}
+
+func TestInventoryRunUsageCollectorStopsOnContextCancel(t *testing.T) {
+	calls := 0
+	inv := &Inventory{
+		Load: func(context.Context, bool) (*InventorySnapshot, error) {
+			calls++
+			return &InventorySnapshot{}, nil
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	inv.RunUsageCollector(ctx)
+	if calls != 1 {
+		t.Fatalf("expected collector to refresh once before stopping, got %d calls", calls)
+	}
+}
+
+func TestInventoryUsageSnapshotFromNilInventory(t *testing.T) {
+	if usageSnapshotFromInventory(nil) != nil {
+		t.Fatal("expected nil usage snapshot")
+	}
+	if got := cloneRuntimeUsage(nil); got != nil {
+		t.Fatalf("expected nil usage clone, got %#v", got)
+	}
+	if got := cloneUsageLimits(nil); got != nil {
+		t.Fatalf("expected nil limit clone, got %#v", got)
 	}
 }
 

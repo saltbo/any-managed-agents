@@ -1,0 +1,285 @@
+package cmd
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/saltbo/any-managed-agents/cmd/ama-runner/pkg/version"
+)
+
+func TestRunFailsOnInvalidConfig(t *testing.T) {
+	err := execute(context.Background(), []string{"--api-server", "://bad"}, testBuild(), nil, nil)
+	if err == nil {
+		t.Fatal("expected invalid config error")
+	}
+	if !strings.Contains(err.Error(), "absolute URL") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestRunVersionPrintsBuildMetadata(t *testing.T) {
+	var output bytes.Buffer
+	err := execute(context.Background(), []string{"version", "--json"}, testBuild(), &output, nil)
+	if err != nil {
+		t.Fatalf("expected version output, got %v", err)
+	}
+	if !strings.Contains(output.String(), `"name":"ama-runner"`) || !strings.Contains(output.String(), `"version":"`) {
+		t.Fatalf("unexpected version output: %s", output.String())
+	}
+}
+
+func TestRunRootVersionIgnoresRunnerEnvironmentValidation(t *testing.T) {
+	t.Setenv("AMA_RUNNER_LEASE_SECONDS", "soon")
+	var output bytes.Buffer
+	err := execute(context.Background(), []string{"--version"}, testBuild(), &output, nil)
+	if err != nil {
+		t.Fatalf("expected version output, got %v", err)
+	}
+	if !strings.Contains(output.String(), "ama-runner") {
+		t.Fatalf("unexpected version output: %s", output.String())
+	}
+}
+
+func TestRunWrapperExecutesVersionCommand(t *testing.T) {
+	if err := Run([]string{"version"}, testBuild()); err != nil {
+		t.Fatalf("expected Run wrapper to execute version command, got %v", err)
+	}
+}
+
+func TestRootCommandHelpAndArgumentValidation(t *testing.T) {
+	var output bytes.Buffer
+	if err := execute(context.Background(), []string{"auth", "logout", "one", "two"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected auth logout argument validation error")
+	}
+	if err := execute(context.Background(), []string{"auth", "refresh", "extra"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected auth refresh argument validation error")
+	}
+	if err := execute(context.Background(), []string{"auth", "status", "extra"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected auth status argument validation error")
+	}
+	if err := execute(context.Background(), []string{"auth", "token", "extra"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected auth token argument validation error")
+	}
+	if err := execute(context.Background(), []string{"auth", "switch", "one", "two"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected auth switch argument validation error")
+	}
+	if err := execute(context.Background(), []string{"config", "get"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected config get argument validation error")
+	}
+	if err := execute(context.Background(), []string{"config", "list", "extra"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected config list argument validation error")
+	}
+	if err := execute(context.Background(), []string{"config", "set", "only-key"}, testBuild(), &output, nil); err == nil {
+		t.Fatal("expected config set argument validation error")
+	}
+}
+
+func TestWriterOrDiscard(t *testing.T) {
+	var output bytes.Buffer
+	if writerOrDiscard(&output) != &output {
+		t.Fatal("expected non-nil writer to pass through")
+	}
+	if writerOrDiscard(nil) == nil {
+		t.Fatal("expected nil writer to become io.Discard")
+	}
+}
+
+func TestRunLoginDiscoversDeviceFlowAndStoresToken(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	var output bytes.Buffer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/health":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status":         "ok",
+				"name":           "Any Managed Agents",
+				"runtime":        "cloudflare-workers",
+				"oidcIssuer":     "http://" + r.Host + "/issuer",
+				"runnerClientId": "runner-client",
+				"runnerScopes":   "openid profile email offline_access",
+			})
+		case "/issuer/.well-known/openid-configuration":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"issuer":                        "http://" + r.Host + "/issuer",
+				"device_authorization_endpoint": "http://" + r.Host + "/device",
+				"token_endpoint":                "http://" + r.Host + "/token",
+			})
+		case "/device":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"device_code":      "device-code",
+				"user_code":        "LOGIN-CODE",
+				"verification_uri": "https://issuer.example.test/device",
+				"expires_in":       60,
+			})
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "login-access-token",
+				"refresh_token": "login-refresh-token",
+				"id_token":      testIDToken("user_1", "runner@example.test", "Runner User"),
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+			})
+		default:
+			t.Fatalf("unexpected request %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("AMA_RUNNER_CREDENTIALS", credentialPath)
+	err := execute(context.Background(), []string{"auth", "login", "--api-server", server.URL}, testBuild(), &output, nil)
+	if err != nil {
+		t.Fatalf("expected login to succeed, got %v", err)
+	}
+	if !strings.Contains(output.String(), "LOGIN-CODE") || strings.Contains(output.String(), "login-access-token") {
+		t.Fatalf("unexpected login output: %s", output.String())
+	}
+	data, err := os.ReadFile(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "login-access-token") || !strings.Contains(string(data), server.URL) {
+		t.Fatalf("expected saved credentials, got %s", string(data))
+	}
+}
+
+func TestRunConfigSetUsesRunnerConfigEnvironmentPath(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "runner.json")
+	t.Setenv("AMA_RUNNER_CONFIG", configPath)
+	var output bytes.Buffer
+
+	err := execute(context.Background(), []string{"config", "set", "environmentId", "env_1"}, testBuild(), &output, nil)
+	if err != nil {
+		t.Fatalf("expected config set to succeed, got %v", err)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"environmentId": "env_1"`) {
+		t.Fatalf("expected config to be written to AMA_RUNNER_CONFIG path, got %s", string(data))
+	}
+	output.Reset()
+	err = execute(context.Background(), []string{"config", "get", "environmentId"}, testBuild(), &output, nil)
+	if err != nil {
+		t.Fatalf("expected config get to succeed, got %v", err)
+	}
+	if strings.TrimSpace(output.String()) != "env_1" {
+		t.Fatalf("unexpected config get output %q", output.String())
+	}
+	output.Reset()
+	err = execute(context.Background(), []string{"config", "list"}, testBuild(), &output, nil)
+	if err != nil {
+		t.Fatalf("expected config list to succeed, got %v", err)
+	}
+	if !strings.Contains(output.String(), "environmentId=env_1") {
+		t.Fatalf("unexpected config list output %q", output.String())
+	}
+}
+
+func TestRunAuthStatusCommand(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	t.Setenv("AMA_RUNNER_CREDENTIALS", credentialPath)
+	data := `{
+  "active": "https://ama.example.test#acct_1",
+  "profiles": [{
+    "accountId": "acct_1",
+    "apiServer": "https://ama.example.test",
+    "accessToken": "token",
+    "tokenType": "Bearer"
+  }]
+}`
+	if err := os.WriteFile(credentialPath, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := execute(context.Background(), []string{"auth", "status"}, testBuild(), &output, nil); err != nil {
+		t.Fatalf("expected auth status command, got %v", err)
+	}
+	if !strings.Contains(output.String(), "* https://ama.example.test acct_1") {
+		t.Fatalf("unexpected auth status output %q", output.String())
+	}
+	output.Reset()
+	if err := execute(context.Background(), []string{"auth", "token"}, testBuild(), &output, nil); err != nil {
+		t.Fatalf("expected auth token command, got %v", err)
+	}
+	if strings.TrimSpace(output.String()) != "token" {
+		t.Fatalf("unexpected auth token output %q", output.String())
+	}
+}
+
+func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	heartbeatCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/health":
+			_, _ = w.Write([]byte(`{"status":"ok","name":"Any Managed Agents","runtime":"cloudflare-workers","oidcIssuer":"https://issuer.example.test","runnerClientId":"runner-client","runnerScopes":"openid profile email offline_access"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runners":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"runner_1","name":"runner","capabilities":["sandbox.exec"],"state":"offline","currentLoad":0,"maxConcurrent":1}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/runners/runner_1/heartbeat":
+			heartbeatCount += 1
+			if heartbeatCount == 1 {
+				go func() {
+					time.Sleep(time.Millisecond)
+					cancel()
+				}()
+			}
+			_, _ = w.Write([]byte(`{"runnerId":"runner_1","state":"active","currentLoad":0,"runtimeUsage":[],"runtimeInventory":[],"lastHeartbeatAt":null}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/work-items":
+			_, _ = w.Write([]byte(`{"data":[],"pagination":{"limit":50,"hasMore":false,"nextCursor":null}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/channel"):
+			if got := r.Header.Get("authorization"); got != "Bearer token" {
+				t.Fatalf("expected runner channel authorization header, got %q", got)
+			}
+			// The relay hub dials the runner pool channel via WebSocket upgrade.
+			// A non-upgrade response causes the hub to log a warning and retry
+			// after its reconnect delay, which is fine for this integration test.
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("AMA_API_SERVER", server.URL)
+	t.Setenv("AMA_TOKEN", "token")
+	t.Setenv("AMA_ENVIRONMENT_ID", "env_1")
+	t.Setenv("AMA_RUNNER_ALLOW_UNSAFE_PROCESS", "true")
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	err := execute(ctx, nil, testBuild(), nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "context canceled") {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if heartbeatCount < 2 {
+		t.Fatalf("expected active and offline heartbeats, got %d", heartbeatCount)
+	}
+}
+
+func testBuild() version.Info {
+	return version.Info{}
+}
+
+func testIDToken(subject string, email string, name string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`))
+	payload, err := json.Marshal(map[string]string{
+		"sub":   subject,
+		"email": email,
+		"name":  name,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + "."
+}

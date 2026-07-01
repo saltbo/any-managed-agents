@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/protocol"
-	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/runtime"
-	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/protocol"
+	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/runtime"
+	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/sandbox"
+	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
 // fakeOpener is a simple Opener that returns a pre-created channel.
@@ -86,6 +88,16 @@ func (ch *fakeChannel) Close(int, string) error {
 	defer ch.mu.Unlock()
 	ch.closed = true
 	return nil
+}
+
+type closeCountingHandle struct {
+	calls int
+	err   error
+}
+
+func (h *closeCountingHandle) Close(context.Context) error {
+	h.calls += 1
+	return h.err
 }
 
 func TestRelayEventDropsWhenNotConnected(t *testing.T) {
@@ -258,6 +270,187 @@ func TestRelayRoutesPromptCommandWithEmptyMessageOpaque(t *testing.T) {
 	if len(received) != 1 || received[0] != `{"type":"send","message":""}` {
 		t.Fatalf("expected empty prompt command routed opaquely, got %v", received)
 	}
+}
+
+func TestRelayHandleWorkAssignedDispatchesValidAssignment(t *testing.T) {
+	var gotLeaseID string
+	var gotWorkItemID string
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir(), func(_ context.Context, lease *ama.Lease, workItem *ama.WorkItem) {
+		gotLeaseID = lease.Id
+		gotWorkItemID = workItem.Id
+	})
+	raw, err := json.Marshal(ama.JSON{
+		"type":     "work.assigned",
+		"lease":    ama.JSON{"id": "lease_1", "workItemId": "work_1", "runnerId": "runner_1", "state": "active"},
+		"workItem": ama.JSON{"id": "work_1", "type": "session.start", "payload": ama.JSON{}, "projectId": "project_1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hub.handleWorkAssigned(context.Background(), raw)
+
+	if gotLeaseID != "lease_1" || gotWorkItemID != "work_1" {
+		t.Fatalf("expected assignment dispatched, got lease=%q work=%q", gotLeaseID, gotWorkItemID)
+	}
+}
+
+func TestRelayHandleWorkAssignedDropsInvalidFrames(t *testing.T) {
+	var calls int
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir(), func(context.Context, *ama.Lease, *ama.WorkItem) {
+		calls += 1
+	})
+
+	hub.handleWorkAssigned(context.Background(), json.RawMessage(`{"lease":{"id":"lease_1"},"workItem":{}}`))
+	hub.handleWorkAssigned(context.Background(), json.RawMessage(`[`))
+
+	if calls != 0 {
+		t.Fatalf("expected invalid assignments dropped, got %d calls", calls)
+	}
+}
+
+func TestRelayHandleWorkAssignedNoHandler(t *testing.T) {
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+	hub.handleWorkAssigned(context.Background(), json.RawMessage(`{"lease":{"id":"lease_1"},"workItem":{"id":"work_1"}}`))
+}
+
+func TestRelayHandlesSandboxRequest(t *testing.T) {
+	ch := newFakeChannel()
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+	toolCallID := "call_1"
+	toolName := "sandbox.exec"
+	input := map[string]any{"command": "echo ok"}
+	handle := NewSandboxHandle("session_1", testWorkspace(t), &fakeSandboxAdapter{
+		result: sandbox.ToolResult{Output: map[string]any{"stdout": "ok\n", "exitCode": 0}},
+	})
+	hub.Register("session_1", handle)
+
+	hub.handleSandboxRequest(context.Background(), ch, protocol.RunnerChannelMessage{
+		Type:      "sandbox.request",
+		RequestId: ptr("request_1"),
+		SessionId: ptr("session_1"),
+		Request: &ama.RunnerSandboxRequest{
+			Type:       "sandbox.execute",
+			ToolCallId: &toolCallID,
+			ToolName:   &toolName,
+			Input:      &input,
+		},
+	})
+
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	if len(ch.writes) != 1 {
+		t.Fatalf("expected one sandbox response, got %d", len(ch.writes))
+	}
+	response := ch.writes[0]
+	if response["type"] != "sandbox.response" || response["ok"] != true {
+		t.Fatalf("unexpected sandbox response: %v", response)
+	}
+	if response["requestId"] != "request_1" || response["runnerId"] != "runner_1" || response["sessionId"] != "session_1" {
+		t.Fatalf("response lost routing fields: %v", response)
+	}
+}
+
+func TestRelayHandlesSandboxRequestErrors(t *testing.T) {
+	t.Run("inactive session", func(t *testing.T) {
+		ch := newFakeChannel()
+		hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+		hub.handleSandboxRequest(context.Background(), ch, protocol.RunnerChannelMessage{
+			Type:      "sandbox.request",
+			RequestId: ptr("request_1"),
+			SessionId: ptr("missing"),
+			Request:   &ama.RunnerSandboxRequest{Type: "sandbox.execute"},
+		})
+		ch.mu.Lock()
+		defer ch.mu.Unlock()
+		if ch.writes[0]["ok"] != false || ch.writes[0]["error"] == nil {
+			t.Fatalf("expected inactive session error, got %v", ch.writes[0])
+		}
+	})
+	t.Run("wrong handler type", func(t *testing.T) {
+		ch := newFakeChannel()
+		hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+		hub.Register("session_1", NewHostHandle("session_1"))
+		hub.handleSandboxRequest(context.Background(), ch, protocol.RunnerChannelMessage{
+			Type:      "sandbox.request",
+			RequestId: ptr("request_2"),
+			SessionId: ptr("session_1"),
+			Request:   &ama.RunnerSandboxRequest{Type: "sandbox.execute"},
+		})
+		ch.mu.Lock()
+		defer ch.mu.Unlock()
+		if ch.writes[0]["ok"] != false || ch.writes[0]["error"] == nil {
+			t.Fatalf("expected unsupported handler error, got %v", ch.writes[0])
+		}
+	})
+	t.Run("handler error", func(t *testing.T) {
+		ch := newFakeChannel()
+		hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+		hub.Register("session_1", NewSandboxHandle("session_1", nil, &fakeSandboxAdapter{}))
+		hub.handleSandboxRequest(context.Background(), ch, protocol.RunnerChannelMessage{
+			Type:      "sandbox.request",
+			RequestId: ptr("request_3"),
+			SessionId: ptr("session_1"),
+			Request:   &ama.RunnerSandboxRequest{Type: "sandbox.execute"},
+		})
+		ch.mu.Lock()
+		defer ch.mu.Unlock()
+		if ch.writes[0]["ok"] != false || ch.writes[0]["error"] == nil {
+			t.Fatalf("expected handler error, got %v", ch.writes[0])
+		}
+	})
+}
+
+func TestRelayUnregisterClosesHandle(t *testing.T) {
+	handle := &closeCountingHandle{}
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+	hub.Register("session_1", handle)
+	hub.Unregister("session_1")
+	hub.Unregister("session_1")
+
+	if handle.calls != 1 {
+		t.Fatalf("expected handle closed once, got %d", handle.calls)
+	}
+}
+
+func TestRelayUnregisterLogsCloseError(t *testing.T) {
+	handle := &closeCountingHandle{err: errors.New("close failed")}
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+	hub.Register("session_1", handle)
+	hub.Unregister("session_1")
+	if handle.calls != 1 {
+		t.Fatalf("expected close attempted once, got %d", handle.calls)
+	}
+}
+
+func TestRelayNotifyWorkFinishedWritesTerminalStates(t *testing.T) {
+	ch := newFakeChannel()
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+	hub.setConn(ch)
+
+	for _, tc := range []struct {
+		state string
+		typ   string
+	}{
+		{state: "completed", typ: "work.completed"},
+		{state: "failed", typ: "work.failed"},
+		{state: "cancelled", typ: "work.cancelled"},
+	} {
+		hub.NotifyWorkFinished(context.Background(), "session_1", "lease_1", tc.state)
+		ch.mu.Lock()
+		got := ch.writes[len(ch.writes)-1]
+		ch.mu.Unlock()
+		if got["type"] != tc.typ || got["sessionId"] != "session_1" || got["leaseId"] != "lease_1" {
+			t.Fatalf("state %q wrote wrong frame: %v", tc.state, got)
+		}
+	}
+}
+
+func TestRelayNotifyWorkFinishedDropsWhenDisconnectedOrWriteFails(t *testing.T) {
+	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
+	hub.NotifyWorkFinished(context.Background(), "session_1", "lease_1", "completed")
+	hub.setConn(&errWriteChannel{})
+	hub.NotifyWorkFinished(context.Background(), "session_1", "lease_1", "completed")
 }
 
 func TestRelayHandlesBackfillForCompletedSession(t *testing.T) {

@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	runnerauth "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/auth"
 	runnerconfig "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/config"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/runtime"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/sandbox"
@@ -78,7 +79,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := EnsureCompatibleHealth(health); err != nil {
+	if err := runnerauth.EnsureCompatibleHealth(health); err != nil {
 		return err
 	}
 	if err := d.ensureRunnerID(ctx); err != nil {
@@ -224,7 +225,7 @@ func (d *Daemon) startRelay(ctx context.Context) {
 	if d.relay != nil {
 		return
 	}
-	d.relay = runnersession.NewRelay(d.Channels, d.RunnerID, d.Config.SandboxAdapter, d.Config.WorkDir, d.runAssignedWork)
+	d.relay = runnersession.NewRelay(d.Channels, d.RunnerID, runnerconfig.ProcessUnsafeAdapter, d.Config.WorkDir, d.runAssignedWork)
 	go d.relay.Run(ctx)
 }
 
@@ -356,7 +357,7 @@ func (d *Daemon) ensureRunner(ctx context.Context) (string, error) {
 		EnvironmentId: lo.EmptyableToPtr(d.Config.EnvironmentID),
 		MaxConcurrent: lo.ToPtr(d.Config.MaxConcurrent),
 		Metadata: lo.ToPtr(ama.JSON{
-			"sandboxAdapter":  d.Config.SandboxAdapter,
+			"sandboxAdapter":  runnerconfig.ProcessUnsafeAdapter,
 			"machineId":       machineID,
 			"hostname":        displayName(),
 			"runnerVersion":   build.Version,
@@ -383,7 +384,7 @@ func (d *Daemon) heartbeat(ctx context.Context) error {
 		RuntimeUsage:     lo.ToPtr(runnerRuntimeUsage(d.getRuntimeUsage())),
 		RuntimeInventory: lo.ToPtr(runnerRuntimeInventory(d.currentRuntimeInventory())),
 		Metadata: lo.ToPtr(ama.JSON{
-			"sandboxAdapter":  d.Config.SandboxAdapter,
+			"sandboxAdapter":  runnerconfig.ProcessUnsafeAdapter,
 			"machineId":       machineID,
 			"hostname":        displayName(),
 			"runnerVersion":   build.Version,

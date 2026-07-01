@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,18 +24,18 @@ type DeviceAuthClient struct {
 }
 
 type DeviceLoginOptions struct {
-	Origin       string
-	Issuer       string
-	ClientID     string
-	Scopes       string
-	ConfigPath   string
-	Output       io.Writer
-	PollInterval time.Duration
+	APIServer      string
+	Issuer         string
+	ClientID       string
+	Scopes         string
+	CredentialPath string
+	Output         io.Writer
+	PollInterval   time.Duration
 }
 
 type DeviceLoginResult struct {
-	Origin     string
-	ConfigPath string
+	APIServer      string
+	CredentialPath string
 }
 
 type oidcMetadata struct {
@@ -55,6 +56,7 @@ type deviceAuthorizationResponse struct {
 type tokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
+	IDToken      string `json:"id_token"`
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
 	Scope        string `json:"scope"`
@@ -90,8 +92,15 @@ func LoginWithDeviceAuthorization(
 	if strings.TrimSpace(token.RefreshToken) == "" {
 		return DeviceLoginResult{}, fmt.Errorf("OIDC token response did not include a refresh token; runner client must allow offline_access")
 	}
-	if err := runnerconfig.SaveRunnerConfig(options.ConfigPath, runnerconfig.SavedRunnerConfig{
-		Origin:       strings.TrimRight(options.Origin, "/"),
+	identity, err := tokenIdentity(token.IDToken)
+	if err != nil {
+		return DeviceLoginResult{}, err
+	}
+	if err := runnerconfig.SaveCredentialProfile(options.CredentialPath, runnerconfig.CredentialProfile{
+		AccountID:    identity.Subject,
+		APIServer:    strings.TrimRight(options.APIServer, "/"),
+		Email:        identity.Email,
+		Name:         identity.Name,
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 		TokenType:    token.TokenType,
@@ -100,7 +109,35 @@ func LoginWithDeviceAuthorization(
 	}); err != nil {
 		return DeviceLoginResult{}, err
 	}
-	return DeviceLoginResult{Origin: strings.TrimRight(options.Origin, "/"), ConfigPath: options.ConfigPath}, nil
+	return DeviceLoginResult{APIServer: strings.TrimRight(options.APIServer, "/"), CredentialPath: options.CredentialPath}, nil
+}
+
+type tokenIdentityClaims struct {
+	Subject string `json:"sub"`
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+}
+
+func tokenIdentity(idToken string) (tokenIdentityClaims, error) {
+	parts := strings.Split(idToken, ".")
+	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+		return tokenIdentityClaims{}, fmt.Errorf("OIDC token response did not include an id token with account identity")
+	}
+	data, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return tokenIdentityClaims{}, fmt.Errorf("OIDC id token payload is invalid: %w", err)
+	}
+	var claims tokenIdentityClaims
+	if err := json.Unmarshal(data, &claims); err != nil {
+		return tokenIdentityClaims{}, fmt.Errorf("OIDC id token claims are invalid: %w", err)
+	}
+	claims.Subject = strings.TrimSpace(claims.Subject)
+	claims.Email = strings.TrimSpace(claims.Email)
+	claims.Name = strings.TrimSpace(claims.Name)
+	if claims.Subject == "" {
+		return tokenIdentityClaims{}, fmt.Errorf("OIDC id token did not include a subject")
+	}
+	return claims, nil
 }
 
 func (c DeviceAuthClient) Discover(ctx context.Context, issuer string) (oidcMetadata, error) {

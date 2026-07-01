@@ -34,25 +34,31 @@ type fakeWork struct {
 }
 
 type fakeAMAServer struct {
-	mu           sync.Mutex
-	creates      []ama.CreateRunnerRequest
-	heartbeats   []ama.PutRunnerHeartbeatRequest
-	updates      []ama.UpdateLeaseRequest
-	events       [][]ama.JSON
-	lease        *fakeWork
-	runnerID     string
-	claims       int
-	healthErr    error
-	createErr    error
-	heartbeatErr error
-	claimErr     error
-	eventErr     error
-	updateErr    error
-	hubChannel   *fakeSessionChannel
-	channelErr   error
-	opens        int
-	server       *httptest.Server
-	sdk          *ama.RunnerClient
+	mu                sync.Mutex
+	creates           []ama.CreateRunnerRequest
+	heartbeats        []ama.PutRunnerHeartbeatRequest
+	updates           []ama.UpdateLeaseRequest
+	events            [][]ama.JSON
+	lease             *fakeWork
+	runnerID          string
+	claims            int
+	healthErr         error
+	createErr         error
+	heartbeatErr      error
+	heartbeatStatus   int
+	heartbeatErrAfter int
+	heartbeatStatuses []int
+	claimErr          error
+	leaseCreateErr    error
+	leaseStatus       int
+	eventErr          error
+	updateErr         error
+	hubChannel        *fakeSessionChannel
+	channelErr        error
+	opens             int
+	health            *ama.HealthResponse
+	server            *httptest.Server
+	sdk               *ama.RunnerClient
 }
 
 func (f *fakeAMAServer) sdkClient() *ama.RunnerClient {
@@ -75,6 +81,10 @@ func (f *fakeAMAServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusInternalServerError, f.healthErr)
 			return
 		}
+		if f.health != nil {
+			writeJSON(w, http.StatusOK, f.health)
+			return
+		}
 		writeJSON(w, http.StatusOK, ama.HealthResponse{Name: "Any Managed Agents", Runtime: ama.CloudflareWorkers, Status: ama.Ok})
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runners":
 		if f.createErr != nil {
@@ -95,8 +105,23 @@ func (f *fakeAMAServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.mu.Unlock()
 		writeJSON(w, http.StatusCreated, fakeRunnerResource(runnerID, body.Name))
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/v1/runners/") && strings.HasSuffix(r.URL.Path, "/heartbeat"):
-		if f.heartbeatErr != nil {
-			writeAPIError(w, http.StatusInternalServerError, f.heartbeatErr)
+		f.mu.Lock()
+		heartbeatCount := len(f.heartbeats)
+		statuses := append([]int(nil), f.heartbeatStatuses...)
+		if len(f.heartbeatStatuses) > 0 && heartbeatCount >= f.heartbeatErrAfter {
+			f.heartbeatStatuses = f.heartbeatStatuses[1:]
+		}
+		f.mu.Unlock()
+		if len(statuses) > 0 && heartbeatCount >= f.heartbeatErrAfter {
+			writeAPIError(w, statuses[0], fmt.Errorf("heartbeat status %d", statuses[0]))
+			return
+		}
+		if f.heartbeatErr != nil && (f.heartbeatErrAfter == 0 || heartbeatCount >= f.heartbeatErrAfter) {
+			status := f.heartbeatStatus
+			if status == 0 {
+				status = http.StatusInternalServerError
+			}
+			writeAPIError(w, status, f.heartbeatErr)
 			return
 		}
 		var body ama.PutRunnerHeartbeatRequest
@@ -135,6 +160,14 @@ func (f *fakeAMAServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/leases":
 		if f.lease == nil {
 			writeAPIError(w, http.StatusInternalServerError, fmt.Errorf("no work item to lease"))
+			return
+		}
+		if f.leaseCreateErr != nil {
+			status := f.leaseStatus
+			if status == 0 {
+				status = http.StatusInternalServerError
+			}
+			writeAPIError(w, status, f.leaseCreateErr)
 			return
 		}
 		writeJSON(w, http.StatusCreated, f.lease.lease)
@@ -722,6 +755,32 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	}
 }
 
+func TestRuntimeSessionWorkspaceFailureFinalizesLease(t *testing.T) {
+	work := codexSessionStartLease("prepare workspace")
+	work.workItem.Payload["workspaceManifest"] = map[string]any{
+		"root": "/workspace",
+		"mounts": []map[string]any{{
+			"type":      "memory",
+			"memoryRef": "ama://memories/store_1",
+			"mountPath": "/outside",
+		}},
+	}
+	hubChannel := newFakeSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeAMAServer{lease: work, hubChannel: hubChannel}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = &fakeRuntimeAdapter{}
+	if err := daemon.RunOnce(context.Background()); err == nil {
+		t.Fatal("expected workspace preparation failure")
+	}
+	if len(client.updates) != 1 || leaseState(client.updates[0]) != "failed" {
+		t.Fatalf("expected failed lease, got %#v", client.updates)
+	}
+	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
+	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "mount path must be under /workspace") {
+		t.Fatalf("expected relayed runtime error for workspace failure, got %s", serializedEvents)
+	}
+}
+
 func TestCodexSessionWorkspaceRejectsTraversalBeforeCreatingDirectory(t *testing.T) {
 	workDir := t.TempDir()
 	_, err := workspace.Open(workDir, "../outside-session")
@@ -908,6 +967,27 @@ func TestStartFailsFastOnAMAServerSetupErrors(t *testing.T) {
 	}
 }
 
+func TestStartFailsOnCleanupAndIncompatibleHealth(t *testing.T) {
+	t.Run("cleanup stale", func(t *testing.T) {
+		client := &fakeAMAServer{}
+		daemon := testDaemon(client, &fakeAdapter{})
+		sessionsPath := filepath.Join(daemon.Config.WorkDir, workspace.SessionsDirName)
+		if err := os.WriteFile(sessionsPath, []byte("not a dir"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := daemon.Start(context.Background()); err == nil {
+			t.Fatal("expected stale cleanup error")
+		}
+	})
+	t.Run("incompatible health", func(t *testing.T) {
+		client := &fakeAMAServer{health: &ama.HealthResponse{Name: "Other", Runtime: ama.CloudflareWorkers, Status: ama.Ok}}
+		daemon := testDaemon(client, &fakeAdapter{})
+		if err := daemon.Start(context.Background()); err == nil {
+			t.Fatal("expected incompatible health error")
+		}
+	})
+}
+
 func TestStartDoesNotPollForWorkItems(t *testing.T) {
 	client := &fakeAMAServer{claimErr: errors.New("claim failed")}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -926,6 +1006,65 @@ func TestStartDoesNotPollForWorkItems(t *testing.T) {
 	client.mu.Unlock()
 	if claims != 0 {
 		t.Fatalf("expected runner Start not to poll work items, got %d polls", claims)
+	}
+}
+
+func TestStartExitsAfterConsecutiveHeartbeatFailures(t *testing.T) {
+	client := &fakeAMAServer{
+		heartbeatErr:      errors.New("network down"),
+		heartbeatErrAfter: 1,
+	}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.Config.HeartbeatInterval = time.Millisecond
+	daemon.Config.ShutdownGraceInterval = time.Millisecond
+	err := daemon.Start(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "runner heartbeat failed") {
+		t.Fatalf("expected consecutive heartbeat failure, got %v", err)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if len(client.heartbeats) != 1 {
+		t.Fatalf("expected only startup heartbeat to be accepted, got %#v", client.heartbeats)
+	}
+}
+
+func TestStartReRegistersWhenHeartbeatReportsRunnerGone(t *testing.T) {
+	client := &fakeAMAServer{
+		runnerID:          "runner_recovered",
+		heartbeatErrAfter: 1,
+		heartbeatStatuses: []int{http.StatusNotFound},
+	}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.Config.HeartbeatInterval = time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.Start(ctx)
+	}()
+	deadline := time.After(time.Second)
+	for {
+		client.mu.Lock()
+		creates := len(client.creates)
+		client.mu.Unlock()
+		if creates > 0 {
+			cancel()
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("runner exited before re-registering: %v", err)
+		case <-deadline:
+			t.Fatal("timed out waiting for re-registration")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation after re-registration, got %v", err)
+	}
+	if daemon.RunnerID != "runner_recovered" {
+		t.Fatalf("expected recovered runner id, got %q", daemon.RunnerID)
 	}
 }
 
@@ -977,12 +1116,158 @@ func TestRunOnceReturnsWhenNoLeaseIsAvailable(t *testing.T) {
 	}
 }
 
+func TestRunOnceCompletesAMASandboxSessionStart(t *testing.T) {
+	lease := sessionStartLease()
+	client := &fakeAMAServer{lease: lease, hubChannel: newFakeSessionChannel(ama.JSON{"type": "runner.channel.accepted"})}
+	daemon := testDaemon(client, &fakeAdapter{})
+
+	if err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("expected AMA sandbox session start success, got %v", err)
+	}
+	if len(client.updates) != 1 || leaseState(client.updates[0]) != "completed" {
+		t.Fatalf("expected completed lease update, got %#v", client.updates)
+	}
+	result := updateResult(client.updates[0])
+	if result["sessionId"] != "session_1" || result["runtime"] != "ama" || result["sandboxReady"] != true {
+		t.Fatalf("expected sandbox-ready session result, got %#v", result)
+	}
+	if len(client.events) != 1 || client.events[0][0]["type"] != "runtime.started" {
+		t.Fatalf("expected runtime.started event upload, got %#v", client.events)
+	}
+}
+
+func TestRunOnceFailsAMASandboxSessionWhenAdapterMissing(t *testing.T) {
+	lease := sessionStartLease()
+	client := &fakeAMAServer{lease: lease, hubChannel: newFakeSessionChannel(ama.JSON{"type": "runner.channel.accepted"})}
+	daemon := testDaemon(client, nil)
+
+	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "sandbox adapter") {
+		t.Fatalf("expected missing sandbox adapter error, got %v", err)
+	}
+	if len(client.updates) != 1 || leaseState(client.updates[0]) != "failed" {
+		t.Fatalf("expected failed lease update, got %#v", client.updates)
+	}
+}
+
 func TestRunOnceReturnsClaimErrors(t *testing.T) {
 	client := &fakeAMAServer{claimErr: errors.New("claim failed")}
 	daemon := testDaemon(client, &fakeAdapter{})
 	err := daemon.RunOnce(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "claim failed") {
 		t.Fatalf("expected claim error, got %v", err)
+	}
+}
+
+func TestDaemonSlotAccountingAndDefaults(t *testing.T) {
+	daemon := testDaemon(&fakeAMAServer{}, &fakeAdapter{})
+	daemon.Config.MaxConcurrent = 1
+	if daemon.activeLoad() != 0 {
+		t.Fatalf("expected no active leases, got %d", daemon.activeLoad())
+	}
+	if !daemon.tryAcquireLeaseSlot() {
+		t.Fatal("expected first lease slot acquisition to succeed")
+	}
+	if daemon.activeLoad() != 1 {
+		t.Fatalf("expected one active lease, got %d", daemon.activeLoad())
+	}
+	if daemon.tryAcquireLeaseSlot() {
+		t.Fatal("expected second lease slot acquisition to fail at capacity")
+	}
+	daemon.releaseLeaseSlot()
+	daemon.releaseLeaseSlot()
+	if daemon.activeLoad() != 0 {
+		t.Fatalf("expected release to floor at zero, got %d", daemon.activeLoad())
+	}
+
+	if daemon.identityStore().Config.WorkDir != daemon.Config.WorkDir {
+		t.Fatal("expected default identity store to use daemon config")
+	}
+	if daemon.runtimeInventory() == nil {
+		t.Fatal("expected default runtime inventory")
+	}
+}
+
+func TestRecoverRunnerIdentityClearsStoredRunnerAndRegistersFresh(t *testing.T) {
+	client := &fakeAMAServer{runnerID: "runner_fresh"}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RunnerID = "runner_stale"
+	store := daemon.identityStore()
+	if err := store.StoreRunnerID("runner_stale"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := daemon.recoverRunnerIdentity(context.Background()); err != nil {
+		t.Fatalf("expected recovery success, got %v", err)
+	}
+	if daemon.RunnerID != "runner_fresh" {
+		t.Fatalf("expected fresh runner id, got %q", daemon.RunnerID)
+	}
+	loaded, err := store.LoadRunnerID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded != "runner_fresh" {
+		t.Fatalf("expected stored runner id refreshed, got %q", loaded)
+	}
+}
+
+func TestHeartbeatOrRecoverReRegistersWhenRunnerIsGone(t *testing.T) {
+	client := &fakeAMAServer{
+		heartbeatErr:    errors.New("runner gone"),
+		heartbeatStatus: http.StatusNotFound,
+		runnerID:        "runner_recovered",
+	}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RunnerID = "runner_stale"
+	err := daemon.heartbeatOrRecover(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "runner gone") {
+		t.Fatalf("expected second heartbeat to still report configured gone error, got %v", err)
+	}
+	if daemon.RunnerID != "runner_recovered" {
+		t.Fatalf("expected runner id recovered before retry, got %q", daemon.RunnerID)
+	}
+	if len(client.creates) != 1 {
+		t.Fatalf("expected one re-registration, got %#v", client.creates)
+	}
+}
+
+func TestNewDaemonWiresSDKClientAndAdapters(t *testing.T) {
+	config := runnerconfig.Config{
+		APIServer:             "https://ama.example.test",
+		Token:                 "token",
+		TokenExplicit:         true,
+		WorkDir:               t.TempDir(),
+		StateDir:              t.TempDir(),
+		CommandTimeout:        time.Second,
+		ShutdownGraceInterval: time.Millisecond,
+	}
+	daemon, err := New(config, version.Info{Name: "ama-runner", Version: "test"})
+	if err != nil {
+		t.Fatalf("expected daemon construction success, got %v", err)
+	}
+	if daemon.Client == nil || daemon.Channels == nil || daemon.Adapter == nil {
+		t.Fatalf("expected daemon dependencies wired, got %#v", daemon)
+	}
+	if daemon.Build.Version != "test" {
+		t.Fatalf("expected build info retained, got %#v", daemon.Build)
+	}
+}
+
+func TestRunnerRuntimeUsageMapsWindows(t *testing.T) {
+	usage := runnerRuntimeUsage([]runtime.RuntimeUsage{{
+		Runtime: "claude-code",
+		Windows: []runtime.UsageWindow{{
+			Label:       "5h",
+			Utilization: 0.42,
+			ResetsAt:    "2026-01-02T03:04:05Z",
+		}},
+	}})
+	if len(usage) != 1 || usage[0].Runtime != "claude-code" || len(usage[0].Windows) != 1 {
+		t.Fatalf("unexpected usage mapping: %#v", usage)
+	}
+	window := usage[0].Windows[0]
+	if window.Label != "5h" || window.Utilization != 0.42 || window.ResetsAt != "2026-01-02T03:04:05Z" {
+		t.Fatalf("unexpected usage window mapping: %#v", window)
 	}
 }
 
@@ -1080,6 +1365,272 @@ func TestContextCancellationMarksLeaseCancelled(t *testing.T) {
 	}
 }
 
+func TestDaemonStartReturnsWorkDirError(t *testing.T) {
+	client := &fakeAMAServer{}
+	daemon := testDaemon(client, &fakeAdapter{})
+	workDirFile := filepath.Join(t.TempDir(), "work-file")
+	if err := os.WriteFile(workDirFile, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	daemon.Config.WorkDir = workDirFile
+	if err := daemon.Start(context.Background()); err == nil {
+		t.Fatal("expected start to fail when work dir is a file")
+	}
+}
+
+func TestDaemonRuntimeInventoryDefaultsAndUsageRefresh(t *testing.T) {
+	calls := 0
+	daemon := Daemon{Config: runnerconfig.Config{}}
+	daemon.RuntimeInventory = &runtime.Inventory{
+		Load: func(_ context.Context, includeUsage bool) (*runtime.InventorySnapshot, error) {
+			calls++
+			if !includeUsage {
+				t.Fatal("expected usage refresh")
+			}
+			return &runtime.InventorySnapshot{Runtimes: []runtime.InventoryRuntime{{
+				Runtime: "codex",
+				UsageWindows: []runtime.UsageWindow{{
+					Label:       "1h",
+					Utilization: 10,
+				}},
+			}}}, nil
+		},
+	}
+	daemon.refreshRuntimeUsage(context.Background())
+	if calls != 1 {
+		t.Fatalf("expected usage refresh call, got %d", calls)
+	}
+	if usage := daemon.getRuntimeUsage(); len(usage) != 1 || usage[0].Runtime != "codex" {
+		t.Fatalf("unexpected runtime usage %#v", usage)
+	}
+
+	defaulted := Daemon{Config: runnerconfig.Config{}}
+	if defaulted.runtimeInventory() == nil || defaulted.RuntimeInventory == nil {
+		t.Fatal("expected runtime inventory to be initialized")
+	}
+}
+
+func TestDaemonIdentityAndRelayHelpers(t *testing.T) {
+	client := &fakeAMAServer{}
+	daemon := testDaemon(client, &fakeAdapter{})
+	store := IdentityStore{Config: daemon.Config}
+	daemon.IdentityStore = &store
+	if got := daemon.identityStore().Config.WorkDir; got != daemon.Config.WorkDir {
+		t.Fatalf("expected injected identity store, got %#v", got)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	daemon.startRelay(ctx)
+	first := daemon.relay
+	daemon.startRelay(ctx)
+	if first == nil || daemon.relay != first {
+		t.Fatal("expected startRelay to be idempotent")
+	}
+}
+
+func TestDaemonIdentityErrorPaths(t *testing.T) {
+	t.Run("stored runner id", func(t *testing.T) {
+		client := &fakeAMAServer{}
+		daemon := testDaemon(client, &fakeAdapter{})
+		store := daemon.identityStore()
+		if err := store.StoreRunnerID("runner_stored"); err != nil {
+			t.Fatal(err)
+		}
+		daemon.RunnerID = ""
+		if err := daemon.ensureRunnerID(context.Background()); err != nil {
+			t.Fatalf("expected stored runner id, got %v", err)
+		}
+		if daemon.RunnerID != "runner_stored" || len(client.creates) != 0 {
+			t.Fatalf("unexpected runner recovery runnerID=%q creates=%d", daemon.RunnerID, len(client.creates))
+		}
+	})
+	t.Run("store runner id failure", func(t *testing.T) {
+		client := &fakeAMAServer{runnerID: "runner_new"}
+		daemon := testDaemon(client, &fakeAdapter{})
+		stateFile := filepath.Join(t.TempDir(), "state-file")
+		if err := os.WriteFile(stateFile, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		daemon.Config.StateDir = stateFile
+		daemon.RunnerID = ""
+		if err := daemon.ensureRunnerID(context.Background()); err == nil {
+			t.Fatal("expected store runner id failure")
+		}
+	})
+	t.Run("recover clear failure", func(t *testing.T) {
+		daemon := testDaemon(&fakeAMAServer{}, &fakeAdapter{})
+		stateFile := filepath.Join(t.TempDir(), "state-file")
+		if err := os.WriteFile(stateFile, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		daemon.Config.StateDir = stateFile
+		if err := daemon.recoverRunnerIdentity(context.Background()); err == nil {
+			t.Fatal("expected recover clear failure")
+		}
+	})
+	t.Run("heartbeat machine id failure", func(t *testing.T) {
+		daemon := testDaemon(&fakeAMAServer{}, &fakeAdapter{})
+		stateFile := filepath.Join(t.TempDir(), "state-file")
+		if err := os.WriteFile(stateFile, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		daemon.Config.StateDir = stateFile
+		if err := daemon.heartbeat(context.Background()); err == nil {
+			t.Fatal("expected heartbeat identity failure")
+		}
+	})
+}
+
+func TestRunOnceSkipsClaimWhenAtCapacity(t *testing.T) {
+	client := &fakeAMAServer{lease: approvedLease()}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.Config.MaxConcurrent = 0
+	if err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("expected capacity skip, got %v", err)
+	}
+	if client.claims != 0 {
+		t.Fatalf("expected no claim at capacity, got %d", client.claims)
+	}
+}
+
+func TestRunOnceFailsBeforeClaimOnIdentityOrHeartbeatError(t *testing.T) {
+	t.Run("identity", func(t *testing.T) {
+		client := &fakeAMAServer{lease: approvedLease()}
+		daemon := testDaemon(client, &fakeAdapter{})
+		stateFile := filepath.Join(t.TempDir(), "state-file")
+		if err := os.WriteFile(stateFile, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		daemon.Config.StateDir = stateFile
+		daemon.RunnerID = ""
+		if err := daemon.RunOnce(context.Background()); err == nil {
+			t.Fatal("expected identity error")
+		}
+		if client.claims != 0 {
+			t.Fatalf("expected no claims after identity error, got %d", client.claims)
+		}
+	})
+	t.Run("heartbeat", func(t *testing.T) {
+		client := &fakeAMAServer{lease: approvedLease(), heartbeatErr: errors.New("heartbeat down")}
+		daemon := testDaemon(client, &fakeAdapter{})
+		if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "heartbeat down") {
+			t.Fatalf("expected heartbeat error, got %v", err)
+		}
+		if client.claims != 0 {
+			t.Fatalf("expected no claims after heartbeat error, got %d", client.claims)
+		}
+	})
+}
+
+func TestRunAssignedWorkSkipsWhenAtCapacity(t *testing.T) {
+	client := &fakeAMAServer{lease: approvedLease()}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.activeLeases = daemon.Config.MaxConcurrent
+	daemon.runAssignedWork(context.Background(), client.lease.lease, client.lease.workItem)
+	time.Sleep(5 * time.Millisecond)
+	if len(client.updates) != 0 {
+		t.Fatalf("expected no lease updates when at capacity, got %#v", client.updates)
+	}
+}
+
+func TestClaimLeaseHandlesRaceAndCreateErrors(t *testing.T) {
+	t.Run("race skips candidate", func(t *testing.T) {
+		client := &fakeAMAServer{
+			lease:          approvedLease(),
+			leaseCreateErr: errors.New("already claimed"),
+			leaseStatus:    http.StatusConflict,
+		}
+		daemon := testDaemon(client, &fakeAdapter{})
+		if err := daemon.RunOnce(context.Background()); err != nil {
+			t.Fatalf("expected claim race to be skipped, got %v", err)
+		}
+		if len(client.updates) != 0 {
+			t.Fatalf("expected no updates after race skip, got %#v", client.updates)
+		}
+	})
+	t.Run("create error fails", func(t *testing.T) {
+		client := &fakeAMAServer{lease: approvedLease(), leaseCreateErr: errors.New("database down")}
+		daemon := testDaemon(client, &fakeAdapter{})
+		if err := daemon.RunOnce(context.Background()); err == nil {
+			t.Fatal("expected lease create error")
+		}
+	})
+}
+
+func TestFinalizeRuntimeSessionBranches(t *testing.T) {
+	t.Run("successful output with warning completes", func(t *testing.T) {
+		client := &fakeAMAServer{lease: approvedLease()}
+		daemon := testDaemon(client, &fakeAdapter{})
+		worker := daemon.leaseWorker()
+		err := worker.finalizeRuntimeSession(
+			context.Background(),
+			context.Background(),
+			client.lease.lease,
+			nil,
+			runtime.Result{Output: ama.JSON{"exitCode": 0}, Err: errors.New("late warning")},
+			func(ama.JSON) {},
+		)
+		if err != nil {
+			t.Fatalf("expected successful warning completion, got %v", err)
+		}
+		if len(client.updates) != 1 || leaseState(client.updates[0]) != "completed" {
+			t.Fatalf("expected completed lease, got %#v", client.updates)
+		}
+		if updateResult(client.updates[0])["completionWarning"] == nil {
+			t.Fatalf("expected completion warning in result, got %#v", updateResult(client.updates[0]))
+		}
+	})
+	t.Run("timeout fails and writes runtime error", func(t *testing.T) {
+		client := &fakeAMAServer{lease: approvedLease()}
+		daemon := testDaemon(client, &fakeAdapter{})
+		worker := daemon.leaseWorker()
+		var runtimeError ama.JSON
+		err := worker.finalizeRuntimeSession(
+			context.Background(),
+			context.Background(),
+			client.lease.lease,
+			nil,
+			runtime.Result{Output: ama.JSON{"exitCode": 1}, Err: errors.New("deadline"), TimedOut: true},
+			func(payload ama.JSON) { runtimeError = payload },
+		)
+		if err == nil || !strings.Contains(err.Error(), "max duration") {
+			t.Fatalf("expected timeout error, got %v", err)
+		}
+		if runtimeError["code"] != "session_timeout" {
+			t.Fatalf("expected timeout runtime error, got %#v", runtimeError)
+		}
+		if len(client.updates) != 1 || leaseState(client.updates[0]) != "failed" {
+			t.Fatalf("expected failed lease, got %#v", client.updates)
+		}
+	})
+	t.Run("request cancellation interrupts", func(t *testing.T) {
+		client := &fakeAMAServer{lease: approvedLease()}
+		daemon := testDaemon(client, &fakeAdapter{})
+		worker := daemon.leaseWorker()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		tokens := &resumeTokenBox{}
+		tokens.Set("resume_1")
+		err := worker.finalizeRuntimeSession(
+			context.Background(),
+			ctx,
+			client.lease.lease,
+			tokens,
+			runtime.Result{Err: context.Canceled},
+			func(ama.JSON) {},
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected cancellation, got %v", err)
+		}
+		if len(client.updates) != 1 || leaseState(client.updates[0]) != "interrupted" {
+			t.Fatalf("expected interrupted lease, got %#v", client.updates)
+		}
+		if client.updates[0].ResumeToken == nil || *client.updates[0].ResumeToken != "resume_1" {
+			t.Fatalf("expected resume token on interrupt, got %#v", client.updates[0])
+		}
+	})
+}
+
 func testDaemon(client *fakeAMAServer, adapter sandbox.SandboxAdapter) Daemon {
 	workDir, err := os.MkdirTemp("", "ama-runner-test-*")
 	if err != nil {
@@ -1087,7 +1638,6 @@ func testDaemon(client *fakeAMAServer, adapter sandbox.SandboxAdapter) Daemon {
 	}
 	return Daemon{
 		Config: runnerconfig.Config{
-			SandboxAdapter:        runnerconfig.ProcessUnsafeAdapter,
 			StateDir:              workDir,
 			WorkDir:               workDir,
 			MaxConcurrent:         1,

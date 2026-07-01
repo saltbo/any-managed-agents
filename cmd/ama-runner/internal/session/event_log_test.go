@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
@@ -69,5 +70,27 @@ func TestReadEventLogReturnsNilForMissingFile(t *testing.T) {
 	}
 	if events != nil {
 		t.Fatalf("missing log file must return nil events, got %v", events)
+	}
+}
+
+func TestEventLogReportsInvalidAndUnwritableLogs(t *testing.T) {
+	dir := t.TempDir()
+	logPath := EventLogPath(dir)
+	if err := os.WriteFile(logPath, []byte("not json\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenEventLog(dir, "session_1"); err == nil || !strings.Contains(err.Error(), "line 1") {
+		t.Fatalf("expected invalid log error, got %v", err)
+	}
+
+	if _, err := OpenEventLog(filepath.Join(logPath, "child"), "session_1"); err == nil {
+		t.Fatal("expected open under file path to fail")
+	}
+	store := &EventLog{path: filepath.Join(logPath, "child.jsonl"), sessionID: "session_1"}
+	if _, err := store.Append(ama.JSON{"type": "message.completed"}); err == nil {
+		t.Fatal("expected append under file path to fail")
+	}
+	if _, err := (&EventLog{path: filepath.Join(t.TempDir(), "events.jsonl"), sessionID: "session_1"}).Append(ama.JSON{"bad": func() {}}); err == nil {
+		t.Fatal("expected append marshal error")
 	}
 }

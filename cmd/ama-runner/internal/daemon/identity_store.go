@@ -28,7 +28,7 @@ type identityState struct {
 
 type identityBinding struct {
 	Key         string `json:"key"`
-	Origin      string `json:"apiServer"`
+	APIServer   string `json:"apiServer"`
 	Project     string `json:"projectId,omitempty"`
 	Environment string `json:"environmentId,omitempty"`
 	MachineID   string `json:"machineId"`
@@ -89,7 +89,7 @@ func (s IdentityStore) StoreRunnerID(runnerID string) error {
 	state.MachineID = machineID
 	binding := identityBinding{
 		Key:         key,
-		Origin:      strings.TrimRight(s.Config.Origin, "/"),
+		APIServer:   strings.TrimRight(s.Config.APIServer, "/"),
 		Project:     s.Config.ProjectID,
 		Environment: s.Config.EnvironmentID,
 		MachineID:   machineID,
@@ -135,7 +135,7 @@ func (s IdentityStore) path() string {
 
 func (s IdentityStore) identityKey(machineID string) string {
 	parts := []string{
-		strings.TrimRight(s.Config.Origin, "/"),
+		strings.TrimRight(s.Config.APIServer, "/"),
 		s.Config.ProjectID,
 		s.Config.EnvironmentID,
 		machineID,

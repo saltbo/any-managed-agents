@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	runnercmd "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/cmd"
+	runnercmd "github.com/saltbo/any-managed-agents/cmd/ama-runner/cmd"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/pkg/version"
 )
 

@@ -111,6 +111,71 @@ func TestProcessAdapterExecutesSandboxExecInWorkdir(t *testing.T) {
 	}
 }
 
+func TestProcessAdapterValidatesToolsAndInputs(t *testing.T) {
+	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	workDir := t.TempDir()
+	cases := []ToolRequest{
+		{ToolName: "sandbox.unknown", WorkDir: workDir},
+		{ToolName: "sandbox.exec", Input: map[string]any{"command": " "}, WorkDir: workDir},
+		{ToolName: "sandbox.read", Input: map[string]any{}, WorkDir: workDir},
+		{ToolName: "sandbox.write", Input: map[string]any{"path": " "}, WorkDir: workDir},
+		{ToolName: "sandbox.write", Input: map[string]any{"path": "file.txt"}, WorkDir: workDir},
+	}
+	for _, request := range cases {
+		if _, err := adapter.Execute(context.Background(), request); err == nil {
+			t.Fatalf("expected %s with input %#v to fail", request.ToolName, request.Input)
+		}
+	}
+}
+
+func TestProcessAdapterReadAndWrite(t *testing.T) {
+	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	workDir := t.TempDir()
+	if _, err := adapter.Execute(context.Background(), ToolRequest{
+		ToolName: "sandbox.write",
+		Input:    map[string]any{"path": "notes/plan.md", "content": "ship it"},
+		WorkDir:  workDir,
+	}); err != nil {
+		t.Fatalf("write tool failed: %v", err)
+	}
+	result, err := adapter.Execute(context.Background(), ToolRequest{
+		ToolName: "sandbox.read",
+		Input:    map[string]any{"path": "/workspace/notes/plan.md"},
+		WorkDir:  workDir,
+	})
+	if err != nil {
+		t.Fatalf("read tool failed: %v", err)
+	}
+	if result.Output["content"] != "ship it" {
+		t.Fatalf("unexpected read result %#v", result.Output)
+	}
+}
+
+func TestProcessAdapterExecReportsFailureAndTimeout(t *testing.T) {
+	workDir := t.TempDir()
+	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	result, err := adapter.Execute(context.Background(), ToolRequest{
+		ToolName: "sandbox.exec",
+		Input:    map[string]any{"command": "printf err >&2; exit 7"},
+		WorkDir:  workDir,
+	})
+	if err == nil || !strings.Contains(err.Error(), "code 7") {
+		t.Fatalf("expected exit error, got %v", err)
+	}
+	if result.Output["exitCode"] != 7 || result.Output["stderr"] != "err" {
+		t.Fatalf("unexpected failed output %#v", result.Output)
+	}
+
+	timeoutAdapter := ProcessAdapter{CommandTimeout: time.Millisecond, ShutdownGraceInterval: time.Millisecond}
+	if _, err := timeoutAdapter.Execute(context.Background(), ToolRequest{
+		ToolName: "sandbox.exec",
+		Input:    map[string]any{"command": "sleep 1"},
+		WorkDir:  workDir,
+	}); err == nil {
+		t.Fatal("expected command timeout")
+	}
+}
+
 func TestProcessAdapterDoesNotExposeDaemonAMAEnvironment(t *testing.T) {
 	operatorHome := t.TempDir()
 	t.Setenv("AMA_TOKEN", "secret-token")

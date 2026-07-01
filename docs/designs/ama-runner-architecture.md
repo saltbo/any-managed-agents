@@ -8,8 +8,8 @@ reports lease state through the Go AMA SDK.
 ## Principles
 
 - Keep packages by capability, not by layer names.
-- Keep CLI bootstrap, login/version commands, token refresh, and channel dialing
-  in `internal/cmd`.
+- Keep CLI command assembly in `cmd/ama-runner/cmd`; keep config loading and
+  credential helpers in `internal/cli` and `internal/config`.
 - Keep the daemon package responsible for process lifecycle, lease orchestration,
   and relay wiring.
 - Keep reusable runner build metadata in `pkg/version`.
@@ -26,16 +26,14 @@ reports lease state through the Go AMA SDK.
 
 ## Final Object Model
 
-### `cmd.Application`
+### `cmd.Root`
 
-CLI/application bootstrap:
+CLI command bootstrap:
 
-- loads config
-- builds auth transport
-- builds `ama.Client`
-- creates the daemon
-- handles login/version commands
-- opens the per-runner relay channel transport
+- declares top-level Cobra commands
+- wires Viper-backed daemon configuration
+- handles auth/config/version command surfaces
+- starts the daemon from the root command
 
 ### `version.Info`
 

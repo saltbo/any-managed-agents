@@ -26,10 +26,10 @@ All AMA API calls go through `sdk/go/ama`. The daemon uses `ama.NewRunner` for r
 Authenticate the runner with FlareAuth/OIDC device login before starting the daemon:
 
 ```bash
-ama-runner login --origin "https://ama.example.com"
+ama-runner auth login --api-server "https://ama.example.com"
 ```
 
-The command discovers the AMA control plane OIDC metadata from `/api/v1/health`, starts the provider device authorization flow for the registered runner client, prints the verification URL/code, and stores the returned token material in the local runner config file. It never prints access or refresh tokens.
+The command discovers the AMA control plane OIDC metadata from `/api/v1/health`, starts the provider device authorization flow for the registered runner client, prints the verification URL/code, and stores the returned token material in the local runner credential file. It never prints access or refresh tokens.
 
 By default, the config file is:
 
@@ -37,17 +37,22 @@ By default, the config file is:
 - `$XDG_CONFIG_HOME/ama-runner/config.json`
 - `$HOME/.config/ama-runner/config.json`
 
-The config directory is created with `0700` permissions and the token file is written with `0600` permissions where the host filesystem supports POSIX modes. Treat this file as local operator credential material.
+By default, the credential file is:
+
+- `$AMA_RUNNER_CREDENTIALS` when set
+- `$XDG_CONFIG_HOME/ama-runner/credentials.json`
+- `$HOME/.config/ama-runner/credentials.json`
+
+The config directory is created with `0700` permissions and the credential file is written with `0600` permissions where the host filesystem supports POSIX modes. Treat the credential file as local operator credential material.
 
 Required daemon configuration can come from environment variables, flags, or a JSON config file.
 
 Environment variables:
 
 ```bash
-export AMA_ORIGIN="https://ama.example.com"
-export AMA_RUNNER_NAME="mac-mini-runner-1"
-export AMA_RUNNER_CAPABILITIES="sandbox.exec,sandbox.read,sandbox.write"
-export AMA_RUNNER_SANDBOX_ADAPTER="process-unsafe"
+export AMA_API_SERVER="https://ama.example.com"
+export AMA_PROJECT_ID="project_..."
+export AMA_ENVIRONMENT_ID="env_..."
 export AMA_RUNNER_ALLOW_UNSAFE_PROCESS="true"
 export AMA_RUNNER_WORKDIR="/var/lib/ama-runner/workspace"
 ```
@@ -56,12 +61,11 @@ Useful flags:
 
 ```bash
 ama-runner \
-  --origin "$AMA_ORIGIN" \
-  --runner-name mac-mini-runner-1 \
-  --capabilities sandbox.exec,sandbox.read,sandbox.write \
-  --sandbox-adapter process-unsafe \
+  --api-server "$AMA_API_SERVER" \
+  --project-id "$AMA_PROJECT_ID" \
+  --environment-id "$AMA_ENVIRONMENT_ID" \
   --allow-unsafe-process \
-  --workdir /var/lib/ama-runner/workspace
+  --work-dir /var/lib/ama-runner/workspace
 ```
 
 Timing defaults:
@@ -70,11 +74,11 @@ Timing defaults:
 - Lease renewal interval: `20s`
 - Heartbeat interval: `20s`
 - Poll interval when no work is available: `5s`
-- Max concurrent leases: `1`
+- Max concurrent leases: `5`
 
-The daemon loads the saved device-login access token at startup when `--token` and `AMA_TOKEN` are not provided. `--token` and `AMA_TOKEN` remain available for tests and temporary compatibility, and they take precedence over the saved token. Operators should prefer `ama-runner login` for normal self-hosted runners.
+The daemon loads the saved device-login access token at startup when `AMA_TOKEN` is not provided. `AMA_TOKEN` remains available for tests and temporary process-local overrides, and it takes precedence over the saved token. Operators should prefer `ama-runner auth login` for normal self-hosted runners.
 
-The daemon fails fast when origin, token, runner id/name, capabilities, work directory, adapter selection, or timing values are invalid. `--runner-id` can be used for an existing registered runner. Without a runner id, the daemon registers a runner using `--runner-name`. Runner registration stores only OIDC subject/client binding metadata, safe capabilities, heartbeat/load state, and secret references; raw token material is not stored in D1 or returned by runner APIs. Runner device-login tokens are accepted only for runner registration and runtime runner APIs, not for general control-plane resources such as environments, agents, sessions, providers, or vaults.
+The daemon fails fast when the API server, token, environment binding, work directory, unsafe adapter acknowledgement, or timing values are invalid. Runner registration stores only OIDC subject/client binding metadata, safe capabilities, environment binding metadata, heartbeat/load state, and secret references; raw token material is not stored in D1 or returned by runner APIs. Runner device-login tokens are accepted only for runner registration and runtime runner APIs, not for general control-plane resources such as environments, agents, sessions, providers, or vaults.
 
 ## Local Executor Boundary
 

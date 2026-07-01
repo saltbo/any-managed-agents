@@ -33,6 +33,29 @@ func TestWorkspaceSafety(t *testing.T) {
 	if _, err := Open(fileRoot, "session_1"); err == nil {
 		t.Fatal("expected workspace root file error")
 	}
+	for _, sessionID := range []string{"", ".", "..", "nested/session"} {
+		if _, err := Open(workDir, sessionID); err == nil {
+			t.Fatalf("expected invalid session id %q to fail", sessionID)
+		}
+	}
+	sessionsFileRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sessionsFileRoot, SessionsDirName), []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(sessionsFileRoot, "session_1"); err == nil {
+		t.Fatal("expected sessions path file conflict to fail")
+	}
+	workspaceFileRoot := t.TempDir()
+	sessionDir := filepath.Join(workspaceFileRoot, SessionsDirName, "session_1")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, WorkspaceDirName), []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(workspaceFileRoot, "session_1"); err == nil {
+		t.Fatal("expected workspace path file conflict to fail")
+	}
 }
 
 func TestPrepareWorkspaceMountsGitRepositoryWorktree(t *testing.T) {
@@ -152,6 +175,102 @@ func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 	}
 }
 
+func TestPrepareWorkspaceMountsSecretFiles(t *testing.T) {
+	workspace, err := Prepare(context.Background(), PrepareRequest{
+		WorkDir:   t.TempDir(),
+		SessionID: "session_1",
+		Manifest: workspaceManifest(protocol.WorkspaceMount{
+			Type:      "secret",
+			Name:      "vault",
+			MountPath: "/workspace/.ama/secrets/vault",
+			ReadOnly:  true,
+			Files: []protocol.WorkspaceFile{{
+				Path:    "TOKEN",
+				Content: "secret-value",
+			}},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("expected secret mount success, got %v", err)
+	}
+	t.Cleanup(func() {
+		_ = filepath.WalkDir(workspace.Root, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if entry.IsDir() {
+				_ = os.Chmod(path, 0o700)
+			} else {
+				_ = os.Chmod(path, 0o600)
+			}
+			return nil
+		})
+	})
+	secretPath := filepath.Join(workspace.Root, ".ama", "secrets", "vault", "TOKEN")
+	data, err := os.ReadFile(secretPath)
+	if err != nil || string(data) != "secret-value" {
+		t.Fatalf("expected secret content, got %q err=%v", data, err)
+	}
+	info, err := os.Stat(secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o400 {
+		t.Fatalf("expected read-only secret file, got %v", info.Mode().Perm())
+	}
+	state, err := os.ReadFile(filepath.Join(workspace.Dir, SessionStateFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(state), "secret-value") || !strings.Contains(string(state), `"type": "secret"`) {
+		t.Fatalf("expected secret state without content, got %s", string(state))
+	}
+}
+
+func TestPrepareWorkspaceReturnsMountErrors(t *testing.T) {
+	workDir := t.TempDir()
+	cases := []struct {
+		name     string
+		manifest protocol.WorkspaceManifest
+	}{
+		{
+			name: "memory",
+			manifest: workspaceManifest(protocol.WorkspaceMount{
+				Type:      "memory",
+				MemoryRef: "ama://memories/store_1",
+				MountPath: "/outside",
+			}),
+		},
+		{
+			name: "secret",
+			manifest: workspaceManifest(protocol.WorkspaceMount{
+				Type:      "secret",
+				MountPath: "/workspace/.ama/secrets",
+				Files:     []protocol.WorkspaceFile{{Path: "../TOKEN", Content: "bad"}},
+			}),
+		},
+		{
+			name: "git",
+			manifest: workspaceManifest(protocol.WorkspaceMount{
+				Type: "git_repository",
+				URL:  "bad-url",
+			}),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Prepare(context.Background(), PrepareRequest{
+				WorkDir:   workDir,
+				SessionID: "session_" + tc.name,
+				Manifest:  tc.manifest,
+			})
+			if err == nil {
+				t.Fatal("expected prepare error")
+			}
+		})
+	}
+}
+
 func TestWorkspaceReadsWritableMemoryStores(t *testing.T) {
 	workDir := t.TempDir()
 	workspace, err := Prepare(context.Background(), PrepareRequest{
@@ -179,6 +298,114 @@ func TestWorkspaceReadsWritableMemoryStores(t *testing.T) {
 	}
 	if got := stores[0].Memories[0]; got.Path != "notes/plan.md" || got.Content != "updated plan\n" {
 		t.Fatalf("expected updated memory content, got %#v", got)
+	}
+}
+
+func TestWorkspaceReadWritableMemoryStoresNilAndReadOnly(t *testing.T) {
+	if _, err := (*Workspace)(nil).ReadWritableMemoryStores(); err == nil || !strings.Contains(err.Error(), "workspace is not prepared") {
+		t.Fatalf("expected nil workspace error, got %v", err)
+	}
+	prepared, err := Prepare(context.Background(), PrepareRequest{
+		WorkDir:   t.TempDir(),
+		SessionID: "session_1",
+		Manifest: workspaceManifest(memoryMount("read_only", "", protocol.WorkspaceFile{
+			Path:    "notes.md",
+			Content: "readonly",
+		})),
+	})
+	if err != nil {
+		t.Fatalf("prepare read-only memory: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = prepared.Cleanup(context.Background())
+	})
+	stores, err := prepared.ReadWritableMemoryStores()
+	if err != nil {
+		t.Fatalf("read writable stores: %v", err)
+	}
+	if len(stores) != 0 {
+		t.Fatalf("expected read-only memory store to be skipped, got %#v", stores)
+	}
+}
+
+func TestWorkspaceCleanupNilAndSkipMissingGitCache(t *testing.T) {
+	if err := (*Workspace)(nil).Cleanup(context.Background()); err != nil {
+		t.Fatalf("nil cleanup should succeed: %v", err)
+	}
+	root := t.TempDir()
+	workspace := &Workspace{
+		Root: root,
+		worktrees: []preparedWorktree{{
+			cacheDir: filepath.Join(t.TempDir(), "missing-cache"),
+			path:     filepath.Join(root, "repo"),
+		}},
+	}
+	if err := workspace.Cleanup(context.Background()); err != nil {
+		t.Fatalf("cleanup should ignore missing git cache: %v", err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("expected root removal, got %v", err)
+	}
+}
+
+func TestEnsureUnderWorkspaceRejectsOutsidePaths(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureUnderWorkspace(root, filepath.Dir(root)); err == nil {
+		t.Fatal("expected outside path error")
+	}
+}
+
+func TestWorkspacePrepareUsesDefaultRootAndRecoversMountedState(t *testing.T) {
+	workDir := t.TempDir()
+	prepared, err := Prepare(context.Background(), PrepareRequest{
+		WorkDir:   workDir,
+		SessionID: "session_1",
+		Manifest: protocol.WorkspaceManifest{Mounts: []protocol.WorkspaceMount{
+			memoryMount("read_write", "", protocol.WorkspaceFile{Path: "notes.md", Content: "hello"}),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("prepare workspace: %v", err)
+	}
+	if prepared.Root == "" || !strings.HasSuffix(prepared.Root, filepath.Join("session_1", "workspace")) {
+		t.Fatalf("unexpected prepared root %q", prepared.Root)
+	}
+	recovered := staleWorkspace(workDir, prepared.Dir)
+	if len(recovered.memoryStores) != 1 || recovered.memoryStores[0].memoryRef != "ama://memories/memstore_1" {
+		t.Fatalf("expected stale workspace to restore memory store, got %#v", recovered.memoryStores)
+	}
+}
+
+func TestStaleWorkspaceIgnoresMissingOrInvalidState(t *testing.T) {
+	workDir := t.TempDir()
+	sessionDir := filepath.Join(workDir, SessionsDirName, "session_1")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := staleWorkspace(workDir, sessionDir); len(got.memoryStores) != 0 || len(got.worktrees) != 0 {
+		t.Fatalf("expected no restored mounts without state, got %#v", got)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, SessionStateFileName), []byte(`not json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := staleWorkspace(workDir, sessionDir); len(got.memoryStores) != 0 || len(got.worktrees) != 0 {
+		t.Fatalf("expected invalid state to be ignored, got %#v", got)
+	}
+}
+
+func TestAddMountedVolumesSkipsInvalidEntries(t *testing.T) {
+	workDir := t.TempDir()
+	workspace := &Workspace{}
+	addMountedVolumes(workDir, workspace, []mountedVolume{
+		{Type: "memory", MemoryRef: "ama://memories/store_1", Access: "read_write"},
+		{Type: "git_repository", URL: "bad-url", LocalPath: "/tmp/repo"},
+		{Type: "memory", MemoryRef: "ama://memories/store_2", Access: "read_only", LocalPath: "/tmp/memory"},
+	})
+	if len(workspace.memoryStores) != 1 || workspace.memoryStores[0].memoryRef != "ama://memories/store_2" {
+		t.Fatalf("expected only valid local path memory mount, got %#v", workspace.memoryStores)
+	}
+	if len(workspace.worktrees) != 0 {
+		t.Fatalf("expected invalid git mount skipped, got %#v", workspace.worktrees)
 	}
 }
 
@@ -214,6 +441,56 @@ func TestPrepareWorkspaceRejectsUnsafeMemoryPath(t *testing.T) {
 	}
 }
 
+func TestWorkspacePathValidationHelpers(t *testing.T) {
+	root := t.TempDir()
+	if _, err := localMountPath(root, "/workspace/repo"); err != nil {
+		t.Fatalf("expected workspace path, got %v", err)
+	}
+	for _, path := range []string{"", "/workspace", "/etc/passwd", "../escape"} {
+		if _, err := localMountPath(root, path); err == nil {
+			t.Fatalf("expected unsafe mount path error for %q", path)
+		}
+	}
+	if _, err := localMountPathForWorkspacePath(root, "/workspace/secrets"); err != nil {
+		t.Fatalf("expected secret path, got %v", err)
+	}
+	for _, path := range []string{"", "/workspace", "/etc/passwd", "../escape"} {
+		if _, err := localMountPathForWorkspacePath(root, path); err == nil {
+			t.Fatalf("expected unsafe secret path error for %q", path)
+		}
+	}
+	for _, path := range []string{"", "/abs", "../escape"} {
+		if _, err := cleanMemoryPath(path); err == nil {
+			t.Fatalf("expected unsafe memory path error for %q", path)
+		}
+	}
+}
+
+func TestWorkspaceReferenceParsing(t *testing.T) {
+	if id, err := memoryStoreIDFromRef("ama://memories/store%201"); err != nil || id != "store 1" {
+		t.Fatalf("expected decoded memory id, id=%q err=%v", id, err)
+	}
+	for _, ref := range []string{"", "https://example.test/store", "ama://memories", "ama://memories/a/b"} {
+		if _, err := memoryStoreIDFromRef(ref); err == nil {
+			t.Fatalf("expected invalid memory ref error for %q", ref)
+		}
+	}
+	if parsed, err := parseGitRepositoryURL("https://github.com/saltbo/zpan.git"); err != nil || parsed.Hostname() != "github.com" {
+		t.Fatalf("expected git url, parsed=%v err=%v", parsed, err)
+	}
+	for _, raw := range []string{
+		"http://github.com/saltbo/zpan.git",
+		"https://user@github.com/saltbo/zpan.git",
+		"https://github.com/saltbo",
+		"https://github.com/saltbo/../zpan.git",
+		"https://github.com/saltbo/zpan.git?token=secret",
+	} {
+		if _, err := parseGitRepositoryURL(raw); err == nil {
+			t.Fatalf("expected unsafe git url error for %q", raw)
+		}
+	}
+}
+
 func TestCleanupWorkspaceRemovesReadOnlyMemoryStore(t *testing.T) {
 	workspace, err := Prepare(context.Background(), PrepareRequest{
 		WorkDir:   t.TempDir(),
@@ -231,6 +508,47 @@ func TestCleanupWorkspaceRemovesReadOnlyMemoryStore(t *testing.T) {
 	}
 	if _, err := os.Stat(workspace.Root); !os.IsNotExist(err) {
 		t.Fatalf("expected session root cleanup, got err=%v", err)
+	}
+}
+
+func TestCleanupStaleHandlesRetentionMissingAndRecentWorkspaces(t *testing.T) {
+	if err := CleanupStale(context.Background(), t.TempDir(), 0); err != nil {
+		t.Fatalf("non-positive retention should be no-op: %v", err)
+	}
+	if err := CleanupStale(context.Background(), filepath.Join(t.TempDir(), "missing"), time.Hour); err != nil {
+		t.Fatalf("missing work dir should be no-op: %v", err)
+	}
+	workDir := t.TempDir()
+	recent, err := Open(workDir, "recent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CleanupStale(context.Background(), workDir, time.Hour); err != nil {
+		t.Fatalf("cleanup stale: %v", err)
+	}
+	if _, err := os.Stat(recent.Root); err != nil {
+		t.Fatalf("recent workspace should remain, got %v", err)
+	}
+}
+
+func TestCleanupStaleRemovesOldWorkspaceWithInvalidState(t *testing.T) {
+	workDir := t.TempDir()
+	oldSession := filepath.Join(workDir, SessionsDirName, "old")
+	if err := os.MkdirAll(filepath.Join(oldSession, WorkspaceDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(oldSession, SessionStateFileName), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(oldSession, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := CleanupStale(context.Background(), workDir, time.Hour); err != nil {
+		t.Fatalf("cleanup stale invalid state: %v", err)
+	}
+	if _, err := os.Stat(oldSession); !os.IsNotExist(err) {
+		t.Fatalf("expected old session removed, got %v", err)
 	}
 }
 
@@ -388,6 +706,33 @@ func TestCleanupStaleWorkspacesRemovesExpiredSessionRoots(t *testing.T) {
 	}
 	if _, err := os.Stat(sessionRoot); !os.IsNotExist(err) {
 		t.Fatalf("expected stale session root cleanup, got err=%v", err)
+	}
+}
+
+func TestStaleWorkspaceRestoresMountedVolumesFromState(t *testing.T) {
+	workDir := t.TempDir()
+	sessionRoot := filepath.Join(workDir, SessionsDirName, "session_old")
+	workspaceRoot := filepath.Join(sessionRoot, WorkspaceDirName)
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	state := `{
+		"volumes": [
+			{"type":"git_repository","url":"https://github.com/saltbo/zpan.git","localPath":"` + filepath.ToSlash(filepath.Join(workspaceRoot, "repo")) + `"},
+			{"type":"memory","memoryRef":"ama://memories/store_1","access":"read_write","localPath":"` + filepath.ToSlash(filepath.Join(workspaceRoot, "memory")) + `"},
+			{"type":"git_repository","url":"not-url","localPath":"ignored"},
+			{"type":"memory","memoryRef":"missing-path"}
+		]
+	}`
+	if err := os.WriteFile(filepath.Join(sessionRoot, SessionStateFileName), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	workspace := staleWorkspace(workDir, sessionRoot)
+	if len(workspace.worktrees) != 1 || len(workspace.memoryStores) != 1 {
+		t.Fatalf("expected mounted volumes to be restored, got worktrees=%#v memory=%#v", workspace.worktrees, workspace.memoryStores)
+	}
+	if !strings.Contains(workspace.worktrees[0].cacheDir, filepath.Join("repositories", "github.com", "saltbo", "zpan")) {
+		t.Fatalf("unexpected restored cache dir: %#v", workspace.worktrees[0])
 	}
 }
 

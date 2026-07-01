@@ -8,197 +8,11 @@ import (
 	"time"
 )
 
-func TestLoadConfigFailsFastOnMissingRequiredValues(t *testing.T) {
-	_, err := LoadConfig(nil, testGetenv(t, nil))
-	if err == nil {
-		t.Fatal("expected missing config to fail")
-	}
-	if !strings.Contains(err.Error(), "AMA API server URL is required") {
-		t.Fatalf("expected API server validation error, got %v", err)
-	}
-}
-
-func TestLoadConfigRequiresUnsafeProcessAcknowledgement(t *testing.T) {
-	env := map[string]string{
-		"AMA_API_SERVER": "https://ama.example.test",
-		"AMA_TOKEN":      "token",
-	}
-	_, err := LoadConfig(nil, testGetenv(t, env))
-	if err == nil {
-		t.Fatal("expected unsafe adapter acknowledgement to fail")
-	}
-	if !strings.Contains(err.Error(), "process-unsafe adapter requires") {
-		t.Fatalf("expected unsafe adapter error, got %v", err)
-	}
-}
-
-func TestLoadConfigRejectsMalformedEnvValues(t *testing.T) {
-	env := map[string]string{"AMA_RUNNER_LEASE_SECONDS": "soon"}
-	_, err := LoadConfig(nil, testGetenv(t, env))
-	if err == nil {
-		t.Fatal("expected malformed env value to fail")
-	}
-	if !strings.Contains(err.Error(), "AMA_RUNNER_LEASE_SECONDS must be an integer") {
-		t.Fatalf("unexpected error %v", err)
-	}
-}
-
-func TestLoadConfigRejectsMalformedDurationEnvValues(t *testing.T) {
-	env := map[string]string{"AMA_RUNNER_RENEW_INTERVAL": "soon"}
-	_, err := LoadConfig(nil, testGetenv(t, env))
-	if err == nil {
-		t.Fatal("expected malformed duration env value to fail")
-	}
-	if !strings.Contains(err.Error(), "AMA_RUNNER_RENEW_INTERVAL must be a duration") {
-		t.Fatalf("unexpected error %v", err)
-	}
-}
-
-func TestLoadConfigRejectsMalformedBoolEnvValues(t *testing.T) {
-	env := map[string]string{"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "maybe"}
-	_, err := LoadConfig(nil, testGetenv(t, env))
-	if err == nil {
-		t.Fatal("expected malformed bool env value to fail")
-	}
-	if !strings.Contains(err.Error(), "AMA_RUNNER_ALLOW_UNSAFE_PROCESS must be a boolean") {
-		t.Fatalf("unexpected error %v", err)
-	}
-}
-
-func TestLoadConfigParsesValidatedRunnerConfig(t *testing.T) {
-	env := map[string]string{
-		"AMA_API_SERVER":                  "https://ama.example.test",
-		"AMA_TOKEN":                       "token",
-		"AMA_PROJECT_ID":                  "project_env",
-		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
-		"AMA_RUNNER_LEASE_SECONDS":        "90",
-		"AMA_RUNNER_RENEW_INTERVAL":       "30s",
-	}
-	config, err := LoadConfig([]string{"--heartbeat-interval", "25s"}, testGetenv(t, env))
-	if err != nil {
-		t.Fatalf("expected valid config, got %v", err)
-	}
-	if config.Origin != "https://ama.example.test" || config.ProjectID != "project_env" {
-		t.Fatalf("unexpected config: %#v", config)
-	}
-	if config.LeaseDurationSeconds != 90 || config.RenewInterval != 30*time.Second || config.HeartbeatInterval != 25*time.Second {
-		t.Fatalf("unexpected timing config: %#v", config)
-	}
-	if config.MaxConcurrent != 5 {
-		t.Fatalf("expected default max concurrent leases to be 5, got %d", config.MaxConcurrent)
-	}
-}
-
-func TestLoadConfigUsesSavedDeviceLoginTokenWhenNoExplicitTokenIsProvided(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "runner.json")
-	if err := SaveRunnerConfig(configPath, SavedRunnerConfig{
-		Origin:      "https://ama.example.test",
-		AccessToken: "saved-token",
-		ProjectID:   "project_saved",
-		TokenType:   "Bearer",
-		ExpiresAt:   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	env := map[string]string{
-		"AMA_RUNNER_CONFIG":               configPath,
-		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
-		"AMA_RUNNER_HEARTBEAT_INTERVAL":   "20s",
-		"AMA_RUNNER_RENEW_INTERVAL":       "20s",
-		"AMA_RUNNER_LEASE_SECONDS":        "60",
-		"AMA_RUNNER_COMMAND_TIMEOUT":      "1s",
-		"AMA_RUNNER_SHUTDOWN_GRACE":       "1s",
-	}
-	config, err := LoadConfig(nil, testGetenv(t, env))
-	if err != nil {
-		t.Fatalf("expected saved token config to load, got %v", err)
-	}
-	if config.Origin != "https://ama.example.test" || config.Token != "saved-token" || config.ProjectID != "project_saved" {
-		t.Fatalf("unexpected saved token config: %#v", config)
-	}
-
-	env["AMA_TOKEN"] = "override-token"
-	config, err = LoadConfig(nil, testGetenv(t, env))
-	if err != nil {
-		t.Fatalf("expected env token override to load, got %v", err)
-	}
-	if config.Token != "override-token" {
-		t.Fatalf("expected explicit env token to win, got %q", config.Token)
-	}
-}
-
-func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
-	env := map[string]string{
-		"AMA_API_SERVER":                  "https://env.example.test",
-		"AMA_TOKEN":                       "env-token",
-		"AMA_PROJECT_ID":                  "project_env",
-		"AMA_ENVIRONMENT_ID":              "env_old",
-		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
-	}
-	config, err := LoadConfig([]string{
-		"--api-server", "https://flag.example.test",
-		"--token", "flag-token",
-		"--project-id", "project_flag",
-		"--environment-id", "env_flag",
-		"--sandbox-adapter", processUnsafeAdapter,
-		"--allow-unsafe-process=false",
-		"--allow-unsafe-process",
-		"--workdir", "/tmp/flag-work",
-		"--max-concurrent", "1",
-		"--heartbeat-interval", "10s",
-		"--lease-seconds", "30",
-		"--renew-interval", "5s",
-		"--command-timeout", "45s",
-		"--shutdown-grace", "3s",
-	}, testGetenv(t, env))
-	if err != nil {
-		t.Fatalf("expected valid flag config, got %v", err)
-	}
-	if config.Origin != "https://flag.example.test" || config.Token != "flag-token" || config.ProjectID != "project_flag" {
-		t.Fatalf("flags did not override env: %#v", config)
-	}
-	if config.WorkDir != "/tmp/flag-work" || config.CommandTimeout != 45*time.Second {
-		t.Fatalf("unexpected flag values: %#v", config)
-	}
-}
-
-func TestLoadConfigMaxSessionDuration(t *testing.T) {
-	env := map[string]string{
-		"AMA_API_SERVER":                  "https://ama.example.test",
-		"AMA_TOKEN":                       "token",
-		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
-	}
-	config, err := LoadConfig(nil, testGetenv(t, env))
-	if err != nil {
-		t.Fatalf("expected valid config, got %v", err)
-	}
-	if config.MaxSessionDuration != 2*time.Hour {
-		t.Fatalf("expected default max session duration of 2h, got %v", config.MaxSessionDuration)
-	}
-
-	env["AMA_RUNNER_MAX_SESSION_DURATION"] = "45m"
-	config, err = LoadConfig(nil, testGetenv(t, env))
-	if err != nil {
-		t.Fatalf("expected valid env config, got %v", err)
-	}
-	if config.MaxSessionDuration != 45*time.Minute {
-		t.Fatalf("expected env max session duration, got %v", config.MaxSessionDuration)
-	}
-
-	config, err = LoadConfig([]string{"--max-session-duration", "0"}, testGetenv(t, env))
-	if err != nil {
-		t.Fatalf("expected valid flag config, got %v", err)
-	}
-	if config.MaxSessionDuration != 0 {
-		t.Fatalf("expected flag to disable max session duration, got %v", config.MaxSessionDuration)
-	}
-}
-
 func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 	valid := Config{
-		Origin:                "https://ama.example.test",
+		APIServer:             "https://ama.example.test",
 		Token:                 "token",
-		SandboxAdapter:        processUnsafeAdapter,
+		EnvironmentID:         "env_1",
 		AllowUnsafeProcess:    true,
 		StateDir:              t.TempDir(),
 		WorkDir:               t.TempDir(),
@@ -214,13 +28,18 @@ func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 		mutate func(*Config)
 		want   string
 	}{
-		{"apiServer", func(c *Config) { c.Origin = "://bad" }, "absolute URL"},
+		{"apiServerMissing", func(c *Config) { c.APIServer = "" }, "AMA API server URL is required"},
+		{"apiServerMalformed", func(c *Config) { c.APIServer = "://bad" }, "absolute URL"},
 		{"token", func(c *Config) { c.Token = "" }, "AMA token"},
-		{"adapter", func(c *Config) { c.SandboxAdapter = "docker" }, "unsupported sandbox adapter"},
+		{"environment", func(c *Config) { c.EnvironmentID = "" }, "AMA environment id"},
+		{"unsafe", func(c *Config) { c.AllowUnsafeProcess = false }, "process-unsafe adapter requires"},
+		{"workDir", func(c *Config) { c.WorkDir = "" }, "work dir"},
+		{"stateDir", func(c *Config) { c.StateDir = "" }, "runner state directory"},
 		{"max", func(c *Config) { c.MaxConcurrent = 0 }, "max concurrent"},
 		{"lease", func(c *Config) { c.LeaseDurationSeconds = 10 }, "lease duration"},
 		{"heartbeat", func(c *Config) { c.HeartbeatInterval = time.Minute }, "heartbeat interval"},
 		{"renew", func(c *Config) { c.RenewInterval = time.Minute }, "renew interval"},
+		{"timeout", func(c *Config) { c.CommandTimeout = 0 }, "command timeout"},
 		{"maxSession", func(c *Config) { c.MaxSessionDuration = -time.Second }, "max session duration"},
 	}
 	for _, tc := range cases {
@@ -235,240 +54,346 @@ func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 	}
 }
 
-func TestLoadConfigReadsJSONConfigFileWithDurationStrings(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "runner.json")
-	if err := os.WriteFile(configPath, []byte(`{
-		"apiServer": "https://ama.example.test",
-		"token": "token",
-		"runnerName": "runner",
-		"capabilities": ["sandbox.exec"],
-		"sandboxAdapter": "process-unsafe",
-		"allowUnsafeProcess": true,
-		"workDir": "/tmp/ama-runner",
-		"maxConcurrent": 1,
-		"leaseDurationSeconds": 90,
-		"heartbeatInterval": "25s",
-		"renewInterval": "30s"
-	}`), 0o644); err != nil {
-		t.Fatal(err)
+func TestCredentialStoreSwitchesAccountsAndProfiles(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	profiles := []CredentialProfile{
+		{AccountID: "acct_1", APIServer: "https://ama.example.test", Email: "one@example.test", AccessToken: "token-1", TokenType: "Bearer"},
+		{AccountID: "acct_2", APIServer: "https://ama.example.test", Email: "two@example.test", AccessToken: "token-2", TokenType: "Bearer"},
+		{AccountID: "acct_other", APIServer: "https://other.example.test", Email: "other@example.test", AccessToken: "token-other", TokenType: "Bearer"},
 	}
-	config, err := LoadConfig([]string{"--config", configPath}, testGetenv(t, nil))
-	if err != nil {
-		t.Fatalf("expected config file to load, got %v", err)
-	}
-	if config.WorkDir != "/tmp/ama-runner" || config.RenewInterval != 30*time.Second {
-		t.Fatalf("unexpected config file values: %#v", config)
-	}
-}
-
-func TestLoadConfigReadsJSONConfigFileWithSingleHyphenFlag(t *testing.T) {
-	for _, args := range [][]string{{"-config"}, {}} {
-		configPath := filepath.Join(t.TempDir(), "runner.json")
-		if err := os.WriteFile(configPath, []byte(`{
-			"apiServer": "https://ama.example.test",
-			"token": "token",
-			"runnerName": "runner",
-			"capabilities": ["sandbox.exec"],
-			"sandboxAdapter": "process-unsafe",
-			"allowUnsafeProcess": true,
-			"maxConcurrent": 1,
-			"leaseDurationSeconds": 90,
-			"heartbeatInterval": "25s",
-			"renewInterval": "30s"
-		}`), 0o644); err != nil {
+	for _, profile := range profiles {
+		if err := SaveCredentialProfile(credentialPath, profile); err != nil {
 			t.Fatal(err)
 		}
-		if len(args) == 1 {
-			args = append(args, configPath)
-		} else {
-			args = []string{"-config=" + configPath}
-		}
-		config, err := LoadConfig(args, testGetenv(t, nil))
-		if err != nil {
-			t.Fatalf("expected config file to load for args %v, got %v", args, err)
-		}
-		if config.ConfigPath != configPath || config.Origin != "https://ama.example.test" {
-			t.Fatalf("unexpected config for args %v: %#v", args, config)
-		}
 	}
-}
 
-func TestLoadConfigFileCanExplicitlyDisableUnsafeEnv(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "runner.json")
-	if err := os.WriteFile(configPath, []byte(`{
-		"apiServer": "https://ama.example.test",
-		"token": "token",
-		"runnerName": "runner",
-		"capabilities": ["sandbox.exec"],
-		"sandboxAdapter": "process-unsafe",
-		"allowUnsafeProcess": false,
-		"workDir": "/tmp/ama-runner",
-		"maxConcurrent": 1,
-		"leaseDurationSeconds": 90,
-		"heartbeatInterval": "25s",
-		"renewInterval": "30s"
-	}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	env := map[string]string{"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true"}
-	_, err := LoadConfig([]string{"--config", configPath}, testGetenv(t, env))
-	if err == nil || !strings.Contains(err.Error(), "process-unsafe adapter requires") {
-		t.Fatalf("expected explicit false to override env, got %v", err)
-	}
-}
-
-func TestLoadConfigReadsJSONConfigFileWithNumericDuration(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "runner.json")
-	if err := os.WriteFile(configPath, []byte(`{
-		"apiServer": "https://ama.example.test",
-		"token": "token",
-		"runnerName": "runner",
-		"capabilities": ["sandbox.exec"],
-		"sandboxAdapter": "process-unsafe",
-		"allowUnsafeProcess": true,
-		"workDir": "/tmp/ama-runner",
-		"maxConcurrent": 1,
-		"leaseDurationSeconds": 90,
-		"heartbeatInterval": 25000000000,
-		"renewInterval": 30000000000
-	}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	config, err := LoadConfig([]string{"--config", configPath}, testGetenv(t, nil))
+	selected, err := SwitchCredentialProfile(credentialPath, "https://ama.example.test", "two@example.test")
 	if err != nil {
-		t.Fatalf("expected config file to load, got %v", err)
+		t.Fatalf("expected account switch, got %v", err)
 	}
-	if config.HeartbeatInterval != 25*time.Second || config.RenewInterval != 30*time.Second {
-		t.Fatalf("unexpected duration values: %#v", config)
+	if selected.AccountID != "acct_2" {
+		t.Fatalf("expected second account, got %#v", selected)
 	}
-}
-
-func TestLoadConfigFileCanDisableUnsafeProcessInheritedFromEnv(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "runner.json")
-	if err := os.WriteFile(configPath, []byte(`{
-		"apiServer": "https://ama.example.test",
-		"token": "token",
-		"runnerName": "runner",
-		"capabilities": ["sandbox.exec"],
-		"sandboxAdapter": "process-unsafe",
-		"allowUnsafeProcess": false,
-		"workDir": "/tmp/ama-runner",
-		"maxConcurrent": 1,
-		"leaseDurationSeconds": 90,
-		"heartbeatInterval": "25s",
-		"renewInterval": "30s"
-	}`), 0o644); err != nil {
+	active, err := LoadCredentialProfile(credentialPath, "https://ama.example.test")
+	if err != nil {
 		t.Fatal(err)
 	}
-	env := map[string]string{"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true"}
-	_, err := LoadConfig([]string{"--config", configPath}, testGetenv(t, env))
-	if err == nil || !strings.Contains(err.Error(), "process-unsafe adapter requires") {
-		t.Fatalf("expected config file false to override env true, got %v", err)
+	if active == nil || active.AccessToken != "token-2" {
+		t.Fatalf("expected active account token, got %#v", active)
+	}
+
+	selected, err = SwitchCredentialProfile(credentialPath, "https://other.example.test", "")
+	if err != nil {
+		t.Fatalf("expected profile switch, got %v", err)
+	}
+	if selected.AccountID != "acct_other" {
+		t.Fatalf("expected other profile, got %#v", selected)
+	}
+
+	if _, err := SwitchCredentialProfile(credentialPath, "https://ama.example.test", ""); err == nil || !strings.Contains(err.Error(), "multiple saved accounts") {
+		t.Fatalf("expected ambiguous account error, got %v", err)
+	}
+	if _, err := SwitchCredentialProfile(credentialPath, "https://ama.example.test", "missing@example.test"); err == nil || !strings.Contains(err.Error(), "no saved auth account") {
+		t.Fatalf("expected missing account error, got %v", err)
+	}
+	if _, err := SwitchCredentialProfile(credentialPath, "https://missing.example.test", ""); err == nil || !strings.Contains(err.Error(), "no saved auth profile") {
+		t.Fatalf("expected missing profile error, got %v", err)
 	}
 }
 
-func TestLoadConfigFileErrors(t *testing.T) {
-	_, err := LoadConfig([]string{"--config", filepath.Join(t.TempDir(), "missing.json")}, testGetenv(t, nil))
-	if err == nil {
-		t.Fatal("expected missing config file error")
+func TestCredentialStoreLoadsAndLogsOutProfiles(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	if store, err := LoadCredentialStore(""); err != nil || len(store.Profiles) != 0 {
+		t.Fatalf("expected empty store for empty path, store=%#v err=%v", store, err)
 	}
-	badPath := filepath.Join(t.TempDir(), "bad.json")
-	if err := os.WriteFile(badPath, []byte(`{"renewInterval": false}`), 0o644); err != nil {
+	if store, err := LoadCredentialStore(filepath.Join(t.TempDir(), "missing.json")); err != nil || len(store.Profiles) != 0 {
+		t.Fatalf("expected empty store for missing path, store=%#v err=%v", store, err)
+	}
+	if err := os.WriteFile(credentialPath, []byte(`{}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = LoadConfig([]string{"--config", badPath}, testGetenv(t, nil))
-	if err == nil {
-		t.Fatal("expected invalid config file error")
+	if store, err := LoadCredentialStore(credentialPath); err != nil || store.Active != "" || len(store.Profiles) != 0 {
+		t.Fatalf("expected empty store for empty credential file, store=%#v err=%v", store, err)
+	}
+	if active, err := LoadActiveCredentialProfile(""); err != nil || active != nil {
+		t.Fatalf("expected empty active profile for empty path, active=%#v err=%v", active, err)
+	}
+	profile := CredentialProfile{
+		AccountID:   "acct_1",
+		APIServer:   "https://ama.example.test/",
+		Email:       "runner@example.test",
+		AccessToken: "token",
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	}
+	if err := SaveCredentialProfile(credentialPath, profile); err != nil {
+		t.Fatal(err)
+	}
+	active, err := LoadActiveCredentialProfile(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active == nil || active.APIServer != "https://ama.example.test" {
+		t.Fatalf("expected normalized active profile, got %#v", active)
+	}
+	if err := LogoutCredentialProfile(credentialPath, ""); err != nil {
+		t.Fatal(err)
+	}
+	store, err := LoadCredentialStore(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(store.Profiles) != 0 || store.Active != "" {
+		t.Fatalf("expected logout to clear profile, got %#v", store)
+	}
+	if err := LogoutCredentialProfile(credentialPath, ""); err != nil {
+		t.Fatalf("logout with no active profile should be no-op: %v", err)
 	}
 }
 
-func TestDurationJSONRejectsInvalidString(t *testing.T) {
-	var value durationJSON
-	if err := value.UnmarshalJSON([]byte(`"soon"`)); err == nil {
-		t.Fatal("expected invalid duration string error")
+func TestCredentialStoreUpdatesAndReassignsActiveProfiles(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	first := CredentialProfile{AccountID: "acct_1", APIServer: "https://ama.example.test", AccessToken: "token-1", TokenType: "Bearer"}
+	updated := CredentialProfile{AccountID: "acct_1", APIServer: "https://ama.example.test/", Email: "updated@example.test", AccessToken: "token-updated", TokenType: "Bearer"}
+	otherServer := CredentialProfile{AccountID: "acct_2", APIServer: "https://other.example.test", AccessToken: "token-2", TokenType: "Bearer"}
+	if err := SaveCredentialProfile(credentialPath, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCredentialProfile(credentialPath, updated); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCredentialProfile(credentialPath, otherServer); err != nil {
+		t.Fatal(err)
+	}
+	store, err := LoadCredentialStore(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(store.Profiles) != 2 {
+		t.Fatalf("expected upsert to replace profile, got %#v", store.Profiles)
+	}
+	active, err := LoadActiveCredentialProfile(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active == nil || active.AccountID != "acct_2" {
+		t.Fatalf("expected last saved profile active, got %#v", active)
+	}
+	if err := LogoutCredentialProfile(credentialPath, "https://other.example.test"); err != nil {
+		t.Fatal(err)
+	}
+	active, err = LoadActiveCredentialProfile(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active == nil || active.AccessToken != "token-updated" || active.APIServer != "https://ama.example.test" {
+		t.Fatalf("expected remaining profile to become active, got %#v", active)
 	}
 }
 
-func TestEnvOrUsesFallbackForMissingValue(t *testing.T) {
-	value := envOr(testGetenv(t, nil), "AMA_RUNNER_WORKDIR", "/state/ama-runner/work")
-	if value != "/state/ama-runner/work" {
-		t.Fatalf("expected fallback value, got %q", value)
+func TestCredentialStoreLoadProfileSelection(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	for _, profile := range []CredentialProfile{
+		{AccountID: "acct_1", APIServer: "https://ama.example.test", AccessToken: "token-1", TokenType: "Bearer"},
+		{AccountID: "acct_2", APIServer: "https://ama.example.test", AccessToken: "token-2", TokenType: "Bearer"},
+		{AccountID: "acct_3", APIServer: "https://other.example.test", AccessToken: "token-3", TokenType: "Bearer"},
+	} {
+		if err := SaveCredentialProfile(credentialPath, profile); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if got := envOr(func(string) string { return "value" }, "SET", "fallback"); got != "value" {
-		t.Fatalf("expected env value, got %q", got)
+	if got, err := LoadCredentialProfile(credentialPath, "https://missing.example.test"); err != nil || got != nil {
+		t.Fatalf("expected no profile for missing server, got %#v err=%v", got, err)
 	}
-}
-
-func TestMergeConfigOverrideBranches(t *testing.T) {
-	base := Config{Origin: "base", Token: "base", MaxConcurrent: 1}
-	override := Config{
-		Origin:                "origin",
-		Token:                 "token",
-		EnvironmentID:         "env",
-		SandboxAdapter:        ProcessUnsafeAdapter,
-		AllowUnsafeProcess:    true,
-		StateDir:              "state",
-		WorkDir:               "work",
-		MaxConcurrent:         2,
-		HeartbeatInterval:     2 * time.Second,
-		LeaseDurationSeconds:  3,
-		RenewInterval:         4 * time.Second,
-		CommandTimeout:        5 * time.Second,
-		ShutdownGraceInterval: 6 * time.Second,
+	if _, err := LoadCredentialProfile(credentialPath, "https://ama.example.test"); err == nil || !strings.Contains(err.Error(), "multiple saved accounts") {
+		t.Fatalf("expected ambiguous profile error, got %v", err)
 	}
-	got := mergeConfig(base, override)
-	if got.Origin != "origin" ||
-		got.Token != "token" ||
-		got.EnvironmentID != "env" ||
-		!got.AllowUnsafeProcess ||
-		got.StateDir != "state" ||
-		got.WorkDir != "work" ||
-		got.MaxConcurrent != 2 ||
-		got.HeartbeatInterval != 2*time.Second ||
-		got.LeaseDurationSeconds != 3 ||
-		got.RenewInterval != 4*time.Second ||
-		got.CommandTimeout != 5*time.Second ||
-		got.ShutdownGraceInterval != 6*time.Second {
-		t.Fatalf("unexpected merged config %#v", got)
+	if got, err := LoadCredentialProfile(credentialPath, "https://other.example.test"); err != nil || got == nil || got.AccountID != "acct_3" {
+		t.Fatalf("expected single matching profile, got %#v err=%v", got, err)
+	}
+	if got, err := LoadCredentialProfile(credentialPath, ""); err != nil || got == nil || got.AccountID != "acct_3" {
+		t.Fatalf("expected active profile when server omitted, got %#v err=%v", got, err)
 	}
 }
 
-func TestDefaultStateDirFollowsXDGStateDirectory(t *testing.T) {
-	env := map[string]string{
-		"XDG_STATE_HOME": "/state",
-		"HOME":           "/home/runner",
+func TestCredentialStoreRejectsInvalidProfilesAndFiles(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "credentials.json")
+	if err := SaveCredentialProfile("", CredentialProfile{AccountID: "acct_1", APIServer: "https://ama.example.test", AccessToken: "token", TokenType: "Bearer"}); err == nil {
+		t.Fatal("expected empty credential path to fail")
 	}
-	if got := defaultStateDir(func(key string) string { return env[key] }); got != filepath.Join("/state", "ama-runner") {
+	for _, profile := range []CredentialProfile{
+		{AccountID: "acct_1", APIServer: "https://ama.example.test", TokenType: "Bearer"},
+		{APIServer: "https://ama.example.test", AccessToken: "token", TokenType: "Bearer"},
+	} {
+		if err := SaveCredentialProfile(credentialPath, profile); err == nil {
+			t.Fatalf("expected invalid profile error for %#v", profile)
+		}
+	}
+	if err := os.WriteFile(credentialPath, []byte(`{"active":"https://ama.example.test#acct_1","profiles":[{"accountId":"acct_1","apiServer":"https://ama.example.test","accessToken":"token","tokenType":"Bearer","expiresAt":"not-time"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadActiveCredentialProfile(credentialPath); err == nil {
+		t.Fatal("expected malformed expiry error")
+	}
+	if err := os.WriteFile(credentialPath, []byte(`{"active":"https://ama.example.test#acct_1","profiles":[{"accountId":"acct_1","apiServer":"https://ama.example.test","accessToken":"token","tokenType":"Bearer","expiresAt":"2000-01-01T00:00:00Z"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadActiveCredentialProfile(credentialPath); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("expected expired token error, got %v", err)
+	}
+	if err := os.WriteFile(credentialPath, []byte(`not json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadCredentialStore(credentialPath); err == nil {
+		t.Fatal("expected invalid json error")
+	}
+	if _, err := loadRawCredentialFile(""); err == nil {
+		t.Fatal("expected empty raw credential path to fail")
+	}
+	if err := saveRawCredentialFile("", CredentialStore{}); err == nil {
+		t.Fatal("expected empty raw credential save path to fail")
+	}
+	blockedParent := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blockedParent, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveRawCredentialFile(filepath.Join(blockedParent, "credentials.json"), CredentialStore{}); err == nil {
+		t.Fatal("expected save under file parent to fail")
+	}
+}
+
+func TestDefaultPathsFollowXDGDirectories(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/config")
+	t.Setenv("XDG_STATE_HOME", "/state")
+	t.Setenv("HOME", "/home/runner")
+	if got := DefaultConfigPath(); got != filepath.Join("/config", "ama-runner", "config.json") {
+		t.Fatalf("expected XDG config path, got %q", got)
+	}
+	if got := DefaultCredentialPath(); got != filepath.Join("/config", "ama-runner", "credentials.json") {
+		t.Fatalf("expected XDG credential path, got %q", got)
+	}
+	if got := DefaultStateDir(); got != filepath.Join("/state", "ama-runner") {
 		t.Fatalf("expected XDG state dir, got %q", got)
 	}
-	if got := defaultWorkDir(func(key string) string { return env[key] }); got != filepath.Join("/state", "ama-runner", "work") {
+	if got := DefaultWorkDir(); got != filepath.Join("/state", "ama-runner", "work") {
 		t.Fatalf("expected XDG work dir, got %q", got)
-	}
-	delete(env, "XDG_STATE_HOME")
-	if got := defaultStateDir(func(key string) string { return env[key] }); got != filepath.Join("/home/runner", ".local", "state", "ama-runner") {
-		t.Fatalf("expected HOME state dir, got %q", got)
-	}
-	if got := defaultWorkDir(func(key string) string { return env[key] }); got != filepath.Join("/home/runner", ".local", "state", "ama-runner", "work") {
-		t.Fatalf("expected HOME work dir, got %q", got)
-	}
-	delete(env, "HOME")
-	if got := defaultStateDir(func(key string) string { return env[key] }); got != "" {
-		t.Fatalf("expected empty state dir without XDG_STATE_HOME or HOME, got %q", got)
 	}
 }
 
-func testGetenv(t *testing.T, env map[string]string) func(string) string {
-	t.Helper()
-	stateHome := t.TempDir()
-	return func(key string) string {
-		if env != nil {
-			if value, ok := env[key]; ok {
-				return value
-			}
+func TestDefaultPathsFallBackToHomeAndCanBeEmpty(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "/home/runner")
+	if got := DefaultConfigPath(); got != filepath.Join("/home/runner", ".config", "ama-runner", "config.json") {
+		t.Fatalf("expected HOME config path, got %q", got)
+	}
+	if got := DefaultCredentialPath(); got != filepath.Join("/home/runner", ".config", "ama-runner", "credentials.json") {
+		t.Fatalf("expected HOME credential path, got %q", got)
+	}
+	if got := DefaultStateDir(); got != filepath.Join("/home/runner", ".local", "state", "ama-runner") {
+		t.Fatalf("expected HOME state path, got %q", got)
+	}
+	t.Setenv("HOME", "")
+	if DefaultConfigPath() != "" || DefaultCredentialPath() != "" || DefaultStateDir() != "" || DefaultWorkDir() != "" {
+		t.Fatal("expected empty default paths without HOME or XDG")
+	}
+}
+
+func TestSaveLocalConfigValuePrunesUnknownKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{
+		"apiServer": "https://ama.example.test",
+		"accessToken": "old-token",
+		"refreshToken": "old-refresh"
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SaveLocalConfigValue(path, "environmentId", "env_1"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := string(data)
+	if strings.Contains(config, "accessToken") || strings.Contains(config, "refreshToken") {
+		t.Fatalf("expected credentials to be pruned from local config, got %s", config)
+	}
+	if !strings.Contains(config, `"apiServer"`) || !strings.Contains(config, `"environmentId"`) {
+		t.Fatalf("expected allowed config keys to remain, got %s", config)
+	}
+}
+
+func TestLocalConfigParsesAllowedValueTypes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	values := map[string]string{
+		"apiServer":          "https://ama.example.test",
+		"allowUnsafeProcess": "true",
+		"maxConcurrent":      "3",
+		"workDir":            "/tmp/work",
+	}
+	for key, value := range values {
+		if err := SaveLocalConfigValue(path, key, value); err != nil {
+			t.Fatalf("expected %s to save, got %v", key, err)
 		}
-		if key == "XDG_STATE_HOME" {
-			return stateHome
+	}
+	config, err := LoadLocalConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config["allowUnsafeProcess"] != true || config["maxConcurrent"] != float64(3) && config["maxConcurrent"] != 3 {
+		t.Fatalf("unexpected parsed local config: %#v", config)
+	}
+	keys := LocalConfigKeys()
+	if len(keys) == 0 || keys[0] > keys[len(keys)-1] {
+		t.Fatalf("expected sorted config keys, got %#v", keys)
+	}
+}
+
+func TestLocalConfigRejectsInvalidValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if _, err := LoadLocalConfig(""); err == nil {
+		t.Fatal("expected empty config path to fail")
+	}
+	cases := []struct {
+		key   string
+		value string
+	}{
+		{key: "allowUnsafeProcess", value: "maybe"},
+		{key: "maxConcurrent", value: "many"},
+		{key: "unknown", value: "value"},
+	}
+	for _, tc := range cases {
+		if err := SaveLocalConfigValue(path, tc.key, tc.value); err == nil {
+			t.Fatalf("expected invalid value error for %s=%s", tc.key, tc.value)
 		}
-		return ""
+	}
+	if _, err := LoadLocalConfig(filepath.Join(t.TempDir(), "missing.json")); err != nil {
+		t.Fatalf("expected missing config to load empty, got %v", err)
+	}
+	if err := os.WriteFile(path, []byte(`not json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadLocalConfig(path); err == nil {
+		t.Fatal("expected invalid local config json error")
+	}
+	if _, err := loadWritableLocalConfig(path); err == nil {
+		t.Fatal("expected invalid writable local config json error")
+	}
+	blockedParent := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blockedParent, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveLocalConfigValue(filepath.Join(blockedParent, "config.json"), "apiServer", "https://ama.example.test"); err == nil {
+		t.Fatal("expected save under file parent to fail")
+	}
+	localConfigKeys["durationForTest"] = LocalDuration
+	t.Cleanup(func() { delete(localConfigKeys, "durationForTest") })
+	if got, err := parseLocalConfigValue("durationForTest", "5s"); err != nil || got != "5s" {
+		t.Fatalf("expected duration parse success, got %#v err=%v", got, err)
+	}
+	if _, err := parseLocalConfigValue("durationForTest", "soon"); err == nil {
+		t.Fatal("expected invalid duration error")
 	}
 }
