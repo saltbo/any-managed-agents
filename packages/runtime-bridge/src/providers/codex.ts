@@ -21,7 +21,7 @@ import {
   type RuntimeProviderRequest,
   type RuntimeUsageWindow,
 } from '../protocol'
-import { arrayValue, hostHome, objectValue, resolveCliPath, sdkEnv } from './cli-host'
+import { hostHome, objectValue, resolveCliPath, sdkEnv } from './cli-host'
 
 const CODEX_USAGE_API = 'https://chatgpt.com/backend-api/wham/usage'
 
@@ -58,23 +58,19 @@ function itemId(item: Record<string, unknown>) {
 
 function codexToolShape(item: Record<string, unknown>): { toolName: string; args: Record<string, unknown> } | null {
   switch (item.type) {
-    case 'command_execution':
+    case 'command_execution': {
+      if (typeof item.command !== 'string' || !item.command) return null
       return { toolName: 'bash', args: { command: item.command } }
-    case 'file_change':
-      return {
-        toolName: 'edit',
-        args: {
-          changes: item.changes,
-          files: arrayValue(item.changes)
-            .map((change) => objectValue(change))
-            .map((change) => [change.kind, change.path].filter(Boolean).join(' '))
-            .filter(Boolean),
-        },
-      }
+    }
     case 'mcp_tool_call':
-      return { toolName: typeof item.name === 'string' ? item.name : 'mcp_tool', args: objectValue(item.arguments) }
-    case 'web_search':
+      return {
+        toolName: typeof item.name === 'string' && item.name ? `mcp.${item.name}` : 'mcp.tool',
+        args: objectValue(item.arguments),
+      }
+    case 'web_search': {
+      if (typeof item.query !== 'string' || !item.query) return null
       return { toolName: 'web_search', args: { query: item.query } }
+    }
     default:
       return null
   }
@@ -89,9 +85,10 @@ function toolResult(item: Record<string, unknown>): ToolResult {
       : typeof item.aggregated_output === 'string'
         ? item.aggregated_output
         : [stdout, stderr].filter(Boolean).join('\n')
+  const structuredContent = codexToolStructuredContent(item)
   return {
     content: output ? [{ type: 'text', text: output }] : [],
-    structuredContent: codexToolStructuredContent(item),
+    ...(structuredContent ? { structuredContent } : {}),
     ...(typeof item.exit_code === 'number'
       ? { exitCode: item.exit_code }
       : typeof item.exitCode === 'number'
@@ -100,7 +97,7 @@ function toolResult(item: Record<string, unknown>): ToolResult {
   }
 }
 
-function codexToolStructuredContent(item: Record<string, unknown>) {
+function codexToolStructuredContent(item: Record<string, unknown>): Record<string, unknown> | undefined {
   const structured = Object.fromEntries(
     Object.entries({
       result: item.result,
@@ -137,6 +134,9 @@ class CodexEventMapper {
       }
       case 'item.completed': {
         const item = objectValue(event.item)
+        if (item.type === 'file_change') {
+          return
+        }
         if (item.type === 'agent_message' && typeof item.text === 'string' && item.text) {
           yield runtimeEvent('message.completed', {
             message: textMessage('assistant', item.text, typeof item.id === 'string' ? item.id : undefined),

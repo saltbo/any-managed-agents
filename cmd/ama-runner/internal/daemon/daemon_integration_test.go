@@ -61,7 +61,7 @@ func TestDaemonRunOnceExecutesSandboxWorkThroughControlPlane(t *testing.T) {
 
 	control.waitForRunnerChannel(t)
 	if got, err := os.ReadFile(filepath.Join(workDir, "runner-integration.txt")); err != nil || string(got) != "integration" {
-		t.Fatalf("expected sandbox.exec to write integration marker, got %q err=%v", got, err)
+		t.Fatalf("expected bash to write integration marker, got %q err=%v", got, err)
 	}
 
 	control.mu.Lock()
@@ -203,7 +203,7 @@ func (p *runnerIntegrationControlPlane) runner(state ama.RunnerState) ama.Runner
 		EnvironmentId:    lo.ToPtr("env_integration"),
 		AuthMode:         ama.Bearer,
 		State:            state,
-		Capabilities:     []string{"sandbox.exec", "ama-sandbox"},
+		Capabilities:     []string{"ama-sandbox"},
 		MaxConcurrent:    1,
 		CurrentLoad:      0,
 		Metadata:         map[string]any{},
@@ -229,7 +229,7 @@ func (p *runnerIntegrationControlPlane) workItem() ama.WorkItem {
 			"approved":   true,
 			"sessionId":  p.sessionID,
 			"toolCallId": "tool_integration",
-			"toolName":   "sandbox.exec",
+			"toolName":   "bash",
 			"input": map[string]any{
 				"command": "printf integration > runner-integration.txt && printf done",
 			},

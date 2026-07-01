@@ -43,18 +43,37 @@ function normalizeUsagePercent(value: number): number {
 
 function normalizeToolInput(name: string, input: Record<string, unknown>): Record<string, unknown> {
   switch (name) {
+    case 'Bash':
+      return typeof input.command === 'string' ? { command: input.command } : input
     case 'Read':
-      return { ...input, filePath: input.file_path ?? input.filePath }
+      return { path: input.file_path ?? input.filePath }
     case 'Write':
-      return { ...input, filePath: input.file_path ?? input.filePath }
-    case 'Edit':
+      return { path: input.file_path ?? input.filePath, content: input.content }
+    case 'Edit': {
+      const oldText = input.old_string ?? input.oldString
+      const newText = input.new_string ?? input.newString
+      if (typeof oldText !== 'string' || typeof newText !== 'string') return input
       return {
-        ...input,
-        filePath: input.file_path ?? input.filePath,
-        oldString: input.old_string ?? input.oldString,
-        newString: input.new_string ?? input.newString,
-        replaceAll: input.replace_all ?? input.replaceAll,
+        path: input.file_path ?? input.filePath,
+        edits: [{ oldText, newText }],
       }
+    }
+    case 'Grep':
+      return {
+        pattern: input.pattern,
+        ...(typeof input.path === 'string' ? { path: input.path } : {}),
+        ...(typeof input.glob === 'string' ? { glob: input.glob } : {}),
+        ...(typeof input['-i'] === 'boolean' ? { ignoreCase: input['-i'] } : {}),
+      }
+    case 'Glob':
+      return {
+        glob: input.pattern,
+        ...(typeof input.path === 'string' ? { path: input.path } : {}),
+      }
+    case 'WebFetch':
+      return { url: input.url }
+    case 'WebSearch':
+      return { query: input.query }
     default:
       return input
   }
@@ -177,7 +196,7 @@ function claudeSdkEnv(request: RuntimeProviderRequest) {
   return env
 }
 
-class ClaudeEventMapper {
+export class ClaudeEventMapper {
   private activeMessageId: string | null = null
   private text = ''
   private reasoning = ''

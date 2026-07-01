@@ -35,7 +35,7 @@ func TestParseWorkPayloadNormalizesApprovedToolCall(t *testing.T) {
 		"type":     "tool.execute",
 		"toolCall": ama.JSON{
 			"id":        "call_1",
-			"name":      "sandbox.exec",
+			"name":      "bash",
 			"approved":  true,
 			"arguments": ama.JSON{"command": "true"},
 		},
@@ -43,7 +43,7 @@ func TestParseWorkPayloadNormalizesApprovedToolCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if payload.ToolCallID != "call_1" || payload.ToolName != "sandbox.exec" || payload.Input["command"] != "true" {
+	if payload.ToolCallID != "call_1" || payload.ToolName != "bash" || payload.Input["command"] != "true" {
 		t.Fatalf("unexpected parsed tool payload: %#v", payload)
 	}
 }
@@ -54,7 +54,7 @@ func TestParseWorkPayloadNormalizesNestedToolCallInput(t *testing.T) {
 		"type":     "tool.execute",
 		"toolCall": ama.JSON{
 			"id":       "call_1",
-			"name":     "sandbox.read",
+			"name":     "read",
 			"approved": true,
 			"input":    ama.JSON{"path": "README.md"},
 		},
@@ -62,7 +62,7 @@ func TestParseWorkPayloadNormalizesNestedToolCallInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if payload.ToolCallID != "call_1" || payload.ToolName != "sandbox.read" || payload.Input["path"] != "README.md" {
+	if payload.ToolCallID != "call_1" || payload.ToolName != "read" || payload.Input["path"] != "README.md" {
 		t.Fatalf("unexpected parsed tool payload: %#v", payload)
 	}
 }
@@ -143,7 +143,7 @@ func TestParseWorkPayloadRejectsUnsafeToolWork(t *testing.T) {
 		"type":     "tool.execute",
 		"toolCall": ama.JSON{
 			"id":       "call_1",
-			"name":     "sandbox.exec",
+			"name":     "bash",
 			"approved": false,
 			"input":    ama.JSON{"command": "true"},
 		},
@@ -170,7 +170,7 @@ func TestParseWorkPayloadRejectsMalformedToolWork(t *testing.T) {
 				"protocol": "ama-runner-work",
 				"type":     "tool.execute",
 				"approved": true,
-				"toolName": "sandbox.exec",
+				"toolName": "bash",
 				"input":    ama.JSON{"command": "true"},
 			},
 			want: "toolCallId, toolName, and input",
@@ -182,7 +182,7 @@ func TestParseWorkPayloadRejectsMalformedToolWork(t *testing.T) {
 				"type":       "tool.execute",
 				"approved":   true,
 				"toolCallId": "call_1",
-				"toolName":   "sandbox.exec",
+				"toolName":   "bash",
 			},
 			want: "toolCallId, toolName, and input",
 		},
@@ -270,7 +270,7 @@ func TestRunnerChannelMessageAccessors(t *testing.T) {
 	requestID := "request_1"
 	sessionID := "session_1"
 	toolCallID := "tool_1"
-	toolName := "sandbox.exec"
+	toolName := "bash"
 	readOnly := true
 	input := map[string]any{"command": "true"}
 	volumes := []ama.RunnerVolume{

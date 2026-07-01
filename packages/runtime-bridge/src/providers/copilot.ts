@@ -64,7 +64,8 @@ function numberValue(value: unknown) {
 function normalizeTool(name: string, args: Record<string, unknown>) {
   switch (name) {
     case 'bash':
-      return { toolName: 'bash', args }
+    case 'shell':
+      return { toolName: 'bash', args: { command: args.command ?? args.cmd } }
     case 'read':
     case 'view':
       return { toolName: 'read', args: { path: args.path ?? args.file_path } }
@@ -74,12 +75,25 @@ function normalizeTool(name: string, args: Record<string, unknown>) {
         toolName: 'write',
         args: { path: args.path ?? args.file_path, content: args.file_text ?? args.content },
       }
+    case 'edit':
+      return {
+        toolName: 'edit',
+        args: {
+          path: args.path ?? args.file_path,
+          edits: Array.isArray(args.edits) ? args.edits : [{ oldText: args.old_text, newText: args.new_text }],
+        },
+      }
+    case 'fetch':
+    case 'url':
+      return { toolName: 'fetch', args: { url: args.url } }
+    case 'web_search':
+      return { toolName: 'web_search', args: { query: args.query } }
     default:
       return { toolName: name, args }
   }
 }
 
-class CopilotEventMapper {
+export class CopilotEventMapper {
   private activeMessageId: string | null = null
   private text = ''
   private reasoning = ''

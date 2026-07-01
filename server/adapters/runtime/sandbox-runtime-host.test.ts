@@ -64,7 +64,7 @@ describe('session-runtime', () => {
     mockExecutor.execute.mockResolvedValueOnce({
       toolCallId: 'call_git_status',
       toolName: 'bash',
-      output: { stdout: 'clean' },
+      output: { stdout: 'clean', stderr: '', exitCode: 0 },
       error: null,
       durationMs: 42,
     })
@@ -78,8 +78,6 @@ describe('session-runtime', () => {
             id: 'call_git_status',
             name: 'bash',
             input: { command: 'git status' },
-            output: { stdout: 'clean' },
-            durationMs: 42,
           },
         ],
       },
@@ -91,18 +89,14 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       toolCallId: 'call_git_status',
       toolName: 'bash',
-      input: {
-        command: 'git status',
-        output: { stdout: 'clean' },
-        durationMs: 42,
-      },
+      input: { command: 'git status' },
       cwd: '/workspace',
     })
     expect(results).toEqual([
       {
         toolCallId: 'call_git_status',
         toolName: 'bash',
-        output: { stdout: 'clean' },
+        output: { stdout: 'clean', stderr: '', exitCode: 0 },
         error: null,
         durationMs: 42,
       },
@@ -457,7 +451,7 @@ describe('session-runtime', () => {
     mockExecutor.execute.mockResolvedValueOnce({
       toolCallId: 'call_git_status',
       toolName: 'bash',
-      output: { stdout: 'clean' },
+      output: { stdout: 'clean', stderr: '', exitCode: 0 },
       error: null,
       durationMs: 5,
     })

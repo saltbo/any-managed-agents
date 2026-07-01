@@ -1,3 +1,4 @@
+import { parseAmaSandboxToolInput } from '@ama/runtime-contracts/tool-contracts'
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
 import { gitRepositoryMountPath } from '@server/domain/git-repository'
@@ -386,19 +387,14 @@ export async function executeRuntimeToolCalls(
     if (!isAmaSandboxToolName(toolName)) {
       throw new Error(`Unsupported sandbox tool: ${toolName}`)
     }
-    const input = call.input ?? {}
+    const input = parseAmaSandboxToolInput(toolName, call.input ?? {})
     results.push(
       await executor.execute({
         sessionId: values.sessionId,
         sandboxId: values.sandboxId,
         toolCallId,
         toolName,
-        input: {
-          ...input,
-          ...(call.output ? { output: call.output } : {}),
-          ...(call.error ? { error: call.error } : {}),
-          ...(call.durationMs !== undefined ? { durationMs: call.durationMs } : {}),
-        },
+        input,
         cwd: '/workspace',
       }),
     )
@@ -534,19 +530,20 @@ export function createRuntimeExecutionAdapters(
             if (typeof call.id !== 'string' || !call.id) {
               throw new Error('Runtime tool call id is required')
             }
+            const toolName = (() => {
+              const value = typeof call.name === 'string' ? call.name : 'tool'
+              if (!isAmaSandboxToolName(value)) {
+                throw new Error(`Unsupported sandbox tool: ${value}`)
+              }
+              return value
+            })()
             results.push(
               await (await executorForSession(input.sessionId)).execute({
                 sessionId: input.sessionId,
                 sandboxId: input.sandboxId,
                 toolCallId: call.id,
-                toolName: (() => {
-                  const toolName = typeof call.name === 'string' ? call.name : 'tool'
-                  if (!isAmaSandboxToolName(toolName)) {
-                    throw new Error(`Unsupported sandbox tool: ${toolName}`)
-                  }
-                  return toolName
-                })(),
-                input: call.input ?? {},
+                toolName,
+                input: parseAmaSandboxToolInput(toolName, call.input ?? {}),
                 cwd: '/workspace',
               }),
             )

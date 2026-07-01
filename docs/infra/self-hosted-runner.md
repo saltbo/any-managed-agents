@@ -84,15 +84,21 @@ The daemon fails fast when the API server, token, environment binding, work dire
 
 The only v1 adapter is `process-unsafe`. It is marked unsafe because it executes commands directly on the host with the configured work directory as the workspace boundary.
 
-`process-unsafe` supports only approved AMA tool work for:
+`process-unsafe` supports approved AMA sandbox tool work for:
 
-- `sandbox.exec`
-- `sandbox.read`
-- `sandbox.write`
+- `bash`
+- `read`
+- `write`
+- `edit`
+- `grep`
+- `find`
+- `ls`
+- `fetch`
+- `web_search`
 
 The adapter captures stdout, stderr, exit code, structured output, and errors. File reads/writes are constrained to the configured work directory, including symlink boundary checks. Command cancellation uses context cancellation and process-group termination on Unix-like hosts.
 
-`sandbox.exec` starts child commands with an explicit minimal environment. AMA control-plane credentials and `AMA_*` runner/operator configuration are not passed to leased commands. `HOME` and temp directories are set to runner-controlled directories inside the configured workspace so host operator config paths are not inherited.
+`bash` starts child commands with an explicit minimal environment. AMA control-plane credentials and `AMA_*` runner/operator configuration are not passed to leased commands. `HOME` and temp directories are set to runner-controlled directories inside the configured workspace so host operator config paths are not inherited.
 
 Do not use this adapter for untrusted workloads. Docker/OCI isolation should be added later as a separate adapter behind the same interface.
 
@@ -111,7 +117,7 @@ At startup, the daemon:
 
 `204` lease responses mean no eligible work is available. Authentication failures, runner-token binding failures, unsupported payload protocols, unsupported sandbox backends, and incompatible control planes are fatal.
 
-Current AMA self-hosted session creation queues `session.start` work. The daemon handles that work as a cloud-owned session handoff: it uploads a structured `runner.session.started` event and completes the lease without launching Pi/PyAgent locally. Approved `sandbox.exec`, `sandbox.read`, and `sandbox.write` tool payloads are the only work items that enter the local process adapter.
+Current AMA self-hosted session creation queues `session.start` work. The daemon handles that work as a cloud-owned session handoff: it uploads a structured `runner.session.started` event and completes the lease without launching Pi/PyAgent locally. Approved AMA sandbox tool payloads are the only work items that enter the local process adapter.
 
 ## Cancellation Status
 

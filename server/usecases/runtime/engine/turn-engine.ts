@@ -5,6 +5,11 @@
 // the same cloud loop with a runner-backed sandbox executor.
 
 import {
+  amaSandboxToolInputJsonSchema,
+  parseAmaSandboxToolInput,
+  parseAmaSandboxToolOutput,
+} from '@ama/runtime-contracts/tool-contracts'
+import {
   Agent,
   type AgentEvent,
   type AgentMessage,
@@ -19,7 +24,6 @@ import {
   type Model,
   type StreamOptions,
   type ToolCall,
-  Type,
   type Usage,
 } from '@earendil-works/pi-ai'
 import { AMA_SANDBOX_TOOL_NAMES, type AmaSandboxToolName } from '@shared/agent-tools'
@@ -169,20 +173,15 @@ function runtimeTools(
 ) {
   const ensure = (signal: AbortSignal | undefined) =>
     ensureTurnActive(signal ?? values.engineSignal, () => values.liveness.ensureActive())
-  const tool = (
-    name: AmaSandboxToolName,
-    label: string,
-    description: string,
-    parameters: AgentTool['parameters'],
-  ): AgentTool =>
+  const tool = (name: AmaSandboxToolName, label: string, description: string): AgentTool =>
     ({
       name,
       label,
       description,
-      parameters,
+      parameters: amaSandboxToolInputJsonSchema(name) as AgentTool['parameters'],
       executionMode: 'sequential',
       async execute(toolCallId, params, signal): Promise<AgentToolResult<Record<string, unknown>>> {
-        const input = params as Record<string, unknown>
+        const input = parseAmaSandboxToolInput(name, params)
         await ensure(signal)
         const decision = await values.policy.approve({ toolCallId, toolName: name, input })
         if (!decision.allowed) {
@@ -211,9 +210,10 @@ function runtimeTools(
         if (result.error) {
           throw new Error(JSON.stringify(result.error))
         }
+        const output = parseAmaSandboxToolOutput(name, result.output)
         return {
-          content: [{ type: 'text', text: stringifyToolOutput(result.output) }],
-          details: { ...result.output, durationMs: result.durationMs },
+          content: [{ type: 'text', text: stringifyToolOutput(output) }],
+          details: { ...output, durationMs: result.durationMs },
         }
       },
     }) satisfies AgentTool
@@ -224,79 +224,15 @@ function runtimeTools(
   const allowsTool = (toolName: string) => allowedTools.includes(toolName)
 
   return [
-    tool(
-      'read',
-      'Read file',
-      'Read a UTF-8 file from the session workspace.',
-      Type.Object({
-        path: Type.String(),
-        offset: Type.Optional(Type.Number()),
-        limit: Type.Optional(Type.Number()),
-      }),
-    ),
-    tool(
-      'bash',
-      'Run command',
-      'Run a shell command in the session workspace.',
-      Type.Object({ command: Type.String(), timeout: Type.Optional(Type.Number()) }),
-    ),
-    tool(
-      'edit',
-      'Edit file',
-      'Replace text in a UTF-8 file under the session workspace.',
-      Type.Object({
-        path: Type.String(),
-        edits: Type.Array(Type.Object({ oldText: Type.String(), newText: Type.String() })),
-      }),
-    ),
-    tool(
-      'write',
-      'Write file',
-      'Write a UTF-8 file under the session workspace.',
-      Type.Object({ path: Type.String(), content: Type.String() }),
-    ),
-    tool(
-      'grep',
-      'Search text',
-      'Search workspace files for text using ripgrep-style matching.',
-      Type.Object({
-        pattern: Type.String(),
-        path: Type.Optional(Type.String()),
-        glob: Type.Optional(Type.String()),
-        ignoreCase: Type.Optional(Type.Boolean()),
-        literal: Type.Optional(Type.Boolean()),
-        context: Type.Optional(Type.Number()),
-        limit: Type.Optional(Type.Number()),
-      }),
-    ),
-    tool(
-      'find',
-      'Find files',
-      'Find workspace files by name pattern.',
-      Type.Object({
-        pattern: Type.String(),
-        path: Type.Optional(Type.String()),
-        limit: Type.Optional(Type.Number()),
-      }),
-    ),
-    tool(
-      'ls',
-      'List files',
-      'List files in a workspace directory.',
-      Type.Object({ path: Type.Optional(Type.String()), limit: Type.Optional(Type.Number()) }),
-    ),
-    tool(
-      'fetch',
-      'Fetch URL',
-      'Fetch an HTTP(S) URL over the sandbox network, subject to the session network policy.',
-      Type.Object({ url: Type.String() }),
-    ),
-    tool(
-      'web_search',
-      'Search web',
-      'Search the web from inside the sandbox network.',
-      Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
-    ),
+    tool('read', 'Read file', 'Read a UTF-8 file from the session workspace.'),
+    tool('bash', 'Run command', 'Run a shell command in the session workspace.'),
+    tool('edit', 'Edit file', 'Replace text in a UTF-8 file under the session workspace.'),
+    tool('write', 'Write file', 'Write a UTF-8 file under the session workspace.'),
+    tool('grep', 'Search text', 'Search workspace files for text using ripgrep-style matching.'),
+    tool('find', 'Find files', 'Find workspace files by name pattern.'),
+    tool('ls', 'List files', 'List files in a workspace directory.'),
+    tool('fetch', 'Fetch URL', 'Fetch an HTTP(S) URL over the sandbox network, subject to the session network policy.'),
+    tool('web_search', 'Search web', 'Search the web from inside the sandbox network.'),
   ].filter((candidate) => allowsTool(candidate.name))
 }
 
@@ -549,7 +485,7 @@ function amaToolResult(message: Extract<AgentMessage, { role: 'toolResult' }>): 
       }
       return [{ type: 'json', value: block }]
     }),
-    ...(message.details !== undefined ? { structuredContent: message.details } : {}),
+    ...(isJsonObject(message.details) ? { structuredContent: message.details } : {}),
   }
 }
 
@@ -564,8 +500,12 @@ function amaToolResultFromAgentResult(result: AgentToolResult<unknown>): ToolRes
       }
       return [{ type: 'json', value: block }]
     }),
-    ...(result.details !== undefined ? { structuredContent: result.details } : {}),
+    ...(isJsonObject(result.details) ? { structuredContent: result.details } : {}),
   }
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function agentToolResult(result: unknown): AgentToolResult<unknown> {

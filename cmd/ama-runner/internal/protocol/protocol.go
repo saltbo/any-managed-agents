@@ -153,7 +153,7 @@ func ParseWorkPayload(payload any) (WorkPayload, error) {
 	if normalized.ToolCallID == "" || normalized.ToolName == "" || normalized.Input == nil {
 		return WorkPayload{}, fmt.Errorf("runner work item must include toolCallId, toolName, and input")
 	}
-	if normalized.ToolName != "sandbox.exec" && normalized.ToolName != "sandbox.read" && normalized.ToolName != "sandbox.write" {
+	if !lo.Contains([]string{"bash", "read", "write", "edit", "grep", "find", "ls", "fetch", "web_search"}, normalized.ToolName) {
 		return WorkPayload{}, fmt.Errorf("unsupported sandbox tool: %s", normalized.ToolName)
 	}
 	return normalized, nil

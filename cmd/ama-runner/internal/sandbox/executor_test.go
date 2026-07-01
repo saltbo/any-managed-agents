@@ -95,7 +95,7 @@ func TestProcessAdapterExecutesSandboxExecInWorkdir(t *testing.T) {
 	workDir := t.TempDir()
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	result, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.exec",
+		ToolName: "bash",
 		Input:    map[string]any{"command": "pwd && printf ok"},
 		WorkDir:  workDir,
 	})
@@ -116,10 +116,10 @@ func TestProcessAdapterValidatesToolsAndInputs(t *testing.T) {
 	workDir := t.TempDir()
 	cases := []ToolRequest{
 		{ToolName: "sandbox.unknown", WorkDir: workDir},
-		{ToolName: "sandbox.exec", Input: map[string]any{"command": " "}, WorkDir: workDir},
-		{ToolName: "sandbox.read", Input: map[string]any{}, WorkDir: workDir},
-		{ToolName: "sandbox.write", Input: map[string]any{"path": " "}, WorkDir: workDir},
-		{ToolName: "sandbox.write", Input: map[string]any{"path": "file.txt"}, WorkDir: workDir},
+		{ToolName: "bash", Input: map[string]any{"command": " "}, WorkDir: workDir},
+		{ToolName: "read", Input: map[string]any{}, WorkDir: workDir},
+		{ToolName: "write", Input: map[string]any{"path": " "}, WorkDir: workDir},
+		{ToolName: "write", Input: map[string]any{"path": "file.txt"}, WorkDir: workDir},
 	}
 	for _, request := range cases {
 		if _, err := adapter.Execute(context.Background(), request); err == nil {
@@ -132,14 +132,14 @@ func TestProcessAdapterReadAndWrite(t *testing.T) {
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	workDir := t.TempDir()
 	if _, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.write",
+		ToolName: "write",
 		Input:    map[string]any{"path": "notes/plan.md", "content": "ship it"},
 		WorkDir:  workDir,
 	}); err != nil {
 		t.Fatalf("write tool failed: %v", err)
 	}
 	result, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.read",
+		ToolName: "read",
 		Input:    map[string]any{"path": "/workspace/notes/plan.md"},
 		WorkDir:  workDir,
 	})
@@ -151,11 +151,41 @@ func TestProcessAdapterReadAndWrite(t *testing.T) {
 	}
 }
 
+func TestProcessAdapterFindSupportsGlob(t *testing.T) {
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg is required for find glob support")
+	}
+	workDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workDir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "src", "app.test.ts"), []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "src", "app.ts"), []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	result, err := adapter.Execute(context.Background(), ToolRequest{
+		ToolName: "find",
+		Input:    map[string]any{"glob": "**/*.test.ts", "path": "."},
+		WorkDir:  workDir,
+	})
+	if err != nil {
+		t.Fatalf("find tool failed: %v", err)
+	}
+	stdout, _ := result.Output["stdout"].(string)
+	if !strings.Contains(stdout, "src/app.test.ts") || strings.Contains(stdout, "src/app.ts") {
+		t.Fatalf("unexpected find output %q", stdout)
+	}
+}
+
 func TestProcessAdapterExecReportsFailureAndTimeout(t *testing.T) {
 	workDir := t.TempDir()
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	result, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.exec",
+		ToolName: "bash",
 		Input:    map[string]any{"command": "printf err >&2; exit 7"},
 		WorkDir:  workDir,
 	})
@@ -168,7 +198,7 @@ func TestProcessAdapterExecReportsFailureAndTimeout(t *testing.T) {
 
 	timeoutAdapter := ProcessAdapter{CommandTimeout: time.Millisecond, ShutdownGraceInterval: time.Millisecond}
 	if _, err := timeoutAdapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.exec",
+		ToolName: "bash",
 		Input:    map[string]any{"command": "sleep 1"},
 		WorkDir:  workDir,
 	}); err == nil {
@@ -189,7 +219,7 @@ func TestProcessAdapterDoesNotExposeDaemonAMAEnvironment(t *testing.T) {
 	workDir := t.TempDir()
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	result, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.exec",
+		ToolName: "bash",
 		Input:    map[string]any{"command": "env"},
 		WorkDir:  workDir,
 	})
@@ -311,7 +341,7 @@ func TestProcessAdapterRejectsSymlinkedEnvironmentDirectories(t *testing.T) {
 		}
 		marker := filepath.Join(workDir, "ran")
 		_, err := adapter.Execute(context.Background(), ToolRequest{
-			ToolName: "sandbox.exec",
+			ToolName: "bash",
 			Input:    map[string]any{"command": "touch ran"},
 			WorkDir:  workDir,
 		})
@@ -327,7 +357,7 @@ func TestProcessAdapterRejectsSymlinkedEnvironmentDirectories(t *testing.T) {
 func TestProcessAdapterRejectsPathsOutsideWorkspace(t *testing.T) {
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	_, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.read",
+		ToolName: "read",
 		Input:    map[string]any{"path": "../secret.txt"},
 		WorkDir:  t.TempDir(),
 	})
@@ -354,7 +384,7 @@ func TestProcessAdapterRejectsSymlinkWorkspaceEscapes(t *testing.T) {
 	}
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	_, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.read",
+		ToolName: "read",
 		Input:    map[string]any{"path": "readlink"},
 		WorkDir:  workDir,
 	})
@@ -362,7 +392,7 @@ func TestProcessAdapterRejectsSymlinkWorkspaceEscapes(t *testing.T) {
 		t.Fatalf("expected read symlink boundary error, got %v", err)
 	}
 	_, err = adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.write",
+		ToolName: "write",
 		Input:    map[string]any{"path": "writelink/out.txt", "content": "bad"},
 		WorkDir:  workDir,
 	})
@@ -370,7 +400,7 @@ func TestProcessAdapterRejectsSymlinkWorkspaceEscapes(t *testing.T) {
 		t.Fatalf("expected write symlink boundary error, got %v", err)
 	}
 	_, err = adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.write",
+		ToolName: "write",
 		Input:    map[string]any{"path": "readlink", "content": "bad"},
 		WorkDir:  workDir,
 	})
@@ -383,7 +413,7 @@ func TestProcessAdapterReadsAndWritesInsideWorkspace(t *testing.T) {
 	workDir := t.TempDir()
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	write, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.write",
+		ToolName: "write",
 		Input:    map[string]any{"path": "notes/todo.txt", "content": "done"},
 		WorkDir:  workDir,
 	})
@@ -397,7 +427,7 @@ func TestProcessAdapterReadsAndWritesInsideWorkspace(t *testing.T) {
 		t.Fatalf("unexpected written content %q, %v", content, err)
 	}
 	read, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.read",
+		ToolName: "read",
 		Input:    map[string]any{"path": "/workspace/notes/todo.txt"},
 		WorkDir:  workDir,
 	})
@@ -416,11 +446,11 @@ func TestProcessAdapterValidatesReadWriteInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := []ToolRequest{
-		{ToolName: "sandbox.read", Input: map[string]any{}, WorkDir: t.TempDir()},
-		{ToolName: "sandbox.read", Input: map[string]any{"path": "missing.txt"}, WorkDir: t.TempDir()},
-		{ToolName: "sandbox.write", Input: map[string]any{"path": "x"}, WorkDir: t.TempDir()},
-		{ToolName: "sandbox.write", Input: map[string]any{"path": "../x", "content": "bad"}, WorkDir: t.TempDir()},
-		{ToolName: "sandbox.write", Input: map[string]any{"path": "child.txt", "content": "bad"}, WorkDir: fileWorkDir},
+		{ToolName: "read", Input: map[string]any{}, WorkDir: t.TempDir()},
+		{ToolName: "read", Input: map[string]any{"path": "missing.txt"}, WorkDir: t.TempDir()},
+		{ToolName: "write", Input: map[string]any{"path": "x"}, WorkDir: t.TempDir()},
+		{ToolName: "write", Input: map[string]any{"path": "../x", "content": "bad"}, WorkDir: t.TempDir()},
+		{ToolName: "write", Input: map[string]any{"path": "child.txt", "content": "bad"}, WorkDir: fileWorkDir},
 	}
 	for _, request := range tests {
 		if _, err := adapter.Execute(context.Background(), request); err == nil {
@@ -443,7 +473,7 @@ func TestProcessAdapterRejectsSymlinkEscapes(t *testing.T) {
 	}
 	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
 	_, readErr := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.read",
+		ToolName: "read",
 		Input:    map[string]any{"path": "secret-link"},
 		WorkDir:  workDir,
 	})
@@ -451,7 +481,7 @@ func TestProcessAdapterRejectsSymlinkEscapes(t *testing.T) {
 		t.Fatalf("expected symlink read escape rejection, got %v", readErr)
 	}
 	_, writeErr := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.write",
+		ToolName: "write",
 		Input:    map[string]any{"path": "outside-dir/new.txt", "content": "bad"},
 		WorkDir:  workDir,
 	})
@@ -463,7 +493,7 @@ func TestProcessAdapterRejectsSymlinkEscapes(t *testing.T) {
 func TestProcessAdapterReportsCommandFailureAndTimeout(t *testing.T) {
 	adapter := ProcessAdapter{CommandTimeout: 500 * time.Millisecond, ShutdownGraceInterval: 50 * time.Millisecond}
 	failed, err := adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.exec",
+		ToolName: "bash",
 		Input:    map[string]any{"command": "printf bad >&2; exit 7"},
 		WorkDir:  t.TempDir(),
 	})
@@ -474,7 +504,7 @@ func TestProcessAdapterReportsCommandFailureAndTimeout(t *testing.T) {
 		t.Fatalf("unexpected failure output %#v", failed.Output)
 	}
 	_, err = adapter.Execute(context.Background(), ToolRequest{
-		ToolName: "sandbox.exec",
+		ToolName: "bash",
 		Input:    map[string]any{"command": "sleep 1"},
 		WorkDir:  t.TempDir(),
 	})

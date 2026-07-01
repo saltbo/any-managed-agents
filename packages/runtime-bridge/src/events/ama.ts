@@ -6,6 +6,7 @@ import {
   type MessageContentBlock,
   type MessageRole,
   type ToolCall,
+  ToolCallSchema,
   type ToolResult,
   type UsageRecordedPayload,
 } from '@ama/runtime-contracts/session-events'
@@ -67,7 +68,7 @@ export function reasoningBlock(text: string): MessageContentBlock {
 }
 
 export function toolCallBlock(toolCall: ToolCall): MessageContentBlock {
-  return { type: 'tool_call', toolCall }
+  return { type: 'tool_call', toolCall: ToolCallSchema.parse(toolCall) }
 }
 
 export function toolResultBlock(toolCallId: string, result: ToolResult, failed = false): MessageContentBlock {

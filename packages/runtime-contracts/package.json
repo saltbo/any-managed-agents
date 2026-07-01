@@ -10,6 +10,7 @@
     "./runtime-names": "./src/runtime-names.ts",
     "./sandbox-tools": "./src/sandbox-tools.ts",
     "./session-events": "./src/session-events.ts",
+    "./tool-contracts": "./src/tool-contracts.ts",
     "./workspace-manifest": "./src/workspace-manifest.ts"
   },
   "dependencies": {

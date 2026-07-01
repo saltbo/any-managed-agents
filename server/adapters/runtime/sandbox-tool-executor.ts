@@ -1,3 +1,4 @@
+import { parseAmaSandboxToolInput, parseAmaSandboxToolOutput } from '@ama/runtime-contracts/tool-contracts'
 import type { Env } from '../../env'
 import { RuntimeTurnCancelledError } from '../../usecases/runtime/engine/errors'
 import type { ToolExecutionInput, ToolExecutionResult, ToolExecutor } from '../../usecases/runtime/engine/ports'
@@ -76,6 +77,22 @@ function patternFromInput(input: Record<string, unknown>) {
     throw new Error('search tools require a non-empty pattern')
   }
   return pattern
+}
+
+function findPatternFromInput(input: Record<string, unknown>) {
+  const pattern = input.pattern
+  if (typeof pattern === 'string' && pattern.trim()) {
+    return pattern
+  }
+  return undefined
+}
+
+function findGlobFromInput(input: Record<string, unknown>) {
+  const glob = input.glob
+  if (typeof glob === 'string' && glob.trim()) {
+    return glob
+  }
+  return undefined
 }
 
 function queryFromInput(input: Record<string, unknown>) {
@@ -170,6 +187,18 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`
 }
 
+function globMatches(glob: string, path: string) {
+  const normalizedGlob = glob.replaceAll('\\', '/')
+  const normalizedPath = path.replaceAll('\\', '/').replace(/^\/workspace\//, '')
+  const escaped = normalizedGlob
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replaceAll('**', '\0')
+    .replaceAll('*', '[^/]*')
+    .replaceAll('?', '[^/]')
+    .replaceAll('\0', '.*')
+  return new RegExp(`^${escaped}$`).test(normalizedPath)
+}
+
 function shellPathFromInput(input: Record<string, unknown>) {
   return shellQuote(filePathFromInput({ path: typeof input.path === 'string' && input.path.trim() ? input.path : '.' }))
 }
@@ -187,7 +216,15 @@ function grepCommand(input: Record<string, unknown>) {
 
 function findCommand(input: Record<string, unknown>) {
   const limit = limitFromInput(input, 200)
-  return `find ${shellPathFromInput(input)} -type f -name ${shellQuote(`*${patternFromInput(input)}*`)} -print | head -n ${limit}`
+  const glob = findGlobFromInput(input)
+  if (glob) {
+    return `rg --files --glob ${shellQuote(glob)} ${shellPathFromInput(input)} | head -n ${limit}`
+  }
+  const pattern = findPatternFromInput(input)
+  if (!pattern) {
+    throw new Error('find requires pattern or glob')
+  }
+  return `find ${shellPathFromInput(input)} -type f -name ${shellQuote(`*${pattern}*`)} -print | head -n ${limit}`
 }
 
 function lsCommand(input: Record<string, unknown>) {
@@ -217,12 +254,13 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
       throw new RuntimeTurnCancelledError()
     }
     const startedAt = Date.now()
+    const toolInput = parseAmaSandboxToolInput(input.toolName, input.input)
     const sandbox = await this.sandbox(input.sandboxId)
-    const output = await this.executeInSandbox(sandbox, input)
+    const output = await this.executeInSandbox(sandbox, { ...input, input: toolInput } as ToolExecutionInput)
     return {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
-      output,
+      output: parseAmaSandboxToolOutput(input.toolName, output),
       error: null,
       durationMs: Date.now() - startedAt,
     }
@@ -368,25 +406,14 @@ export class TestToolExecutor implements ToolExecutor {
       throw new Error(`Unsupported sandbox tool: ${input.toolName}`)
     }
     const startedAt = Date.now()
-    const providedOutput =
-      input.input.output && typeof input.input.output === 'object'
-        ? (input.input.output as Record<string, unknown>)
-        : null
-    const output = providedOutput ?? this.simulate(input)
+    const toolInput = parseAmaSandboxToolInput(input.toolName, input.input)
+    const output = this.simulate({ ...input, input: toolInput } as ToolExecutionInput)
     return {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
-      output,
-      error:
-        input.input.error && typeof input.input.error === 'object'
-          ? (input.input.error as Record<string, unknown>)
-          : null,
-      durationMs:
-        typeof input.input.durationMs === 'number'
-          ? input.input.durationMs
-          : providedOutput || Object.keys(output).length === 0
-            ? 0
-            : Math.max(1, Date.now() - startedAt),
+      output: parseAmaSandboxToolOutput(input.toolName, output),
+      error: null,
+      durationMs: Object.keys(output).length === 0 ? 0 : Math.max(1, Date.now() - startedAt),
     }
   }
 
@@ -399,47 +426,48 @@ export class TestToolExecutor implements ToolExecutor {
   // are readable back per sandbox, and fetches resolve without leaving the
   // test process.
   private simulate(input: ToolExecutionInput): Record<string, unknown> {
+    const args = input.input as Record<string, unknown>
     if (input.toolName === 'bash') {
-      return typeof input.input.command === 'string' ? simulatedExecOutput(input.input.command) : {}
+      return typeof args.command === 'string' ? simulatedExecOutput(args.command) : {}
     }
     if (input.toolName === 'write') {
-      if (typeof input.input.path !== 'string') {
+      if (typeof args.path !== 'string') {
         return {}
       }
-      const path = filePathFromInput(input.input)
-      const content = textFromInput(input.input)
+      const path = filePathFromInput(args)
+      const content = textFromInput(args)
       simulatedSandboxFs(input.sandboxId).set(path, content)
       return { ok: true, path, bytes: content.length }
     }
     if (input.toolName === 'read') {
-      if (typeof input.input.path !== 'string') {
+      if (typeof args.path !== 'string') {
         return {}
       }
-      const path = filePathFromInput(input.input)
+      const path = filePathFromInput(args)
       const content = simulatedSandboxFs(input.sandboxId).get(path)
       if (content === undefined) {
         throw new Error(`Sandbox file not found: ${path}`)
       }
-      return { content: lineWindow(content, input.input), path }
+      return { content: lineWindow(content, args), path }
     }
     if (input.toolName === 'edit') {
-      if (typeof input.input.path !== 'string') {
+      if (typeof args.path !== 'string') {
         return {}
       }
-      const path = filePathFromInput(input.input)
+      const path = filePathFromInput(args)
       const content = simulatedSandboxFs(input.sandboxId).get(path)
       if (content === undefined) {
         throw new Error(`Sandbox file not found: ${path}`)
       }
-      const next = applyEdits(content, input.input)
+      const next = applyEdits(content, args)
       simulatedSandboxFs(input.sandboxId).set(path, next)
       return { ok: true, path }
     }
     if (input.toolName === 'grep') {
-      const pattern = patternFromInput(input.input)
-      const limit = limitFromInput(input.input, 200)
-      const literal = input.input.literal === true
-      const ignoreCase = input.input.ignoreCase === true
+      const pattern = patternFromInput(args)
+      const limit = limitFromInput(args, 200)
+      const literal = args.literal === true
+      const ignoreCase = args.ignoreCase === true
       const matches: string[] = []
       for (const [path, content] of simulatedSandboxFs(input.sandboxId)) {
         const lines = content.split(/\r?\n/)
@@ -455,17 +483,21 @@ export class TestToolExecutor implements ToolExecutor {
       return { stdout: matches.join('\n'), stderr: '', exitCode: matches.length > 0 ? 0 : 1 }
     }
     if (input.toolName === 'find') {
-      const pattern = patternFromInput(input.input)
-      const limit = limitFromInput(input.input, 200)
+      const pattern = findPatternFromInput(args)
+      const glob = findGlobFromInput(args)
+      if (!pattern && !glob) {
+        throw new Error('find requires pattern or glob')
+      }
+      const limit = limitFromInput(args, 200)
       const paths = [...simulatedSandboxFs(input.sandboxId).keys()]
-        .filter((path) => path.includes(pattern))
+        .filter((path) => (glob ? globMatches(glob, path) : path.includes(pattern!)))
         .slice(0, limit)
       return { stdout: paths.join('\n'), stderr: '', exitCode: 0 }
     }
     if (input.toolName === 'ls') {
-      const root = filePathFromInput({ path: typeof input.input.path === 'string' ? input.input.path : '.' })
+      const root = filePathFromInput({ path: typeof args.path === 'string' ? args.path : '.' })
       const prefix = root.endsWith('/') ? root : `${root}/`
-      const limit = limitFromInput(input.input, 200)
+      const limit = limitFromInput(args, 200)
       const entries = [...simulatedSandboxFs(input.sandboxId).keys()]
         .filter((path) => path.startsWith(prefix))
         .map((path) =>
@@ -477,21 +509,19 @@ export class TestToolExecutor implements ToolExecutor {
     }
     if (input.toolName === 'web_search') {
       return {
-        stdout: `simulated web search: ${queryFromInput(input.input)}`,
+        stdout: `simulated web search: ${queryFromInput(args)}`,
         stderr: '',
         exitCode: 0,
       }
     }
-    if (typeof input.input.url !== 'string' && typeof input.input.host !== 'string') {
+    if (typeof args.url !== 'string') {
       return {}
     }
-    const url = typeof input.input.url === 'string' ? urlFromInput(input.input) : null
-    const host = typeof input.input.host === 'string' ? input.input.host : url ? new URL(url).hostname : null
+    const url = urlFromInput(args)
     return {
-      status: 200,
-      host,
-      ...(url ? { url } : {}),
-      content: `simulated fetch ${host ?? 'unknown-host'} ok`,
+      stdout: `simulated fetch ${new URL(url).hostname} ok`,
+      stderr: '',
+      exitCode: 0,
     }
   }
 }

@@ -135,7 +135,7 @@ func TestHostHandleCloseIsNoop(t *testing.T) {
 
 func TestSandboxHandleExecutesSandboxRequest(t *testing.T) {
 	toolCallID := "call_1"
-	toolName := "sandbox.exec"
+	toolName := "bash"
 	input := map[string]any{"command": "pwd"}
 	adapter := &fakeSandboxAdapter{
 		result: sandbox.ToolResult{Output: map[string]any{"stdout": "/workspace\n", "exitCode": 0}},
@@ -168,7 +168,7 @@ func TestSandboxHandleExecutesSandboxRequest(t *testing.T) {
 
 func TestSandboxHandleExecuteReturnsToolErrorInResponse(t *testing.T) {
 	toolCallID := "call_2"
-	toolName := "sandbox.exec"
+	toolName := "bash"
 	input := map[string]any{"command": "false"}
 	handle := NewSandboxHandle("session_1", testWorkspace(t), &fakeSandboxAdapter{
 		result: sandbox.ToolResult{Output: map[string]any{"stderr": "boom", "exitCode": 1}},

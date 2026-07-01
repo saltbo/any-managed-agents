@@ -362,7 +362,7 @@ function createControlPlane(runtime, gitConfig) {
         return json(response, 201, {
           id: RUNNER_ID,
           name: 'smoke-runner',
-          capabilities: ['sandbox.exec'],
+          capabilities: ['ama-sandbox'],
           state: 'offline',
           currentLoad: 0,
           maxConcurrent: 1,

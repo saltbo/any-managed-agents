@@ -47,6 +47,7 @@ from .auth_organization import AuthOrganization
 from .auth_project import AuthProject
 from .auth_session import AuthSession
 from .auth_user import AuthUser
+from .bash_tool_input import BashToolInput
 from .budget import Budget
 from .budget_limit_type import BudgetLimitType
 from .budget_list_response import BudgetListResponse
@@ -121,6 +122,8 @@ from .create_vault_request import CreateVaultRequest
 from .create_vault_request_metadata import CreateVaultRequestMetadata
 from .create_vault_request_spec import CreateVaultRequestSpec
 from .create_vault_request_spec_scope import CreateVaultRequestSpecScope
+from .edit_tool_input import EditToolInput
+from .edit_tool_input_edits_item import EditToolInputEditsItem
 from .env_from_entry import EnvFromEntry
 from .env_from_entry_type import EnvFromEntryType
 from .environment import Environment
@@ -147,13 +150,35 @@ from .event_message import EventMessage
 from .event_message_role import EventMessageRole
 from .event_record import EventRecord
 from .event_record_list_response import EventRecordListResponse
-from .event_tool_call import EventToolCall
+from .event_tool_call_type_0 import EventToolCallType0
+from .event_tool_call_type_0_name import EventToolCallType0Name
+from .event_tool_call_type_1 import EventToolCallType1
+from .event_tool_call_type_1_name import EventToolCallType1Name
+from .event_tool_call_type_2 import EventToolCallType2
+from .event_tool_call_type_2_name import EventToolCallType2Name
+from .event_tool_call_type_3 import EventToolCallType3
+from .event_tool_call_type_3_name import EventToolCallType3Name
+from .event_tool_call_type_4 import EventToolCallType4
+from .event_tool_call_type_4_name import EventToolCallType4Name
+from .event_tool_call_type_5 import EventToolCallType5
+from .event_tool_call_type_5_name import EventToolCallType5Name
+from .event_tool_call_type_6 import EventToolCallType6
+from .event_tool_call_type_6_name import EventToolCallType6Name
+from .event_tool_call_type_7 import EventToolCallType7
+from .event_tool_call_type_7_name import EventToolCallType7Name
+from .event_tool_call_type_8 import EventToolCallType8
+from .event_tool_call_type_8_name import EventToolCallType8Name
 from .execution_env import ExecutionEnv
 from .execution_spec_input import ExecutionSpecInput
+from .external_tool_call import ExternalToolCall
+from .external_tool_call_input import ExternalToolCallInput
+from .fetch_tool_input import FetchToolInput
 from .file_content_block import FileContentBlock
 from .file_content_block_type import FileContentBlockType
+from .find_tool_input import FindToolInput
 from .git_repository_volume import GitRepositoryVolume
 from .git_repository_volume_type import GitRepositoryVolumeType
+from .grep_tool_input import GrepToolInput
 from .health_response import HealthResponse
 from .health_response_runtime import HealthResponseRuntime
 from .health_response_status import HealthResponseStatus
@@ -183,6 +208,7 @@ from .list_vault_credential_versions_state import ListVaultCredentialVersionsSta
 from .list_vault_credentials_state import ListVaultCredentialsState
 from .list_vaults_archived import ListVaultsArchived
 from .list_work_items_state import ListWorkItemsState
+from .ls_tool_input import LsToolInput
 from .memory_store import MemoryStore
 from .memory_store_list_response import MemoryStoreListResponse
 from .memory_store_memory import MemoryStoreMemory
@@ -223,6 +249,7 @@ from .public_oidc_config_type_0 import PublicOidcConfigType0
 from .put_runner_heartbeat_request import PutRunnerHeartbeatRequest
 from .put_runner_heartbeat_request_metadata import PutRunnerHeartbeatRequestMetadata
 from .put_runner_heartbeat_request_state import PutRunnerHeartbeatRequestState
+from .read_tool_input import ReadToolInput
 from .read_usage_summary_group_by import ReadUsageSummaryGroupBy
 from .reasoning_content_block import ReasoningContentBlock
 from .reasoning_content_block_type import ReasoningContentBlockType
@@ -362,6 +389,7 @@ from .tool_call_content_block_type import ToolCallContentBlockType
 from .tool_result import ToolResult
 from .tool_result_content_block import ToolResultContentBlock
 from .tool_result_content_block_type import ToolResultContentBlockType
+from .tool_result_structured_content import ToolResultStructuredContent
 from .trigger import Trigger
 from .trigger_create_metadata import TriggerCreateMetadata
 from .trigger_list_response import TriggerListResponse
@@ -460,12 +488,14 @@ from .vault_spec import VaultSpec
 from .vault_spec_scope import VaultSpecScope
 from .vault_status import VaultStatus
 from .volume_mount import VolumeMount
+from .web_search_tool_input import WebSearchToolInput
 from .work_item import WorkItem
 from .work_item_error_type_0 import WorkItemErrorType0
 from .work_item_list_response import WorkItemListResponse
 from .work_item_payload import WorkItemPayload
 from .work_item_result_type_0 import WorkItemResultType0
 from .work_item_state import WorkItemState
+from .write_tool_input import WriteToolInput
 
 __all__ = (
     "Agent",
@@ -515,6 +545,7 @@ __all__ = (
     "AuthProject",
     "AuthSession",
     "AuthUser",
+    "BashToolInput",
     "Budget",
     "BudgetLimitType",
     "BudgetListResponse",
@@ -589,6 +620,8 @@ __all__ = (
     "CreateVaultRequestMetadata",
     "CreateVaultRequestSpec",
     "CreateVaultRequestSpecScope",
+    "EditToolInput",
+    "EditToolInputEditsItem",
     "EnvFromEntry",
     "EnvFromEntryType",
     "Environment",
@@ -615,13 +648,35 @@ __all__ = (
     "EventMessageRole",
     "EventRecord",
     "EventRecordListResponse",
-    "EventToolCall",
+    "EventToolCallType0",
+    "EventToolCallType0Name",
+    "EventToolCallType1",
+    "EventToolCallType1Name",
+    "EventToolCallType2",
+    "EventToolCallType2Name",
+    "EventToolCallType3",
+    "EventToolCallType3Name",
+    "EventToolCallType4",
+    "EventToolCallType4Name",
+    "EventToolCallType5",
+    "EventToolCallType5Name",
+    "EventToolCallType6",
+    "EventToolCallType6Name",
+    "EventToolCallType7",
+    "EventToolCallType7Name",
+    "EventToolCallType8",
+    "EventToolCallType8Name",
     "ExecutionEnv",
     "ExecutionSpecInput",
+    "ExternalToolCall",
+    "ExternalToolCallInput",
+    "FetchToolInput",
     "FileContentBlock",
     "FileContentBlockType",
+    "FindToolInput",
     "GitRepositoryVolume",
     "GitRepositoryVolumeType",
+    "GrepToolInput",
     "HealthResponse",
     "HealthResponseRuntime",
     "HealthResponseStatus",
@@ -651,6 +706,7 @@ __all__ = (
     "ListVaultCredentialVersionsState",
     "ListVaultsArchived",
     "ListWorkItemsState",
+    "LsToolInput",
     "MemoryStore",
     "MemoryStoreListResponse",
     "MemoryStoreMemory",
@@ -691,6 +747,7 @@ __all__ = (
     "PutRunnerHeartbeatRequest",
     "PutRunnerHeartbeatRequestMetadata",
     "PutRunnerHeartbeatRequestState",
+    "ReadToolInput",
     "ReadUsageSummaryGroupBy",
     "ReasoningContentBlock",
     "ReasoningContentBlockType",
@@ -830,6 +887,7 @@ __all__ = (
     "ToolResult",
     "ToolResultContentBlock",
     "ToolResultContentBlockType",
+    "ToolResultStructuredContent",
     "Trigger",
     "TriggerCreateMetadata",
     "TriggerListResponse",
@@ -928,10 +986,12 @@ __all__ = (
     "VaultSpecScope",
     "VaultStatus",
     "VolumeMount",
+    "WebSearchToolInput",
     "WorkItem",
     "WorkItemErrorType0",
     "WorkItemListResponse",
     "WorkItemPayload",
     "WorkItemResultType0",
     "WorkItemState",
+    "WriteToolInput",
 )

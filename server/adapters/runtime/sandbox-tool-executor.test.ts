@@ -36,7 +36,7 @@ describe('tool-executor', () => {
     expect(toolExecutor({ AMA_RUNTIME_MODE: 'live' } as Env)).toBeInstanceOf(CloudflareSandboxToolExecutor)
   })
 
-  it('echoes supplied tool output, error, and duration in test mode', async () => {
+  it('simulates canonical bash output in test mode', async () => {
     const executor = new TestToolExecutor()
 
     await expect(
@@ -45,22 +45,17 @@ describe('tool-executor', () => {
         sandboxId: 'sandbox_123',
         toolCallId: 'call_1',
         toolName: 'bash',
-        input: {
-          output: { stdout: 'ok' },
-          error: { message: 'failed' },
-          durationMs: 9,
-        },
+        input: { command: 'echo ok' },
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       toolCallId: 'call_1',
       toolName: 'bash',
-      output: { stdout: 'ok' },
-      error: { message: 'failed' },
-      durationMs: 9,
+      output: { stdout: 'ok', stderr: '', exitCode: 0 },
+      error: null,
     })
   })
 
-  it('defaults missing test-mode tool result fields safely', async () => {
+  it('rejects invalid test-mode tool input before simulation', async () => {
     const executor = new TestToolExecutor()
 
     await expect(
@@ -71,13 +66,7 @@ describe('tool-executor', () => {
         toolName: 'bash',
         input: {},
       }),
-    ).resolves.toEqual({
-      toolCallId: 'call_1',
-      toolName: 'bash',
-      output: {},
-      error: null,
-      durationMs: 0,
-    })
+    ).rejects.toThrow()
   })
 
   it('executes sandbox commands in /workspace through Cloudflare Sandbox', async () => {
@@ -145,6 +134,25 @@ describe('tool-executor', () => {
     expect(sandboxMock.exec).toHaveBeenCalledWith(expect.stringContaining('lite.duckduckgo.com'), {
       cwd: '/workspace',
       timeout: 90_000,
+    })
+  })
+
+  it('executes find glob searches inside the sandbox', async () => {
+    sandboxMock.exec.mockResolvedValue({ stdout: 'src/app.test.ts', stderr: '', exitCode: 0 })
+    const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
+
+    await expect(
+      executor.execute({
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        toolCallId: 'find_1',
+        toolName: 'find',
+        input: { glob: '**/*.test.ts', path: 'src', limit: 5 },
+      }),
+    ).resolves.toMatchObject({ output: { stdout: 'src/app.test.ts', stderr: '', exitCode: 0 } })
+    expect(sandboxMock.exec).toHaveBeenCalledWith("rg --files --glob '**/*.test.ts' '/workspace/src' | head -n 5", {
+      cwd: '/workspace',
+      timeout: 600_000,
     })
   })
 

@@ -451,6 +451,412 @@
         ]
       },
       "EventToolCall": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "bash"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/BashToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "read"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/ReadToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "write"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/WriteToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "edit"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/EditToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "grep"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/GrepToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "find"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/FindToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "ls"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/LsToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "fetch"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/FetchToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "enum": [
+                  "web_search"
+                ]
+              },
+              "input": {
+                "$ref": "#/components/schemas/WebSearchToolInput"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "#/components/schemas/ExternalToolCall"
+          }
+        ]
+      },
+      "BashToolInput": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeout": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "ReadToolInput": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "WriteToolInput": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "EditToolInput": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "edits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "oldText": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "newText": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "oldText",
+                "newText"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "path",
+          "edits"
+        ],
+        "additionalProperties": false
+      },
+      "GrepToolInput": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "glob": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ignoreCase": {
+            "type": "boolean"
+          },
+          "literal": {
+            "type": "boolean"
+          },
+          "context": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "additionalProperties": false
+      },
+      "FindToolInput": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1
+          },
+          "glob": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "LsToolInput": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "FetchToolInput": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "WebSearchToolInput": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "ExternalToolCall": {
         "type": "object",
         "properties": {
           "id": {
@@ -460,12 +866,16 @@
             "type": "string"
           },
           "input": {
-            "nullable": true
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
           }
         },
         "required": [
           "id",
-          "name"
+          "name",
+          "input"
         ],
         "additionalProperties": false
       },
@@ -504,10 +914,13 @@
             }
           },
           "structuredContent": {
-            "nullable": true
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
           },
           "exitCode": {
-            "type": "number"
+            "type": "integer"
           }
         },
         "required": [

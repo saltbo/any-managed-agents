@@ -318,7 +318,7 @@ func TestRelayHandlesSandboxRequest(t *testing.T) {
 	ch := newFakeChannel()
 	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
 	toolCallID := "call_1"
-	toolName := "sandbox.exec"
+	toolName := "bash"
 	input := map[string]any{"command": "echo ok"}
 	handle := NewSandboxHandle("session_1", testWorkspace(t), &fakeSandboxAdapter{
 		result: sandbox.ToolResult{Output: map[string]any{"stdout": "ok\n", "exitCode": 0}},

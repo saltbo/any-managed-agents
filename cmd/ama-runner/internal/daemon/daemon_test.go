@@ -564,7 +564,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		"systemPrompt":  "Follow the AMA runtime protocol.",
 		"skills":        []any{},
 		"subagents":     []any{ama.JSON{"name": "reviewer", "description": "Reviews pull requests", "systemPrompt": "Review strictly."}},
-		"allowedTools":  []any{"sandbox.exec"},
+		"allowedTools":  []any{"bash"},
 		"mcpConnectors": []any{},
 	}
 	// Codex is a CLI relay runtime: events flow over the per-runner hub channel,
@@ -588,7 +588,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		},
 		events: []RuntimeEventRecord{
 			runtimeEvent("message.completed", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "prompt:build the feature"}}}}),
-			runtimeToolCallMessage("tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}),
+			runtimeToolCallMessage("tool_1", "bash", ama.JSON{"command": "printf ok"}),
 			runtimeToolResultMessage("tool_1", ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}),
 			runtimeEvent("usage.recorded", ama.JSON{"provider": "provider_codex", "model": "gpt-5.3-codex", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
 		},
@@ -1698,7 +1698,7 @@ func approvedLease() *fakeWork {
 				"type":       "tool.execute",
 				"approved":   true,
 				"toolCallId": "call_1",
-				"toolName":   "sandbox.exec",
+				"toolName":   "bash",
 				"input":      map[string]any{"command": "printf ok"},
 			},
 		},
@@ -1948,7 +1948,7 @@ func TestHeartbeatAdvertisesNoExternalRuntimesWhenNoCLIsAreInstalled(t *testing.
 		t.Fatalf("expected heartbeat success, got %v", err)
 	}
 	got := heartbeatCapabilities(client.heartbeats[0])
-	want := []string{"sandbox.exec", amaSandboxCapability}
+	want := []string{amaSandboxCapability}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected only base capabilities %v, got %v", want, got)
 	}
@@ -2052,7 +2052,7 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "copilot_thread_1"},
 		events: []RuntimeEventRecord{
 			runtimeEvent("message.completed", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "copilot prompt ok"}}}}),
-			runtimeToolCallMessage("copilot_tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}),
+			runtimeToolCallMessage("copilot_tool_1", "bash", ama.JSON{"command": "printf ok"}),
 			runtimeToolResultMessage("copilot_tool_1", ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}),
 			runtimeEvent("usage.recorded", ama.JSON{"provider": "provider_copilot", "model": "copilot-cli", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
 		},

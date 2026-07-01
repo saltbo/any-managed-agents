@@ -16,6 +16,7 @@ if TYPE_CHECKING:
   from ..models.image_content_block import ImageContentBlock
   from ..models.json_content_block import JsonContentBlock
   from ..models.text_content_block import TextContentBlock
+  from ..models.tool_result_structured_content import ToolResultStructuredContent
 
 
 
@@ -30,13 +31,13 @@ class ToolResult:
     """ 
         Attributes:
             content (list[FileContentBlock | ImageContentBlock | JsonContentBlock | TextContentBlock]):
-            structured_content (Any | Unset):
-            exit_code (float | Unset):
+            structured_content (ToolResultStructuredContent | Unset):
+            exit_code (int | Unset):
      """
 
     content: list[FileContentBlock | ImageContentBlock | JsonContentBlock | TextContentBlock]
-    structured_content: Any | Unset = UNSET
-    exit_code: float | Unset = UNSET
+    structured_content: ToolResultStructuredContent | Unset = UNSET
+    exit_code: int | Unset = UNSET
 
 
 
@@ -47,6 +48,7 @@ class ToolResult:
         from ..models.image_content_block import ImageContentBlock
         from ..models.json_content_block import JsonContentBlock
         from ..models.text_content_block import TextContentBlock
+        from ..models.tool_result_structured_content import ToolResultStructuredContent
         content = []
         for content_item_data in self.content:
             content_item: dict[str, Any]
@@ -63,7 +65,9 @@ class ToolResult:
 
 
 
-        structured_content = self.structured_content
+        structured_content: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.structured_content, Unset):
+            structured_content = self.structured_content.to_dict()
 
         exit_code = self.exit_code
 
@@ -88,6 +92,7 @@ class ToolResult:
         from ..models.image_content_block import ImageContentBlock
         from ..models.json_content_block import JsonContentBlock
         from ..models.text_content_block import TextContentBlock
+        from ..models.tool_result_structured_content import ToolResultStructuredContent
         d = dict(src_dict)
         content = []
         _content = d.pop("content")
@@ -136,7 +141,15 @@ class ToolResult:
             content.append(content_item)
 
 
-        structured_content = d.pop("structuredContent", UNSET)
+        _structured_content = d.pop("structuredContent", UNSET)
+        structured_content: ToolResultStructuredContent | Unset
+        if isinstance(_structured_content,  Unset):
+            structured_content = UNSET
+        else:
+            structured_content = ToolResultStructuredContent.from_dict(_structured_content)
+
+
+
 
         exit_code = d.pop("exitCode", UNSET)
 

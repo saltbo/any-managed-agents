@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -37,12 +38,24 @@ type ProcessAdapter struct {
 
 func (a ProcessAdapter) Execute(ctx context.Context, request ToolRequest) (ToolResult, error) {
 	switch request.ToolName {
-	case "sandbox.exec":
+	case "bash":
 		return a.exec(ctx, request)
-	case "sandbox.read":
+	case "read":
 		return a.read(request)
-	case "sandbox.write":
+	case "write":
 		return a.write(request)
+	case "edit":
+		return a.edit(request)
+	case "grep":
+		return a.command(ctx, request, grepCommand(request.Input), 0)
+	case "find":
+		return a.command(ctx, request, findCommand(request.Input), 0)
+	case "ls":
+		return a.command(ctx, request, lsCommand(request.Input), 0)
+	case "fetch":
+		return a.command(ctx, request, fetchCommand(request.Input), 90*time.Second)
+	case "web_search":
+		return a.command(ctx, request, webSearchCommand(request.Input), 90*time.Second)
 	default:
 		return ToolResult{}, fmt.Errorf("unsupported sandbox tool: %s", request.ToolName)
 	}
@@ -51,13 +64,23 @@ func (a ProcessAdapter) Execute(ctx context.Context, request ToolRequest) (ToolR
 func (a ProcessAdapter) exec(ctx context.Context, request ToolRequest) (ToolResult, error) {
 	command, ok := StringInput(request.Input, "command")
 	if !ok || strings.TrimSpace(command) == "" {
-		return ToolResult{}, fmt.Errorf("sandbox.exec requires a non-empty command")
+		return ToolResult{}, fmt.Errorf("bash requires a non-empty command")
 	}
-	timeout := a.CommandTimeout
-	if timeout <= 0 {
-		timeout = 10 * time.Minute
+	return a.command(ctx, request, command, 0)
+}
+
+func (a ProcessAdapter) command(ctx context.Context, request ToolRequest, command string, timeout time.Duration) (ToolResult, error) {
+	if strings.TrimSpace(command) == "" {
+		return ToolResult{}, fmt.Errorf("%s produced an empty command", request.ToolName)
 	}
-	commandCtx, cancel := context.WithTimeout(ctx, timeout)
+	commandTimeout := a.CommandTimeout
+	if commandTimeout <= 0 {
+		commandTimeout = 10 * time.Minute
+	}
+	if timeout > 0 && timeout < commandTimeout {
+		commandTimeout = timeout
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
 	env, err := ProcessCommandEnvironment(request.WorkDir)
@@ -113,7 +136,7 @@ func (a ProcessAdapter) exec(ctx context.Context, request ToolRequest) (ToolResu
 func (a ProcessAdapter) read(request ToolRequest) (ToolResult, error) {
 	path, ok := StringInput(request.Input, "path")
 	if !ok || strings.TrimSpace(path) == "" {
-		return ToolResult{}, fmt.Errorf("sandbox.read requires a path")
+		return ToolResult{}, fmt.Errorf("read requires a path")
 	}
 	resolved, err := ResolveReadPath(request.WorkDir, path)
 	if err != nil {
@@ -123,17 +146,17 @@ func (a ProcessAdapter) read(request ToolRequest) (ToolResult, error) {
 	if err != nil {
 		return ToolResult{}, err
 	}
-	return ToolResult{Output: map[string]any{"content": string(content)}}, nil
+	return ToolResult{Output: map[string]any{"content": string(content), "path": path}}, nil
 }
 
 func (a ProcessAdapter) write(request ToolRequest) (ToolResult, error) {
 	path, ok := StringInput(request.Input, "path")
 	if !ok || strings.TrimSpace(path) == "" {
-		return ToolResult{}, fmt.Errorf("sandbox.write requires a path")
+		return ToolResult{}, fmt.Errorf("write requires a path")
 	}
 	content, ok := StringInput(request.Input, "content")
 	if !ok {
-		return ToolResult{}, fmt.Errorf("sandbox.write requires string content")
+		return ToolResult{}, fmt.Errorf("write requires string content")
 	}
 	resolved, err := ResolveWritePath(request.WorkDir, path)
 	if err != nil {
@@ -142,7 +165,49 @@ func (a ProcessAdapter) write(request ToolRequest) (ToolResult, error) {
 	if err := os.WriteFile(resolved, []byte(content), 0o644); err != nil {
 		return ToolResult{}, err
 	}
-	return ToolResult{Output: map[string]any{"ok": true}}, nil
+	return ToolResult{Output: map[string]any{"ok": true, "path": path, "bytes": len(content)}}, nil
+}
+
+func (a ProcessAdapter) edit(request ToolRequest) (ToolResult, error) {
+	path, ok := StringInput(request.Input, "path")
+	if !ok || strings.TrimSpace(path) == "" {
+		return ToolResult{}, fmt.Errorf("edit requires a path")
+	}
+	edits, ok := request.Input["edits"].([]any)
+	if !ok || len(edits) == 0 {
+		return ToolResult{}, fmt.Errorf("edit requires at least one edit")
+	}
+	resolved, err := ResolveWritePath(request.WorkDir, path)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		return ToolResult{}, err
+	}
+	content := string(data)
+	for _, value := range edits {
+		edit, ok := value.(map[string]any)
+		if !ok {
+			return ToolResult{}, fmt.Errorf("edit entries must be objects")
+		}
+		oldText, ok := StringInput(edit, "oldText")
+		if !ok || oldText == "" {
+			return ToolResult{}, fmt.Errorf("edit oldText must be a non-empty string")
+		}
+		newText, ok := StringInput(edit, "newText")
+		if !ok {
+			return ToolResult{}, fmt.Errorf("edit newText must be a string")
+		}
+		if !strings.Contains(content, oldText) {
+			return ToolResult{}, fmt.Errorf("edit oldText was not found")
+		}
+		content = strings.Replace(content, oldText, newText, 1)
+	}
+	if err := os.WriteFile(resolved, []byte(content), 0o644); err != nil {
+		return ToolResult{}, err
+	}
+	return ToolResult{Output: map[string]any{"ok": true, "path": path}}, nil
 }
 
 func (a ProcessAdapter) stopProcess(cmd *exec.Cmd) {
@@ -161,6 +226,97 @@ func (a ProcessAdapter) stopProcess(cmd *exec.Cmd) {
 func StringInput(input map[string]any, key string) (string, bool) {
 	value, ok := input[key].(string)
 	return value, ok
+}
+
+func OptionalStringInput(input map[string]any, key string, fallback string) string {
+	value, ok := StringInput(input, key)
+	if !ok || strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
+func PositiveIntInput(input map[string]any, key string, fallback int) int {
+	value, ok := input[key]
+	if !ok {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case int:
+		if typed >= 0 {
+			return typed
+		}
+	case float64:
+		if typed >= 0 && typed == float64(int(typed)) {
+			return int(typed)
+		}
+	}
+	return fallback
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func shellPath(input map[string]any) string {
+	return shellQuote(OptionalStringInput(input, "path", "."))
+}
+
+func grepCommand(input map[string]any) string {
+	pattern, _ := StringInput(input, "pattern")
+	args := []string{"rg", "--line-number", "--color", "never"}
+	if value, ok := input["ignoreCase"].(bool); ok && value {
+		args = append(args, "--ignore-case")
+	}
+	if value, ok := input["literal"].(bool); ok && value {
+		args = append(args, "--fixed-strings")
+	}
+	if glob, ok := StringInput(input, "glob"); ok && strings.TrimSpace(glob) != "" {
+		args = append(args, "--glob", shellQuote(glob))
+	}
+	if _, ok := input["context"]; ok {
+		args = append(args, "--context", strconv.Itoa(PositiveIntInput(input, "context", 0)))
+	}
+	args = append(args, "--max-count", strconv.Itoa(PositiveIntInput(input, "limit", 200)))
+	args = append(args, shellQuote(pattern), shellPath(input))
+	return strings.Join(args, " ")
+}
+
+func findCommand(input map[string]any) string {
+	limit := PositiveIntInput(input, "limit", 200)
+	if glob, ok := StringInput(input, "glob"); ok && strings.TrimSpace(glob) != "" {
+		return "rg --files --glob " + shellQuote(glob) + " " + shellPath(input) + " | head -n " + strconv.Itoa(limit)
+	}
+	pattern, ok := StringInput(input, "pattern")
+	if !ok || strings.TrimSpace(pattern) == "" {
+		return ""
+	}
+	return "find " + shellPath(input) + " -type f -name " + shellQuote("*"+pattern+"*") + " -print | head -n " + strconv.Itoa(limit)
+}
+
+func lsCommand(input map[string]any) string {
+	limit := PositiveIntInput(input, "limit", 200)
+	return "find " + shellPath(input) + " -maxdepth 1 -mindepth 1 -print | sort | head -n " + strconv.Itoa(limit)
+}
+
+func fetchCommand(input map[string]any) string {
+	url, _ := StringInput(input, "url")
+	return "curl -fsS --max-time 60 " + shellQuote(url)
+}
+
+func webSearchCommand(input map[string]any) string {
+	query, _ := StringInput(input, "query")
+	limit := PositiveIntInput(input, "limit", 20)
+	if limit > 50 {
+		limit = 50
+	}
+	url := "https://lite.duckduckgo.com/lite/?q=" + strings.ReplaceAll(query, " ", "+")
+	return strings.Join([]string{
+		"curl -fsSL --max-time 30 " + shellQuote(url),
+		"sed -E 's/<[^>]*>/ /g; s/&amp;/\\&/g; s/&quot;/\"/g'",
+		"awk '{$1=$1; if (length($0) > 0) print}'",
+		"head -n " + strconv.Itoa(limit*4),
+	}, " | ")
 }
 
 func ProcessCommandEnvironment(workDir string) ([]string, error) {

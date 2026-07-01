@@ -1,3 +1,4 @@
+import { parseAmaSandboxToolOutput } from '@ama/runtime-contracts/tool-contracts'
 import type { RunnerChannel } from '@server/usecases/ports'
 import type { Env } from '../../env'
 
@@ -78,10 +79,7 @@ export function createRunnerChannel(
       return {
         toolCallId: String(result.toolCallId ?? input.toolCallId),
         toolName: input.toolName,
-        output:
-          result.output && typeof result.output === 'object' && !Array.isArray(result.output)
-            ? (result.output as Record<string, unknown>)
-            : {},
+        output: parseAmaSandboxToolOutput(input.toolName, result.output),
         error:
           result.error && typeof result.error === 'object' && !Array.isArray(result.error)
             ? (result.error as Record<string, unknown>)

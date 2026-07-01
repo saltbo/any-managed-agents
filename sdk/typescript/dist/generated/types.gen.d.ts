@@ -93,8 +93,92 @@ export type ToolCallContentBlock = {
 };
 export type EventToolCall = {
     id: string;
+    name: 'bash';
+    input: BashToolInput;
+} | {
+    id: string;
+    name: 'read';
+    input: ReadToolInput;
+} | {
+    id: string;
+    name: 'write';
+    input: WriteToolInput;
+} | {
+    id: string;
+    name: 'edit';
+    input: EditToolInput;
+} | {
+    id: string;
+    name: 'grep';
+    input: GrepToolInput;
+} | {
+    id: string;
+    name: 'find';
+    input: FindToolInput;
+} | {
+    id: string;
+    name: 'ls';
+    input: LsToolInput;
+} | {
+    id: string;
+    name: 'fetch';
+    input: FetchToolInput;
+} | {
+    id: string;
+    name: 'web_search';
+    input: WebSearchToolInput;
+} | ExternalToolCall;
+export type BashToolInput = {
+    command: string;
+    timeout?: number;
+};
+export type ReadToolInput = {
+    path: string;
+    offset?: number;
+    limit?: number;
+};
+export type WriteToolInput = {
+    path: string;
+    content: string;
+};
+export type EditToolInput = {
+    path: string;
+    edits: Array<{
+        oldText: string;
+        newText: string;
+    }>;
+};
+export type GrepToolInput = {
+    pattern: string;
+    path?: string;
+    glob?: string;
+    ignoreCase?: boolean;
+    literal?: boolean;
+    context?: number;
+    limit?: number;
+};
+export type FindToolInput = {
+    pattern: string;
+    path?: string;
+    limit?: number;
+};
+export type LsToolInput = {
+    path?: string;
+    limit?: number;
+};
+export type FetchToolInput = {
+    url: string;
+};
+export type WebSearchToolInput = {
+    query: string;
+    limit?: number;
+};
+export type ExternalToolCall = {
+    id: string;
     name: string;
-    input?: unknown;
+    input: {
+        [key: string]: unknown;
+    };
 };
 export type ToolResultContentBlock = {
     type: 'tool_result';
@@ -104,7 +188,9 @@ export type ToolResultContentBlock = {
 };
 export type ToolResult = {
     content: Array<ToolResultValueContentBlock>;
-    structuredContent?: unknown;
+    structuredContent?: {
+        [key: string]: unknown;
+    };
     exitCode?: number;
 };
 export type ToolResultValueContentBlock = ({

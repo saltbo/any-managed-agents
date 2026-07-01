@@ -15,43 +15,38 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="EventToolCall")
+T = TypeVar("T", bound="WebSearchToolInput")
 
 
 
 @_attrs_define
-class EventToolCall:
+class WebSearchToolInput:
     """ 
         Attributes:
-            id (str):
-            name (str):
-            input_ (Any | Unset):
+            query (str):
+            limit (int | Unset):
      """
 
-    id: str
-    name: str
-    input_: Any | Unset = UNSET
+    query: str
+    limit: int | Unset = UNSET
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        id = self.id
+        query = self.query
 
-        name = self.name
-
-        input_ = self.input_
+        limit = self.limit
 
 
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
-            "id": id,
-            "name": name,
+            "query": query,
         })
-        if input_ is not UNSET:
-            field_dict["input"] = input_
+        if limit is not UNSET:
+            field_dict["limit"] = limit
 
         return field_dict
 
@@ -60,17 +55,14 @@ class EventToolCall:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        id = d.pop("id")
+        query = d.pop("query")
 
-        name = d.pop("name")
+        limit = d.pop("limit", UNSET)
 
-        input_ = d.pop("input", UNSET)
-
-        event_tool_call = cls(
-            id=id,
-            name=name,
-            input_=input_,
+        web_search_tool_input = cls(
+            query=query,
+            limit=limit,
         )
 
-        return event_tool_call
+        return web_search_tool_input
 

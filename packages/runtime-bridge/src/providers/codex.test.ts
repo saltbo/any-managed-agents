@@ -88,6 +88,25 @@ async function* commandEvents() {
   }
 }
 
+async function* fileChangeEvents() {
+  yield {
+    type: 'item.started',
+    item: {
+      id: 'item_file_1',
+      type: 'file_change',
+      changes: [{ kind: 'update', path: 'src/app.ts' }],
+    },
+  }
+  yield {
+    type: 'item.completed',
+    item: {
+      id: 'item_file_1',
+      type: 'file_change',
+      changes: [{ kind: 'update', path: 'src/app.ts' }],
+    },
+  }
+}
+
 async function* repeatedCommandEvents() {
   yield* commandEvents()
   yield { type: 'turn.completed' }
@@ -219,6 +238,19 @@ describe('codexProvider', () => {
       })
 
     expect(toolCallIds).toEqual(['item_1', 'item_1', 'item_1', 'item_1'])
+  })
+
+  it('does not map Codex file change observations to tool calls', async () => {
+    runStreamedMock.mockResolvedValue({ events: fileChangeEvents() })
+    startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
+
+    const handle = await codexProvider.execute(request())
+    const events = []
+    for await (const event of handle.events) {
+      events.push(event)
+    }
+
+    expect(events).toEqual([])
   })
 
   it('does not emit model usage when Codex SDK events do not report the actual model', async () => {

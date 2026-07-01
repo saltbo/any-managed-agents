@@ -432,7 +432,7 @@ func (d *Daemon) runUsageCollector(ctx context.Context) {
 }
 
 func runnerCapabilities(runtimeCapabilities []string) []string {
-	capabilities := []string{"sandbox.exec", "ama-sandbox"}
+	capabilities := []string{"ama-sandbox"}
 	return append(capabilities, runtimeCapabilities...)
 }
 

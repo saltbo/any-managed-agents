@@ -39,7 +39,7 @@ export const CLAUDE_CODE_BUILTIN_TOOL_NAMES = [
   'Write',
 ] as const
 
-export const CODEX_RUNTIME_TOOL_EVENTS = ['command_execution', 'file_change', 'mcp_tool_call', 'web_search'] as const
+export const CODEX_RUNTIME_TOOL_EVENTS = ['command_execution', 'mcp_tool_call', 'web_search'] as const
 
 export const COPILOT_PERMISSION_TOOL_KINDS = [
   'shell',

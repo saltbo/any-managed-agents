@@ -196,10 +196,11 @@ async function resolveToolCall(db: Db, scope: UsageRecordingScope, toolCallId: s
       if (block.type !== 'tool_call') continue
       const toolCall = objectField(block, 'toolCall')
       if (stringField(toolCall, 'id') === toolCallId) {
+        const input = objectField(toolCall, 'input')
         return {
           id: toolCallId,
           name: stringField(toolCall, 'name') ?? 'tool',
-          input: toolCall.input ?? {},
+          input,
         }
       }
     }

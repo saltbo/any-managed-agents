@@ -778,6 +778,141 @@ func (e EventMessageRole) Valid() bool {
 	}
 }
 
+// Defines values for EventToolCall0Name.
+const (
+	Bash EventToolCall0Name = "bash"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall0Name enum.
+func (e EventToolCall0Name) Valid() bool {
+	switch e {
+	case Bash:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall1Name.
+const (
+	Read EventToolCall1Name = "read"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall1Name enum.
+func (e EventToolCall1Name) Valid() bool {
+	switch e {
+	case Read:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall2Name.
+const (
+	Write EventToolCall2Name = "write"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall2Name enum.
+func (e EventToolCall2Name) Valid() bool {
+	switch e {
+	case Write:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall3Name.
+const (
+	Edit EventToolCall3Name = "edit"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall3Name enum.
+func (e EventToolCall3Name) Valid() bool {
+	switch e {
+	case Edit:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall4Name.
+const (
+	Grep EventToolCall4Name = "grep"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall4Name enum.
+func (e EventToolCall4Name) Valid() bool {
+	switch e {
+	case Grep:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall5Name.
+const (
+	Find EventToolCall5Name = "find"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall5Name enum.
+func (e EventToolCall5Name) Valid() bool {
+	switch e {
+	case Find:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall6Name.
+const (
+	Ls EventToolCall6Name = "ls"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall6Name enum.
+func (e EventToolCall6Name) Valid() bool {
+	switch e {
+	case Ls:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall7Name.
+const (
+	Fetch EventToolCall7Name = "fetch"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall7Name enum.
+func (e EventToolCall7Name) Valid() bool {
+	switch e {
+	case Fetch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventToolCall8Name.
+const (
+	WebSearch EventToolCall8Name = "web_search"
+)
+
+// Valid indicates whether the value is a known member of the EventToolCall8Name enum.
+func (e EventToolCall8Name) Valid() bool {
+	switch e {
+	case WebSearch:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FileContentBlockType.
 const (
 	File FileContentBlockType = "file"
@@ -2911,6 +3046,12 @@ type AuthUser struct {
 	Name  *string `json:"name"`
 }
 
+// BashToolInput defines model for BashToolInput.
+type BashToolInput struct {
+	Command string   `json:"command"`
+	Timeout *float32 `json:"timeout,omitempty"`
+}
+
 // Budget defines model for Budget.
 type Budget struct {
 	CreatedAt  time.Time              `json:"createdAt"`
@@ -3220,6 +3361,15 @@ type CreateVaultRequest struct {
 // CreateVaultRequestSpecScope defines model for CreateVaultRequest.Spec.Scope.
 type CreateVaultRequestSpecScope string
 
+// EditToolInput defines model for EditToolInput.
+type EditToolInput struct {
+	Edits []struct {
+		NewText string `json:"newText"`
+		OldText string `json:"oldText"`
+	} `json:"edits"`
+	Path string `json:"path"`
+}
+
 // EnvFromEntry defines model for EnvFromEntry.
 type EnvFromEntry struct {
 	Key       *string          `json:"key,omitempty"`
@@ -3367,10 +3517,98 @@ type EventRecordListResponse struct {
 
 // EventToolCall defines model for EventToolCall.
 type EventToolCall struct {
-	Id    string      `json:"id"`
-	Input interface{} `json:"input,omitempty"`
-	Name  string      `json:"name"`
+	union json.RawMessage
 }
+
+// EventToolCall0 defines model for .
+type EventToolCall0 struct {
+	Id    string             `json:"id"`
+	Input BashToolInput      `json:"input"`
+	Name  EventToolCall0Name `json:"name"`
+}
+
+// EventToolCall0Name defines model for EventToolCall.0.Name.
+type EventToolCall0Name string
+
+// EventToolCall1 defines model for .
+type EventToolCall1 struct {
+	Id    string             `json:"id"`
+	Input ReadToolInput      `json:"input"`
+	Name  EventToolCall1Name `json:"name"`
+}
+
+// EventToolCall1Name defines model for EventToolCall.1.Name.
+type EventToolCall1Name string
+
+// EventToolCall2 defines model for .
+type EventToolCall2 struct {
+	Id    string             `json:"id"`
+	Input WriteToolInput     `json:"input"`
+	Name  EventToolCall2Name `json:"name"`
+}
+
+// EventToolCall2Name defines model for EventToolCall.2.Name.
+type EventToolCall2Name string
+
+// EventToolCall3 defines model for .
+type EventToolCall3 struct {
+	Id    string             `json:"id"`
+	Input EditToolInput      `json:"input"`
+	Name  EventToolCall3Name `json:"name"`
+}
+
+// EventToolCall3Name defines model for EventToolCall.3.Name.
+type EventToolCall3Name string
+
+// EventToolCall4 defines model for .
+type EventToolCall4 struct {
+	Id    string             `json:"id"`
+	Input GrepToolInput      `json:"input"`
+	Name  EventToolCall4Name `json:"name"`
+}
+
+// EventToolCall4Name defines model for EventToolCall.4.Name.
+type EventToolCall4Name string
+
+// EventToolCall5 defines model for .
+type EventToolCall5 struct {
+	Id    string             `json:"id"`
+	Input FindToolInput      `json:"input"`
+	Name  EventToolCall5Name `json:"name"`
+}
+
+// EventToolCall5Name defines model for EventToolCall.5.Name.
+type EventToolCall5Name string
+
+// EventToolCall6 defines model for .
+type EventToolCall6 struct {
+	Id    string             `json:"id"`
+	Input LsToolInput        `json:"input"`
+	Name  EventToolCall6Name `json:"name"`
+}
+
+// EventToolCall6Name defines model for EventToolCall.6.Name.
+type EventToolCall6Name string
+
+// EventToolCall7 defines model for .
+type EventToolCall7 struct {
+	Id    string             `json:"id"`
+	Input FetchToolInput     `json:"input"`
+	Name  EventToolCall7Name `json:"name"`
+}
+
+// EventToolCall7Name defines model for EventToolCall.7.Name.
+type EventToolCall7Name string
+
+// EventToolCall8 defines model for .
+type EventToolCall8 struct {
+	Id    string             `json:"id"`
+	Input WebSearchToolInput `json:"input"`
+	Name  EventToolCall8Name `json:"name"`
+}
+
+// EventToolCall8Name defines model for EventToolCall.8.Name.
+type EventToolCall8Name string
 
 // ExecutionEnv defines model for ExecutionEnv.
 type ExecutionEnv map[string]string
@@ -3386,6 +3624,18 @@ type ExecutionSpecInput struct {
 	Volumes       *[]Volume       `json:"volumes,omitempty"`
 }
 
+// ExternalToolCall defines model for ExternalToolCall.
+type ExternalToolCall struct {
+	Id    string                  `json:"id"`
+	Input map[string]*interface{} `json:"input"`
+	Name  string                  `json:"name"`
+}
+
+// FetchToolInput defines model for FetchToolInput.
+type FetchToolInput struct {
+	Url string `json:"url"`
+}
+
 // FileContentBlock defines model for FileContentBlock.
 type FileContentBlock struct {
 	Data      *string              `json:"data,omitempty"`
@@ -3398,6 +3648,14 @@ type FileContentBlock struct {
 // FileContentBlockType defines model for FileContentBlock.Type.
 type FileContentBlockType string
 
+// FindToolInput defines model for FindToolInput.
+type FindToolInput struct {
+	Glob    *string `json:"glob,omitempty"`
+	Limit   *int    `json:"limit,omitempty"`
+	Path    *string `json:"path,omitempty"`
+	Pattern *string `json:"pattern,omitempty"`
+}
+
 // GitRepositoryVolume defines model for GitRepositoryVolume.
 type GitRepositoryVolume struct {
 	Name      string                  `json:"name"`
@@ -3409,6 +3667,17 @@ type GitRepositoryVolume struct {
 
 // GitRepositoryVolumeType defines model for GitRepositoryVolume.Type.
 type GitRepositoryVolumeType string
+
+// GrepToolInput defines model for GrepToolInput.
+type GrepToolInput struct {
+	Context    *int    `json:"context,omitempty"`
+	Glob       *string `json:"glob,omitempty"`
+	IgnoreCase *bool   `json:"ignoreCase,omitempty"`
+	Limit      *int    `json:"limit,omitempty"`
+	Literal    *bool   `json:"literal,omitempty"`
+	Path       *string `json:"path,omitempty"`
+	Pattern    string  `json:"pattern"`
+}
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
@@ -3474,6 +3743,12 @@ type ListPagination struct {
 	HasMore    bool    `json:"hasMore"`
 	Limit      int     `json:"limit"`
 	NextCursor *string `json:"nextCursor"`
+}
+
+// LsToolInput defines model for LsToolInput.
+type LsToolInput struct {
+	Limit *int    `json:"limit,omitempty"`
+	Path  *string `json:"path,omitempty"`
 }
 
 // MemoryStore defines model for MemoryStore.
@@ -3698,6 +3973,13 @@ type PutRunnerHeartbeatRequest struct {
 
 // PutRunnerHeartbeatRequestState defines model for PutRunnerHeartbeatRequest.State.
 type PutRunnerHeartbeatRequestState string
+
+// ReadToolInput defines model for ReadToolInput.
+type ReadToolInput struct {
+	Limit  *int   `json:"limit,omitempty"`
+	Offset *int   `json:"offset,omitempty"`
+	Path   string `json:"path"`
+}
 
 // ReasoningContentBlock defines model for ReasoningContentBlock.
 type ReasoningContentBlock struct {
@@ -4426,8 +4708,8 @@ type ToolCallContentBlockType string
 // ToolResult defines model for ToolResult.
 type ToolResult struct {
 	Content           []ToolResultValueContentBlock `json:"content"`
-	ExitCode          *float32                      `json:"exitCode,omitempty"`
-	StructuredContent interface{}                   `json:"structuredContent,omitempty"`
+	ExitCode          *int                          `json:"exitCode,omitempty"`
+	StructuredContent *map[string]*interface{}      `json:"structuredContent,omitempty"`
 }
 
 // ToolResultContentBlock defines model for ToolResultContentBlock.
@@ -4958,6 +5240,12 @@ type VolumeMount struct {
 	ReadOnly  *bool  `json:"readOnly,omitempty"`
 }
 
+// WebSearchToolInput defines model for WebSearchToolInput.
+type WebSearchToolInput struct {
+	Limit *int   `json:"limit,omitempty"`
+	Query string `json:"query"`
+}
+
 // WorkItem defines model for WorkItem.
 type WorkItem struct {
 	Attempts      int                     `json:"attempts"`
@@ -4986,6 +5274,12 @@ type WorkItemState string
 type WorkItemListResponse struct {
 	Data       []WorkItem     `json:"data"`
 	Pagination ListPagination `json:"pagination"`
+}
+
+// WriteToolInput defines model for WriteToolInput.
+type WriteToolInput struct {
+	Content string `json:"content"`
+	Path    string `json:"path"`
 }
 
 // bearerAuthContextKey is the context key for bearerAuth security scheme
@@ -5811,6 +6105,276 @@ func (t CreateTriggerRequest_Spec_Source) MarshalJSON() ([]byte, error) {
 }
 
 func (t *CreateTriggerRequest_Spec_Source) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsEventToolCall0 returns the union data inside the EventToolCall as a EventToolCall0
+func (t EventToolCall) AsEventToolCall0() (EventToolCall0, error) {
+	var body EventToolCall0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall0 overwrites any union data inside the EventToolCall as the provided EventToolCall0
+func (t *EventToolCall) FromEventToolCall0(v EventToolCall0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall0 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall0
+func (t *EventToolCall) MergeEventToolCall0(v EventToolCall0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall1 returns the union data inside the EventToolCall as a EventToolCall1
+func (t EventToolCall) AsEventToolCall1() (EventToolCall1, error) {
+	var body EventToolCall1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall1 overwrites any union data inside the EventToolCall as the provided EventToolCall1
+func (t *EventToolCall) FromEventToolCall1(v EventToolCall1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall1 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall1
+func (t *EventToolCall) MergeEventToolCall1(v EventToolCall1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall2 returns the union data inside the EventToolCall as a EventToolCall2
+func (t EventToolCall) AsEventToolCall2() (EventToolCall2, error) {
+	var body EventToolCall2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall2 overwrites any union data inside the EventToolCall as the provided EventToolCall2
+func (t *EventToolCall) FromEventToolCall2(v EventToolCall2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall2 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall2
+func (t *EventToolCall) MergeEventToolCall2(v EventToolCall2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall3 returns the union data inside the EventToolCall as a EventToolCall3
+func (t EventToolCall) AsEventToolCall3() (EventToolCall3, error) {
+	var body EventToolCall3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall3 overwrites any union data inside the EventToolCall as the provided EventToolCall3
+func (t *EventToolCall) FromEventToolCall3(v EventToolCall3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall3 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall3
+func (t *EventToolCall) MergeEventToolCall3(v EventToolCall3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall4 returns the union data inside the EventToolCall as a EventToolCall4
+func (t EventToolCall) AsEventToolCall4() (EventToolCall4, error) {
+	var body EventToolCall4
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall4 overwrites any union data inside the EventToolCall as the provided EventToolCall4
+func (t *EventToolCall) FromEventToolCall4(v EventToolCall4) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall4 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall4
+func (t *EventToolCall) MergeEventToolCall4(v EventToolCall4) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall5 returns the union data inside the EventToolCall as a EventToolCall5
+func (t EventToolCall) AsEventToolCall5() (EventToolCall5, error) {
+	var body EventToolCall5
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall5 overwrites any union data inside the EventToolCall as the provided EventToolCall5
+func (t *EventToolCall) FromEventToolCall5(v EventToolCall5) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall5 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall5
+func (t *EventToolCall) MergeEventToolCall5(v EventToolCall5) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall6 returns the union data inside the EventToolCall as a EventToolCall6
+func (t EventToolCall) AsEventToolCall6() (EventToolCall6, error) {
+	var body EventToolCall6
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall6 overwrites any union data inside the EventToolCall as the provided EventToolCall6
+func (t *EventToolCall) FromEventToolCall6(v EventToolCall6) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall6 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall6
+func (t *EventToolCall) MergeEventToolCall6(v EventToolCall6) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall7 returns the union data inside the EventToolCall as a EventToolCall7
+func (t EventToolCall) AsEventToolCall7() (EventToolCall7, error) {
+	var body EventToolCall7
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall7 overwrites any union data inside the EventToolCall as the provided EventToolCall7
+func (t *EventToolCall) FromEventToolCall7(v EventToolCall7) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall7 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall7
+func (t *EventToolCall) MergeEventToolCall7(v EventToolCall7) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventToolCall8 returns the union data inside the EventToolCall as a EventToolCall8
+func (t EventToolCall) AsEventToolCall8() (EventToolCall8, error) {
+	var body EventToolCall8
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventToolCall8 overwrites any union data inside the EventToolCall as the provided EventToolCall8
+func (t *EventToolCall) FromEventToolCall8(v EventToolCall8) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventToolCall8 performs a merge with any union data inside the EventToolCall, using the provided EventToolCall8
+func (t *EventToolCall) MergeEventToolCall8(v EventToolCall8) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsExternalToolCall returns the union data inside the EventToolCall as a ExternalToolCall
+func (t EventToolCall) AsExternalToolCall() (ExternalToolCall, error) {
+	var body ExternalToolCall
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromExternalToolCall overwrites any union data inside the EventToolCall as the provided ExternalToolCall
+func (t *EventToolCall) FromExternalToolCall(v ExternalToolCall) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeExternalToolCall performs a merge with any union data inside the EventToolCall, using the provided ExternalToolCall
+func (t *EventToolCall) MergeExternalToolCall(v ExternalToolCall) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t EventToolCall) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *EventToolCall) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

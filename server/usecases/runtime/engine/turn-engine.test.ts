@@ -79,7 +79,7 @@ describe('AMA runtime turn-engine', () => {
         async (): Promise<ToolExecutionResult> => ({
           toolCallId: 'x',
           toolName: 'bash',
-          output: {},
+          output: { stdout: '', stderr: '', exitCode: 0 },
           error: null,
           durationMs: 0,
         }),
@@ -124,7 +124,7 @@ describe('AMA runtime turn-engine', () => {
         async (): Promise<ToolExecutionResult> => ({
           toolCallId: 'x',
           toolName: 'bash',
-          output: {},
+          output: { stdout: '', stderr: '', exitCode: 0 },
           error: null,
           durationMs: 0,
         }),

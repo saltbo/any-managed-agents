@@ -180,10 +180,81 @@ const TextContentBlockSchema = z.object({ type: z.literal('text'), text: z.strin
 const ReasoningContentBlockSchema = z
   .object({ type: z.literal('reasoning'), text: z.string() })
   .openapi('ReasoningContentBlock')
-const ToolCallSchema = z
-  .object({ id: z.string(), name: z.string(), input: z.unknown() })
+const NonNegativeIntegerSchema = z.number().int().min(0)
+const BashToolInputSchema = z
+  .object({ command: z.string().min(1), timeout: z.number().positive().optional() })
   .strict()
-  .openapi('EventToolCall')
+  .openapi('BashToolInput')
+const ReadToolInputSchema = z
+  .object({
+    path: z.string().min(1),
+    offset: NonNegativeIntegerSchema.optional(),
+    limit: NonNegativeIntegerSchema.optional(),
+  })
+  .strict()
+  .openapi('ReadToolInput')
+const WriteToolInputSchema = z
+  .object({ path: z.string().min(1), content: z.string() })
+  .strict()
+  .openapi('WriteToolInput')
+const EditToolInputSchema = z
+  .object({
+    path: z.string().min(1),
+    edits: z.array(z.object({ oldText: z.string().min(1), newText: z.string() }).strict()).min(1),
+  })
+  .strict()
+  .openapi('EditToolInput')
+const GrepToolInputSchema = z
+  .object({
+    pattern: z.string().min(1),
+    path: z.string().min(1).optional(),
+    glob: z.string().min(1).optional(),
+    ignoreCase: z.boolean().optional(),
+    literal: z.boolean().optional(),
+    context: NonNegativeIntegerSchema.optional(),
+    limit: NonNegativeIntegerSchema.optional(),
+  })
+  .strict()
+  .openapi('GrepToolInput')
+const FindToolInputSchema = z
+  .object({
+    pattern: z.string().min(1).optional(),
+    glob: z.string().min(1).optional(),
+    path: z.string().min(1).optional(),
+    limit: NonNegativeIntegerSchema.optional(),
+  })
+  .refine((input) => input.pattern !== undefined || input.glob !== undefined, {
+    message: 'find requires pattern or glob',
+  })
+  .strict()
+  .openapi('FindToolInput')
+const LsToolInputSchema = z
+  .object({ path: z.string().min(1).optional(), limit: NonNegativeIntegerSchema.optional() })
+  .strict()
+  .openapi('LsToolInput')
+const FetchToolInputSchema = z.object({ url: z.string().url() }).strict().openapi('FetchToolInput')
+const WebSearchToolInputSchema = z
+  .object({ query: z.string().min(1), limit: NonNegativeIntegerSchema.optional() })
+  .strict()
+  .openapi('WebSearchToolInput')
+const KnownToolCallSchema = z
+  .discriminatedUnion('name', [
+    z.object({ id: z.string(), name: z.literal('bash'), input: BashToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('read'), input: ReadToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('write'), input: WriteToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('edit'), input: EditToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('grep'), input: GrepToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('find'), input: FindToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('ls'), input: LsToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('fetch'), input: FetchToolInputSchema }).strict(),
+    z.object({ id: z.string(), name: z.literal('web_search'), input: WebSearchToolInputSchema }).strict(),
+  ])
+  .openapi('KnownToolCall')
+const ExternalToolCallSchema = z
+  .object({ id: z.string(), name: z.string(), input: JsonObjectSchema })
+  .strict()
+  .openapi('ExternalToolCall')
+const ToolCallSchema = z.union([KnownToolCallSchema, ExternalToolCallSchema]).openapi('EventToolCall')
 const ToolCallContentBlockSchema = z
   .object({ type: z.literal('tool_call'), toolCall: ToolCallSchema })
   .openapi('ToolCallContentBlock')
@@ -216,8 +287,8 @@ const ToolResultValueContentBlockSchema = z
 const ToolResultSchema = z
   .object({
     content: z.array(ToolResultValueContentBlockSchema),
-    structuredContent: z.unknown().optional(),
-    exitCode: z.number().optional(),
+    structuredContent: JsonObjectSchema.optional(),
+    exitCode: z.number().int().optional(),
   })
   .strict()
   .openapi('ToolResult')
