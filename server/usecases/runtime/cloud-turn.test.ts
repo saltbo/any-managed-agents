@@ -231,7 +231,6 @@ describe('consumeCloudTurnQueueMessage — cloud-command turn path [spec: runtim
             content: [expect.objectContaining({ type: 'text', text: 'continue the task' })],
           }),
         }),
-        metadata: expect.objectContaining({ source: 'user-prompt', auditAction: 'session.command' }),
       }),
     )
     expect(runSessionTurnMock).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'continue the task' }))

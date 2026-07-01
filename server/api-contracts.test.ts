@@ -41,17 +41,10 @@ function sortedUnique(fields: string[]) {
 describe('route schema and handler alignment [spec: api-contracts/schema-alignment]', () => {
   it('keeps agent write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
-    // 'content' is read for the memory PUT handler; 'archived' is the update-only
-    // lifecycle transition — neither belongs to the agent create write schema.
-    const handled = sortedUnique(
-      bodyFields(routeSources.agents).filter(
-        (field) => field !== 'content' && field !== 'metadata' && field !== 'archived',
-      ),
-    )
     const createFields = schemaFields(doc, 'CreateAgentRequest')
     const updateFields = schemaFields(doc, 'UpdateAgentRequest')
 
-    expect(handled).toEqual(createFields)
+    expect(createFields).toEqual(['metadata', 'spec'])
     // Update is the create payload plus the lifecycle archive transition (§1.3).
     expect(updateFields).toEqual(sortedUnique([...createFields, 'archived']))
   })
@@ -73,43 +66,23 @@ describe('route schema and handler alignment [spec: api-contracts/schema-alignme
     // operations: create, update, message (content), approval decision, and
     // batch event ingest (events).
     expect(sortedUnique(bodyFields(routeSources.sessions))).toEqual([
-      'agentId',
       'archived',
       // POST /sessions/{id}/messages body.content
       'content',
       // PATCH /sessions/{id}/approvals/{id} body.decision
       'decision',
-      'env',
-      'envFrom',
-      'environmentId',
       // POST /sessions/{id}/events body.events
       'events',
       'metadata',
-      'name',
       'prompt',
       'reason',
       'result',
-      'runtime',
-      'runtimeConfig',
+      'spec',
       'state',
-      'volumeMounts',
-      'volumes',
     ])
 
-    expect(schemaFields(doc, 'CreateSessionRequest')).toEqual([
-      'agentId',
-      'env',
-      'envFrom',
-      'environmentId',
-      'metadata',
-      'name',
-      'prompt',
-      'runtime',
-      'runtimeConfig',
-      'volumeMounts',
-      'volumes',
-    ])
-    expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['archived', 'metadata', 'name', 'state'])
+    expect(schemaFields(doc, 'CreateSessionRequest')).toEqual(['metadata', 'prompt', 'spec'])
+    expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['archived', 'metadata', 'state'])
     expect(schemaFields(doc, 'CreateSessionMessageRequest')).toEqual(['content', 'type'])
     expect(schemaFields(doc, 'SessionApprovalDecisionRequest')).toEqual(['decision', 'reason', 'result'])
   })

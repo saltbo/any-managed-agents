@@ -34,8 +34,8 @@ describe('amaSessionEventTypeFromPayload', () => {
 })
 
 describe('normalizeAmaEvent', () => {
-  it('keeps a canonical event shape and defaults metadata', () => {
+  it('keeps a canonical event shape without adding transport metadata', () => {
     const event: AmaEvent = { type: 'turn.completed', payload: {} }
-    expect(normalizeAmaEvent(event)).toEqual({ type: 'turn.completed', payload: {}, metadata: {} })
+    expect(normalizeAmaEvent(event)).toEqual({ type: 'turn.completed', payload: {} })
   })
 })

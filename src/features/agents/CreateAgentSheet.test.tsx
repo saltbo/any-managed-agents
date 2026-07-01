@@ -57,6 +57,7 @@ describe('CreateAgentSheet', () => {
 
   it('calls API and closes sheet on successful submission', async () => {
     const agentsColl = createCollection<Agent>([])
+    let postedBody: Record<string, unknown> | null = null
     server.use(
       ...(agentsColl.list().length === 0
         ? [
@@ -64,8 +65,9 @@ describe('CreateAgentSheet', () => {
               HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
             ),
             http.post('*/api/v1/agents', async ({ request }) => {
-              const body = (await request.json()) as Record<string, unknown>
-              const agent = buildAgent({ id: 'agent_new', name: (body.name as string) ?? 'Agent', ...body })
+              postedBody = (await request.json()) as Record<string, unknown>
+              const metadata = postedBody.metadata as { name?: string } | undefined
+              const agent = buildAgent({ id: 'agent_new', name: metadata?.name ?? 'Agent' })
               agentsColl.put(agent)
               return HttpResponse.json(agent, { status: 201 })
             }),
@@ -84,8 +86,12 @@ describe('CreateAgentSheet', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save agent' }))
     await waitFor(() => expect(closed).toBe(true))
+    const body = postedBody as unknown as Record<string, unknown>
+    expect(body).toMatchObject({ metadata: { name: 'Coding agent' } })
+    expect(body.metadata).not.toHaveProperty('description')
   })
 
   it('shows creating agent label while mutation is pending', async () => {

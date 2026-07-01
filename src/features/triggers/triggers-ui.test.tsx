@@ -352,7 +352,7 @@ describe('[spec: triggers/console-page] TriggersPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pause trigger' }))
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect(patchedBody!.suspend).toBe(true)
+    expect((patchedBody!.spec as { suspend: boolean }).suspend).toBe(true)
   })
 })
 
@@ -395,7 +395,7 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
 
     capturedActions!.pauseTrigger('trigger_1')
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect(patchedBody!.suspend).toBe(true)
+    expect((patchedBody!.spec as { suspend: boolean }).suspend).toBe(true)
     expect(patchedUrl).toContain('trigger_1')
   })
 
@@ -427,7 +427,7 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
 
     capturedActions!.resumeTrigger('trigger_1')
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect(patchedBody!.suspend).toBe(false)
+    expect((patchedBody!.spec as { suspend: boolean }).suspend).toBe(false)
   })
 
   it('calls DELETE /triggers/:id when deleteTrigger is invoked [spec: triggers/delete]', async () => {
@@ -544,15 +544,17 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     await waitFor(() => expect(postedBody).not.toBeNull())
     expect(postedBody).toMatchObject({
-      name: 'Nightly research',
-      suspend: false,
-      source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 6 * 86400 } },
-      template: {
-        spec: {
-          agentId: 'agent_1',
-          environmentId: 'env_1',
-          runtime: 'ama',
-          promptTemplate: 'Research the latest offers.',
+      metadata: { name: 'Nightly research' },
+      spec: {
+        suspend: false,
+        source: { type: 'schedule', schedule: { type: 'interval', intervalSeconds: 6 * 86400 } },
+        template: {
+          spec: {
+            agentId: 'agent_1',
+            environmentId: 'env_1',
+            runtime: 'ama',
+            promptTemplate: 'Research the latest offers.',
+          },
         },
       },
     })
@@ -644,10 +646,12 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     fireEvent.click(submitButton)
     await waitFor(() => expect(postedBody).not.toBeNull())
     expect(postedBody).toMatchObject({
-      template: {
-        spec: {
-          agentId: 'agent_2',
-          environmentId: 'env_2',
+      spec: {
+        template: {
+          spec: {
+            agentId: 'agent_2',
+            environmentId: 'env_2',
+          },
         },
       },
     })
@@ -709,7 +713,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     fireEvent.submit(form)
 
     await waitFor(() => expect(postedBody).not.toBeNull())
-    const schedule = (postedBody!.source as { schedule: Record<string, unknown> }).schedule
+    const schedule = (postedBody!.spec as { source: { schedule: Record<string, unknown> } }).source.schedule
     expect(schedule.intervalSeconds).toBe(60)
   })
 
@@ -744,9 +748,11 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     await waitFor(() => expect(postedBody).not.toBeNull())
     expect(postedBody).toMatchObject({
-      name: 'Webhook trigger',
-      source: { type: 'http' },
-      template: { spec: { promptTemplate: 'Handle {{ body.ticket.id }}' } },
+      metadata: { name: 'Webhook trigger' },
+      spec: {
+        source: { type: 'http' },
+        template: { spec: { promptTemplate: 'Handle {{ body.ticket.id }}' } },
+      },
     })
   })
 
@@ -774,7 +780,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     fireEvent.click(submitButton)
     await waitFor(() => expect(postedBody).not.toBeNull())
-    expect((postedBody!.template as { spec: { runtime: string } }).spec.runtime).toBe('codex')
+    expect((postedBody!.spec as { template: { spec: { runtime: string } } }).template.spec.runtime).toBe('codex')
   })
 
   it('updates intervalUnit when a different unit is selected', async () => {
@@ -805,7 +811,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     fireEvent.click(submitButton)
     await waitFor(() => expect(postedBody).not.toBeNull())
-    const schedule = (postedBody!.source as { schedule: Record<string, unknown> }).schedule
+    const schedule = (postedBody!.spec as { source: { schedule: Record<string, unknown> } }).source.schedule
     // 2 hours = 2 * 3600 = 7200
     expect(schedule.intervalSeconds).toBe(7200)
   })
@@ -834,7 +840,7 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
 
     fireEvent.click(submitButton)
     await waitFor(() => expect(postedBody).not.toBeNull())
-    expect(postedBody!.suspend).toBe(true)
+    expect((postedBody!.spec as { suspend: boolean }).suspend).toBe(true)
   })
 })
 

@@ -97,9 +97,6 @@ export function validateAllowedTools(tools: string[]): FieldErrors | null {
     if (!isAmaSandboxToolName(tool)) {
       return { allowedTools: `Tool is not supported by the AMA sandbox runtime: ${tool}` }
     }
-    if (secretString(tool)) {
-      return { allowedTools: 'Secret material must be stored in a vault.' }
-    }
   }
   return null
 }

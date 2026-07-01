@@ -86,6 +86,12 @@ describe('mergeSessionUserMetadata', () => {
       ),
     ).toEqual({ labels: { keep: 'yes', add: 'new' }, annotations: { add: 'new' } })
   })
+
+  it('applies delete patches when current labels or annotations are absent', () => {
+    expect(
+      mergeSessionUserMetadata({}, { labels: { missing: null }, annotations: { missing: null }, ticket: null }),
+    ).toEqual({ labels: {}, annotations: {} })
+  })
 })
 
 describe('[spec: sessions/workspace-safety] hasEmbeddedCredentialUrl additional branches', () => {

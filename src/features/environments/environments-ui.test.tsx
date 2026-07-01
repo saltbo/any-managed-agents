@@ -478,8 +478,11 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(capturedBody).not.toBeNull())
-    expect((capturedBody!.networking as Record<string, unknown>).type).toBe('limited')
-    expect(capturedBody!.name).toBe('Node workspace')
+    expect(((capturedBody!.spec as Record<string, unknown>).networking as Record<string, unknown>).type).toBe('limited')
+    expect((capturedBody!.metadata as Record<string, unknown>).name).toBe('Node workspace')
+    expect((capturedBody!.metadata as Record<string, unknown>).description).toBe(
+      'Default workspace for Pi-backed coding sessions.',
+    )
   })
 
   it('sends packages grouped by package manager', async () => {
@@ -522,7 +525,7 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
 
     await waitFor(() => expect(capturedBody).not.toBeNull())
-    expect(capturedBody!.packages).toEqual({
+    expect((capturedBody!.spec as Record<string, unknown>).packages).toEqual({
       type: 'packages',
       apt: [],
       cargo: [],
@@ -582,7 +585,35 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(capturedBody).not.toBeNull())
-    expect((capturedBody!.networking as Record<string, unknown>).type).toBe('open')
+    expect(((capturedBody!.spec as Record<string, unknown>).networking as Record<string, unknown>).type).toBe('open')
+  })
+
+  it('omits description metadata when description is blank', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    server.use(
+      http.post('*/api/v1/environments', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment({ id: 'env_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateEnvironmentSheet open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    const body = capturedBody as unknown as Record<string, unknown>
+    expect(body.metadata).not.toHaveProperty('description')
   })
 })
 
@@ -840,7 +871,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect(patchedBody!.name).toBe('Node workspace')
+    expect((patchedBody!.metadata as Record<string, unknown>).name).toBe('Node workspace')
   })
 
   it('clears name error when name is typed after a failed validation', async () => {
@@ -1027,7 +1058,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
     await waitFor(() => expect(patchedBody).not.toBeNull())
-    expect((patchedBody!.networking as Record<string, unknown>).type).toBe('open')
+    expect(((patchedBody!.spec as Record<string, unknown>).networking as Record<string, unknown>).type).toBe('open')
   })
 
   it('handles update api error without crashing', async () => {

@@ -35,6 +35,12 @@ describe('[spec: agents/tool-contract] validateAllowedTools', () => {
     })
   })
 
+  it('rejects secret-looking tool names', () => {
+    expect(validateAllowedTools(['raw-secret-token'])).toEqual({
+      allowedTools: 'Tool is not supported by the AMA sandbox runtime: raw-secret-token',
+    })
+  })
+
   it('accepts supported sandbox tools', () => {
     expect(validateAllowedTools(['read', 'bash', 'fetch'])).toBeNull()
   })
@@ -82,6 +88,15 @@ describe('[spec: agents/validation] validateSubagents', () => {
   it('rejects duplicate sub-agent names', () => {
     expect(validateSubagents([subagent, { ...subagent, model: 'qa' }])).toEqual({
       subagents: 'Sub-agent is configured more than once: reviewer',
+    })
+  })
+
+  it('rejects invalid sub-agent tools and skills', () => {
+    expect(validateSubagents([{ ...subagent, allowedTools: ['repo.delete'] }])).toEqual({
+      subagents: 'Tool is not supported by the AMA sandbox runtime: repo.delete',
+    })
+    expect(validateSubagents([{ ...subagent, skills: ['missing-style'] }])).toEqual({
+      subagents: 'Skill must be a stable <source>@<skill> reference: missing-style',
     })
   })
 

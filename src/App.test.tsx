@@ -44,7 +44,7 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
-function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } = {}) {
+function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean; initialEvents?: EventRecord[] } = {}) {
   const sentCommands: unknown[] = []
   const socketUrls: string[] = []
   let sequence = 0
@@ -63,6 +63,17 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
       queueMicrotask(() => {
         this.readyState = MockRuntimeWebSocket.OPEN
         this.dispatchEvent(new Event('open'))
+        this.dispatchEvent(
+          new MessageEvent('message', {
+            data: JSON.stringify({
+              type: 'backfill',
+              requestId: null,
+              events: options.initialEvents ?? [],
+              nextCursor: null,
+              hasMore: false,
+            }),
+          }),
+        )
       })
     }
 
@@ -77,7 +88,6 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
             sequence: ++sequence,
             type: 'message.completed',
             payload: {
-              type: 'message.completed',
               message: {
                 id: `${command.id}_assistant_msg`,
                 role: 'assistant',
@@ -88,13 +98,35 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
         )
         this.emitEvent(
           event({
-            id: `${command.id}_tool`,
+            id: `${command.id}_tool_call`,
             sequence: ++sequence,
             type: 'message.completed',
             payload: {
-              type: 'message.completed',
               message: {
-                id: `${command.id}_tool_msg`,
+                id: `${command.id}_tool_call_msg`,
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool_call',
+                    toolCall: {
+                      id: `${command.id}_tool`,
+                      name: 'bash',
+                      input: { command: `printf %s ${JSON.stringify(command.content ?? '')}` },
+                    },
+                  },
+                ],
+              },
+            },
+          }),
+        )
+        this.emitEvent(
+          event({
+            id: `${command.id}_tool_result`,
+            sequence: ++sequence,
+            type: 'message.completed',
+            payload: {
+              message: {
+                id: `${command.id}_tool_result_msg`,
                 role: 'tool',
                 parentToolCallId: `${command.id}_tool`,
                 content: [
@@ -113,7 +145,7 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
             id: `${command.id}_end`,
             sequence: ++sequence,
             type: 'turn.completed',
-            payload: { type: 'turn.completed', id: `${command.id}_end`, stage: 'agent_completed', willRetry: false },
+            payload: { id: `${command.id}_end`, stage: 'agent_completed', willRetry: false },
           }),
         )
         if (options.closeAfterAgentEnd) {
@@ -199,6 +231,39 @@ function event(overrides: EventRecordOverrides = {}): EventRecord {
     createdAt: now,
     ...recordOverrides,
   }
+}
+
+function sessionInitialEvents(): EventRecord[] {
+  return [
+    event({
+      payload: {
+        message: { id: 'msg_hello', role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+      },
+    }),
+    event({
+      id: 'event_2',
+      type: 'message.completed',
+      payload: {
+        message: {
+          id: 'msg_tool_call',
+          role: 'assistant',
+          content: [{ type: 'tool_call', toolCall: { id: 'tool_1', name: 'read', input: {} } }],
+        },
+      },
+    }),
+    event({
+      id: 'event_3',
+      type: 'message.completed',
+      payload: {
+        message: {
+          id: 'msg_tool_result',
+          role: 'tool',
+          parentToolCallId: 'tool_1',
+          content: [{ type: 'tool_result', toolCallId: 'tool_1', result: { content: [] } }],
+        },
+      },
+    }),
+  ]
 }
 
 function provider(overrides: Partial<Provider> = {}): Provider {
@@ -406,18 +471,16 @@ function mockConsoleApi(seed?: {
     }
     if (path === '/api/v1/sessions' && method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}')) as {
-        agentId: string
-        environmentId: string
-        name?: string
-        metadata?: Record<string, string>
-        volumes?: Session['spec']['volumes']
+        metadata?: { name?: string; annotations?: Record<string, string> }
+        spec?: Session['spec']
       }
+      const spec = body.spec
       const created = session({
-        agentId: body.agentId,
-        environmentId: body.environmentId,
-        ...(typeof body.name === 'string' ? { name: body.name } : {}),
-        metadata: { ...session().metadata, annotations: body.metadata ?? {} },
-        spec: { ...session().spec, volumes: body.volumes ?? [] },
+        ...(spec?.agentId ? { agentId: spec.agentId } : {}),
+        ...(spec?.environmentId ? { environmentId: spec.environmentId } : {}),
+        ...(typeof body.metadata?.name === 'string' ? { name: body.metadata.name } : {}),
+        metadata: { ...session().metadata, annotations: body.metadata?.annotations ?? {} },
+        spec: { ...session().spec, ...(spec ?? {}) },
       })
       state.sessions = [created]
       return jsonResponse(created)
@@ -581,7 +644,7 @@ describe('App', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/Received: Create ama-message/)).toBeTruthy()
-    expect(await screen.findByText('write_file')).toBeTruthy()
+    expect(await screen.findByText('bash')).toBeTruthy()
     expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt' }))
   })
 
@@ -590,39 +653,7 @@ describe('App', () => {
       environments: [environment()],
       agents: [agent()],
       sessions: [session()],
-      events: [
-        event({
-          payload: {
-            type: 'message.completed',
-            message: { id: 'msg_hello', role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
-          },
-        }),
-        event({
-          id: 'event_2',
-          type: 'message.completed',
-          payload: {
-            type: 'message.completed',
-            message: {
-              id: 'msg_tool_call',
-              role: 'assistant',
-              content: [{ type: 'tool_call', toolCall: { id: 'tool_1', name: 'read', input: {} } }],
-            },
-          },
-        }),
-        event({
-          id: 'event_3',
-          type: 'message.completed',
-          payload: {
-            type: 'message.completed',
-            message: {
-              id: 'msg_tool_result',
-              role: 'tool',
-              parentToolCallId: 'tool_1',
-              content: [{ type: 'tool_result', toolCallId: 'tool_1', result: { content: [] } }],
-            },
-          },
-        }),
-      ],
+      events: sessionInitialEvents(),
     })
 
     window.history.pushState({}, '', '/agents/agent_1')
@@ -693,41 +724,9 @@ describe('App', () => {
           },
         }),
       ],
-      events: [
-        event({
-          payload: {
-            type: 'message.completed',
-            message: { id: 'msg_hello', role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
-          },
-        }),
-        event({
-          id: 'event_2',
-          type: 'message.completed',
-          payload: {
-            type: 'message.completed',
-            message: {
-              id: 'msg_tool_call',
-              role: 'assistant',
-              content: [{ type: 'tool_call', toolCall: { id: 'tool_1', name: 'read', input: {} } }],
-            },
-          },
-        }),
-        event({
-          id: 'event_3',
-          type: 'message.completed',
-          payload: {
-            type: 'message.completed',
-            message: {
-              id: 'msg_tool_result',
-              role: 'tool',
-              parentToolCallId: 'tool_1',
-              content: [{ type: 'tool_result', toolCallId: 'tool_1', result: { content: [] } }],
-            },
-          },
-        }),
-      ],
+      events: sessionInitialEvents(),
     })
-    const { sentCommands, socketUrls } = installMockRuntimeWebSocket()
+    const { sentCommands, socketUrls } = installMockRuntimeWebSocket({ initialEvents: sessionInitialEvents() })
 
     window.history.pushState({}, '', '/environments/env_1')
     const { unmount } = render(<App />)
@@ -959,7 +958,7 @@ describe('App', () => {
 
     await waitFor(() => expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt' })))
     expect(await screen.findByText(/Received: Run live check/)).toBeTruthy()
-    expect(await screen.findByText('write_file')).toBeTruthy()
+    expect(await screen.findByText('bash')).toBeTruthy()
   })
 })
 

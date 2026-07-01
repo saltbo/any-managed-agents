@@ -629,10 +629,11 @@ describe('[spec: vaults/create-sheet] CreateVaultSheet', () => {
 
   it('calls POST /api/v1/vaults and closes sheet on submit', async () => {
     const vaults = createCollection<Vault>()
+    let postedBody: Record<string, unknown> | null = null
     server.use(
       http.post('*/api/v1/vaults', async ({ request }) => {
-        const body = (await request.json()) as Record<string, unknown>
-        const metadata = body.metadata as { name?: unknown } | undefined
+        postedBody = (await request.json()) as Record<string, unknown>
+        const metadata = postedBody.metadata as { name?: unknown } | undefined
         const created = vault({ id: 'vault_new', name: String(metadata?.name ?? 'Provider credentials') })
         vaults.put(created)
         return HttpResponse.json(created, { status: 201 })
@@ -652,8 +653,12 @@ describe('[spec: vaults/create-sheet] CreateVaultSheet', () => {
       </QueryClientProvider>,
     )
 
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: /Save vault/i }))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const body = postedBody as unknown as Record<string, unknown>
+    expect(body).toMatchObject({ metadata: { name: 'Provider credentials' }, spec: { scope: 'project' } })
+    expect(body.metadata).not.toHaveProperty('description')
   })
 
   it('shows toast error when POST /api/v1/vaults returns 500', async () => {
