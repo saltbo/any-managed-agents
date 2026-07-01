@@ -9,12 +9,10 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.ama_event_type_5_type import AmaEventType5Type
-from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.event_metadata import EventMetadata
-  from ..models.session_checkpoint_payload import SessionCheckpointPayload
+  from ..models.message_event_payload import MessageEventPayload
 
 
 
@@ -29,28 +27,21 @@ class AmaEventType5:
     """ 
         Attributes:
             type_ (AmaEventType5Type):
-            payload (SessionCheckpointPayload):
-            metadata (EventMetadata | Unset):
+            payload (MessageEventPayload):
      """
 
     type_: AmaEventType5Type
-    payload: SessionCheckpointPayload
-    metadata: EventMetadata | Unset = UNSET
+    payload: MessageEventPayload
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.event_metadata import EventMetadata
-        from ..models.session_checkpoint_payload import SessionCheckpointPayload
+        from ..models.message_event_payload import MessageEventPayload
         type_ = self.type_.value
 
         payload = self.payload.to_dict()
-
-        metadata: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.metadata, Unset):
-            metadata = self.metadata.to_dict()
 
 
         field_dict: dict[str, Any] = {}
@@ -59,8 +50,6 @@ class AmaEventType5:
             "type": type_,
             "payload": payload,
         })
-        if metadata is not UNSET:
-            field_dict["metadata"] = metadata
 
         return field_dict
 
@@ -68,25 +57,14 @@ class AmaEventType5:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.event_metadata import EventMetadata
-        from ..models.session_checkpoint_payload import SessionCheckpointPayload
+        from ..models.message_event_payload import MessageEventPayload
         d = dict(src_dict)
         type_ = AmaEventType5Type(d.pop("type"))
 
 
 
 
-        payload = SessionCheckpointPayload.from_dict(d.pop("payload"))
-
-
-
-
-        _metadata = d.pop("metadata", UNSET)
-        metadata: EventMetadata | Unset
-        if isinstance(_metadata,  Unset):
-            metadata = UNSET
-        else:
-            metadata = EventMetadata.from_dict(_metadata)
+        payload = MessageEventPayload.from_dict(d.pop("payload"))
 
 
 
@@ -94,7 +72,6 @@ class AmaEventType5:
         ama_event_type_5 = cls(
             type_=type_,
             payload=payload,
-            metadata=metadata,
         )
 
         return ama_event_type_5

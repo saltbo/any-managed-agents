@@ -118,7 +118,6 @@ function eventRecordFromAction(event: AmaEvent | EventRecord, at: string, state:
   }
   return {
     id: `${event.type}_${at}_${state.debugEvents.length + 1}`,
-    projectId: '',
     sessionId: '',
     sequence: state.eventKeys.length + 1,
     event,
@@ -161,8 +160,9 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
       .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt)),
   )
   const tools = runtimeEvents
-    .filter(({ stored, payload }) => isToolEvent(sessionEventType(stored, payload)))
-    .map(({ stored, payload }) => toolFromSessionEvent(payload, stored.createdAt, sessionEventType(stored, payload)))
+    .flatMap(({ stored, payload }) =>
+      toolsFromMessageEvent(payload, stored.createdAt, sessionEventType(stored, payload)),
+    )
     .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
     .reduce<SessionRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
   const debugEvents = runtimeEvents.map(
@@ -178,7 +178,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
     .filter((key): key is string => Boolean(key))
   const hasTerminalEvent = runtimeEvents.some(({ stored, payload }) => {
     const type = sessionEventType(stored, payload)
-    return type === 'agent.completed' || type === 'turn.completed'
+    return type === 'runtime.completed' || type === 'turn.completed'
   })
   const hasErrorEvent = runtimeEvents.some(({ stored }) => {
     return stored.event.type === 'runtime.error'
@@ -206,17 +206,22 @@ type StoredRuntimeEvent = {
 function uniquePersistedRuntimeEvents(events: EventRecord[]): StoredRuntimeEvent[] {
   const seen = new Set<string>()
   let turnKey: string | null = null
+  let turnIndex = 0
   const uniqueEvents: StoredRuntimeEvent[] = []
   events
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((stored) => {
       const payload = objectValue(stored.event.payload)
       const type = sessionEventType(stored, payload)
+      if (type === 'turn.started' || isUserMessage(payload, type)) {
+        turnIndex += 1
+        turnKey = `turn:${turnIndex}`
+      }
       const nextTurnKey = runtimeTurnKey(payload, type)
       if (nextTurnKey) {
         turnKey = nextTurnKey
       }
-      const key = runtimeEventKey(payload, type, isToolEvent(type) ? turnKey : null)
+      const key = runtimeEventKey(payload, type, turnKey)
       if (key && seen.has(key)) {
         return
       }
@@ -228,6 +233,13 @@ function uniquePersistedRuntimeEvents(events: EventRecord[]): StoredRuntimeEvent
   return uniqueEvents
 }
 
+function isUserMessage(event: Record<string, unknown>, eventType: string) {
+  if (!isTranscriptEvent(eventType)) {
+    return false
+  }
+  return stringField(objectValue(event.message), 'role') === 'user'
+}
+
 function sessionEventType(stored: EventRecord, _payload: Record<string, unknown>): AmaSessionEventType {
   return stored.event.type
 }
@@ -237,11 +249,7 @@ function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
     return null
   }
   const message = objectValue(event.message)
-  const timestamp =
-    scalarField(message, 'timestamp') ??
-    scalarField(event, 'timestamp') ??
-    stringField(event, 'responseId') ??
-    stringField(message, 'id')
+  const timestamp = scalarField(message, 'timestamp') ?? stringField(message, 'id')
   if (!timestamp) {
     return null
   }
@@ -250,34 +258,18 @@ function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
 
 function messageFromSessionEvent(event: Record<string, unknown>, at: string, status: SessionRuntimeMessage['status']) {
   const message = objectValue(event.message)
-  const rawRole = stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant'
-  if (rawRole === 'toolResult') {
+  const rawRole = stringField(message, 'role') ?? 'assistant'
+  if (rawRole === 'tool') {
     return null
   }
   const role: SessionRuntimeMessage['role'] =
     rawRole === 'user' || rawRole === 'assistant' || rawRole === 'system' ? rawRole : 'assistant'
-  const errorMessage = stringField(message, 'errorMessage') ?? stringField(event, 'errorMessage')
-  if (errorMessage) {
-    return {
-      id: stringField(event, 'id') ?? stringField(message, 'id') ?? `runtime_error_${at}`,
-      role: 'assistant' as const,
-      content: errorMessage,
-      status: 'error' as const,
-      createdAt: at,
-    }
-  }
-  const content = extractText(message.content ?? event.content ?? event.delta ?? '')
+  const content = extractText(message.content)
   if (!content) {
     return null
   }
   return {
-    id:
-      stringField(event, 'messageId') ??
-      stringField(message, 'id') ??
-      scalarField(message, 'timestamp') ??
-      stringField(event, 'responseId') ??
-      stringField(event, 'id') ??
-      `${role}_${at}`,
+    id: stringField(message, 'id') ?? scalarField(message, 'timestamp') ?? `${role}_${at}`,
     role,
     content,
     status,
@@ -309,38 +301,56 @@ function messageFromRuntimeError(
   }
 }
 
-function toolFromSessionEvent(
+function toolsFromMessageEvent(
   event: Record<string, unknown>,
   at: string,
   eventType: string,
-): SessionRuntimeToolTrace | null {
-  const toolCall = objectValue(event.toolCall ?? event)
-  const callId =
-    stringField(toolCall, 'id') ??
-    stringField(toolCall, 'toolCallId') ??
-    stringField(event, 'toolCallId') ??
-    stringField(event, 'id')
-  if (!callId) {
-    return null
-  }
-  const status = stringField(event, 'status')
-  const failed = status === 'error' || Boolean(toolCall.error ?? event.error ?? event.isError)
-  const input = toolCall.input ?? toolCall.args ?? event.input ?? event.args
-  const output = toolCall.output ?? toolCall.result ?? toolCall.partialResult ?? event.output ?? event.result
-  return {
-    id: callId,
-    callId,
-    name:
-      stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? stringField(event, 'toolName') ?? 'tool',
-    status: eventType === 'tool_call.completed' ? (failed ? 'error' : 'success') : 'running',
-    input,
-    output: readableToolValue(output),
-    error: failed ? readableContent(toolCall.error ?? event.error) : null,
-    durationMs: numberField(toolCall, 'durationMs') ?? numberField(event, 'durationMs'),
-    createdAt: at,
-    updatedAt: at,
-    eventType,
-  } satisfies SessionRuntimeToolTrace
+): SessionRuntimeToolTrace[] {
+  if (!isTranscriptEvent(eventType)) return []
+  const message = objectValue(event.message)
+  const content = Array.isArray(message.content) ? message.content : []
+  return content
+    .map((item): SessionRuntimeToolTrace | null => {
+      const block = objectValue(item)
+      if (block.type === 'tool_call') {
+        const toolCall = objectValue(block.toolCall)
+        const callId = stringField(toolCall, 'id')
+        if (!callId) return null
+        return {
+          id: callId,
+          callId,
+          name: stringField(toolCall, 'name') ?? 'tool',
+          status: 'running',
+          input: toolCall.input,
+          output: undefined,
+          error: null,
+          durationMs: null,
+          createdAt: at,
+          updatedAt: at,
+          eventType: 'tool_call',
+        }
+      }
+      if (block.type === 'tool_result') {
+        const callId = stringField(block, 'toolCallId')
+        if (!callId) return null
+        const failed = Boolean(block.error)
+        return {
+          id: callId,
+          callId,
+          name: 'tool',
+          status: failed ? 'error' : 'success',
+          input: undefined,
+          output: readableToolValue(block.result),
+          error: failed ? readableContent(block.error) : null,
+          durationMs: null,
+          createdAt: at,
+          updatedAt: at,
+          eventType: 'tool_result',
+        }
+      }
+      return null
+    })
+    .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
 }
 
 function upsertMessage(messages: SessionRuntimeMessage[], message: SessionRuntimeMessage) {
@@ -380,7 +390,7 @@ function normalizeMessageContent(value: string) {
 function upsertTool(tools: SessionRuntimeToolTrace[], tool: SessionRuntimeToolTrace) {
   const runningIndex = findLastToolIndex(tools, (item) => item.callId === tool.callId && item.status === 'running')
   const index =
-    tool.eventType === 'tool_call.started'
+    tool.eventType === 'tool_call'
       ? runningIndex
       : runningIndex !== -1
         ? runningIndex
@@ -396,13 +406,14 @@ function upsertTool(tools: SessionRuntimeToolTrace[], tool: SessionRuntimeToolTr
   next[index] = {
     ...existing,
     ...tool,
+    name: tool.name === 'tool' ? existing.name : tool.name,
     input: tool.input ?? existing.input,
     output: hasToolValue(tool.output) ? tool.output : existing.output,
     error: tool.error ?? existing.error,
     durationMs:
       tool.durationMs ??
       existing.durationMs ??
-      (tool.eventType === 'tool_call.completed' ? elapsedMs(existing.createdAt, tool.updatedAt) : null),
+      (tool.eventType === 'tool_result' ? elapsedMs(existing.createdAt, tool.updatedAt) : null),
     createdAt: existing.createdAt,
   }
   return next
@@ -425,35 +436,23 @@ function findLastToolIndex(tools: SessionRuntimeToolTrace[], predicate: (tool: S
 
 function runtimeEventKey(event: Record<string, unknown>, eventType: string, turnKey?: string | null) {
   const message = objectValue(event.message)
-  const timestamp =
-    scalarField(message, 'timestamp') ??
-    scalarField(event, 'timestamp') ??
-    stringField(event, 'responseId') ??
-    stringField(message, 'id')
-  const toolCall = objectValue(event.toolCall)
-  const toolCallId = stringField(toolCall, 'id') ?? stringField(toolCall, 'toolCallId')
-  if (isToolEvent(eventType)) {
-    const eventId = stringField(toolCall, 'id') ?? stringField(event, 'id')
-    if (eventId) {
-      return `${eventType}:id:${eventId}`
-    }
-    if (!turnKey) {
-      return null
-    }
-    return `${eventType}:${turnKey}:${toolCallId ?? ''}:${stableStringify(toolCall)}`
+  const timestamp = scalarField(message, 'timestamp') ?? stringField(message, 'id')
+  const toolKey = toolContentEventKey(message, eventType, turnKey)
+  if (toolKey) {
+    return toolKey
   }
   if (eventType === 'message.updated') {
     if (!timestamp) {
       return null
     }
-    return `${eventType}:${timestamp ?? ''}:${stableStringify(message.content ?? event.delta)}`
+    return `${eventType}:${timestamp ?? ''}:${stableStringify(message.content)}`
   }
   if (
-    eventType === 'message.started' ||
-    eventType === 'message.completed' ||
-    eventType === 'agent.started' ||
-    eventType === 'agent.completed' ||
-    eventType === 'turn.started' ||
+	    eventType === 'message.started' ||
+	    eventType === 'message.completed' ||
+	    eventType === 'runtime.started' ||
+	    eventType === 'runtime.completed' ||
+	    eventType === 'turn.started' ||
     eventType === 'turn.completed'
   ) {
     if (!timestamp) {
@@ -464,8 +463,24 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
   return `${eventType}:${stableStringify(event)}`
 }
 
-function isToolEvent(eventType: string) {
-  return eventType === 'tool_call.started' || eventType === 'tool_call.updated' || eventType === 'tool_call.completed'
+function toolContentEventKey(message: Record<string, unknown>, eventType: string, turnKey?: string | null) {
+  if (!isTranscriptEvent(eventType) || !Array.isArray(message.content)) return null
+  const toolParts = message.content
+    .map((item) => {
+      const block = objectValue(item)
+      if (block.type === 'tool_call') {
+        const toolCall = objectValue(block.toolCall)
+        const id = stringField(toolCall, 'id')
+        return id ? `tool_call:${id}` : null
+      }
+      if (block.type === 'tool_result') {
+        const id = stringField(block, 'toolCallId')
+        return id ? `tool_result:${id}` : null
+      }
+      return null
+    })
+    .filter((value): value is string => Boolean(value))
+  return toolParts.length > 0 ? `${eventType}:${turnKey ? `${turnKey}:` : ''}${toolParts.join('|')}` : null
 }
 
 function isTranscriptEvent(eventType: string) {
@@ -494,30 +509,17 @@ function stableStringify(value: unknown): string {
 }
 
 function runtimeErrorMessage(event: Record<string, unknown>) {
-  if (typeof event.error === 'string') {
-    return event.error
-  }
-  const error = objectValue(event.error)
-  return readableContent(error.message ?? event.message ?? event.data ?? event.content ?? 'Runtime error')
+  return readableContent(event.message ?? 'Runtime error')
 }
 
 function extractText(value: unknown): string {
-  if (typeof value === 'string') {
-    return value
-  }
   if (Array.isArray(value)) {
-    const textItems = value
-      .filter((item) => item && typeof item === 'object' && (item as Record<string, unknown>).type === 'text')
-      .map((item) => extractText(item))
+    return value
+      .map((item) => {
+        const record = objectValue(item)
+        return record.type === 'text' && typeof record.text === 'string' ? record.text : ''
+      })
       .join('')
-    return textItems || value.map((item) => extractText(item)).join('')
-  }
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    if (record.type === 'thinking' || record.type === 'toolCall' || record.type === 'toolResult') {
-      return ''
-    }
-    return extractText(record.text ?? record.content ?? record.delta ?? '')
   }
   return ''
 }
@@ -531,6 +533,10 @@ function readableContent(value: unknown): string {
   }
   if (typeof value === 'number' || typeof value === 'boolean') {
     return String(value)
+  }
+  const record = objectValue(value)
+  if (typeof record.message === 'string') {
+    return record.message
   }
   return JSON.stringify(value) ?? ''
 }
@@ -563,6 +569,14 @@ function hasToolValue(value: unknown) {
     return value.length > 0
   }
   if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if (Array.isArray(record.content)) {
+      return (
+        record.content.some((item) => Boolean(extractText(item))) ||
+        record.structuredContent !== undefined ||
+        record.exitCode !== undefined
+      )
+    }
     return Object.keys(value).length > 0
   }
   return true

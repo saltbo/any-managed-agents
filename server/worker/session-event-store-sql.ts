@@ -13,12 +13,7 @@
 import type { EventRecord } from '@server/domain/session'
 import { redactSensitiveValue } from '@server/redaction'
 import type { EventPage, EventQuery } from '@server/usecases/ports'
-import {
-  type AmaEvent,
-  amaEventFromRuntimeEvent,
-  isAmaSessionEventType,
-  normalizeAmaEvent,
-} from '@shared/session-events'
+import { type AmaEvent, isAmaSessionEventType, normalizeAmaEvent } from '@shared/session-events'
 
 export interface EventWriteContext {
   organizationId: string
@@ -93,7 +88,7 @@ export function appendCanonicalEventToSql(
   const sequence = maxSequence + 1
   const createdAt = new Date().toISOString()
   const payload = JSON.stringify(redactSensitiveValue(normalized.payload))
-  const metadata = JSON.stringify(redactSensitiveValue(normalized.metadata))
+  const metadata = '{}'
   sql.exec(
     'INSERT INTO session_events (id, organization_id, project_id, session_id, sequence, type, payload, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     eventId,
@@ -161,6 +156,7 @@ export function queryEventsFromSql(sql: SqlStorage, sessionId: string, query: Ev
 // or runner-backed history reads. The cloud does not persist these rows.
 export interface RelayedRunnerEvent {
   id: string
+  sessionId: string
   sequence: number
   createdAt: string
   event: AmaEvent
@@ -176,7 +172,7 @@ export function stepRelayEvent(raw: RelayedRunnerEvent, scope: EventWriteContext
     sequence: raw.sequence,
     type: event.type,
     payload: JSON.stringify(event.payload),
-    metadata: JSON.stringify(event.metadata),
+    metadata: '{}',
     created_at: raw.createdAt,
   }
 }
@@ -228,31 +224,25 @@ export function exportSessionEventsJsonl(sql: SqlStorage, sessionId: string): st
   return rows.map((row) => JSON.stringify(serializeRow(row))).join('\n')
 }
 
-// Row → EventRecord. Identical output to the D1 repo's serializeEvent: converts
-// legacy non-AMA stored types, redacts payload/metadata on the way out, and tags
-// the raw type into metadata for those legacy rows.
+// Row -> EventRecord. The store only accepts canonical AMA event rows.
 export function serializeRow(row: EventRow): EventRecord {
+  if (!isAmaSessionEventType(row.type)) {
+    throw new Error(`Unsupported session event type: ${row.type}`)
+  }
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
-  const event: AmaEvent = isAmaSessionEventType(row.type)
-    ? ({
-        type: row.type,
-        payload: rawPayload,
-        metadata: rawMetadata,
-      } as AmaEvent)
-    : amaEventFromRuntimeEvent({ ...rawPayload, type: row.type }, { source: 'stored-session-event', ...rawMetadata })
-  if (!isAmaSessionEventType(row.type)) {
-    event.metadata = { ...event.metadata, rawSessionEventType: row.type }
-  }
+  const event = {
+    type: row.type,
+    payload: rawPayload,
+    metadata: rawMetadata,
+  } as AmaEvent
   return {
     id: row.id,
-    projectId: row.project_id,
     sessionId: row.session_id,
     sequence: row.sequence,
     event: {
       type: event.type,
       payload: redactSensitiveValue(event.payload) as typeof event.payload,
-      metadata: redactSensitiveValue(event.metadata ?? {}) as typeof event.metadata,
     } as AmaEvent,
     createdAt: row.created_at,
   }

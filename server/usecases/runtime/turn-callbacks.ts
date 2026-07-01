@@ -16,6 +16,7 @@
 // the tool-approvals layer stays the single owner of the gate construction).
 
 import { parseJson } from '@server/domain/runtime/session-snapshot'
+import type { AmaEvent } from '@shared/session-events'
 import type {
   AuthScope,
   EventStore,
@@ -41,7 +42,7 @@ export async function assertRuntimeSessionRunning(
 
 export interface SessionTurnCallbacks {
   ensureActive: () => Promise<void>
-  onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
+  onEvent: (event: AmaEvent) => Promise<void>
   resolveToolResult: (input: {
     toolCallId: string
     toolName: string
@@ -67,7 +68,7 @@ type TurnCallbacksDeps = {
     auth: AuthScope
     sessionId: string
     sessionMetadata: Record<string, unknown>
-    appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>
+    appendEvent: (event: AmaEvent) => Promise<string>
   }) => ToolApprovalGate
 }
 
@@ -92,15 +93,15 @@ export function buildSessionTurnCallbacks(
     auth,
     sessionId,
     sessionMetadata: parseJson<Record<string, unknown>>(session.metadata) ?? {},
-    appendEvent: (event, metadata) => appendRuntimeEvent({ sessionEventStore }, { auth, sessionId, event, metadata }),
+    appendEvent: (event) => appendRuntimeEvent({ sessionEventStore }, { auth, sessionId, event }),
   })
   let policyDeniedToolCall = false
-  const onEvent = async (event: Record<string, unknown>, metadata?: Record<string, unknown>) => {
+  const onEvent = async (event: AmaEvent) => {
     if (approvalGate.shouldSuppressEvent(event)) {
       return
     }
     await ensureActive()
-    await appendRuntimeEvent({ sessionEventStore }, { auth, sessionId, event, ...(metadata ? { metadata } : {}) })
+    await appendRuntimeEvent({ sessionEventStore }, { auth, sessionId, event })
   }
   const approveToolCall = async ({
     toolCallId,

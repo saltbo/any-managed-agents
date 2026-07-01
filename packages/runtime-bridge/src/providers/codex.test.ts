@@ -56,6 +56,13 @@ async function* events() {
   yield { type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }
 }
 
+async function* usageEvents() {
+  yield {
+    type: 'turn.completed',
+    usage: { input_tokens: 2, cached_input_tokens: 1, output_tokens: 3 },
+  }
+}
+
 async function* commandEvents() {
   yield {
     type: 'item.started',
@@ -135,7 +142,7 @@ describe('codexProvider', () => {
     expect(runStreamedMock).toHaveBeenNthCalledWith(2, 'FOLLOW_UP', { signal: expect.any(AbortSignal) })
   })
 
-  it('preserves Codex command aggregated output in tool results', async () => {
+  it('normalizes Codex command output into AMA tool results', async () => {
     runStreamedMock.mockResolvedValue({ events: commandEvents() })
     startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
 
@@ -145,13 +152,58 @@ describe('codexProvider', () => {
       events.push(event)
     }
 
-    expect(events).toContainEqual({
-      type: 'tool_call.completed',
-      payload: {
-        toolCall: { id: 'item_1', name: 'bash', input: { command: "printf 'ok'" } },
-        result: { aggregated_output: 'ok', output: 'ok', exit_code: 0 },
-        isError: false,
-      },
-    })
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'message.completed',
+          payload: {
+            message: expect.objectContaining({
+              role: 'assistant',
+              content: [
+                {
+                  type: 'tool_call',
+                  toolCall: { id: 'item_1', name: 'bash', input: { command: "printf 'ok'" } },
+                },
+              ],
+            }),
+          },
+        }),
+        expect.objectContaining({
+          type: 'message.completed',
+          payload: {
+            message: expect.objectContaining({
+              role: 'tool',
+              parentToolCallId: 'item_1',
+              content: [
+                {
+                  type: 'tool_result',
+                  toolCallId: 'item_1',
+                  result: {
+                    content: [{ type: 'text', text: 'ok' }],
+                    structuredContent: { aggregatedOutput: 'ok' },
+                    exitCode: 0,
+                  },
+                },
+              ],
+            }),
+          },
+        }),
+      ]),
+    )
+  })
+
+  it('does not emit model usage when Codex SDK events do not report the actual model', async () => {
+    runStreamedMock.mockResolvedValue({ events: usageEvents() })
+    startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
+
+    const handle = await codexProvider.execute(request({ provider: 'workers-ai', model: 'configured-model' }))
+    const events = []
+    for await (const event of handle.events) {
+      events.push(event)
+    }
+
+    expect(events.some((event) => event.type === 'usage.recorded')).toBe(false)
+    expect(JSON.stringify(events)).not.toContain('workers-ai')
+    expect(JSON.stringify(events)).not.toContain('configured-model')
   })
 })

@@ -84,24 +84,16 @@ func (bridgeProtocol) readResult(scanner *bufio.Scanner, requestID string, write
 	return nil, fmt.Errorf("runtime bridge exited before result for request %q", requestID)
 }
 
-func (bridgeProtocol) controlFrame(requestID string, command BridgeControlFrame) runtimebridge.RuntimeBridgeControlMessage {
-	frame := runtimebridge.RuntimeBridgeControlMessage{
-		Type:      command.Type,
-		RequestID: requestID,
+func (bridgeProtocol) controlFrame(requestID string, command BridgeControlFrame) (JSON, error) {
+	var frame JSON
+	if err := json.Unmarshal(command, &frame); err != nil {
+		return nil, fmt.Errorf("invalid bridge control message: %w", err)
 	}
-	if command.Message != "" {
-		frame.Message = command.Message
+	if frame == nil {
+		return nil, fmt.Errorf("invalid bridge control message")
 	}
-	if command.PermissionID != "" {
-		frame.PermissionID = command.PermissionID
-	}
-	if command.Type == "permissionDecision" || command.Allowed {
-		frame.Allowed = command.Allowed
-	}
-	if command.Reason != "" {
-		frame.Reason = command.Reason
-	}
-	return frame
+	frame["requestId"] = requestID
+	return frame, nil
 }
 
 func (bridgeProtocol) inventorySnapshot(value JSON) (*InventorySnapshot, error) {

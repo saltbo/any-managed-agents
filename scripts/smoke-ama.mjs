@@ -739,24 +739,24 @@ function findWorkspace(workDir) {
 
 function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   const { sessionDir, workspace } = findWorkspace(workDir)
-  const eventLog = join(sessionDir, 'events.jsonl')
-  const events = readJSONL(eventLog)
-  const eventTypes = events.map((record) => record.event?.type ?? record.type)
-  for (const required of ['runner.status', 'message.completed', 'runtime.status']) {
-    if (!eventTypes.includes(required)) fail(`event log is missing ${required}`, `events: ${eventTypes.join(', ')}`)
-  }
+	  const eventLog = join(sessionDir, 'events.jsonl')
+	  const events = readJSONL(eventLog)
+	  const eventTypes = events.map((record) => record.event?.type ?? record.type)
+	  for (const required of ['runtime.started', 'message.completed']) {
+	    if (!eventTypes.includes(required)) fail(`event log is missing ${required}`, `events: ${eventTypes.join(', ')}`)
+	  }
   const serializedEvents = JSON.stringify(events)
   if (!serializedEvents.includes(SMOKE_DONE_MARKER)) fail(`runtime response did not include ${SMOKE_DONE_MARKER}`, eventLog)
   if (runtime.name === 'codex' && !serializedEvents.includes(FOLLOW_UP_MARKER)) {
     fail(`Codex multi-turn response did not include ${FOLLOW_UP_MARKER}`, eventLog)
   }
   if (!controlPlaneState.channelAccepted) fail('runner relay channel was not accepted')
-  const liveEventTypes = controlPlaneState.channelMessages
-    .filter((message) => message.type === 'runner.event')
-    .map((message) => message.record?.event?.type ?? message.event?.type)
-  for (const required of ['runner.status', 'message.completed', 'runtime.status']) {
-    if (!liveEventTypes.includes(required)) fail(`live relay is missing ${required}`, liveEventTypes.join(', '))
-  }
+	  const liveEventTypes = controlPlaneState.channelMessages
+	    .filter((message) => message.type === 'runner.event')
+	    .map((message) => message.record?.event?.type ?? message.event?.type)
+	  for (const required of ['runtime.started', 'message.completed']) {
+	    if (!liveEventTypes.includes(required)) fail(`live relay is missing ${required}`, liveEventTypes.join(', '))
+	  }
 
   const completed = controlPlaneState.leaseUpdates.find((update) => update.state === 'completed')
   if (!completed) fail('lease never completed', JSON.stringify(controlPlaneState.leaseUpdates, null, 2))

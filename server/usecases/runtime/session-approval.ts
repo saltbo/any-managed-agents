@@ -87,22 +87,23 @@ export async function decideSessionApproval(
     sessionId: session.id,
     event: {
       type: 'permission.resolved',
-      permissionId: pending.id,
-      allowed: approved,
-      reason: body.reason,
-      toolCall: { id: pending.toolCallId, name: pending.toolName, input: pending.input },
-      details: {
-        approvalId: pending.id,
-        toolCallId: pending.toolCallId,
-        resourceType: 'tool',
-        resourceId: pending.toolName,
-        operation: 'tool_approval_decision',
-        ruleId: 'toolPolicy.requireApprovalTools',
-        state: approved ? 'approved' : 'denied',
-        ...(body.result ? { customResult: true } : {}),
+      payload: {
+        permissionId: pending.id,
+        allowed: approved,
+        ...(body.reason ? { reason: body.reason } : {}),
+        toolCall: { id: pending.toolCallId, name: pending.toolName, input: pending.input },
+        details: {
+          approvalId: pending.id,
+          toolCallId: pending.toolCallId,
+          resourceType: 'tool',
+          resourceId: pending.toolName,
+          operation: 'tool_approval_decision',
+          ruleId: 'toolPolicy.requireApprovalTools',
+          state: approved ? 'approved' : 'denied',
+          ...(body.result ? { customResult: true } : {}),
+        },
       },
     },
-    metadata: { source: 'policy', relatedEventIds: pending.relatedEventIds },
   })
   await deps.audit.record(auth, {
     action: approved ? 'session.tool_approval_approved' : 'session.tool_approval_denied',
@@ -184,31 +185,25 @@ export async function decideSessionApproval(
     auth,
     sessionId: session.id,
     event: {
-      type: 'tool_call.completed',
-      toolCallId: pending.toolCallId,
-      toolName: pending.toolName,
-      result: { content: [{ type: 'text', text: resultText }], details: resultOutput },
-      isError: resultIsError,
-      approval: { id: pending.id, decision: body.decision, ...(body.result ? { custom: true } : {}) },
-    },
-    metadata: { source: 'approval' },
-  })
-  await appendRuntimeEvent(deps, {
-    auth,
-    sessionId: session.id,
-    event: {
       type: 'message.completed',
-      message: {
-        role: 'toolResult',
-        toolCallId: pending.toolCallId,
-        toolName: pending.toolName,
-        content: [{ type: 'text', text: resultText }],
-        details: resultOutput,
-        isError: resultIsError,
-        timestamp: Date.now(),
-      },
-    },
-    metadata: { source: 'approval' },
+      payload: {
+        message: {
+          id: crypto.randomUUID(),
+          role: 'tool',
+          parentToolCallId: pending.toolCallId,
+	          content: [
+            {
+              type: 'tool_result',
+              toolCallId: pending.toolCallId,
+              result: { content: [{ type: 'text', text: resultText }], structuredContent: resultOutput },
+              ...(resultIsError
+                ? { error: { message: resultText || 'Tool execution failed', details: resultOutput } }
+                : {}),
+	            },
+	          ],
+	        },
+	      },
+	    },
   })
   await store.updateSession(auth.project.id, session.id, { state: 'running', stateReason: null, updatedAt: now() })
   const resumed = await store.findSession(auth.project.id, session.id)

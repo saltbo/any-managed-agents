@@ -172,8 +172,10 @@ const SessionSchema = z
   })
   .openapi('Session')
 
-const EventMetadataSchema = JsonObjectSchema.openapi('EventMetadata')
-const LifecyclePayloadSchema = JsonObjectSchema.openapi('LifecyclePayload')
+const RuntimeLifecyclePayloadSchema = z
+  .object({ reason: z.string().optional() })
+  .strict()
+  .openapi('RuntimeLifecyclePayload')
 const TextContentBlockSchema = z.object({ type: z.literal('text'), text: z.string() }).openapi('TextContentBlock')
 const ReasoningContentBlockSchema = z
   .object({ type: z.literal('reasoning'), text: z.string() })
@@ -185,14 +187,6 @@ const ToolCallSchema = z
 const ToolCallContentBlockSchema = z
   .object({ type: z.literal('tool_call'), toolCall: ToolCallSchema })
   .openapi('ToolCallContentBlock')
-const ToolResultContentBlockSchema = z
-  .object({
-    type: z.literal('tool_result'),
-    toolCallId: z.string(),
-    result: z.unknown(),
-    isError: z.boolean().optional(),
-  })
-  .openapi('ToolResultContentBlock')
 const ImageContentBlockSchema = z
   .object({
     type: z.literal('image'),
@@ -210,9 +204,31 @@ const FileContentBlockSchema = z
     data: z.string().optional(),
   })
   .openapi('FileContentBlock')
-const UnknownContentBlockSchema = z
-  .object({ type: z.literal('unknown'), value: z.unknown() })
-  .openapi('UnknownContentBlock')
+const JsonContentBlockSchema = z.object({ type: z.literal('json'), value: z.unknown() }).openapi('JsonContentBlock')
+const ToolResultValueContentBlockSchema = z
+  .discriminatedUnion('type', [
+    TextContentBlockSchema,
+    ImageContentBlockSchema,
+    FileContentBlockSchema,
+    JsonContentBlockSchema,
+  ])
+  .openapi('ToolResultValueContentBlock')
+const ToolResultSchema = z
+  .object({
+    content: z.array(ToolResultValueContentBlockSchema),
+    structuredContent: z.unknown().optional(),
+    exitCode: z.number().optional(),
+  })
+  .strict()
+  .openapi('ToolResult')
+const ToolResultContentBlockSchema = z
+  .object({
+    type: z.literal('tool_result'),
+    toolCallId: z.string(),
+    result: ToolResultSchema,
+    error: z.lazy(() => EventErrorSchema).optional(),
+  })
+  .openapi('ToolResultContentBlock')
 const MessageContentBlockSchema = z
   .discriminatedUnion('type', [
     TextContentBlockSchema,
@@ -221,15 +237,16 @@ const MessageContentBlockSchema = z
     ToolResultContentBlockSchema,
     ImageContentBlockSchema,
     FileContentBlockSchema,
-    UnknownContentBlockSchema,
   ])
   .openapi('MessageContentBlock')
 const MessageSchema = z
   .object({
-    id: z.string().optional(),
-    role: z.enum(['user', 'assistant', 'system', 'tool', 'toolResult']),
+    id: z.string(),
+    role: z.enum(['user', 'assistant', 'system', 'tool']),
     content: z.array(MessageContentBlockSchema),
-    timestamp: z.number().optional(),
+    providerMessageId: z.string().optional(),
+    parentMessageId: z.string().optional(),
+    parentToolCallId: z.string().optional(),
     stopReason: z.string().optional(),
   })
   .strict()
@@ -241,57 +258,29 @@ const EventErrorSchema = z
     category: z.string().optional(),
     retryable: z.boolean().optional(),
     retryAfterSeconds: z.number().optional(),
-    provider: z.string().optional(),
-    model: z.string().optional(),
     details: z.unknown().optional(),
   })
   .strict()
   .openapi('EventError')
 const MessageEventPayloadSchema = z.object({ message: MessageSchema }).strict().openapi('MessageEventPayload')
-const ToolStartedPayloadSchema = z.object({ toolCall: ToolCallSchema }).strict().openapi('ToolStartedPayload')
-const ToolUpdatedPayloadSchema = z
-  .object({ toolCall: ToolCallSchema, partialResult: z.unknown().optional() })
-  .strict()
-  .openapi('ToolUpdatedPayload')
-const ToolCompletedPayloadSchema = z
-  .object({
-    toolCall: ToolCallSchema,
-    result: z.unknown().optional(),
-    error: EventErrorSchema.optional(),
-    isError: z.boolean().optional(),
-    durationMs: z.number().optional(),
-  })
-  .strict()
-  .openapi('ToolCompletedPayload')
 const TurnPayloadSchema = z
   .object({
-    marker: z.string().optional(),
-    stage: z.string().optional(),
     status: z.string().optional(),
+    reason: z.string().optional(),
     message: MessageSchema.optional(),
-    toolResults: z.array(z.unknown()).optional(),
   })
   .strict()
   .openapi('TurnPayload')
-const SessionStopPayloadSchema = z.object({ reason: z.string().optional() }).strict().openapi('SessionStopPayload')
-const SessionCheckpointPayloadSchema = z
-  .object({ resumeTokenRef: z.string().optional(), scope: z.string().optional() })
-  .strict()
-  .openapi('SessionCheckpointPayload')
-const SessionResumePayloadSchema = z
-  .object({ fromCheckpoint: z.string().optional(), reason: z.string().optional() })
-  .strict()
-  .openapi('SessionResumePayload')
 const UsageRecordedPayloadSchema = z
   .object({
-    provider: z.string().optional(),
-    model: z.string().optional(),
+    model: z.string(),
     promptTokens: z.number().optional(),
     completionTokens: z.number().optional(),
     totalTokens: z.number().optional(),
     inputTokens: z.number().optional(),
     outputTokens: z.number().optional(),
     cachedInputTokens: z.number().optional(),
+    cacheCreationInputTokens: z.number().optional(),
     reasoningTokens: z.number().optional(),
     toolTokens: z.number().optional(),
     costMicros: z.number().optional(),
@@ -332,46 +321,30 @@ const PermissionResolvedPayloadSchema = z
   })
   .strict()
   .openapi('PermissionResolvedPayload')
-const RuntimeOutputPayloadSchema = z
-  .object({ stream: z.enum(['stdout', 'stderr', 'runtime', 'reasoning', 'bridge']), content: z.unknown() })
-  .strict()
-  .openapi('RuntimeOutputPayload')
-const StatusPayloadSchema = z.object({ data: JsonObjectSchema }).strict().openapi('StatusPayload')
-
 function eventSchema<TType extends (typeof AMA_SESSION_EVENT_TYPES)[number]>(type: TType, payload: z.ZodTypeAny) {
-  return z.object({ type: z.literal(type), payload, metadata: EventMetadataSchema.optional() }).strict()
+  return z.object({ type: z.literal(type), payload }).strict()
 }
 
 const AmaEventSchema = z
   .discriminatedUnion('type', [
-    eventSchema('agent.started', LifecyclePayloadSchema),
-    eventSchema('agent.completed', LifecyclePayloadSchema),
+    eventSchema('runtime.started', RuntimeLifecyclePayloadSchema),
+    eventSchema('runtime.completed', RuntimeLifecyclePayloadSchema),
     eventSchema('turn.started', TurnPayloadSchema),
     eventSchema('turn.completed', TurnPayloadSchema),
-    eventSchema('session.stopped', SessionStopPayloadSchema),
-    eventSchema('session.checkpointed', SessionCheckpointPayloadSchema),
-    eventSchema('session.resumed', SessionResumePayloadSchema),
     eventSchema('message.started', MessageEventPayloadSchema),
     eventSchema('message.updated', MessageEventPayloadSchema),
     eventSchema('message.completed', MessageEventPayloadSchema),
-    eventSchema('tool_call.started', ToolStartedPayloadSchema),
-    eventSchema('tool_call.updated', ToolUpdatedPayloadSchema),
-    eventSchema('tool_call.completed', ToolCompletedPayloadSchema),
     eventSchema('usage.recorded', UsageRecordedPayloadSchema),
     eventSchema('permission.requested', PermissionRequestPayloadSchema),
     eventSchema('permission.resolved', PermissionResolvedPayloadSchema),
     eventSchema('permission.denied', PermissionDeniedPayloadSchema),
     eventSchema('runtime.error', EventErrorSchema),
-    eventSchema('runtime.status', StatusPayloadSchema),
-    eventSchema('runtime.output', RuntimeOutputPayloadSchema),
-    eventSchema('runner.status', StatusPayloadSchema),
   ])
   .openapi('AmaEvent')
 
 const EventRecordSchema = z
   .object({
     id: z.string(),
-    projectId: z.string(),
     sessionId: z.string(),
     sequence: z.number().int(),
     event: AmaEventSchema,
@@ -793,7 +766,7 @@ async function eventsCsvResponse(c: Context<DepsEnv>, sessionId: string, query: 
     record.event.type,
     record.createdAt,
     JSON.stringify(record.event.payload),
-    JSON.stringify(record.event.metadata ?? {}),
+    '{}',
   ])
   return csvResponse(c, `session-${sessionId}-events.csv`, header, csvRows)
 }
@@ -1414,16 +1387,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
           projectId: auth.project.id,
           sessionId: session.id,
         },
-        events.map((event) => {
-          const amaEvent = {
-            type: event.type,
-            payload: event.payload,
-            metadata: runnerLeaseMetadata
-              ? { source: 'self-hosted-runner', ...(event.metadata ?? {}), ...runnerLeaseMetadata }
-              : { source: 'api', ...(event.metadata ?? {}) },
-          } as AmaEvent
-          return amaEvent
-        }),
+        events.map((event) => ({ type: event.type, payload: event.payload }) as AmaEvent),
       )
       return c.json({ accepted }, 201)
     })

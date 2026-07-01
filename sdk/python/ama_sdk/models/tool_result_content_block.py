@@ -10,7 +10,11 @@ from ..types import UNSET, Unset
 
 from ..models.tool_result_content_block_type import ToolResultContentBlockType
 from ..types import UNSET, Unset
+from typing import cast
 
+if TYPE_CHECKING:
+  from ..models.event_error import EventError
+  from ..models.tool_result import ToolResult
 
 
 
@@ -26,14 +30,14 @@ class ToolResultContentBlock:
         Attributes:
             type_ (ToolResultContentBlockType):
             tool_call_id (str):
-            result (Any | Unset):
-            is_error (bool | Unset):
+            result (ToolResult):
+            error (EventError | Unset):
      """
 
     type_: ToolResultContentBlockType
     tool_call_id: str
-    result: Any | Unset = UNSET
-    is_error: bool | Unset = UNSET
+    result: ToolResult
+    error: EventError | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -41,13 +45,17 @@ class ToolResultContentBlock:
 
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.event_error import EventError
+        from ..models.tool_result import ToolResult
         type_ = self.type_.value
 
         tool_call_id = self.tool_call_id
 
-        result = self.result
+        result = self.result.to_dict()
 
-        is_error = self.is_error
+        error: dict[str, Any] | Unset = UNSET
+        if not isinstance(self.error, Unset):
+            error = self.error.to_dict()
 
 
         field_dict: dict[str, Any] = {}
@@ -55,11 +63,10 @@ class ToolResultContentBlock:
         field_dict.update({
             "type": type_,
             "toolCallId": tool_call_id,
+            "result": result,
         })
-        if result is not UNSET:
-            field_dict["result"] = result
-        if is_error is not UNSET:
-            field_dict["isError"] = is_error
+        if error is not UNSET:
+            field_dict["error"] = error
 
         return field_dict
 
@@ -67,6 +74,8 @@ class ToolResultContentBlock:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.event_error import EventError
+        from ..models.tool_result import ToolResult
         d = dict(src_dict)
         type_ = ToolResultContentBlockType(d.pop("type"))
 
@@ -75,15 +84,26 @@ class ToolResultContentBlock:
 
         tool_call_id = d.pop("toolCallId")
 
-        result = d.pop("result", UNSET)
+        result = ToolResult.from_dict(d.pop("result"))
 
-        is_error = d.pop("isError", UNSET)
+
+
+
+        _error = d.pop("error", UNSET)
+        error: EventError | Unset
+        if isinstance(_error,  Unset):
+            error = UNSET
+        else:
+            error = EventError.from_dict(_error)
+
+
+
 
         tool_result_content_block = cls(
             type_=type_,
             tool_call_id=tool_call_id,
             result=result,
-            is_error=is_error,
+            error=error,
         )
 
 

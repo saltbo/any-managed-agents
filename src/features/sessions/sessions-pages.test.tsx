@@ -81,7 +81,6 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
 function buildMessageEvent(sessionId: string, sequence: number, content: string): EventRecord {
   return {
     id: `event_${sequence}`,
-    projectId: 'project_1',
     sessionId,
     sequence,
     event: {
@@ -1078,7 +1077,6 @@ describe('SessionRuntimePanel — connection and state badges', () => {
     const persistedEvents: EventRecord[] = [
       {
         id: 'persisted_debug_1',
-        projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
         event: { type: 'message.completed', payload: { type: 'message.completed' } },
@@ -1129,7 +1127,6 @@ describe('SessionRuntimePanel — connection and state badges', () => {
     const persistedEvents: EventRecord[] = [
       {
         id: 'transcript_only_ev',
-        projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
         event: { type: 'message.completed', payload: { type: 'message.completed' } },
@@ -1180,7 +1177,6 @@ describe('SessionRuntimePanel — connection and state badges', () => {
     const persistedEvents: EventRecord[] = [
       {
         id: 'shared_event_1',
-        projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
         event: { type: 'message.completed', payload: { type: 'message.completed' } },

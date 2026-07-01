@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	runnerconfig "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/config"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/protocol"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/runtime"
@@ -179,7 +181,7 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 		return err
 	}
 	sessionID := workItemSessionID(workItem)
-	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolCallStarted), toolCallPayload(payload))); err != nil {
+	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeMessageCompleted), toolCallMessagePayload(payload))); err != nil {
 		return err
 	}
 
@@ -203,20 +205,13 @@ func (r LeaseWorker) runTool(ctx context.Context, lease *ama.Lease, workItem *am
 		return r.cancelLease(context.Background(), lease, ctx.Err())
 	}
 	if execErr != nil {
-		endPayload := toolCallPayload(payload)
-		endPayload["error"] = ama.JSON{"message": execErr.Error()}
-		endPayload["result"] = result.Output
-		endPayload["isError"] = true
-		_ = r.uploadSessionEvent(context.Background(), sessionID, runnerEvent(string(sessionevent.EventTypeToolCallCompleted), endPayload))
+		_ = r.uploadSessionEvent(context.Background(), sessionID, runnerEvent(string(sessionevent.EventTypeMessageCompleted), toolResultMessagePayload(payload, result.Output, execErr)))
 		if finishErr := r.failLease(context.Background(), lease, execErr, result.Output); finishErr != nil {
 			return finishErr
 		}
 		return execErr
 	}
-	endPayload := toolCallPayload(payload)
-	endPayload["result"] = result.Output
-	endPayload["isError"] = false
-	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeToolCallCompleted), endPayload)); err != nil {
+	if err := r.uploadSessionEvent(ctx, sessionID, runnerEvent(string(sessionevent.EventTypeMessageCompleted), toolResultMessagePayload(payload, result.Output, nil))); err != nil {
 		return err
 	}
 	return r.completeLease(ctx, lease, ama.JSON{
@@ -274,11 +269,7 @@ func (r LeaseWorker) runAMASandboxSession(ctx context.Context, lease *ama.Lease,
 	}
 	handle := runnersession.NewSandboxHandle(payload.SessionID, workspace, r.SandboxAdapter)
 	relay.Register(payload.SessionID, handle)
-	if err := r.uploadSessionEvent(leaseCtx, payload.SessionID, runnerEvent("runner.sandbox.ready", ama.JSON{
-		"sessionId": payload.SessionID,
-		"runtime":   payload.Runtime,
-		"executor":  r.Config.SandboxAdapter,
-	})); err != nil {
+	if err := r.uploadSessionEvent(leaseCtx, payload.SessionID, runnerEvent(string(sessionevent.EventTypeRuntimeStarted), ama.JSON{})); err != nil {
 		relay.Unregister(payload.SessionID)
 		if finishErr := r.failLease(ctx, lease, err, nil); finishErr != nil {
 			return finishErr
@@ -311,7 +302,10 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		}
 		return err
 	}
-	store, err := runnersession.OpenEventLog(filepath.Join(r.Config.WorkDir, workspace.SessionsDirName, payload.SessionID))
+	store, err := runnersession.OpenEventLog(
+		filepath.Join(r.Config.WorkDir, workspace.SessionsDirName, payload.SessionID),
+		payload.SessionID,
+	)
 	if err != nil {
 		if finishErr := r.failLease(ctx, lease, fmt.Errorf("open session event store: %w", err), nil); finishErr != nil {
 			return finishErr
@@ -322,11 +316,7 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 		relay.RelayEvent(relayCtx, payload.SessionID, event, stamp)
 		return nil
 	}
-	handle := runnersession.NewHostHandle(payload.SessionID, func(message string) {
-		if err := r.relayStoredEvent(context.Background(), store, relayEvent, runnerEvent("message.completed", userPromptEventPayload(message))); err != nil {
-			slog.Warn("runner failed to record delivered prompt event", "sessionId", payload.SessionID, "error", err)
-		}
-	})
+	handle := runnersession.NewHostHandle(payload.SessionID)
 	relay.Register(payload.SessionID, handle)
 	defer relay.Unregister(payload.SessionID)
 
@@ -336,12 +326,6 @@ func (r LeaseWorker) runRuntimeSession(ctx context.Context, lease *ama.Lease, pa
 	renewErrors := make(chan error, 1)
 	go r.renewLease(leaseCtx, lease, cancel, renewErrors, resumeTokens)
 
-	if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("runner.status", r.sessionStartedPayload(payload))); err != nil {
-		if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
-			return finishErr
-		}
-		return err
-	}
 	if prompt := workPrompt(payload); prompt != "" {
 		if err := r.relayStoredEvent(leaseCtx, store, relayEvent, runnerEvent("message.completed", userPromptEventPayload(prompt))); err != nil {
 			if finishErr := r.failLease(context.Background(), lease, err, nil); finishErr != nil {
@@ -426,7 +410,7 @@ func (r LeaseWorker) finalizeRuntimeSession(
 	}
 	if result.TimedOut {
 		timeoutErr := fmt.Errorf("session exceeded max duration %s", r.Config.MaxSessionDuration)
-		writeRuntimeError(ama.JSON{"error": ama.JSON{"message": timeoutErr.Error(), "code": "session_timeout"}})
+		writeRuntimeError(ama.JSON{"message": timeoutErr.Error(), "code": "session_timeout"})
 		if finishErr := r.failLease(context.Background(), lease, timeoutErr, result.Output); finishErr != nil {
 			return finishErr
 		}
@@ -438,7 +422,7 @@ func (r LeaseWorker) finalizeRuntimeSession(
 		}
 		return result.Err
 	}
-	writeRuntimeError(ama.JSON{"error": ama.JSON{"message": result.Err.Error(), "code": "runtime_failed"}})
+	writeRuntimeError(ama.JSON{"message": result.Err.Error(), "code": "runtime_failed"})
 	if finishErr := r.failLease(context.Background(), lease, result.Err, result.Output); finishErr != nil {
 		return finishErr
 	}
@@ -549,10 +533,6 @@ func (r LeaseWorker) uploadSessionEvent(ctx context.Context, sessionID string, e
 	if sessionID == "" {
 		return nil
 	}
-	event = withRunnerMetadata(event, ama.JSON{
-		"runnerId": r.RunnerID,
-		"executor": r.Config.SandboxAdapter,
-	})
 	_, err := r.Client.Sessions.CreateRawEvents(ctx, sessionID, []ama.JSON{event})
 	return err
 }
@@ -593,27 +573,10 @@ func (r LeaseWorker) interruptLease(ctx context.Context, lease *ama.Lease, resum
 	return err
 }
 
-func (r LeaseWorker) sessionStartedPayload(payload protocol.WorkPayload) ama.JSON {
-	data := ama.JSON{
-		"stage":         "session_started",
-		"sessionId":     payload.SessionID,
-		"hostingMode":   payload.HostingMode,
-		"runtime":       payload.Runtime,
-		"runtimeConfig": payload.RuntimeConfig,
-		"provider":      payload.Provider,
-		"runtimeDriver": payload.RuntimeDriver,
-		"executor":      r.Config.SandboxAdapter,
-	}
-	if payload.Model != "" {
-		data["model"] = payload.Model
-	}
-	return ama.JSON{"data": data}
-}
-
 type relaySink func(ctx context.Context, event ama.JSON, relay *runnersession.RelayStamp) error
 
 func (r LeaseWorker) relayStoredEvent(ctx context.Context, store *runnersession.EventLog, relay relaySink, event ama.JSON) error {
-	stored, err := store.Append(withRunnerMetadata(event, ama.JSON{"runnerId": r.RunnerID, "executor": r.Config.SandboxAdapter}))
+	stored, err := store.Append(event)
 	if err != nil {
 		return err
 	}
@@ -624,31 +587,75 @@ func runnerEvent(eventType string, payload ama.JSON) ama.JSON {
 	return ama.JSON{"type": eventType, "payload": payload}
 }
 
-func withRunnerMetadata(event ama.JSON, metadata ama.JSON) ama.JSON {
-	next := lo.Assign(ama.JSON{}, event)
-	current, _ := next["metadata"].(ama.JSON)
-	if current == nil {
-		if record, ok := next["metadata"].(map[string]any); ok {
-			current = ama.JSON(record)
-		}
-	}
-	next["metadata"] = lo.Assign(ama.JSON{}, current, metadata)
-	return next
-}
-
-func toolCallPayload(payload protocol.WorkPayload) ama.JSON {
+func toolCallMessagePayload(payload protocol.WorkPayload) ama.JSON {
 	return ama.JSON{
-		"toolCall": ama.JSON{
-			"id":    payload.ToolCallID,
-			"name":  payload.ToolName,
-			"input": payload.Input,
+		"message": ama.JSON{
+			"id":   "msg_" + uuid.NewString(),
+			"role": "assistant",
+			"content": []ama.JSON{
+				{
+					"type": "tool_call",
+					"toolCall": ama.JSON{
+						"id":    payload.ToolCallID,
+						"name":  payload.ToolName,
+						"input": payload.Input,
+					},
+				},
+			},
 		},
 	}
+}
+
+func toolResultMessagePayload(payload protocol.WorkPayload, output ama.JSON, execErr error) ama.JSON {
+	result := ama.JSON{
+		"content":           toolResultContent(output),
+		"structuredContent": output,
+	}
+	block := ama.JSON{
+		"type":       "tool_result",
+		"toolCallId": payload.ToolCallID,
+		"result":     result,
+	}
+	if execErr != nil {
+		block["error"] = ama.JSON{"message": execErr.Error()}
+	}
+	return ama.JSON{
+		"message": ama.JSON{
+			"id":               "msg_" + uuid.NewString(),
+			"role":             "tool",
+			"parentToolCallId": payload.ToolCallID,
+			"content":          []ama.JSON{block},
+		},
+	}
+}
+
+func toolResultContent(output ama.JSON) []ama.JSON {
+	if text := toolResultText(output); text != "" {
+		return []ama.JSON{{"type": "text", "text": text}}
+	}
+	return []ama.JSON{{"type": "json", "value": output}}
+}
+
+func toolResultText(output ama.JSON) string {
+	if output == nil {
+		return ""
+	}
+	for _, key := range []string{"stdout", "stderr", "output", "aggregated_output"} {
+		if value, ok := output[key].(string); ok && value != "" {
+			return value
+		}
+	}
+	encoded, err := json.Marshal(output)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func userPromptEventPayload(message string) ama.JSON {
 	return ama.JSON{
 		"message": ama.JSON{
+			"id":   "msg_" + uuid.NewString(),
 			"role": "user",
 			"content": []ama.JSON{
 				{"type": "text", "text": message},

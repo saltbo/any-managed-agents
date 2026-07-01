@@ -11,7 +11,6 @@ import {
   AMA_SESSION_EVENT_TYPES,
   type AmaEvent,
   type AmaSessionEventType,
-  amaEventFromRuntimeEvent,
   isAmaSessionEventType,
 } from '@shared/session-events'
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, or, sql } from 'drizzle-orm'
@@ -214,27 +213,21 @@ function serializeApproval(row: SessionApprovalRow): SessionApproval {
 }
 
 function serializeEvent(row: SessionEventRow): EventRecord {
-  const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
-  const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
-  const canonical: AmaEvent = isAmaSessionEventType(row.type)
-    ? ({
-        type: row.type,
-        payload: rawPayload,
-        metadata: rawMetadata,
-      } as AmaEvent)
-    : amaEventFromRuntimeEvent({ ...rawPayload, type: row.type }, { source: 'stored-session-event', ...rawMetadata })
   if (!isAmaSessionEventType(row.type)) {
-    canonical.metadata = { ...canonical.metadata, rawSessionEventType: row.type }
+    throw new Error(`Unsupported session event type: ${row.type}`)
   }
+  const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
+  const event = {
+    type: row.type,
+    payload: rawPayload,
+  } as AmaEvent
   return {
     id: row.id,
-    projectId: row.projectId,
     sessionId: row.sessionId,
     sequence: row.sequence,
     event: {
-      type: canonical.type,
-      payload: redactSensitiveValue(canonical.payload) as typeof canonical.payload,
-      metadata: redactSensitiveValue(canonical.metadata) as typeof canonical.metadata,
+      type: event.type,
+      payload: redactSensitiveValue(event.payload) as typeof event.payload,
     } as AmaEvent,
     createdAt: row.createdAt,
   }
@@ -479,8 +472,7 @@ export function createSessionRepo(db: Db): SessionRepo {
 
     async insertEvents(scope, events) {
       for (const event of events) {
-        const canonicalEvent = amaEventFromRuntimeEvent({ type: event.type, ...event.payload }, event.metadata)
-        await insertCanonicalSessionEvent(db, scope, canonicalEvent)
+        await insertCanonicalSessionEvent(db, scope, event)
       }
       return events.length
     },

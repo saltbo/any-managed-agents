@@ -1,10 +1,15 @@
 import { z } from 'zod'
 import { EXTERNAL_RUNTIME_NAMES } from './runtime-names'
-import { AMA_SESSION_EVENT_TYPES, type AmaEvent, type AmaSessionEventType } from './session-events'
+import {
+  AMA_SESSION_EVENT_TYPES,
+  type AmaEvent,
+  type AmaSessionEventType,
+  JsonObjectSchema,
+  JsonValueSchema,
+} from './session-events'
 
 const AmaSessionEventTypeValues = [...AMA_SESSION_EVENT_TYPES] as [AmaSessionEventType, ...AmaSessionEventType[]]
 
-export const JsonObjectSchema = z.record(z.string(), z.unknown())
 export const StringMapSchema = z.record(z.string(), z.string())
 export const ExternalRuntimeNameSchema = z.enum(EXTERNAL_RUNTIME_NAMES)
 export const AmaSessionEventTypeSchema = z.enum(AmaSessionEventTypeValues)
@@ -27,16 +32,37 @@ export const RuntimeBridgeRunMessageSchema = z
   })
   .strict()
 
-export const RuntimeBridgeControlMessageSchema = z
+export const RuntimeBridgeSendMessageSchema = z
   .object({
-    type: z.enum(['abort', 'send', 'permissionDecision']),
+    type: z.literal('send'),
     requestId: z.string(),
-    message: z.string().optional(),
-    permissionId: z.string().optional(),
-    allowed: z.boolean().optional(),
+    message: z.string(),
+  })
+  .strict()
+
+export const RuntimeBridgeAbortMessageSchema = z
+  .object({
+    type: z.literal('abort'),
+    requestId: z.string(),
     reason: z.string().optional(),
   })
   .strict()
+
+export const RuntimeBridgePermissionDecisionMessageSchema = z
+  .object({
+    type: z.literal('permissionDecision'),
+    requestId: z.string(),
+    permissionId: z.string(),
+    allowed: z.boolean(),
+    reason: z.string().optional(),
+  })
+  .strict()
+
+export const RuntimeBridgeControlMessageSchema = z.discriminatedUnion('type', [
+  RuntimeBridgeSendMessageSchema,
+  RuntimeBridgeAbortMessageSchema,
+  RuntimeBridgePermissionDecisionMessageSchema,
+])
 
 export const RuntimeBridgeInventoryMessageSchema = z
   .object({
@@ -82,32 +108,56 @@ export const RuntimeBridgeInventoryResultSchema = z
   })
   .strict()
 
-export const AmaRuntimeEventSchema = z
-  .object({
-    type: AmaSessionEventTypeSchema,
-    payload: JsonObjectSchema,
-    metadata: JsonObjectSchema.optional(),
-  })
-  .strict()
+export const RuntimeBridgeEventBodySchema = JsonObjectSchema
+export const AmaRuntimeEventSchema = RuntimeBridgeEventBodySchema
 
 export const RuntimeBridgeErrorSchema = z
   .object({
     message: z.string(),
     code: z.string().optional(),
-    details: z.unknown().optional(),
+    details: JsonValueSchema.optional(),
   })
   .strict()
 
-export const RuntimeBridgeOutputMessageSchema = z
+export const RuntimeBridgeReadyMessageSchema = z
+  .object({ type: z.literal('ready'), requestId: z.string().optional() })
+  .strict()
+export const RuntimeBridgeEventMessageSchema = z
   .object({
-    type: z.enum(['ready', 'runtime.event', 'resumeToken', 'result', 'error']),
-    requestId: z.string().optional(),
-    event: AmaRuntimeEventSchema.optional(),
-    result: JsonObjectSchema.optional(),
-    error: RuntimeBridgeErrorSchema.optional(),
-    resumeToken: z.string().optional(),
+    type: z.literal('runtime.event'),
+    requestId: z.string(),
+    event: RuntimeBridgeEventBodySchema,
   })
   .strict()
+export const RuntimeBridgeResumeTokenMessageSchema = z
+  .object({
+    type: z.literal('resumeToken'),
+    requestId: z.string(),
+    resumeToken: z.string(),
+  })
+  .strict()
+export const RuntimeBridgeResultMessageSchema = z
+  .object({
+    type: z.literal('result'),
+    requestId: z.string(),
+    result: JsonObjectSchema,
+  })
+  .strict()
+export const RuntimeBridgeErrorMessageSchema = z
+  .object({
+    type: z.literal('error'),
+    requestId: z.string().optional(),
+    error: RuntimeBridgeErrorSchema,
+  })
+  .strict()
+
+export const RuntimeBridgeOutputMessageSchema = z.discriminatedUnion('type', [
+  RuntimeBridgeReadyMessageSchema,
+  RuntimeBridgeEventMessageSchema,
+  RuntimeBridgeResumeTokenMessageSchema,
+  RuntimeBridgeResultMessageSchema,
+  RuntimeBridgeErrorMessageSchema,
+])
 
 export type RuntimeBridgeRunMessage = z.infer<typeof RuntimeBridgeRunMessageSchema>
 export type RuntimeBridgeControlMessage = z.infer<typeof RuntimeBridgeControlMessageSchema>

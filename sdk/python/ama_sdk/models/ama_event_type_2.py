@@ -9,11 +9,9 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.ama_event_type_2_type import AmaEventType2Type
-from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.event_metadata import EventMetadata
   from ..models.turn_payload import TurnPayload
 
 
@@ -30,27 +28,20 @@ class AmaEventType2:
         Attributes:
             type_ (AmaEventType2Type):
             payload (TurnPayload):
-            metadata (EventMetadata | Unset):
      """
 
     type_: AmaEventType2Type
     payload: TurnPayload
-    metadata: EventMetadata | Unset = UNSET
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.event_metadata import EventMetadata
         from ..models.turn_payload import TurnPayload
         type_ = self.type_.value
 
         payload = self.payload.to_dict()
-
-        metadata: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.metadata, Unset):
-            metadata = self.metadata.to_dict()
 
 
         field_dict: dict[str, Any] = {}
@@ -59,8 +50,6 @@ class AmaEventType2:
             "type": type_,
             "payload": payload,
         })
-        if metadata is not UNSET:
-            field_dict["metadata"] = metadata
 
         return field_dict
 
@@ -68,7 +57,6 @@ class AmaEventType2:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.event_metadata import EventMetadata
         from ..models.turn_payload import TurnPayload
         d = dict(src_dict)
         type_ = AmaEventType2Type(d.pop("type"))
@@ -81,20 +69,9 @@ class AmaEventType2:
 
 
 
-        _metadata = d.pop("metadata", UNSET)
-        metadata: EventMetadata | Unset
-        if isinstance(_metadata,  Unset):
-            metadata = UNSET
-        else:
-            metadata = EventMetadata.from_dict(_metadata)
-
-
-
-
         ama_event_type_2 = cls(
             type_=type_,
             payload=payload,
-            metadata=metadata,
         )
 
         return ama_event_type_2

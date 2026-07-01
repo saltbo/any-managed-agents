@@ -21,6 +21,7 @@ import (
 // threads parent/correlation, and redacts on the way out.
 type Event struct {
 	ID        string   `json:"id"`
+	SessionID string   `json:"sessionId"`
 	Sequence  int64    `json:"sequence"`
 	CreatedAt string   `json:"createdAt"`
 	Event     ama.JSON `json:"event"`
@@ -31,9 +32,10 @@ type Event struct {
 // events live here — the cloud keeps no copy — surviving a runner restart, and
 // the RunnerPool relays backfill reads to this store. Append-only JSONL.
 type EventLog struct {
-	path string
-	mu   sync.Mutex
-	seq  int64
+	path      string
+	sessionID string
+	mu        sync.Mutex
+	seq       int64
 }
 
 // EventLogPath is the canonical on-disk log file for a session's event
@@ -43,11 +45,11 @@ func EventLogPath(sessionDir string) string {
 	return filepath.Join(sessionDir, "events.jsonl")
 }
 
-func OpenEventLog(sessionDir string) (*EventLog, error) {
+func OpenEventLog(sessionDir string, sessionID string) (*EventLog, error) {
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return nil, err
 	}
-	store := &EventLog{path: EventLogPath(sessionDir)}
+	store := &EventLog{path: EventLogPath(sessionDir), sessionID: sessionID}
 	// Recover the latest sequence so a resumed session continues the run rather
 	// than restarting the count (the on-disk log is the source of truth).
 	events, err := store.readAll()
@@ -80,6 +82,7 @@ func (s *EventLog) Append(body ama.JSON) (Event, error) {
 	}
 	event := Event{
 		ID:        id,
+		SessionID: s.sessionID,
 		Sequence:  s.seq,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		Event:     body,

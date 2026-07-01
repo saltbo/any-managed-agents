@@ -18,7 +18,7 @@ function newEventId() {
 }
 
 // Single insert path for session events: allocates the next sequence (retrying
-// on unique collisions) and redacts payload/metadata before anything reaches D1.
+// on unique collisions) and redacts payload before anything reaches D1.
 export async function insertCanonicalSessionEvent(db: Db, scope: EventWriteContext, event: AmaEvent): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const eventId = newEventId()
@@ -36,7 +36,7 @@ export async function insertCanonicalSessionEvent(db: Db, scope: EventWriteConte
         sequence: (latest?.sequence ?? 0) + 1,
         type: event.type,
         payload: JSON.stringify(redactSensitiveValue(event.payload)),
-        metadata: JSON.stringify(redactSensitiveValue(event.metadata ?? {})),
+        metadata: '{}',
         createdAt: new Date().toISOString(),
       })
       // Provider-domain accounting (usage records, provider error health)

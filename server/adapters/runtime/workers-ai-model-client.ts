@@ -129,19 +129,20 @@ function providerAssistantMessage(model: Model<string>, raw: unknown) {
     content.push({ type: 'text', text })
   }
   const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
-  for (const [index, toolCall] of toolCalls.entries()) {
+  for (const toolCall of toolCalls) {
     if (!toolCall || typeof toolCall !== 'object') {
       continue
     }
     const call = toolCall as Record<string, unknown>
     const fn = call.function && typeof call.function === 'object' ? (call.function as Record<string, unknown>) : {}
     const name = typeof fn.name === 'string' ? fn.name : typeof call.name === 'string' ? call.name : null
-    if (!name) {
+    const id = typeof call.id === 'string' && call.id ? call.id : null
+    if (!name || !id) {
       continue
     }
     content.push({
       type: 'toolCall',
-      id: typeof call.id === 'string' ? call.id : `tool_${index + 1}`,
+      id,
       name,
       arguments: parseToolArguments(fn.arguments ?? call.arguments),
     })

@@ -14,12 +14,12 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="EventMetadata")
+T = TypeVar("T", bound="RunnerOpaqueJsonObject")
 
 
 
 @_attrs_define
-class EventMetadata:
+class RunnerOpaqueJsonObject:
     """ 
      """
 
@@ -41,12 +41,12 @@ class EventMetadata:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        event_metadata = cls(
+        runner_opaque_json_object = cls(
         )
 
 
-        event_metadata.additional_properties = d
-        return event_metadata
+        runner_opaque_json_object.additional_properties = d
+        return runner_opaque_json_object
 
     @property
     def additional_keys(self) -> list[str]:

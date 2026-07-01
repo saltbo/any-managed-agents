@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -12,9 +13,9 @@ func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
 	output := strings.Join([]string{
 		`{"type":"ready"}`,
 		`{"type":"resumeToken","requestId":"run_session_1","resumeToken":"thread_1"}`,
-		`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"message.completed","payload":{"message":{"role":"assistant","content":"ok"}}}}`,
+		`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"message.completed","payload":{"message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"ok"}]}}}}`,
 		`{"type":"resumeToken","requestId":"other","resumeToken":"ignored"}`,
-		`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"runtime.output","payload":{"stream":"bridge","content":"bridge diagnostic"}}}`,
+		`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"runtime.error","payload":{"message":"bridge diagnostic"}}}`,
 		`{"type":"runtime.event","requestId":"other","event":{"type":"message.completed","payload":{"message":{"role":"assistant","content":"ignored"}}}}`,
 		`{"type":"result","requestId":"run_session_1","result":{"exitCode":0,"providerThreadId":"thread_1"}}`,
 	}, "\n")
@@ -33,7 +34,7 @@ func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected bridge messages, got %v", err)
 	}
-	if len(events) != 2 || !strings.Contains(events[0], "message.completed") || !strings.Contains(events[1], "bridge diagnostic") {
+	if len(events) != 2 || !strings.Contains(events[0], "message.completed") || !strings.Contains(events[1], "runtime.error") {
 		t.Fatalf("expected forwarded event and log, got %v", events)
 	}
 	if len(resumeTokens) != 1 || resumeTokens[0] != "thread_1" {
@@ -64,7 +65,7 @@ func TestBridgeProtocolErrorBranches(t *testing.T) {
 		t.Fatalf("expected bridge error, got %v", err)
 	}
 	writeErr := errors.New("write failed")
-	scanner = protocol.scanner(strings.NewReader(`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"runtime.output","payload":{"content":"diag"}}}` + "\n"))
+	scanner = protocol.scanner(strings.NewReader(`{"type":"runtime.event","requestId":"run_session_1","event":{"type":"runtime.error","payload":{"message":"diag"}}}` + "\n"))
 	if _, err := protocol.readResult(scanner, "run_session_1", func(JSON) error { return writeErr }, nil); !errors.Is(err, writeErr) {
 		t.Fatalf("expected writer error, got %v", err)
 	}
@@ -75,13 +76,24 @@ func TestBridgeProtocolErrorBranches(t *testing.T) {
 }
 
 func TestBridgeProtocolControlFrame(t *testing.T) {
-	got := bridgeProtocol{}.controlFrame("run_1", BridgeControlFrame{
-		Type:         "permissionDecision",
-		PermissionID: "perm_1",
-		Allowed:      true,
-		Reason:       "ok",
-	})
-	if got.RequestID != "run_1" || got.PermissionID != "perm_1" || got.Allowed != true || got.Reason != "ok" {
+	got, err := bridgeProtocol{}.controlFrame("run_1", BridgeControlFrame(`{"type":"permissionDecision","permissionId":"perm_1","allowed":true,"reason":"ok","nested":{"keep":true}}`))
+	if err != nil {
+		t.Fatalf("expected control frame, got %v", err)
+	}
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serialized := string(data)
+	for _, expected := range []string{`"requestId":"run_1"`, `"permissionId":"perm_1"`, `"allowed":true`, `"nested":{"keep":true}`} {
+		if !strings.Contains(serialized, expected) {
+			t.Fatalf("expected %s in control frame %s", expected, serialized)
+		}
+	}
+}
+
+func TestBridgeProtocolRejectsInvalidControlFrame(t *testing.T) {
+	if got, err := (bridgeProtocol{}).controlFrame("run_1", BridgeControlFrame(`[]`)); err == nil || got != nil {
 		t.Fatalf("unexpected control frame %#v", got)
 	}
 }

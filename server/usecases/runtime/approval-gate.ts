@@ -17,6 +17,7 @@
 import { type PendingSessionApproval, sessionApprovalState } from '@server/domain/runtime/approval-state'
 import { now } from '@server/domain/runtime/util'
 import { redactSensitiveValue } from '@server/redaction'
+import type { AmaEvent } from '@shared/session-events'
 import type {
   AuditPort,
   AuthScope,
@@ -67,7 +68,7 @@ export function createToolApprovalGate(
     auth: AuthScope
     sessionId: string
     sessionMetadata: Record<string, unknown>
-    appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>
+    appendEvent: (event: AmaEvent) => Promise<string>
   },
 ): ToolApprovalGate {
   const { sessionOrchestration: store, audit, policy } = deps
@@ -86,16 +87,9 @@ export function createToolApprovalGate(
       if (!pendingToolCallId) {
         return false
       }
-      const toolCall = event.toolCall as Record<string, unknown> | undefined
-      const message = event.message as Record<string, unknown> | undefined
-      const eventToolCallId =
-        typeof event.toolCallId === 'string'
-          ? event.toolCallId
-          : typeof toolCall?.id === 'string'
-            ? toolCall.id
-            : typeof message?.toolCallId === 'string'
-              ? message.toolCallId
-              : null
+      const payload = event.payload as Record<string, unknown> | undefined
+      const toolCall = payload?.toolCall as Record<string, unknown> | undefined
+      const eventToolCallId = typeof toolCall?.id === 'string' ? toolCall.id : null
       return eventToolCallId === pendingToolCallId
     },
 
@@ -111,9 +105,9 @@ export function createToolApprovalGate(
         return null
       }
       const approvalId = `approval_${crypto.randomUUID().replaceAll('-', '')}`
-      const requestEventId = await values.appendEvent(
-        {
-          type: 'permission.requested',
+      const requestEventId = await values.appendEvent({
+        type: 'permission.requested',
+        payload: {
           permissionId: approvalId,
           toolCall: { id: toolCallId, name: toolName, input },
           details: {
@@ -125,8 +119,7 @@ export function createToolApprovalGate(
             status: 'pending',
           },
         },
-        { source: 'policy' },
-      )
+      })
       await audit.record(auth, {
         action: 'session.tool_approval_requested',
         resourceType: 'tool',

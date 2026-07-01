@@ -28,8 +28,6 @@ class EventError:
             category (str | Unset):
             retryable (bool | Unset):
             retry_after_seconds (float | Unset):
-            provider (str | Unset):
-            model (str | Unset):
             details (Any | Unset):
      """
 
@@ -38,8 +36,6 @@ class EventError:
     category: str | Unset = UNSET
     retryable: bool | Unset = UNSET
     retry_after_seconds: float | Unset = UNSET
-    provider: str | Unset = UNSET
-    model: str | Unset = UNSET
     details: Any | Unset = UNSET
 
 
@@ -57,10 +53,6 @@ class EventError:
 
         retry_after_seconds = self.retry_after_seconds
 
-        provider = self.provider
-
-        model = self.model
-
         details = self.details
 
 
@@ -77,10 +69,6 @@ class EventError:
             field_dict["retryable"] = retryable
         if retry_after_seconds is not UNSET:
             field_dict["retryAfterSeconds"] = retry_after_seconds
-        if provider is not UNSET:
-            field_dict["provider"] = provider
-        if model is not UNSET:
-            field_dict["model"] = model
         if details is not UNSET:
             field_dict["details"] = details
 
@@ -101,10 +89,6 @@ class EventError:
 
         retry_after_seconds = d.pop("retryAfterSeconds", UNSET)
 
-        provider = d.pop("provider", UNSET)
-
-        model = d.pop("model", UNSET)
-
         details = d.pop("details", UNSET)
 
         event_error = cls(
@@ -113,8 +97,6 @@ class EventError:
             category=category,
             retryable=retryable,
             retry_after_seconds=retry_after_seconds,
-            provider=provider,
-            model=model,
             details=details,
         )
 

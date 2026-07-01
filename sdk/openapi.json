@@ -44,9 +44,6 @@
           "id": {
             "type": "string"
           },
-          "projectId": {
-            "type": "string"
-          },
           "sessionId": {
             "type": "string"
           },
@@ -63,7 +60,6 @@
         },
         "required": [
           "id",
-          "projectId",
           "sessionId",
           "sequence",
           "event",
@@ -78,14 +74,11 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "agent.started"
+                  "runtime.started"
                 ]
               },
               "payload": {
-                "$ref": "#/components/schemas/LifecyclePayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
+                "$ref": "#/components/schemas/RuntimeLifecyclePayload"
               }
             },
             "required": [
@@ -100,14 +93,11 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "agent.completed"
+                  "runtime.completed"
                 ]
               },
               "payload": {
-                "$ref": "#/components/schemas/LifecyclePayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
+                "$ref": "#/components/schemas/RuntimeLifecyclePayload"
               }
             },
             "required": [
@@ -127,9 +117,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/TurnPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -149,75 +136,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/TurnPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "session.stopped"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/SessionStopPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "session.checkpointed"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/SessionCheckpointPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "session.resumed"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/SessionResumePayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -237,9 +155,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/MessageEventPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -259,9 +174,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/MessageEventPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -281,75 +193,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/MessageEventPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "tool_call.started"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/ToolStartedPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "tool_call.updated"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/ToolUpdatedPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "tool_call.completed"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/ToolCompletedPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -369,9 +212,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/UsageRecordedPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -391,9 +231,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/PermissionRequestPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -413,9 +250,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/PermissionResolvedPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -435,9 +269,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/PermissionDeniedPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -457,75 +288,6 @@
               },
               "payload": {
                 "$ref": "#/components/schemas/EventError"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "runtime.status"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/StatusPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "runtime.output"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/RuntimeOutputPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
-              }
-            },
-            "required": [
-              "type",
-              "payload"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "runner.status"
-                ]
-              },
-              "payload": {
-                "$ref": "#/components/schemas/StatusPayload"
-              },
-              "metadata": {
-                "$ref": "#/components/schemas/EventMetadata"
               }
             },
             "required": [
@@ -536,38 +298,26 @@
           }
         ]
       },
-      "LifecyclePayload": {
+      "RuntimeLifecyclePayload": {
         "type": "object",
-        "additionalProperties": {
-          "nullable": true
-        }
-      },
-      "EventMetadata": {
-        "type": "object",
-        "additionalProperties": {
-          "nullable": true
-        }
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "TurnPayload": {
         "type": "object",
         "properties": {
-          "marker": {
-            "type": "string"
-          },
-          "stage": {
-            "type": "string"
-          },
           "status": {
+            "type": "string"
+          },
+          "reason": {
             "type": "string"
           },
           "message": {
             "$ref": "#/components/schemas/EventMessage"
-          },
-          "toolResults": {
-            "type": "array",
-            "items": {
-              "nullable": true
-            }
           }
         },
         "additionalProperties": false
@@ -584,8 +334,7 @@
               "user",
               "assistant",
               "system",
-              "tool",
-              "toolResult"
+              "tool"
             ]
           },
           "content": {
@@ -594,14 +343,21 @@
               "$ref": "#/components/schemas/MessageContentBlock"
             }
           },
-          "timestamp": {
-            "type": "number"
+          "providerMessageId": {
+            "type": "string"
+          },
+          "parentMessageId": {
+            "type": "string"
+          },
+          "parentToolCallId": {
+            "type": "string"
           },
           "stopReason": {
             "type": "string"
           }
         },
         "required": [
+          "id",
           "role",
           "content"
         ],
@@ -626,9 +382,6 @@
           },
           {
             "$ref": "#/components/schemas/FileContentBlock"
-          },
-          {
-            "$ref": "#/components/schemas/UnknownContentBlock"
           }
         ],
         "discriminator": {
@@ -639,8 +392,7 @@
             "tool_call": "#/components/schemas/ToolCallContentBlock",
             "tool_result": "#/components/schemas/ToolResultContentBlock",
             "image": "#/components/schemas/ImageContentBlock",
-            "file": "#/components/schemas/FileContentBlock",
-            "unknown": "#/components/schemas/UnknownContentBlock"
+            "file": "#/components/schemas/FileContentBlock"
           }
         }
       },
@@ -730,16 +482,63 @@
             "type": "string"
           },
           "result": {
-            "nullable": true
+            "$ref": "#/components/schemas/ToolResult"
           },
-          "isError": {
-            "type": "boolean"
+          "error": {
+            "$ref": "#/components/schemas/EventError"
           }
         },
         "required": [
           "type",
-          "toolCallId"
+          "toolCallId",
+          "result"
         ]
+      },
+      "ToolResult": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolResultValueContentBlock"
+            }
+          },
+          "structuredContent": {
+            "nullable": true
+          },
+          "exitCode": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "ToolResultValueContentBlock": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextContentBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ImageContentBlock"
+          },
+          {
+            "$ref": "#/components/schemas/FileContentBlock"
+          },
+          {
+            "$ref": "#/components/schemas/JsonContentBlock"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "text": "#/components/schemas/TextContentBlock",
+            "image": "#/components/schemas/ImageContentBlock",
+            "file": "#/components/schemas/FileContentBlock",
+            "json": "#/components/schemas/JsonContentBlock"
+          }
+        }
       },
       "ImageContentBlock": {
         "type": "object",
@@ -790,13 +589,13 @@
           "type"
         ]
       },
-      "UnknownContentBlock": {
+      "JsonContentBlock": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
             "enum": [
-              "unknown"
+              "json"
             ]
           },
           "value": {
@@ -806,102 +605,6 @@
         "required": [
           "type"
         ]
-      },
-      "SessionStopPayload": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "SessionCheckpointPayload": {
-        "type": "object",
-        "properties": {
-          "resumeTokenRef": {
-            "type": "string"
-          },
-          "scope": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "SessionResumePayload": {
-        "type": "object",
-        "properties": {
-          "fromCheckpoint": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "MessageEventPayload": {
-        "type": "object",
-        "properties": {
-          "message": {
-            "$ref": "#/components/schemas/EventMessage"
-          }
-        },
-        "required": [
-          "message"
-        ],
-        "additionalProperties": false
-      },
-      "ToolStartedPayload": {
-        "type": "object",
-        "properties": {
-          "toolCall": {
-            "$ref": "#/components/schemas/EventToolCall"
-          }
-        },
-        "required": [
-          "toolCall"
-        ],
-        "additionalProperties": false
-      },
-      "ToolUpdatedPayload": {
-        "type": "object",
-        "properties": {
-          "toolCall": {
-            "$ref": "#/components/schemas/EventToolCall"
-          },
-          "partialResult": {
-            "nullable": true
-          }
-        },
-        "required": [
-          "toolCall"
-        ],
-        "additionalProperties": false
-      },
-      "ToolCompletedPayload": {
-        "type": "object",
-        "properties": {
-          "toolCall": {
-            "$ref": "#/components/schemas/EventToolCall"
-          },
-          "result": {
-            "nullable": true
-          },
-          "error": {
-            "$ref": "#/components/schemas/EventError"
-          },
-          "isError": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "toolCall"
-        ],
-        "additionalProperties": false
       },
       "EventError": {
         "type": "object",
@@ -921,14 +624,20 @@
           "retryAfterSeconds": {
             "type": "number"
           },
-          "provider": {
-            "type": "string"
-          },
-          "model": {
-            "type": "string"
-          },
           "details": {
             "nullable": true
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "MessageEventPayload": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/EventMessage"
           }
         },
         "required": [
@@ -939,9 +648,6 @@
       "UsageRecordedPayload": {
         "type": "object",
         "properties": {
-          "provider": {
-            "type": "string"
-          },
           "model": {
             "type": "string"
           },
@@ -1065,43 +771,6 @@
             }
           }
         },
-        "additionalProperties": false
-      },
-      "StatusPayload": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "additionalProperties": false
-      },
-      "RuntimeOutputPayload": {
-        "type": "object",
-        "properties": {
-          "stream": {
-            "type": "string",
-            "enum": [
-              "stdout",
-              "stderr",
-              "runtime",
-              "reasoning",
-              "bridge"
-            ]
-          },
-          "content": {
-            "nullable": true
-          }
-        },
-        "required": [
-          "stream"
-        ],
         "additionalProperties": false
       },
       "SessionSocketBackfillMessage": {
@@ -1579,6 +1248,10 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "id",
+          "name"
+        ],
         "additionalProperties": false
       },
       "RunnerWorkPayload": {
@@ -1708,6 +1381,10 @@
             }
           }
         },
+        "required": [
+          "id",
+          "name"
+        ],
         "additionalProperties": false
       },
       "RunnerRuntimeRequest": {
@@ -1722,50 +1399,30 @@
         },
         "additionalProperties": false
       },
+      "RunnerOpaqueJsonObject": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
       "RunnerSessionCommand": {
         "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "runnercmd_abc123"
-          },
-          "type": {
-            "type": "string",
-            "example": "send"
-          },
-          "path": {
-            "type": "string",
-            "example": "/rpc"
-          },
-          "message": {
-            "type": "string",
-            "example": "continue"
-          },
-          "reason": {
-            "type": "string",
-            "example": "user cancelled"
-          },
-          "permissionId": {
-            "type": "string",
-            "example": "perm_abc123"
-          },
-          "allowed": {
-            "type": "boolean"
-          },
-          "body": {
-            "$ref": "#/components/schemas/RunnerRuntimeRequest"
-          }
-        },
-        "required": [
-          "type"
-        ],
-        "additionalProperties": false
+        "properties": {},
+        "additionalProperties": {
+          "nullable": true
+        }
       },
       "RunnerSandboxRequest": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "sandbox.execute",
+              "sandbox.stop",
+              "sandbox.readMemoryStores"
+            ],
             "example": "sandbox.execute"
           },
           "toolCallId": {
@@ -1801,48 +1458,278 @@
         "additionalProperties": false
       },
       "RunnerChannelMessage": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "example": "session.command"
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "runner.channel.accepted"
+                ]
+              },
+              "runnerId": {
+                "type": "string",
+                "example": "runner_abc123"
+              },
+              "environmentId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
           },
-          "eventId": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "work.assigned"
+                ]
+              },
+              "runnerId": {
+                "type": "string",
+                "example": "runner_abc123"
+              },
+              "lease": {
+                "$ref": "#/components/schemas/RunnerOpaqueJsonObject"
+              },
+              "workItem": {
+                "$ref": "#/components/schemas/RunnerOpaqueJsonObject"
+              }
+            },
+            "required": [
+              "type",
+              "lease",
+              "workItem"
+            ],
+            "additionalProperties": false
           },
-          "requestId": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "session.command"
+                ]
+              },
+              "sessionId": {
+                "type": "string",
+                "example": "session_abc123"
+              },
+              "runnerId": {
+                "type": "string",
+                "example": "runner_abc123"
+              },
+              "command": {
+                "$ref": "#/components/schemas/RunnerSessionCommand"
+              }
+            },
+            "required": [
+              "type",
+              "sessionId",
+              "command"
+            ],
+            "additionalProperties": false
           },
-          "message": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sandbox.request"
+                ]
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string",
+                "example": "session_abc123"
+              },
+              "runnerId": {
+                "type": "string",
+                "example": "runner_abc123"
+              },
+              "request": {
+                "$ref": "#/components/schemas/RunnerSandboxRequest"
+              }
+            },
+            "required": [
+              "type",
+              "requestId",
+              "sessionId",
+              "request"
+            ],
+            "additionalProperties": false
           },
-          "sessionId": {
-            "type": "string",
-            "example": "session_abc123"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sandbox.response"
+                ]
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string",
+                "example": "session_abc123"
+              },
+              "runnerId": {
+                "type": "string",
+                "example": "runner_abc123"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "result": {
+                "$ref": "#/components/schemas/RunnerOpaqueJsonObject"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "requestId",
+              "sessionId",
+              "ok"
+            ],
+            "additionalProperties": false
           },
-          "runnerId": {
-            "type": "string",
-            "example": "runner_abc123"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "session.backfill_request"
+                ]
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string",
+                "example": "session_abc123"
+              }
+            },
+            "required": [
+              "type",
+              "eventId",
+              "sessionId"
+            ],
+            "additionalProperties": false
           },
-          "leaseId": {
-            "type": "string",
-            "example": "lease_abc123"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "session.backfill_response"
+                ]
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string",
+                "example": "session_abc123"
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RunnerOpaqueJsonObject"
+                }
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "eventId",
+              "sessionId",
+              "events"
+            ],
+            "additionalProperties": false
           },
-          "workItemId": {
-            "type": "string",
-            "example": "work_abc123"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "runner.event"
+                ]
+              },
+              "sessionId": {
+                "type": "string",
+                "example": "session_abc123"
+              },
+              "record": {
+                "$ref": "#/components/schemas/RunnerOpaqueJsonObject"
+              }
+            },
+            "required": [
+              "type",
+              "sessionId",
+              "record"
+            ],
+            "additionalProperties": false
           },
-          "command": {
-            "$ref": "#/components/schemas/RunnerSessionCommand"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "runner.event.accepted"
+                ]
+              },
+              "eventId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "eventId"
+            ],
+            "additionalProperties": false
           },
-          "request": {
-            "$ref": "#/components/schemas/RunnerSandboxRequest"
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "session.channel.error"
+                ]
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "message"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "type"
-        ],
-        "additionalProperties": false
+        ]
       },
       "HealthResponse": {
         "type": "object",
@@ -12573,27 +12460,18 @@
             "schema": {
               "type": "string",
               "enum": [
-                "agent.started",
-                "agent.completed",
+                "runtime.started",
+                "runtime.completed",
                 "turn.started",
                 "turn.completed",
-                "session.stopped",
-                "session.checkpointed",
-                "session.resumed",
                 "message.started",
                 "message.updated",
                 "message.completed",
-                "tool_call.started",
-                "tool_call.updated",
-                "tool_call.completed",
                 "usage.recorded",
                 "permission.requested",
                 "permission.resolved",
                 "permission.denied",
-                "runtime.error",
-                "runtime.status",
-                "runtime.output",
-                "runner.status"
+                "runtime.error"
               ],
               "example": "message.completed"
             },

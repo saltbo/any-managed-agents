@@ -1,4 +1,14 @@
-import { AMA_SESSION_EVENT_TYPES, type AmaSessionEventType } from '@ama/runtime-contracts/session-events'
+import { randomUUID } from 'node:crypto'
+import {
+  AMA_SESSION_EVENT_TYPES,
+  type AmaSessionEventType,
+  type Message,
+  type MessageContentBlock,
+  type MessageRole,
+  type ToolCall,
+  type ToolResult,
+  type UsageRecordedPayload,
+} from '@ama/runtime-contracts/session-events'
 import type { AmaRuntimeEvent } from '../protocol'
 
 const EVENT_TYPES = new Set<string>(AMA_SESSION_EVENT_TYPES)
@@ -17,49 +27,85 @@ export function runtimeEvent(type: AmaSessionEventType, payload: Record<string, 
   return assertAmaRuntimeEvent({ type, payload } as AmaRuntimeEvent)
 }
 
-export function textMessage(role: 'assistant' | 'user', text: string, id?: string) {
+export function textMessage(
+  role: Extract<MessageRole, 'assistant' | 'user' | 'system'>,
+  text: string,
+  id = randomId('msg'),
+) {
   return {
-    ...(id ? { id } : {}),
+    id,
     role,
     content: [{ type: 'text', text }],
-    timestamp: Date.now(),
   }
 }
 
-export function toolStart(toolCallId: string, toolName: string, args: Record<string, unknown> = {}) {
-  return runtimeEvent('tool_call.started', { toolCall: { id: toolCallId, name: toolName, input: args } })
+export function messageEvent(
+  message: Message,
+  type: Extract<AmaSessionEventType, 'message.started' | 'message.updated' | 'message.completed'> = 'message.completed',
+) {
+  return runtimeEvent(type, { message })
 }
 
-export function toolEnd(
-  toolCallId: string,
-  toolName: string,
-  args: Record<string, unknown>,
-  result: unknown,
-  isError = false,
-) {
-  return runtimeEvent('tool_call.completed', {
-    toolCall: { id: toolCallId, name: toolName, input: args },
+export function messageStarted(message: Message) {
+  return messageEvent(message, 'message.started')
+}
+
+export function messageUpdated(message: Message) {
+  return messageEvent(message, 'message.updated')
+}
+
+export function messageCompleted(message: Message) {
+  return messageEvent(message, 'message.completed')
+}
+
+export function textBlock(text: string): MessageContentBlock {
+  return { type: 'text', text }
+}
+
+export function reasoningBlock(text: string): MessageContentBlock {
+  return { type: 'reasoning', text }
+}
+
+export function toolCallBlock(toolCall: ToolCall): MessageContentBlock {
+  return { type: 'tool_call', toolCall }
+}
+
+export function toolResultBlock(toolCallId: string, result: ToolResult, failed = false): MessageContentBlock {
+  return {
+    type: 'tool_result',
+    toolCallId,
     result,
-    isError,
-    ...(isError
+    ...(failed
       ? {
-          error:
-            typeof result === 'string' ? { message: result } : { message: 'Tool execution failed', details: result },
+          error: {
+            message: toolResultText(result) || 'Tool execution failed',
+            details: result.structuredContent ?? result.content,
+          },
         }
       : {}),
-  })
+  }
 }
 
-export function usageEvent(payload: Record<string, unknown>) {
+export function toolResultMessage(
+  toolCallId: string,
+  result: ToolResult,
+  failed = false,
+  id = randomId('msg'),
+): Message {
+  return {
+    id,
+    role: 'tool',
+    parentToolCallId: toolCallId,
+    content: [toolResultBlock(toolCallId, result, failed)],
+  }
+}
+
+export function usageEvent(payload: UsageRecordedPayload) {
   return runtimeEvent('usage.recorded', payload)
 }
 
 export function turnEnd() {
   return runtimeEvent('turn.completed')
-}
-
-export function reasoning(content: string) {
-  return runtimeEvent('runtime.output', { stream: 'reasoning', content })
 }
 
 export function runtimeError(message: string, code?: string, details?: unknown) {
@@ -68,4 +114,17 @@ export function runtimeError(message: string, code?: string, details?: unknown) 
     ...(code ? { code } : {}),
     ...(details !== undefined ? { details } : {}),
   })
+}
+
+export function randomId(prefix: string) {
+  return `${prefix}_${randomUUID()}`
+}
+
+function toolResultText(result: ToolResult) {
+  return result.content
+    .map((item) => {
+      if (item.type === 'text') return item.text
+      return ''
+    })
+    .join('')
 }

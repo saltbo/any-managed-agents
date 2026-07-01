@@ -76,17 +76,31 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
             id: `${command.id}_assistant`,
             sequence: ++sequence,
             type: 'message.completed',
-            payload: { type: 'message.completed', message: { role: 'assistant', content } },
+            payload: {
+              type: 'message.completed',
+              message: { id: `${command.id}_assistant_msg`, role: 'assistant', content: [{ type: 'text', text: content }] },
+            },
           }),
         )
         this.emitEvent(
           event({
             id: `${command.id}_tool`,
             sequence: ++sequence,
-            type: 'tool_call.completed',
+            type: 'message.completed',
             payload: {
-              type: 'tool_call.completed',
-              toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+              type: 'message.completed',
+              message: {
+                id: `${command.id}_tool_msg`,
+                role: 'tool',
+                parentToolCallId: `${command.id}_tool`,
+                content: [
+                  {
+                    type: 'tool_result',
+                    toolCallId: `${command.id}_tool`,
+                    result: { content: [], structuredContent: { ok: true } },
+                  },
+                ],
+              },
             },
           }),
         )
@@ -168,18 +182,16 @@ function event(overrides: EventRecordOverrides = {}): EventRecord {
     type = overrides.event?.type ?? 'message.completed',
     payload = overrides.event?.payload ?? {
       type: 'message.completed',
-      message: { role: 'assistant', content: 'AMA message completed' },
+      message: { id: 'msg_1', role: 'assistant', content: [{ type: 'text', text: 'AMA message completed' }] },
     },
-    metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
     ...recordOverrides
   } = overrides
   return {
     id: 'event_1',
-    projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
+    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
     createdAt: now,
     ...recordOverrides,
   }
@@ -575,11 +587,36 @@ describe('App', () => {
       agents: [agent()],
       sessions: [session()],
       events: [
-        event({ payload: { type: 'message.completed', message: { role: 'assistant', content: 'hello' } } }),
+        event({
+          payload: {
+            type: 'message.completed',
+            message: { id: 'msg_hello', role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+          },
+        }),
         event({
           id: 'event_2',
-          type: 'tool_call.completed',
-          payload: { type: 'tool_call.completed', toolCall: { id: 'tool_1', name: 'read' } },
+          type: 'message.completed',
+          payload: {
+            type: 'message.completed',
+            message: {
+              id: 'msg_tool_call',
+              role: 'assistant',
+              content: [{ type: 'tool_call', toolCall: { id: 'tool_1', name: 'read', input: {} } }],
+            },
+          },
+        }),
+        event({
+          id: 'event_3',
+          type: 'message.completed',
+          payload: {
+            type: 'message.completed',
+            message: {
+              id: 'msg_tool_result',
+              role: 'tool',
+              parentToolCallId: 'tool_1',
+              content: [{ type: 'tool_result', toolCallId: 'tool_1', result: { content: [] } }],
+            },
+          },
         }),
       ],
     })
@@ -653,11 +690,36 @@ describe('App', () => {
         }),
       ],
       events: [
-        event({ payload: { type: 'message.completed', message: { role: 'assistant', content: 'hello' } } }),
+        event({
+          payload: {
+            type: 'message.completed',
+            message: { id: 'msg_hello', role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+          },
+        }),
         event({
           id: 'event_2',
-          type: 'tool_call.completed',
-          payload: { type: 'tool_call.completed', toolCall: { id: 'tool_1', name: 'read' } },
+          type: 'message.completed',
+          payload: {
+            type: 'message.completed',
+            message: {
+              id: 'msg_tool_call',
+              role: 'assistant',
+              content: [{ type: 'tool_call', toolCall: { id: 'tool_1', name: 'read', input: {} } }],
+            },
+          },
+        }),
+        event({
+          id: 'event_3',
+          type: 'message.completed',
+          payload: {
+            type: 'message.completed',
+            message: {
+              id: 'msg_tool_result',
+              role: 'tool',
+              parentToolCallId: 'tool_1',
+              content: [{ type: 'tool_result', toolCallId: 'tool_1', result: { content: [] } }],
+            },
+          },
         }),
       ],
     })
@@ -807,7 +869,6 @@ describe('App', () => {
     const runtimeEvents: EventRecord[] = [
       {
         id: 'event_1',
-        projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
         event: { type: 'turn.completed', payload: { status: 'idle', reason: 'runtime_ready' } },

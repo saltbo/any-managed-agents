@@ -8,6 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..models.runner_sandbox_request_type import RunnerSandboxRequestType
 from ..types import UNSET, Unset
 from typing import cast
 
@@ -28,7 +29,7 @@ T = TypeVar("T", bound="RunnerSandboxRequest")
 class RunnerSandboxRequest:
     """ 
         Attributes:
-            type_ (str):  Example: sandbox.execute.
+            type_ (RunnerSandboxRequestType):  Example: sandbox.execute.
             tool_call_id (str | Unset):  Example: call_abc123.
             tool_name (str | Unset):  Example: bash.
             input_ (RunnerSandboxRequestInput | Unset):
@@ -36,7 +37,7 @@ class RunnerSandboxRequest:
             volume_mounts (list[RunnerVolumeMount] | Unset):
      """
 
-    type_: str
+    type_: RunnerSandboxRequestType
     tool_call_id: str | Unset = UNSET
     tool_name: str | Unset = UNSET
     input_: RunnerSandboxRequestInput | Unset = UNSET
@@ -51,7 +52,7 @@ class RunnerSandboxRequest:
         from ..models.runner_sandbox_request_input import RunnerSandboxRequestInput
         from ..models.runner_volume import RunnerVolume
         from ..models.runner_volume_mount import RunnerVolumeMount
-        type_ = self.type_
+        type_ = self.type_.value
 
         tool_call_id = self.tool_call_id
 
@@ -106,7 +107,10 @@ class RunnerSandboxRequest:
         from ..models.runner_volume import RunnerVolume
         from ..models.runner_volume_mount import RunnerVolumeMount
         d = dict(src_dict)
-        type_ = d.pop("type")
+        type_ = RunnerSandboxRequestType(d.pop("type"))
+
+
+
 
         tool_call_id = d.pop("toolCallId", UNSET)
 

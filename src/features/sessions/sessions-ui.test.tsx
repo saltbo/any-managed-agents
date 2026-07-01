@@ -64,16 +64,14 @@ function buildPersistedEvent(overrides: EventRecordOverrides = {}): EventRecord 
     payload = overrides.event?.payload ?? {
       message: { role: 'assistant', content: 'Runtime failed to start' },
     },
-    metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
     ...recordOverrides
   } = overrides
   return {
     id: 'event_1',
-    projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
+    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
     createdAt: '2026-05-23T00:00:00.000Z',
     ...recordOverrides,
   }
@@ -413,7 +411,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           durationMs: 12,
           createdAt: '2026-05-23T00:00:01.000Z',
           updatedAt: '2026-05-23T00:00:01.000Z',
-          eventType: 'tool_call.completed',
+          eventType: 'tool_result',
         },
       ],
       debugEvents: [
@@ -507,12 +505,12 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       <SessionRuntimePanel
         runtime={buildRuntimeState({
           debugEvents: [
-            {
-              id: 'live_only_event',
-              type: 'runtime.output',
-              payload: { marker: 'live_only_payload' },
-              createdAt: '2026-05-23T00:00:01.000Z',
-            },
+	            {
+	              id: 'live_only_event',
+	              type: 'runtime.error',
+	              payload: { message: 'live_only_payload' },
+	              createdAt: '2026-05-23T00:00:01.000Z',
+	            },
           ],
         })}
         persistedEvents={persistedEvents}
@@ -642,7 +640,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
               durationMs: 5,
               createdAt: '2026-05-23T00:00:04.000Z',
               updatedAt: '2026-05-23T00:00:04.000Z',
-              eventType: 'tool_call.completed',
+              eventType: 'tool_result',
             },
           ],
           debugEvents: [],

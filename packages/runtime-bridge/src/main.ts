@@ -165,8 +165,8 @@ async function control(message: Exclude<RuntimeBridgeInputMessage, { type: 'run'
     // diagnostic so the prompt loss is observable in the session events.
     const reason = err instanceof Error ? err.message : String(err)
     writeSessionEvent(message.requestId, {
-      type: 'runtime.output',
-      payload: { stream: 'bridge', content: `Runtime rejected injected prompt: ${reason}` },
+      type: 'runtime.error',
+      payload: { message: `Runtime rejected injected prompt: ${reason}`, code: 'runtime_prompt_rejected' },
     })
   }
 }

@@ -503,33 +503,13 @@ export class RunnerPoolObject implements DurableObject {
     if (!sessionId) {
       return
     }
-    const record = objectRecord(frame.record)
-    const event = objectRecord(record?.event)
-    const payload = objectRecord(event?.payload)
-    if (
-      !record ||
-      !event ||
-      !payload ||
-      typeof record.id !== 'string' ||
-      typeof record.sequence !== 'number' ||
-      typeof record.createdAt !== 'string' ||
-      typeof event.type !== 'string' ||
-      !isAmaSessionEventType(event.type)
-    ) {
+    const raw = relayedRunnerEventFrom(frame.record)
+    if (!raw) {
       return
     }
     await fanOutRelayedEvent(this.env, {
       scope: { organizationId: scope.organizationId, projectId: scope.projectId, sessionId },
-      raw: {
-        id: record.id,
-        sequence: record.sequence,
-        createdAt: record.createdAt,
-        event: {
-          type: event.type,
-          payload,
-          metadata: { runnerId: scope.runnerId, ...(objectRecord(event.metadata) ?? {}) },
-        } as AmaEvent,
-      },
+      raw,
     })
   }
 }
@@ -598,6 +578,7 @@ function relayedRunnerEventFrom(value: unknown): RelayedRunnerEvent | null {
     !event ||
     !payload ||
     typeof record.id !== 'string' ||
+    typeof record.sessionId !== 'string' ||
     typeof record.sequence !== 'number' ||
     typeof record.createdAt !== 'string' ||
     typeof event.type !== 'string' ||
@@ -607,12 +588,12 @@ function relayedRunnerEventFrom(value: unknown): RelayedRunnerEvent | null {
   }
   return {
     id: record.id,
+    sessionId: record.sessionId,
     sequence: record.sequence,
     createdAt: record.createdAt,
     event: {
       type: event.type,
       payload,
-      metadata: objectRecord(event.metadata) ?? {},
     } as AmaEvent,
   }
 }

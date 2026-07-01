@@ -10,12 +10,12 @@ import (
 
 func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 	dir := t.TempDir()
-	store, err := OpenEventLog(dir)
+	store, err := OpenEventLog(dir, "session_1")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	for i, typ := range []string{"a", "b", "c"} {
-		event, err := store.Append(ama.JSON{"type": typ, "payload": ama.JSON{"i": i}, "metadata": ama.JSON{"runnerId": "r1"}})
+		event, err := store.Append(ama.JSON{"type": typ, "payload": ama.JSON{"i": i}})
 		if err != nil {
 			t.Fatalf("append: %v", err)
 		}
@@ -24,6 +24,9 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 		}
 		if event.ID == "" {
 			t.Fatal("append assigned an empty id")
+		}
+		if event.SessionID != "session_1" {
+			t.Fatalf("append assigned session = %s, want session_1", event.SessionID)
 		}
 	}
 
@@ -43,7 +46,7 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 
 	// Reopening recovers the sequence so a resumed run keeps counting up rather
 	// than restarting (the on-disk log is the source of truth).
-	reopened, err := OpenEventLog(dir)
+	reopened, err := OpenEventLog(dir, "session_1")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}

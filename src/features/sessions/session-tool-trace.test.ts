@@ -14,41 +14,76 @@ type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
 function buildEvent(overrides: EventRecordOverrides): EventRecord {
   sequence += 1
   const {
-    type = overrides.event?.type ?? 'tool_call.started',
+    type = overrides.event?.type ?? 'message.completed',
     payload = overrides.event?.payload ?? {},
-    metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
     ...recordOverrides
   } = overrides
   return {
     id: `event_${sequence}`,
-    projectId: 'project_1',
     sessionId: 'session_1',
     sequence,
-    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
+    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
     createdAt: '2026-05-23T00:00:00.000Z',
     ...recordOverrides,
   }
 }
 
 function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
+  const overrideToolCall = objectValue(overrides.payload?.toolCall)
+  const toolCall = {
+    id: toolCallId,
+    name: stringField(overrideToolCall, 'name') ?? 'bash',
+    input: overrideToolCall.input ?? { command: 'git status' },
+  }
   return buildEvent({
-    type: 'tool_call.started',
-    payload: { toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } } },
-    ...overrides,
+    type: 'message.completed',
+    payload: {
+      message: {
+        id: `msg_${toolCallId}_call`,
+        role: 'assistant',
+        content: [{ type: 'tool_call', toolCall }],
+      },
+    },
+    ...withoutPayload(overrides),
   })
 }
 
 function toolEnd(toolCallId: string, overrides: EventRecordOverrides = {}) {
+  const overridePayload = objectValue(overrides.payload)
+  const failed = Boolean(overridePayload.error)
   return buildEvent({
-    type: 'tool_call.completed',
+    type: 'message.completed',
     payload: {
-      toolCall: { id: toolCallId, name: 'bash', input: { command: 'git status' } },
-      result: { content: [{ type: 'text', text: 'clean tree' }], details: {} },
-      isError: false,
+      message: {
+        id: `msg_${toolCallId}_result`,
+        role: 'tool',
+        parentToolCallId: toolCallId,
+        content: [
+          {
+            type: 'tool_result',
+            toolCallId,
+            result: overridePayload.result ?? { content: [{ type: 'text', text: 'clean tree' }], structuredContent: {} },
+            ...(failed ? { error: overridePayload.error } : {}),
+          },
+        ],
+      },
     },
-    ...overrides,
+    ...withoutPayload(overrides),
   })
+}
+
+function withoutPayload(overrides: EventRecordOverrides): EventRecordOverrides {
+  const { payload: _payload, type: _type, ...rest } = overrides
+  return rest
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function stringField(record: Record<string, unknown>, field: string) {
+  return typeof record[field] === 'string' ? (record[field] as string) : null
 }
 
 describe('buildSessionToolTrace', () => {
@@ -80,14 +115,13 @@ describe('buildSessionToolTrace', () => {
         createdAt: '2026-05-23T00:00:09.000Z',
         payload: {
           toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
-          result: {},
-          isError: false,
+          result: { content: [] },
           durationMs: 1250,
         },
       }),
     ])
 
-    expect(trace[0]?.durationMs).toBe(1250)
+    expect(trace[0]?.durationMs).toBe(9000)
   })
 
   it('keeps repeated correlation ids as separate executions', () => {
@@ -99,7 +133,7 @@ describe('buildSessionToolTrace', () => {
         payload: {
           toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
           result: { content: [{ type: 'text', text: 'Sandbox command is blocked by policy.' }] },
-          isError: true,
+          error: { message: 'Sandbox command is blocked by policy.' },
         },
       }),
     ])
@@ -118,7 +152,7 @@ describe('buildSessionToolTrace', () => {
         payload: {
           toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
           result: { content: [{ type: 'text', text: longError }] },
-          isError: true,
+          error: { message: longError },
         },
       }),
     ])
@@ -135,8 +169,8 @@ describe('buildSessionToolTrace', () => {
     expect(trace[0]).toMatchObject({
       orphanedResult: true,
       status: 'completed',
-      name: 'bash',
-      input: { command: 'git status' },
+      name: 'tool',
+      input: undefined,
       startedAt: null,
       durationMs: null,
     })
@@ -150,7 +184,11 @@ describe('buildSessionToolTrace', () => {
         payload: { reason: 'sandbox_command_denied', command: 'git status' },
       }),
       toolEnd('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
+        payload: {
+          toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
+          result: { content: [] },
+          error: { message: 'Tool execution failed' },
+        },
       }),
     ])
 
@@ -165,7 +203,11 @@ describe('buildSessionToolTrace', () => {
         payload: { permissionId: 'approval_1', command: 'git status' },
       }),
       toolEnd('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
+        payload: {
+          toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
+          result: { content: [] },
+          error: { message: 'Tool execution failed' },
+        },
       }),
     ])
 
@@ -284,7 +326,11 @@ describe('buildSessionToolTrace — approval edge cases', () => {
         payload: { reason: 'sandbox_command_denied' }, // no command field
       }),
       toolEnd('call_1', {
-        payload: { toolCallId: 'call_1', toolName: 'bash', result: {}, isError: true },
+        payload: {
+          toolCall: { id: 'call_1', name: 'bash', input: { command: 'git status' } },
+          result: { content: [] },
+          error: { message: 'Tool execution failed' },
+        },
       }),
     ])
 
@@ -294,8 +340,14 @@ describe('buildSessionToolTrace — approval edge cases', () => {
   it('pairs tool with start having no command against denial with no command', () => {
     // Tool input has no command field, denial has no command field — both match
     const startNoCommand = buildEvent({
-      type: 'tool_call.started',
-      payload: { toolCallId: 'call_nocmd', toolName: 'bash', args: { path: '/tmp' } },
+      type: 'message.completed',
+      payload: {
+        message: {
+          id: 'msg_call_nocmd',
+          role: 'assistant',
+          content: [{ type: 'tool_call', toolCall: { id: 'call_nocmd', name: 'bash', input: { path: '/tmp' } } }],
+        },
+      },
     })
     const trace = buildSessionToolTrace([
       startNoCommand,
@@ -304,7 +356,11 @@ describe('buildSessionToolTrace — approval edge cases', () => {
         payload: { reason: 'sandbox_command_denied' },
       }),
       toolEnd('call_nocmd', {
-        payload: { toolCallId: 'call_nocmd', toolName: 'bash', result: {}, isError: true },
+        payload: {
+          toolCall: { id: 'call_nocmd', name: 'bash', input: { path: '/tmp' } },
+          result: { content: [] },
+          error: { message: 'Tool execution failed' },
+        },
       }),
     ])
 
@@ -315,10 +371,9 @@ describe('buildSessionToolTrace — approval edge cases', () => {
     const trace = buildSessionToolTrace([
       toolEnd('call_orphan_err', {
         payload: {
-          toolCallId: 'call_orphan_err',
-          toolName: 'bash',
+          toolCall: { id: 'call_orphan_err', name: 'bash', input: { command: 'git status' } },
           result: { content: [{ type: 'text', text: 'Permission denied' }] },
-          isError: true,
+          error: { message: 'Permission denied' },
         },
       }),
     ])

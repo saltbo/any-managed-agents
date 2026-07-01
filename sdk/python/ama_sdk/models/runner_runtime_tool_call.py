@@ -27,14 +27,14 @@ T = TypeVar("T", bound="RunnerRuntimeToolCall")
 class RunnerRuntimeToolCall:
     """ 
         Attributes:
-            id (str | Unset):  Example: tool_1.
-            name (str | Unset):  Example: bash.
+            id (str):  Example: tool_1.
+            name (str):  Example: bash.
             input_ (RunnerRuntimeToolCallInput | Unset):
             arguments (RunnerRuntimeToolCallArguments | Unset):
      """
 
-    id: str | Unset = UNSET
-    name: str | Unset = UNSET
+    id: str
+    name: str
     input_: RunnerRuntimeToolCallInput | Unset = UNSET
     arguments: RunnerRuntimeToolCallArguments | Unset = UNSET
 
@@ -61,11 +61,9 @@ class RunnerRuntimeToolCall:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
+            "id": id,
+            "name": name,
         })
-        if id is not UNSET:
-            field_dict["id"] = id
-        if name is not UNSET:
-            field_dict["name"] = name
         if input_ is not UNSET:
             field_dict["input"] = input_
         if arguments is not UNSET:
@@ -80,9 +78,9 @@ class RunnerRuntimeToolCall:
         from ..models.runner_runtime_tool_call_arguments import RunnerRuntimeToolCallArguments
         from ..models.runner_runtime_tool_call_input import RunnerRuntimeToolCallInput
         d = dict(src_dict)
-        id = d.pop("id", UNSET)
+        id = d.pop("id")
 
-        name = d.pop("name", UNSET)
+        name = d.pop("name")
 
         _input_ = d.pop("input", UNSET)
         input_: RunnerRuntimeToolCallInput | Unset

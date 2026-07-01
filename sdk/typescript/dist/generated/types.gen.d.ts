@@ -7,115 +7,63 @@ export type SessionSocketEventMessage = {
 };
 export type EventRecord = {
     id: string;
-    projectId: string;
     sessionId: string;
     sequence: number;
     event: AmaEvent;
     createdAt: string;
 };
 export type AmaEvent = {
-    type: 'agent.started';
-    payload: LifecyclePayload;
-    metadata?: EventMetadata;
+    type: 'runtime.started';
+    payload: RuntimeLifecyclePayload;
 } | {
-    type: 'agent.completed';
-    payload: LifecyclePayload;
-    metadata?: EventMetadata;
+    type: 'runtime.completed';
+    payload: RuntimeLifecyclePayload;
 } | {
     type: 'turn.started';
     payload: TurnPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'turn.completed';
     payload: TurnPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'session.stopped';
-    payload: SessionStopPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'session.checkpointed';
-    payload: SessionCheckpointPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'session.resumed';
-    payload: SessionResumePayload;
-    metadata?: EventMetadata;
 } | {
     type: 'message.started';
     payload: MessageEventPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'message.updated';
     payload: MessageEventPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'message.completed';
     payload: MessageEventPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'tool_call.started';
-    payload: ToolStartedPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'tool_call.updated';
-    payload: ToolUpdatedPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'tool_call.completed';
-    payload: ToolCompletedPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'usage.recorded';
     payload: UsageRecordedPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'permission.requested';
     payload: PermissionRequestPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'permission.resolved';
     payload: PermissionResolvedPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'permission.denied';
     payload: PermissionDeniedPayload;
-    metadata?: EventMetadata;
 } | {
     type: 'runtime.error';
     payload: EventError;
-    metadata?: EventMetadata;
-} | {
-    type: 'runtime.status';
-    payload: StatusPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'runtime.output';
-    payload: RuntimeOutputPayload;
-    metadata?: EventMetadata;
-} | {
-    type: 'runner.status';
-    payload: StatusPayload;
-    metadata?: EventMetadata;
 };
-export type LifecyclePayload = {
-    [key: string]: unknown;
-};
-export type EventMetadata = {
-    [key: string]: unknown;
+export type RuntimeLifecyclePayload = {
+    reason?: string;
 };
 export type TurnPayload = {
-    marker?: string;
-    stage?: string;
     status?: string;
+    reason?: string;
     message?: EventMessage;
-    toolResults?: Array<unknown>;
 };
 export type EventMessage = {
-    id?: string;
-    role: 'user' | 'assistant' | 'system' | 'tool' | 'toolResult';
+    id: string;
+    role: 'user' | 'assistant' | 'system' | 'tool';
     content: Array<MessageContentBlock>;
-    timestamp?: number;
+    providerMessageId?: string;
+    parentMessageId?: string;
+    parentToolCallId?: string;
     stopReason?: string;
 };
 export type MessageContentBlock = ({
@@ -130,9 +78,7 @@ export type MessageContentBlock = ({
     type: 'image';
 } & ImageContentBlock) | ({
     type: 'file';
-} & FileContentBlock) | ({
-    type: 'unknown';
-} & UnknownContentBlock);
+} & FileContentBlock);
 export type TextContentBlock = {
     type: 'text';
     text: string;
@@ -153,9 +99,23 @@ export type EventToolCall = {
 export type ToolResultContentBlock = {
     type: 'tool_result';
     toolCallId: string;
-    result?: unknown;
-    isError?: boolean;
+    result: ToolResult;
+    error?: EventError;
 };
+export type ToolResult = {
+    content: Array<ToolResultValueContentBlock>;
+    structuredContent?: unknown;
+    exitCode?: number;
+};
+export type ToolResultValueContentBlock = ({
+    type: 'text';
+} & TextContentBlock) | ({
+    type: 'image';
+} & ImageContentBlock) | ({
+    type: 'file';
+} & FileContentBlock) | ({
+    type: 'json';
+} & JsonContentBlock);
 export type ImageContentBlock = {
     type: 'image';
     url?: string;
@@ -169,37 +129,9 @@ export type FileContentBlock = {
     mediaType?: string;
     data?: string;
 };
-export type UnknownContentBlock = {
-    type: 'unknown';
+export type JsonContentBlock = {
+    type: 'json';
     value?: unknown;
-};
-export type SessionStopPayload = {
-    reason?: string;
-};
-export type SessionCheckpointPayload = {
-    resumeTokenRef?: string;
-    scope?: string;
-};
-export type SessionResumePayload = {
-    fromCheckpoint?: string;
-    reason?: string;
-};
-export type MessageEventPayload = {
-    message: EventMessage;
-};
-export type ToolStartedPayload = {
-    toolCall: EventToolCall;
-};
-export type ToolUpdatedPayload = {
-    toolCall: EventToolCall;
-    partialResult?: unknown;
-};
-export type ToolCompletedPayload = {
-    toolCall: EventToolCall;
-    result?: unknown;
-    error?: EventError;
-    isError?: boolean;
-    durationMs?: number;
 };
 export type EventError = {
     message: string;
@@ -210,6 +142,9 @@ export type EventError = {
     provider?: string;
     model?: string;
     details?: unknown;
+};
+export type MessageEventPayload = {
+    message: EventMessage;
 };
 export type UsageRecordedPayload = {
     provider?: string;
@@ -256,15 +191,6 @@ export type PermissionDeniedPayload = {
     details?: {
         [key: string]: unknown;
     };
-};
-export type StatusPayload = {
-    data: {
-        [key: string]: unknown;
-    };
-};
-export type RuntimeOutputPayload = {
-    stream: 'stdout' | 'stderr' | 'runtime' | 'reasoning' | 'bridge';
-    content?: unknown;
 };
 export type SessionSocketBackfillMessage = {
     type: 'backfill';
@@ -374,8 +300,8 @@ export type RunnerVolumeMount = {
     readOnly?: boolean;
 };
 export type RunnerToolCall = {
-    id?: string;
-    name?: string;
+    id: string;
+    name: string;
     arguments?: {
         [key: string]: unknown;
     };
@@ -419,8 +345,8 @@ export type RunnerWorkPayload = {
     toolCall?: RunnerToolCall;
 };
 export type RunnerRuntimeToolCall = {
-    id?: string;
-    name?: string;
+    id: string;
+    name: string;
     input?: {
         [key: string]: unknown;
     };
@@ -431,18 +357,14 @@ export type RunnerRuntimeToolCall = {
 export type RunnerRuntimeRequest = {
     toolCalls?: Array<RunnerRuntimeToolCall>;
 };
+export type RunnerOpaqueJsonObject = {
+    [key: string]: unknown;
+};
 export type RunnerSessionCommand = {
-    id?: string;
-    type: string;
-    path?: string;
-    message?: string;
-    reason?: string;
-    permissionId?: string;
-    allowed?: boolean;
-    body?: RunnerRuntimeRequest;
+    [key: string]: unknown;
 };
 export type RunnerSandboxRequest = {
-    type: string;
+    type: 'sandbox.execute' | 'sandbox.stop' | 'sandbox.readMemoryStores';
     toolCallId?: string;
     toolName?: string;
     input?: {
@@ -452,16 +374,54 @@ export type RunnerSandboxRequest = {
     volumeMounts?: Array<RunnerVolumeMount>;
 };
 export type RunnerChannelMessage = {
-    type: string;
-    eventId?: string;
-    requestId?: string;
-    message?: string;
-    sessionId?: string;
+    type: 'runner.channel.accepted';
     runnerId?: string;
-    leaseId?: string;
-    workItemId?: string;
-    command?: RunnerSessionCommand;
-    request?: RunnerSandboxRequest;
+    environmentId?: string;
+} | {
+    type: 'work.assigned';
+    runnerId?: string;
+    lease: RunnerOpaqueJsonObject;
+    workItem: RunnerOpaqueJsonObject;
+} | {
+    type: 'session.command';
+    sessionId: string;
+    runnerId?: string;
+    command: RunnerSessionCommand;
+} | {
+    type: 'sandbox.request';
+    requestId: string;
+    sessionId: string;
+    runnerId?: string;
+    request: RunnerSandboxRequest;
+} | {
+    type: 'sandbox.response';
+    requestId: string;
+    sessionId: string;
+    runnerId?: string;
+    ok: boolean;
+    result?: RunnerOpaqueJsonObject;
+    error?: string;
+} | {
+    type: 'session.backfill_request';
+    eventId: string;
+    sessionId: string;
+} | {
+    type: 'session.backfill_response';
+    eventId: string;
+    sessionId: string;
+    events: Array<RunnerOpaqueJsonObject>;
+    error?: string;
+} | {
+    type: 'runner.event';
+    sessionId: string;
+    record: RunnerOpaqueJsonObject;
+} | {
+    type: 'runner.event.accepted';
+    eventId: string;
+} | {
+    type: 'session.channel.error';
+    eventId?: string;
+    message: string;
 };
 export type HealthResponse = {
     status: 'ok';
@@ -3598,7 +3558,7 @@ export type ListSessionEventsData = {
         cursor?: number | null;
         order?: 'asc' | 'desc';
         limit?: number;
-        type?: 'agent.started' | 'agent.completed' | 'turn.started' | 'turn.completed' | 'session.stopped' | 'session.checkpointed' | 'session.resumed' | 'message.started' | 'message.updated' | 'message.completed' | 'tool_call.started' | 'tool_call.updated' | 'tool_call.completed' | 'usage.recorded' | 'permission.requested' | 'permission.resolved' | 'permission.denied' | 'runtime.error' | 'runtime.status' | 'runtime.output' | 'runner.status';
+        type?: 'runtime.started' | 'runtime.completed' | 'turn.started' | 'turn.completed' | 'message.started' | 'message.updated' | 'message.completed' | 'usage.recorded' | 'permission.requested' | 'permission.resolved' | 'permission.denied' | 'runtime.error';
         createdFrom?: string;
         createdTo?: string;
     };

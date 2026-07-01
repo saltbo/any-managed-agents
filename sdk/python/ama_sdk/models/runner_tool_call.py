@@ -27,15 +27,15 @@ T = TypeVar("T", bound="RunnerToolCall")
 class RunnerToolCall:
     """ 
         Attributes:
-            id (str | Unset):  Example: call_abc123.
-            name (str | Unset):  Example: bash.
+            id (str):  Example: call_abc123.
+            name (str):  Example: bash.
             arguments (RunnerToolCallArguments | Unset):
             input_ (RunnerToolCallInput | Unset):
             approved (bool | Unset):
      """
 
-    id: str | Unset = UNSET
-    name: str | Unset = UNSET
+    id: str
+    name: str
     arguments: RunnerToolCallArguments | Unset = UNSET
     input_: RunnerToolCallInput | Unset = UNSET
     approved: bool | Unset = UNSET
@@ -65,11 +65,9 @@ class RunnerToolCall:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
+            "id": id,
+            "name": name,
         })
-        if id is not UNSET:
-            field_dict["id"] = id
-        if name is not UNSET:
-            field_dict["name"] = name
         if arguments is not UNSET:
             field_dict["arguments"] = arguments
         if input_ is not UNSET:
@@ -86,9 +84,9 @@ class RunnerToolCall:
         from ..models.runner_tool_call_arguments import RunnerToolCallArguments
         from ..models.runner_tool_call_input import RunnerToolCallInput
         d = dict(src_dict)
-        id = d.pop("id", UNSET)
+        id = d.pop("id")
 
-        name = d.pop("name", UNSET)
+        name = d.pop("name")
 
         _arguments = d.pop("arguments", UNSET)
         arguments: RunnerToolCallArguments | Unset

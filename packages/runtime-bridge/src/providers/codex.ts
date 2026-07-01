@@ -1,15 +1,17 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { ToolResult } from '@ama/runtime-contracts/session-events'
 import { Codex, type ThreadEvent } from '@openai/codex-sdk'
 import {
-  reasoning,
+  messageEvent,
+  randomId,
+  reasoningBlock,
   runtimeError,
   runtimeEvent,
   textMessage,
-  toolEnd,
-  toolStart,
+  toolCallBlock,
+  toolResultMessage,
   turnEnd,
-  usageEvent,
 } from '../events/ama'
 import {
   type AmaRuntimeEvent,
@@ -19,7 +21,7 @@ import {
   type RuntimeProviderRequest,
   type RuntimeUsageWindow,
 } from '../protocol'
-import { arrayValue, hostHome, normalizeProviderUsage, objectValue, resolveCliPath, sdkEnv } from './cli-host'
+import { arrayValue, hostHome, objectValue, resolveCliPath, sdkEnv } from './cli-host'
 
 const CODEX_USAGE_API = 'https://chatgpt.com/backend-api/wham/usage'
 
@@ -51,7 +53,7 @@ function positiveNumber(value: unknown): number | undefined {
 }
 
 function itemId(item: Record<string, unknown>) {
-  return typeof item.id === 'string' && item.id ? item.id : `codex-tool-${Date.now()}`
+  return typeof item.id === 'string' && item.id ? item.id : null
 }
 
 function codexToolShape(item: Record<string, unknown>): { toolName: string; args: Record<string, unknown> } | null {
@@ -78,23 +80,43 @@ function codexToolShape(item: Record<string, unknown>): { toolName: string; args
   }
 }
 
-function toolResult(item: Record<string, unknown>) {
-  const result: Record<string, unknown> = {}
-  for (const key of ['stdout', 'stderr', 'output', 'aggregated_output', 'result', 'exit_code', 'exitCode']) {
-    if (key in item) result[key] = item[key]
+function toolResult(item: Record<string, unknown>): ToolResult {
+  const stdout = typeof item.stdout === 'string' ? item.stdout : ''
+  const stderr = typeof item.stderr === 'string' ? item.stderr : ''
+  const output =
+    typeof item.output === 'string'
+      ? item.output
+      : typeof item.aggregated_output === 'string'
+        ? item.aggregated_output
+        : [stdout, stderr].filter(Boolean).join('\n')
+  return {
+    content: output ? [{ type: 'text', text: output }] : [],
+    structuredContent: codexToolStructuredContent(item),
+    ...(typeof item.exit_code === 'number'
+      ? { exitCode: item.exit_code }
+      : typeof item.exitCode === 'number'
+        ? { exitCode: item.exitCode }
+        : {}),
   }
-  if (!('output' in result) && typeof result.aggregated_output === 'string') {
-    result.output = result.aggregated_output
-  }
-  return Object.keys(result).length ? result : { item }
+}
+
+function codexToolStructuredContent(item: Record<string, unknown>) {
+  const structured = Object.fromEntries(
+    Object.entries({
+      result: item.result,
+      stdout: item.stdout,
+      stderr: item.stderr,
+      output: item.output,
+      aggregatedOutput: item.aggregated_output,
+    }).filter(([, value]) => value !== undefined && value !== ''),
+  )
+  return Object.keys(structured).length > 0 ? structured : undefined
 }
 
 function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
   switch (event.type) {
     case 'thread.started':
-      yield runtimeEvent('runtime.status', {
-        data: { stage: 'thread_started', status: 'running', threadId: event.thread_id },
-      })
+      yield runtimeEvent('runtime.started')
       return
     case 'turn.started':
       yield runtimeEvent('turn.started')
@@ -102,7 +124,14 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
     case 'item.started': {
       const item = objectValue(event.item)
       const shape = codexToolShape(item)
-      if (shape) yield toolStart(itemId(item), shape.toolName, shape.args)
+      const id = itemId(item)
+      if (shape && id) {
+        yield messageEvent({
+          id: randomId('msg'),
+          role: 'assistant',
+          content: [toolCallBlock({ id, name: shape.toolName, input: shape.args })],
+        })
+      }
       return
     }
     case 'item.completed': {
@@ -114,17 +143,28 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
         return
       }
       if (item.type === 'reasoning' && typeof item.text === 'string' && item.text) {
-        yield reasoning(item.text)
+        yield messageEvent({
+          id: typeof item.id === 'string' ? item.id : randomId('msg'),
+          role: 'assistant',
+          content: [reasoningBlock(item.text)],
+        })
         return
       }
       const shape = codexToolShape(item)
-      if (shape) yield toolEnd(itemId(item), shape.toolName, shape.args, toolResult(item), Boolean(item.error))
+      const id = itemId(item)
+      if (shape && id) yield messageEvent(toolResultMessage(id, toolResult(item), Boolean(item.error)))
       return
     }
-    case 'turn.completed':
-      yield usageEvent(normalizeProviderUsage(objectValue(event.usage)))
+    case 'turn.completed': {
+      // TODO(codex-usage): @openai/codex-sdk 0.142.5 exposes token usage here
+      // but not the actual model used for the turn. The raw Codex JSONL has it
+      // under turn_context.payload.model. Do not emit usage.recorded until the
+      // bridge can read that confirmed source or the SDK exposes an equivalent
+      // field; falling back to request.model would misattribute sessions where
+      // Codex resolves or switches models itself.
       yield turnEnd()
       return
+    }
     case 'turn.failed':
       yield runtimeError(
         String(objectValue(event.error).message ?? JSON.stringify(event)),
@@ -136,7 +176,7 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
       yield runtimeError(String(event.message ?? JSON.stringify(event)), 'codex_error', event)
       return
     default:
-      yield runtimeEvent('runtime.status', { data: { unmappedEvent: event } })
+      return
   }
 }
 

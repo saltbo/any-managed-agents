@@ -1,10 +1,12 @@
 import {
   assertAmaRuntimeEvent,
+  messageEvent,
+  randomId,
   runtimeError,
   runtimeEvent,
   textMessage,
-  toolEnd,
-  toolStart,
+  toolCallBlock,
+  toolResultMessage,
   usageEvent,
 } from './events/ama'
 import {
@@ -73,7 +75,7 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
     ? `${marker} resumed-with-token:${request.resumeToken ? 'yes' : 'none'}`
     : `${marker} received:${request.prompt}`
   const queue: AmaRuntimeEvent[] = [
-    runtimeEvent('turn.started', { marker, stage: `${marker}-started`, status: 'running' }),
+    runtimeEvent('turn.started', { status: 'running' }),
     runtimeEvent('message.completed', { message: textMessage('assistant', initialMessage) }),
   ]
   const permission = request.runtimeConfig?.e2eBridgePermission as { action?: string; command?: string } | undefined
@@ -81,9 +83,7 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
     queue.push(
       runtimeEvent('permission.requested', {
         permissionId: `perm_${request.sessionId}`,
-        action: permission.action ?? 'shell',
         command: permission.command ?? 'printf permission-ok',
-        runtime: request.runtime,
       }),
     )
   }
@@ -117,7 +117,7 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
       )
     },
     async abort() {
-      push(runtimeEvent('turn.completed', { marker, stage: `${marker}-aborted`, status: 'aborted' }))
+      push(runtimeEvent('turn.completed', { status: 'aborted' }))
       end()
     },
     async resolvePermission(permissionId: string, allowed: boolean, reason?: string) {
@@ -131,13 +131,13 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
       }
       const toolCallId = `${permissionId}_tool`
       push(
-        toolStart(toolCallId, 'bash', { command: 'printf permission-ok' }),
-        toolEnd(
-          toolCallId,
-          'bash',
-          { command: 'printf permission-ok' },
-          { stdout: 'permission-ok', stderr: '', exitCode: 0 },
-          false,
+        messageEvent({
+          id: randomId('msg'),
+          role: 'assistant',
+          content: [toolCallBlock({ id: toolCallId, name: 'bash', input: { command: 'printf permission-ok' } })],
+        }),
+        messageEvent(
+          toolResultMessage(toolCallId, { content: [{ type: 'text', text: 'permission-ok' }], exitCode: 0 }),
         ),
         runtimeEvent('message.completed', { message: textMessage('assistant', `${marker} permission-approved`) }),
       )
@@ -149,45 +149,39 @@ export function liveBridgeTestHandle(request: RunRequest): RuntimeProviderHandle
 export function deterministicBridgeTestEvents(request: RunRequest): AmaRuntimeEvent[] {
   const marker = `${request.runtime}-bridge-test`
   const toolCallId = `${request.runtime.replace(/[^a-z0-9]/gi, '_')}_tool`
-  const receipt = {
-    marker,
-    sessionId: request.sessionId,
-    runtime: request.runtime,
-    provider: request.provider,
-    model: request.model,
-    prompt: request.prompt,
-    workspace: request.cwd,
-    workspaceEnv: request.env.AMA_WORKSPACE,
-    runtimeConfig: request.runtimeConfig,
-    agentSnapshot: request.agentSnapshot,
-    hasAmaToken: Object.hasOwn(request.env, 'AMA_TOKEN'),
-    leakedToken: Object.values(request.env).includes('raw-secret-value') ? 'raw-secret-value' : null,
-    home: request.env.HOME,
-    tmpdir: request.env.TMPDIR,
-  }
+  const receipt = [
+    `session:${request.sessionId}`,
+    `runtime:${request.runtime}`,
+    `workspace:${request.cwd}`,
+    `workspaceEnv:${request.env.AMA_WORKSPACE}`,
+    `home:${request.env.HOME}`,
+    `tmpdir:${request.env.TMPDIR}`,
+    `hasAmaToken:${Object.hasOwn(request.env, 'AMA_TOKEN')}`,
+    `leakedToken:${Object.values(request.env).includes('raw-secret-value') ? 'raw-secret-value' : 'none'}`,
+  ].join('\n')
   return [
-    runtimeEvent('turn.started', { ...receipt, stage: `${marker}-started`, status: 'running' }),
-    runtimeEvent('message.completed', { message: textMessage('assistant', `${marker} received:${request.prompt}`) }),
-    toolStart(toolCallId, 'bash', { command: `printf ${request.runtime}-tool-ok` }),
-    toolEnd(
-      toolCallId,
-      'bash',
-      { command: `printf ${request.runtime}-tool-ok` },
-      { stdout: `${request.runtime}-tool-ok`, stderr: '', exitCode: 0 },
-      false,
+    runtimeEvent('turn.started', { status: 'running' }),
+    runtimeEvent('message.completed', {
+      message: textMessage('assistant', `${marker} received:${request.prompt}\n${receipt}`),
+    }),
+    messageEvent({
+      id: randomId('msg'),
+      role: 'assistant',
+      content: [
+        toolCallBlock({ id: toolCallId, name: 'bash', input: { command: `printf ${request.runtime}-tool-ok` } }),
+      ],
+    }),
+    messageEvent(
+      toolResultMessage(toolCallId, { content: [{ type: 'text', text: `${request.runtime}-tool-ok` }], exitCode: 0 }),
     ),
     usageEvent({
-      provider: request.provider,
-      model: request.model,
+      model: `${request.runtime}-bridge-test-model`,
       inputTokens: 4,
       outputTokens: 6,
       totalTokens: 10,
     }),
-    runtimeEvent('runtime.output', { stream: 'stdout', content: `workspace:${request.cwd}` }),
-    runtimeEvent('runtime.output', { stream: 'stdout', content: `${marker}-stdout` }),
-    runtimeEvent('runtime.output', { stream: 'stderr', content: `${marker}-stderr` }),
     runtimeError(`${marker} safe diagnostic`, 'bridge_test_diagnostic'),
-    runtimeEvent('turn.completed', { ...receipt, stage: `${marker}-completed`, status: 'completed' }),
+    runtimeEvent('turn.completed', { status: 'completed' }),
   ]
 }
 

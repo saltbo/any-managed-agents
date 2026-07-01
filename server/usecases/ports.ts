@@ -1631,7 +1631,7 @@ export type SessionTurnInput = {
   // Checked before each model call after the first; returning true pauses the run.
   shouldPause?: () => boolean
   ensureActive?: () => Promise<void>
-  onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
+  onEvent: (event: AmaEvent) => Promise<void>
   approveToolCall?: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision>
   // Supplies a caller-provided tool result (e.g. an approved custom tool
   // outcome) instead of executing the tool in the sandbox.

@@ -45,7 +45,7 @@ function fakeDoStore() {
 }
 
 const scope = { organizationId: 'org_1', projectId: 'project_1', sessionId: 'sess_1' }
-const event: AmaEvent = { type: 'turn.completed', payload: {}, metadata: {} }
+const event: AmaEvent = { type: 'turn.completed', payload: {} }
 const query = { order: 'asc' as const, limit: 50 }
 
 // Every non-cloud session now relays over the per-runner channel. The isCloudLoop
@@ -118,8 +118,8 @@ describe('createEventStore — storage follows the loop', () => {
   it('insertEvents canonicalises each event and routes it through append', async () => {
     const { store, doStore } = makeStore(true)
     const count = await store.insertEvents(scope, [
-      { type: 'turn.completed', payload: {}, metadata: { source: 'api' } },
-      { type: 'runtime.error', payload: { message: 'x' }, metadata: { source: 'api' } },
+      { type: 'turn.completed', payload: {} },
+      { type: 'runtime.error', payload: { message: 'x' } },
     ])
     expect(count).toBe(2)
     expect(doStore.append).toHaveBeenCalledTimes(2)

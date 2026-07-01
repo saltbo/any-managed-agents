@@ -9,12 +9,10 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.ama_event_type_9_type import AmaEventType9Type
-from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.event_metadata import EventMetadata
-  from ..models.message_event_payload import MessageEventPayload
+  from ..models.permission_resolved_payload import PermissionResolvedPayload
 
 
 
@@ -29,28 +27,21 @@ class AmaEventType9:
     """ 
         Attributes:
             type_ (AmaEventType9Type):
-            payload (MessageEventPayload):
-            metadata (EventMetadata | Unset):
+            payload (PermissionResolvedPayload):
      """
 
     type_: AmaEventType9Type
-    payload: MessageEventPayload
-    metadata: EventMetadata | Unset = UNSET
+    payload: PermissionResolvedPayload
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.event_metadata import EventMetadata
-        from ..models.message_event_payload import MessageEventPayload
+        from ..models.permission_resolved_payload import PermissionResolvedPayload
         type_ = self.type_.value
 
         payload = self.payload.to_dict()
-
-        metadata: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.metadata, Unset):
-            metadata = self.metadata.to_dict()
 
 
         field_dict: dict[str, Any] = {}
@@ -59,8 +50,6 @@ class AmaEventType9:
             "type": type_,
             "payload": payload,
         })
-        if metadata is not UNSET:
-            field_dict["metadata"] = metadata
 
         return field_dict
 
@@ -68,25 +57,14 @@ class AmaEventType9:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.event_metadata import EventMetadata
-        from ..models.message_event_payload import MessageEventPayload
+        from ..models.permission_resolved_payload import PermissionResolvedPayload
         d = dict(src_dict)
         type_ = AmaEventType9Type(d.pop("type"))
 
 
 
 
-        payload = MessageEventPayload.from_dict(d.pop("payload"))
-
-
-
-
-        _metadata = d.pop("metadata", UNSET)
-        metadata: EventMetadata | Unset
-        if isinstance(_metadata,  Unset):
-            metadata = UNSET
-        else:
-            metadata = EventMetadata.from_dict(_metadata)
+        payload = PermissionResolvedPayload.from_dict(d.pop("payload"))
 
 
 
@@ -94,7 +72,6 @@ class AmaEventType9:
         ama_event_type_9 = cls(
             type_=type_,
             payload=payload,
-            metadata=metadata,
         )
 
         return ama_event_type_9

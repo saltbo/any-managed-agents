@@ -17,7 +17,7 @@ import type {
   SessionSandboxExecutor,
 } from '@server/usecases/ports'
 import { isAmaSandboxToolName } from '@shared/agent-tools'
-import { amaEventFromRuntimeEvent } from '@shared/session-events'
+import type { AmaEvent } from '@shared/session-events'
 import { canonicalProvider } from '../../domain/runtime/provider'
 import type { Env } from '../../env'
 import {
@@ -113,7 +113,7 @@ export type SessionTurnInput = {
   // Checked before each model call after the first; returning true pauses the run.
   shouldPause?: () => boolean
   ensureActive?: () => Promise<void>
-  onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
+  onEvent: (event: AmaEvent) => Promise<void>
   approveToolCall?: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision>
   // Supplies a caller-provided tool result (e.g. an approved custom tool
   // outcome) instead of executing the tool in the sandbox.
@@ -377,8 +377,11 @@ export async function executeRuntimeToolCalls(
 ) {
   const executor = toolExecutor(env)
   const results = []
-  for (const [index, call] of runtimeToolCalls(values.body).entries()) {
-    const toolCallId = typeof call.id === 'string' ? call.id : `tool_${index + 1}`
+  for (const call of runtimeToolCalls(values.body)) {
+    if (typeof call.id !== 'string' || !call.id) {
+      throw new Error('Runtime tool call id is required')
+    }
+    const toolCallId = call.id
     const toolName = typeof call.name === 'string' ? call.name : 'tool'
     if (!isAmaSandboxToolName(toolName)) {
       throw new Error(`Unsupported sandbox tool: ${toolName}`)
@@ -459,7 +462,7 @@ export async function runSessionTurn(
     ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
     ...(input.continuation ? { continuation: true } : {}),
     ...(input.messages ? { messages: input.messages } : {}),
-    sink: { emit: (event, metadata) => input.onEvent(amaEventFromRuntimeEvent(event, metadata)) },
+    sink: { emit: (event) => input.onEvent(event) },
     policy: { approve: input.approveToolCall ?? (async () => ({ allowed: true })) },
     toolResults: { resolve: input.resolveToolResult ?? (async () => null) },
     liveness: { ensureActive: input.ensureActive ?? (async () => {}) },
@@ -527,12 +530,15 @@ export function createRuntimeExecutionAdapters(
           const body = input.body as { toolCalls?: RuntimeToolCall[] }
           const calls = runtimeToolCalls(body)
           const results = []
-          for (const [index, call] of calls.entries()) {
+          for (const call of calls) {
+            if (typeof call.id !== 'string' || !call.id) {
+              throw new Error('Runtime tool call id is required')
+            }
             results.push(
               await (await executorForSession(input.sessionId)).execute({
                 sessionId: input.sessionId,
                 sandboxId: input.sandboxId,
-                toolCallId: typeof call.id === 'string' ? call.id : `tool_${index + 1}`,
+                toolCallId: call.id,
                 toolName: (() => {
                   const toolName = typeof call.name === 'string' ? call.name : 'tool'
                   if (!isAmaSandboxToolName(toolName)) {

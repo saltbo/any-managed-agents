@@ -4,6 +4,17 @@
 // context. Lives apart from the engine loop because it is a distinct concern with
 // its own boundary (it parses persisted/queued JSON).
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
+import type { ImageContent, TextContent } from '@earendil-works/pi-ai'
+import type { Message, MessageContentBlock, ToolResultValueContentBlock } from '@shared/session-events'
+
+const ZERO_USAGE = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+}
 
 export function isPersistedMessage(value: unknown): value is AgentMessage {
   if (!value || typeof value !== 'object' || !('role' in value)) {
@@ -11,6 +22,78 @@ export function isPersistedMessage(value: unknown): value is AgentMessage {
   }
   const role = (value as { role?: unknown }).role
   return role === 'user' || role === 'assistant' || role === 'toolResult'
+}
+
+function amaMessageFromValue(value: unknown): Message | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const record = value as Partial<Message>
+  if (
+    (record.role !== 'user' && record.role !== 'assistant' && record.role !== 'tool') ||
+    !Array.isArray(record.content)
+  ) {
+    return null
+  }
+  return record as Message
+}
+
+function textFromContent(blocks: MessageContentBlock[]) {
+  return blocks
+    .map((block) => {
+      if (block.type === 'text' || block.type === 'reasoning') return block.text
+      return ''
+    })
+    .join('')
+}
+
+function piTextContentBlocks(blocks: MessageContentBlock[]): TextContent[] {
+  return blocks.flatMap((block): TextContent[] => {
+    if (block.type === 'text') return [{ type: 'text' as const, text: block.text }]
+    return []
+  })
+}
+
+function piToolResultContentBlocks(blocks: ToolResultValueContentBlock[]): Array<TextContent | ImageContent> {
+  return blocks.flatMap((block): Array<TextContent | ImageContent> => {
+    if (block.type === 'text') return [{ type: 'text' as const, text: block.text }]
+    if (block.type === 'image' && block.data && block.mediaType) {
+      return [{ type: 'image' as const, data: block.data, mimeType: block.mediaType }]
+    }
+    return []
+  })
+}
+
+function agentMessageFromAmaMessage(message: Message): AgentMessage | null {
+  const timestamp = Date.now()
+  if (message.role === 'user') {
+    return { role: 'user', content: textFromContent(message.content), timestamp }
+  }
+  if (message.role === 'assistant') {
+    return {
+      role: 'assistant',
+      content: piTextContentBlocks(message.content),
+      api: 'ama',
+      provider: 'ama',
+      model: 'ama',
+      usage: ZERO_USAGE,
+      stopReason: message.stopReason === 'aborted' || message.stopReason === 'error' ? message.stopReason : 'stop',
+      timestamp,
+    }
+  }
+  const resultBlock = message.content.find((block) => block.type === 'tool_result')
+  if (resultBlock?.type !== 'tool_result') {
+    return null
+  }
+  return {
+    role: 'toolResult',
+    toolCallId: resultBlock.toolCallId,
+    toolName: 'tool',
+    content: piToolResultContentBlocks(resultBlock.result.content),
+    details: resultBlock.result.structuredContent,
+    isError: Boolean(resultBlock.error),
+    timestamp,
+  }
 }
 
 // Safely resolve an event payload to an object. Persisted/queued payloads cross a
@@ -44,29 +127,26 @@ function eventCore(event: {
   }
 }
 
-// Prefers the latest agent.completed snapshot, else the accumulated message.completed
-// messages. Malformed event payloads are skipped rather than throwing.
+// Accumulates canonical completed transcript messages. Malformed event payloads
+// are skipped rather than throwing.
 export function runtimeMessagesFromEvents(
   events: Array<{ type?: string; payload: string | Record<string, unknown> }>,
 ): AgentMessage[] {
-  let latestAgentEndMessages: AgentMessage[] | null = null
   const messageEndMessages: AgentMessage[] = []
   for (const event of events) {
     const core = eventCore(event)
     if (!core) {
       continue
     }
-    if (core.type === 'agent.completed' && Array.isArray(core.payload.messages)) {
-      const messages = core.payload.messages.filter(isPersistedMessage)
-      if (messages.length > 0) {
-        latestAgentEndMessages = messages
-      }
+    if (core.type !== 'message.completed') {
       continue
     }
-    if (core.type !== 'message.completed' || !isPersistedMessage(core.payload.message)) {
+    const amaMessage = amaMessageFromValue(core.payload.message)
+    const message = amaMessage ? agentMessageFromAmaMessage(amaMessage) : null
+    if (!message) {
       continue
     }
-    messageEndMessages.push(core.payload.message)
+    messageEndMessages.push(message)
   }
-  return latestAgentEndMessages ?? messageEndMessages
+  return messageEndMessages
 }

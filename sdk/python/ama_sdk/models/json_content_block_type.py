@@ -1,7 +1,7 @@
 from enum import Enum
 
-class AmaEventType19Type(str, Enum):
-    RUNTIME_OUTPUT = "runtime.output"
+class JsonContentBlockType(str, Enum):
+    JSON = "json"
 
     def __str__(self) -> str:
         return str(self.value)

@@ -10,7 +10,6 @@ import type {
   ListPageResult,
   WorkItemClaimCandidate,
 } from '@server/usecases/ports'
-import { amaEventFromRuntimeEvent } from '@shared/session-events'
 import { and, desc, eq, gt, inArray, isNull, lt, lte, max, or, sql } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import {
@@ -23,7 +22,6 @@ import {
   sessions,
   workItems,
 } from '../../db/schema'
-import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
@@ -319,23 +317,6 @@ async function runtimeFailureStateReason(db: Db, sessionId: string | null): Prom
   return null
 }
 
-async function appendSessionRunnerEvent(
-  db: Db,
-  scope: { organizationId: string; projectId: string },
-  sessionId: string,
-  event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> },
-) {
-  const canonicalEvent = amaEventFromRuntimeEvent(
-    { type: event.type, ...event.payload },
-    { source: 'self-hosted-runner', ...(event.metadata ?? {}) },
-  )
-  await insertCanonicalSessionEvent(
-    db,
-    { organizationId: scope.organizationId, projectId: scope.projectId, sessionId },
-    canonicalEvent,
-  )
-}
-
 function workItemRuntimeMetadata(workItem: WorkItemRow) {
   const payload = parseJson<Record<string, unknown>>(workItem.payload) ?? {}
   return {
@@ -568,16 +549,6 @@ export function createLeaseRepo(db: Db): LeaseRepo {
             ...(input.resumeToken ? { resumeToken: input.resumeToken } : {}),
           })
           .where(and(eq(leases.id, input.leaseId), eq(leases.state, 'active')))
-        if (renewedPayload !== null && workItem.sessionId) {
-          // A fresh runtime resume token marks a safe resume point. Record it as
-          // a canonical lifecycle event carrying only the safe work-item
-          // reference — the raw provider token stays inside the work payload.
-          await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-            type: 'session.checkpointed',
-            payload: { resumeTokenRef: `work-item:${workItem.id}`, scope: 'runtime-resume-token' },
-            metadata: workItemRuntimeMetadata(workItem),
-          })
-        }
       } else if (input.state === 'interrupted') {
         // The runner stopped mid-flight (e.g. graceful shutdown). End the lease but
         // keep the work recoverable so a restarted runner resumes the session.
@@ -596,30 +567,12 @@ export function createLeaseRepo(db: Db): LeaseRepo {
         }
         await releaseRunnerLoad(db, input.projectId, lease.runnerId, timestamp)
         const interruptedPayload = payloadWithResumeToken(workItem, input.resumeToken)
-        if (interruptedPayload !== null && workItem.sessionId) {
-          await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-            type: 'session.checkpointed',
-            payload: { resumeTokenRef: `work-item:${workItem.id}`, scope: 'runtime-resume-token' },
-            metadata: workItemRuntimeMetadata(workItem),
-          })
-        }
-        const recovery = await requeueWorkItemForRecovery(
+        await requeueWorkItemForRecovery(
           db,
           input.projectId,
           interruptedPayload !== null ? { ...workItem, payload: interruptedPayload } : workItem,
           timestamp,
         )
-        if (recovery === 'requeued' && workItem.sessionId) {
-          const recoveredPayload = parseJson<Record<string, unknown>>(interruptedPayload ?? workItem.payload)
-          await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-            type: 'session.resumed',
-            payload: {
-              fromCheckpoint: recoveredPayload?.resumeToken ? `work-item:${workItem.id}` : null,
-              reason: 'runner-recovery',
-            },
-            metadata: workItemRuntimeMetadata(workItem),
-          })
-        }
       } else {
         // Completion: the lease ends and its outcome lands on the work item —
         // the leases table carries no result/error columns.
@@ -803,18 +756,6 @@ export function createLeaseRepo(db: Db): LeaseRepo {
         return { ok: false, status: 409, message: 'Session is not waiting for a runner channel' }
       }
       await db.insert(sessionChannels).values(channel)
-      await appendSessionRunnerEvent(db, scope, workItem.sessionId, {
-        type: 'runner.status',
-        payload: { status: 'channel_accepted', runnerId, leaseId, workItemId: workItem.id },
-        metadata: {
-          source: 'self-hosted-runner-channel',
-          ...workItemRuntimeMetadata(workItem),
-          channelId: channel.id,
-          runnerId,
-          leaseId,
-          workItemId: workItem.id,
-        },
-      })
       return { ok: true, channelId: channel.id, sessionId: workItem.sessionId, workItemId: workItem.id, runnerId }
     },
 

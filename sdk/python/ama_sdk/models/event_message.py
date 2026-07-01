@@ -19,7 +19,6 @@ if TYPE_CHECKING:
   from ..models.text_content_block import TextContentBlock
   from ..models.tool_call_content_block import ToolCallContentBlock
   from ..models.tool_result_content_block import ToolResultContentBlock
-  from ..models.unknown_content_block import UnknownContentBlock
 
 
 
@@ -33,18 +32,22 @@ T = TypeVar("T", bound="EventMessage")
 class EventMessage:
     """ 
         Attributes:
+            id (str):
             role (EventMessageRole):
             content (list[FileContentBlock | ImageContentBlock | ReasoningContentBlock | TextContentBlock |
-                ToolCallContentBlock | ToolResultContentBlock | UnknownContentBlock]):
-            id (str | Unset):
-            timestamp (float | Unset):
+                ToolCallContentBlock | ToolResultContentBlock]):
+            provider_message_id (str | Unset):
+            parent_message_id (str | Unset):
+            parent_tool_call_id (str | Unset):
             stop_reason (str | Unset):
      """
 
+    id: str
     role: EventMessageRole
-    content: list[FileContentBlock | ImageContentBlock | ReasoningContentBlock | TextContentBlock | ToolCallContentBlock | ToolResultContentBlock | UnknownContentBlock]
-    id: str | Unset = UNSET
-    timestamp: float | Unset = UNSET
+    content: list[FileContentBlock | ImageContentBlock | ReasoningContentBlock | TextContentBlock | ToolCallContentBlock | ToolResultContentBlock]
+    provider_message_id: str | Unset = UNSET
+    parent_message_id: str | Unset = UNSET
+    parent_tool_call_id: str | Unset = UNSET
     stop_reason: str | Unset = UNSET
 
 
@@ -58,7 +61,8 @@ class EventMessage:
         from ..models.text_content_block import TextContentBlock
         from ..models.tool_call_content_block import ToolCallContentBlock
         from ..models.tool_result_content_block import ToolResultContentBlock
-        from ..models.unknown_content_block import UnknownContentBlock
+        id = self.id
+
         role = self.role.value
 
         content = []
@@ -74,8 +78,6 @@ class EventMessage:
                 content_item = content_item_data.to_dict()
             elif isinstance(content_item_data, ImageContentBlock):
                 content_item = content_item_data.to_dict()
-            elif isinstance(content_item_data, FileContentBlock):
-                content_item = content_item_data.to_dict()
             else:
                 content_item = content_item_data.to_dict()
 
@@ -83,9 +85,11 @@ class EventMessage:
 
 
 
-        id = self.id
+        provider_message_id = self.provider_message_id
 
-        timestamp = self.timestamp
+        parent_message_id = self.parent_message_id
+
+        parent_tool_call_id = self.parent_tool_call_id
 
         stop_reason = self.stop_reason
 
@@ -93,13 +97,16 @@ class EventMessage:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
+            "id": id,
             "role": role,
             "content": content,
         })
-        if id is not UNSET:
-            field_dict["id"] = id
-        if timestamp is not UNSET:
-            field_dict["timestamp"] = timestamp
+        if provider_message_id is not UNSET:
+            field_dict["providerMessageId"] = provider_message_id
+        if parent_message_id is not UNSET:
+            field_dict["parentMessageId"] = parent_message_id
+        if parent_tool_call_id is not UNSET:
+            field_dict["parentToolCallId"] = parent_tool_call_id
         if stop_reason is not UNSET:
             field_dict["stopReason"] = stop_reason
 
@@ -115,8 +122,9 @@ class EventMessage:
         from ..models.text_content_block import TextContentBlock
         from ..models.tool_call_content_block import ToolCallContentBlock
         from ..models.tool_result_content_block import ToolResultContentBlock
-        from ..models.unknown_content_block import UnknownContentBlock
         d = dict(src_dict)
+        id = d.pop("id")
+
         role = EventMessageRole(d.pop("role"))
 
 
@@ -125,7 +133,7 @@ class EventMessage:
         content = []
         _content = d.pop("content")
         for content_item_data in (_content):
-            def _parse_content_item(data: object) -> FileContentBlock | ImageContentBlock | ReasoningContentBlock | TextContentBlock | ToolCallContentBlock | ToolResultContentBlock | UnknownContentBlock:
+            def _parse_content_item(data: object) -> FileContentBlock | ImageContentBlock | ReasoningContentBlock | TextContentBlock | ToolCallContentBlock | ToolResultContentBlock:
                 try:
                     if not isinstance(data, dict):
                         raise TypeError()
@@ -176,40 +184,34 @@ class EventMessage:
                     return componentsschemas_message_content_block_type_4
                 except (TypeError, ValueError, AttributeError, KeyError):
                     pass
-                try:
-                    if not isinstance(data, dict):
-                        raise TypeError()
-                    componentsschemas_message_content_block_type_5 = FileContentBlock.from_dict(data)
-
-
-
-                    return componentsschemas_message_content_block_type_5
-                except (TypeError, ValueError, AttributeError, KeyError):
-                    pass
                 if not isinstance(data, dict):
                     raise TypeError()
-                componentsschemas_message_content_block_type_6 = UnknownContentBlock.from_dict(data)
+                componentsschemas_message_content_block_type_5 = FileContentBlock.from_dict(data)
 
 
 
-                return componentsschemas_message_content_block_type_6
+                return componentsschemas_message_content_block_type_5
 
             content_item = _parse_content_item(content_item_data)
 
             content.append(content_item)
 
 
-        id = d.pop("id", UNSET)
+        provider_message_id = d.pop("providerMessageId", UNSET)
 
-        timestamp = d.pop("timestamp", UNSET)
+        parent_message_id = d.pop("parentMessageId", UNSET)
+
+        parent_tool_call_id = d.pop("parentToolCallId", UNSET)
 
         stop_reason = d.pop("stopReason", UNSET)
 
         event_message = cls(
+            id=id,
             role=role,
             content=content,
-            id=id,
-            timestamp=timestamp,
+            provider_message_id=provider_message_id,
+            parent_message_id=parent_message_id,
+            parent_tool_call_id=parent_tool_call_id,
             stop_reason=stop_reason,
         )
 

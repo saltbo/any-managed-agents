@@ -111,4 +111,68 @@ describe('AMA runtime turn-engine', () => {
     // The model is never invoked once the external signal pre-aborts the run.
     expect(modelClient.complete).not.toHaveBeenCalled()
   })
+
+  it('keeps one message id across a streamed assistant message lifecycle', async () => {
+    const events: Array<Parameters<RuntimeEventSink['emit']>[0]> = []
+    const sink: RuntimeEventSink = {
+      emit: vi.fn(async (event) => {
+        events.push(event)
+      }),
+    }
+    const executor: ToolExecutor = {
+      execute: vi.fn(
+        async (): Promise<ToolExecutionResult> => ({
+          toolCallId: 'x',
+          toolName: 'bash',
+          output: {},
+          error: null,
+          durationMs: 0,
+        }),
+      ),
+    }
+    const modelClient: ModelClient = {
+      complete: vi.fn(async () =>
+        assistantMessage(model, [{ type: 'text', text: 'hello' }] as unknown as AssistantMessage['content'], 'stop', {
+          ...ZERO_USAGE,
+          input: 1,
+          output: 1,
+          totalTokens: 2,
+        }),
+      ),
+    }
+    const policy: ToolPolicyGate = { approve: vi.fn(async () => ({ allowed: true })) }
+    const toolResults: ToolResultResolver = { resolve: vi.fn(async () => null) }
+    const liveness: TurnLiveness = { ensureActive: vi.fn(async () => {}) }
+
+    await runTurn({
+      sessionId: 'session_1',
+      sandboxId: 'sandbox_1',
+      model,
+      providerLabel: 'test',
+      modelLabel: 'test-model',
+      agentSnapshot: { systemPrompt: 'noop', allowedTools: [] },
+      prompt: 'say hello',
+      sink,
+      policy,
+      toolResults,
+      liveness,
+      executor,
+      modelClient,
+    })
+
+    const assistantMessages = events.filter(
+      (
+        event,
+      ): event is Extract<
+        Parameters<RuntimeEventSink['emit']>[0],
+        { type: 'message.started' | 'message.updated' | 'message.completed' }
+      > =>
+        (event.type === 'message.started' || event.type === 'message.updated' || event.type === 'message.completed') &&
+        event.payload.message.role === 'assistant',
+    )
+    expect(assistantMessages[0]?.type).toBe('message.started')
+    expect(assistantMessages.at(-1)?.type).toBe('message.completed')
+    expect(assistantMessages.some((event) => event.type === 'message.updated')).toBe(true)
+    expect(new Set(assistantMessages.map((event) => event.payload.message.id)).size).toBe(1)
+  })
 })

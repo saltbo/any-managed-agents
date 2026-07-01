@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { reasoning, turnEnd } from './ama'
+import { messageEvent, reasoningBlock, turnEnd } from './ama'
 
 describe('turnEnd', () => {
   it('emits the canonical empty end-of-turn payload', () => {
@@ -11,11 +11,11 @@ describe('turnEnd', () => {
   })
 })
 
-describe('reasoning', () => {
-  it('emits a runtime.output reasoning stream event', () => {
-    expect(reasoning('thinking...')).toEqual({
-      type: 'runtime.output',
-      payload: { stream: 'reasoning', content: 'thinking...' },
+describe('reasoningBlock', () => {
+  it('keeps reasoning as transcript message content', () => {
+    expect(messageEvent({ id: 'msg_1', role: 'assistant', content: [reasoningBlock('thinking...')] })).toEqual({
+      type: 'message.completed',
+      payload: { message: { id: 'msg_1', role: 'assistant', content: [{ type: 'reasoning', text: 'thinking...' }] } },
     })
   })
 })

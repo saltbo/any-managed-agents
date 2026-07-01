@@ -16,16 +16,7 @@ if TYPE_CHECKING:
   from ..models.ama_event_type_1 import AmaEventType1
   from ..models.ama_event_type_10 import AmaEventType10
   from ..models.ama_event_type_11 import AmaEventType11
-  from ..models.ama_event_type_12 import AmaEventType12
-  from ..models.ama_event_type_13 import AmaEventType13
-  from ..models.ama_event_type_14 import AmaEventType14
-  from ..models.ama_event_type_15 import AmaEventType15
-  from ..models.ama_event_type_16 import AmaEventType16
-  from ..models.ama_event_type_17 import AmaEventType17
-  from ..models.ama_event_type_18 import AmaEventType18
-  from ..models.ama_event_type_19 import AmaEventType19
   from ..models.ama_event_type_2 import AmaEventType2
-  from ..models.ama_event_type_20 import AmaEventType20
   from ..models.ama_event_type_3 import AmaEventType3
   from ..models.ama_event_type_4 import AmaEventType4
   from ..models.ama_event_type_5 import AmaEventType5
@@ -47,21 +38,17 @@ class EventRecord:
     """ 
         Attributes:
             id (str):
-            project_id (str):
             session_id (str):
             sequence (int):
-            event (AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 |
-                AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 |
-                AmaEventType2 | AmaEventType20 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 |
-                AmaEventType8 | AmaEventType9):
+            event (AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType2 | AmaEventType3 |
+                AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9):
             created_at (datetime.datetime):
      """
 
     id: str
-    project_id: str
     session_id: str
     sequence: int
-    event: AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType20 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9
+    event: AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9
     created_at: datetime.datetime
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -74,16 +61,7 @@ class EventRecord:
         from ..models.ama_event_type_1 import AmaEventType1
         from ..models.ama_event_type_10 import AmaEventType10
         from ..models.ama_event_type_11 import AmaEventType11
-        from ..models.ama_event_type_12 import AmaEventType12
-        from ..models.ama_event_type_13 import AmaEventType13
-        from ..models.ama_event_type_14 import AmaEventType14
-        from ..models.ama_event_type_15 import AmaEventType15
-        from ..models.ama_event_type_16 import AmaEventType16
-        from ..models.ama_event_type_17 import AmaEventType17
-        from ..models.ama_event_type_18 import AmaEventType18
-        from ..models.ama_event_type_19 import AmaEventType19
         from ..models.ama_event_type_2 import AmaEventType2
-        from ..models.ama_event_type_20 import AmaEventType20
         from ..models.ama_event_type_3 import AmaEventType3
         from ..models.ama_event_type_4 import AmaEventType4
         from ..models.ama_event_type_5 import AmaEventType5
@@ -92,8 +70,6 @@ class EventRecord:
         from ..models.ama_event_type_8 import AmaEventType8
         from ..models.ama_event_type_9 import AmaEventType9
         id = self.id
-
-        project_id = self.project_id
 
         session_id = self.session_id
 
@@ -122,24 +98,6 @@ class EventRecord:
             event = self.event.to_dict()
         elif isinstance(self.event, AmaEventType10):
             event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType11):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType12):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType13):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType14):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType15):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType16):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType17):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType18):
-            event = self.event.to_dict()
-        elif isinstance(self.event, AmaEventType19):
-            event = self.event.to_dict()
         else:
             event = self.event.to_dict()
 
@@ -151,7 +109,6 @@ class EventRecord:
         field_dict.update(self.additional_properties)
         field_dict.update({
             "id": id,
-            "projectId": project_id,
             "sessionId": session_id,
             "sequence": sequence,
             "event": event,
@@ -168,16 +125,7 @@ class EventRecord:
         from ..models.ama_event_type_1 import AmaEventType1
         from ..models.ama_event_type_10 import AmaEventType10
         from ..models.ama_event_type_11 import AmaEventType11
-        from ..models.ama_event_type_12 import AmaEventType12
-        from ..models.ama_event_type_13 import AmaEventType13
-        from ..models.ama_event_type_14 import AmaEventType14
-        from ..models.ama_event_type_15 import AmaEventType15
-        from ..models.ama_event_type_16 import AmaEventType16
-        from ..models.ama_event_type_17 import AmaEventType17
-        from ..models.ama_event_type_18 import AmaEventType18
-        from ..models.ama_event_type_19 import AmaEventType19
         from ..models.ama_event_type_2 import AmaEventType2
-        from ..models.ama_event_type_20 import AmaEventType20
         from ..models.ama_event_type_3 import AmaEventType3
         from ..models.ama_event_type_4 import AmaEventType4
         from ..models.ama_event_type_5 import AmaEventType5
@@ -188,13 +136,11 @@ class EventRecord:
         d = dict(src_dict)
         id = d.pop("id")
 
-        project_id = d.pop("projectId")
-
         session_id = d.pop("sessionId")
 
         sequence = d.pop("sequence")
 
-        def _parse_event(data: object) -> AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType12 | AmaEventType13 | AmaEventType14 | AmaEventType15 | AmaEventType16 | AmaEventType17 | AmaEventType18 | AmaEventType19 | AmaEventType2 | AmaEventType20 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9:
+        def _parse_event(data: object) -> AmaEventType0 | AmaEventType1 | AmaEventType10 | AmaEventType11 | AmaEventType2 | AmaEventType3 | AmaEventType4 | AmaEventType5 | AmaEventType6 | AmaEventType7 | AmaEventType8 | AmaEventType9:
             try:
                 if not isinstance(data, dict):
                     raise TypeError()
@@ -305,103 +251,13 @@ class EventRecord:
                 return componentsschemas_ama_event_type_10
             except (TypeError, ValueError, AttributeError, KeyError):
                 pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_11 = AmaEventType11.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_11
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_12 = AmaEventType12.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_12
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_13 = AmaEventType13.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_13
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_14 = AmaEventType14.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_14
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_15 = AmaEventType15.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_15
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_16 = AmaEventType16.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_16
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_17 = AmaEventType17.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_17
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_18 = AmaEventType18.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_18
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_ama_event_type_19 = AmaEventType19.from_dict(data)
-
-
-
-                return componentsschemas_ama_event_type_19
-            except (TypeError, ValueError, AttributeError, KeyError):
-                pass
             if not isinstance(data, dict):
                 raise TypeError()
-            componentsschemas_ama_event_type_20 = AmaEventType20.from_dict(data)
+            componentsschemas_ama_event_type_11 = AmaEventType11.from_dict(data)
 
 
 
-            return componentsschemas_ama_event_type_20
+            return componentsschemas_ama_event_type_11
 
         event = _parse_event(d.pop("event"))
 
@@ -413,7 +269,6 @@ class EventRecord:
 
         event_record = cls(
             id=id,
-            project_id=project_id,
             session_id=session_id,
             sequence=sequence,
             event=event,

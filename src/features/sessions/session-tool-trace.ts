@@ -26,23 +26,25 @@ interface TraceAccumulator extends SessionToolTraceEntry {
   endSequence: number | null
 }
 
-// Builds one trace entry per tool execution from canonical AMA events. Pairing
-// uses the tool call id inside the event payload; results without a recorded
-// call degrade into explicit orphaned entries instead of being dropped.
+// Builds one trace entry per tool execution from canonical AMA message content
+// blocks. Pairing uses toolCall.id and tool_result.toolCallId; results without
+// a recorded call degrade into explicit orphaned entries instead of being
+// dropped.
 export function buildSessionToolTrace(events: EventRecord[]): SessionToolTraceEntry[] {
   const ordered = [...events].sort((left, right) => left.sequence - right.sequence)
   const entries: TraceAccumulator[] = []
   for (const record of ordered) {
-    if (record.event.type === 'tool_call.started') {
-      entries.push(entryFromStart(record))
-      continue
-    }
-    if (record.event.type === 'tool_call.completed') {
-      const open = findOpenEntry(entries, pairingKey(record))
-      if (open) {
-        completeEntry(open, record)
-      } else {
-        entries.push(orphanedEntryFromEnd(record))
+    for (const block of messageContent(record)) {
+      if (block.type === 'tool_call') {
+        entries.push(entryFromToolCall(record, block))
+      }
+      if (block.type === 'tool_result') {
+        const open = findOpenEntry(entries, stringField(block, 'toolCallId') ?? record.id)
+        if (open) {
+          completeEntry(open, record, block)
+        } else {
+          entries.push(orphanedEntryFromToolResult(record, block))
+        }
       }
     }
   }
@@ -63,9 +65,8 @@ export function summarizeToolValue(value: unknown): string {
   return truncate(text.replace(/\s+/g, ' ').trim(), VALUE_SUMMARY_LIMIT)
 }
 
-function entryFromStart(record: EventRecord): TraceAccumulator {
-  const payload = objectValue(record.event.payload)
-  const toolCall = objectValue(payload.toolCall)
+function entryFromToolCall(record: EventRecord, block: Record<string, unknown>): TraceAccumulator {
+  const toolCall = objectValue(block.toolCall)
   return {
     key: record.id,
     toolCallId: stringField(toolCall, 'id'),
@@ -84,46 +85,38 @@ function entryFromStart(record: EventRecord): TraceAccumulator {
   }
 }
 
-function completeEntry(entry: TraceAccumulator, record: EventRecord) {
-  const payload = objectValue(record.event.payload)
-  const failed = payload.isError === true || Boolean(payload.error)
+function completeEntry(entry: TraceAccumulator, record: EventRecord, block: Record<string, unknown>) {
+  const failed = Boolean(block.error)
   entry.status = failed ? 'failed' : 'completed'
-  entry.output = payload.result
+  entry.output = block.result
   entry.errorSummary = failed
-    ? truncate(toolValueText(payload.error ?? payload.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
+    ? truncate(toolValueText(block.error ?? block.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
     : null
-  entry.durationMs = numberField(payload, 'durationMs') ?? elapsedMs(entry.startedAt, record.createdAt)
+  entry.durationMs = elapsedMs(entry.startedAt, record.createdAt)
   entry.completedAt = record.createdAt
   entry.endSequence = record.sequence
 }
 
-function orphanedEntryFromEnd(record: EventRecord): TraceAccumulator {
-  const payload = objectValue(record.event.payload)
-  const toolCall = objectValue(payload.toolCall)
-  const failed = payload.isError === true || Boolean(payload.error)
+function orphanedEntryFromToolResult(record: EventRecord, block: Record<string, unknown>): TraceAccumulator {
+  const failed = Boolean(block.error)
   return {
     key: record.id,
-    toolCallId: stringField(toolCall, 'id'),
-    name: stringField(toolCall, 'name') ?? 'tool',
+    toolCallId: stringField(block, 'toolCallId'),
+    name: 'tool',
     status: failed ? 'failed' : 'completed',
     approval: 'approved',
     orphanedResult: true,
-    input: toolCall.input,
-    output: payload.result,
+    input: undefined,
+    output: block.result,
     errorSummary: failed
-      ? truncate(toolValueText(payload.error ?? payload.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
+      ? truncate(toolValueText(block.error ?? block.result) || 'Tool execution failed', ERROR_SUMMARY_LIMIT)
       : null,
-    durationMs: numberField(payload, 'durationMs'),
+    durationMs: null,
     startedAt: null,
     completedAt: record.createdAt,
     startSequence: null,
     endSequence: record.sequence,
   }
-}
-
-function pairingKey(record: EventRecord) {
-  const toolCall = objectValue(objectValue(record.event.payload).toolCall)
-  return stringField(toolCall, 'id') ?? record.id
 }
 
 function findOpenEntry(entries: TraceAccumulator[], key: string) {
@@ -190,7 +183,22 @@ function toolValueText(value: unknown): string {
       return text
     }
   }
+  if (typeof record.message === 'string') {
+    return record.message
+  }
   return JSON.stringify(value) ?? ''
+}
+
+function messageContent(record: EventRecord): Record<string, unknown>[] {
+  if (
+    record.event.type !== 'message.started' &&
+    record.event.type !== 'message.updated' &&
+    record.event.type !== 'message.completed'
+  ) {
+    return []
+  }
+  const message = objectValue(objectValue(record.event.payload).message)
+  return Array.isArray(message.content) ? message.content.map(objectValue) : []
 }
 
 function elapsedMs(start: string | null, end: string) {
@@ -211,8 +219,4 @@ function objectValue(value: unknown): Record<string, unknown> {
 
 function stringField(record: Record<string, unknown>, field: string) {
   return typeof record[field] === 'string' ? (record[field] as string) : null
-}
-
-function numberField(record: Record<string, unknown>, field: string) {
-  return typeof record[field] === 'number' && Number.isFinite(record[field]) ? (record[field] as number) : null
 }

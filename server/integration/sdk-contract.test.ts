@@ -35,7 +35,7 @@ function externalRefs(runId: string) {
   return { product: 'agent-kanban', boardId: `board_${runId}`, taskId: `task_${runId}` }
 }
 function externalMetadata(refs: ReturnType<typeof externalRefs>): Json {
-  return { externalProduct: refs.product, externalBoardId: refs.boardId, externalTaskId: refs.taskId }
+  return { annotations: { externalProduct: refs.product, externalBoardId: refs.boardId, externalTaskId: refs.taskId } }
 }
 function obj(value: unknown): Json {
   expect(value && typeof value === 'object' && !Array.isArray(value)).toBe(true)
@@ -59,18 +59,22 @@ async function newSdk() {
 
 async function createAgentThroughSdk(ama: AmaClient, runId: string) {
   return (await ama.agents.create({
-    name: `${runId} external agent`,
-    systemPrompt: 'Work items arrive from an external product over the AMA SDK.',
-    provider: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
+    metadata: { name: `${runId} external agent` },
+    spec: {
+      systemPrompt: 'Work items arrive from an external product over the AMA SDK.',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+    },
   })) as Json
 }
 async function createEnvironmentThroughSdk(ama: AmaClient, runId: string) {
   return (await ama.environments.create({
-    name: `${runId} external env`,
-    type: 'cloud',
-    networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
-    packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+    metadata: { name: `${runId} external env` },
+    spec: {
+      type: 'cloud',
+      networking: { type: 'open', allowMcpServers: true, allowPackageManagers: true },
+      packages: { type: 'packages', apt: [], cargo: [], gem: [], go: [], npm: [], pip: [] },
+    },
   })) as Json
 }
 const readSession = (ama: AmaClient, sessionId: string) => ama.sessions.get(sessionId) as Promise<Json>
@@ -85,13 +89,22 @@ async function createSessionThroughSdk(
   environment: Json,
   extra: Json,
 ) {
+  const { prompt, volumes, volumeMounts, env, envFrom, ...unexpected } = extra
+  if (Object.keys(unexpected).length > 0) {
+    throw new Error(`Unexpected SDK session options: ${Object.keys(unexpected).join(', ')}`)
+  }
   const created = (await ama.sessions.create({
-    agentId: resourceUid(agent),
-    environmentId: resourceUid(environment),
-    runtime: 'ama',
-    name: `${runId} external session`,
-    metadata: externalMetadata(refs),
-    ...extra,
+    metadata: { name: `${runId} external session`, ...externalMetadata(refs) },
+    spec: {
+      agentId: resourceUid(agent),
+      environmentId: resourceUid(environment),
+      runtime: 'ama',
+      ...(Array.isArray(volumes) ? { volumes } : {}),
+      ...(Array.isArray(volumeMounts) ? { volumeMounts } : {}),
+      ...(env && typeof env === 'object' ? { env } : {}),
+      ...(Array.isArray(envFrom) ? { envFrom } : {}),
+    },
+    prompt: typeof prompt === 'string' ? prompt : `${runId} external work`,
   })) as Json
   // Cloud sessions reach `idle` synchronously in the integration pool, so we just
   // read the session back rather than polling a runtime drive-to-idle loop.
@@ -120,7 +133,7 @@ describe('[CF] generated SDK contract', () => {
     const createdAgent = await createAgentThroughSdk(ama, runId)
     const createdAgentId = resourceUid(createdAgent)
     const updatedAgent = (await ama.agents.update(createdAgentId, {
-      description: 'Updated by the external product through the SDK.',
+      metadata: { description: 'Updated by the external product through the SDK.' },
     })) as Json
     const createdEnv = await createEnvironmentThroughSdk(ama, runId)
     const createdEnvId = resourceUid(createdEnv)
@@ -198,7 +211,7 @@ describe('[CF] generated SDK contract', () => {
     expect(typeof obj(obj(obj(obj(before.status).bindings).agent).snapshot).version).toBe('number')
     expect(obj(obj(obj(obj(before.status).bindings).environment).snapshot).environmentId).toBe(resourceUid(environment))
     await ama.agents.update(resourceUid(agent), {
-      systemPrompt: 'Changed after session creation — the snapshot must not follow.',
+      spec: { systemPrompt: 'Changed after session creation — the snapshot must not follow.' },
     })
     const after = await readSession(ama, sessionId)
     expect(obj(obj(after.status).bindings).agent).toEqual(obj(obj(before.status).bindings).agent)
@@ -259,7 +272,7 @@ describe('[CF] generated SDK contract', () => {
     expect(['accepted', 'delivered'].includes(String(command.state))).toBe(true)
     expect(JSON.stringify(command).includes('://')).toBe(false)
 
-    // The command result is persisted as canonical session events, including session.stopped.
+    // The command result is persisted as canonical session events; lifecycle state lives on the session status.
     const events = await listEvents(ama, sessionId)
     expect(JSON.stringify(events.data).includes(`external product follow-up ${runId}`)).toBe(true)
     for (const record of events.data) {
@@ -267,7 +280,6 @@ describe('[CF] generated SDK contract', () => {
         true,
       )
     }
-    expect(events.data.some((record) => record.event.type === 'session.stopped')).toBe(true)
     expect(obj(await readSession(ama, sessionId)).status).toMatchObject({ phase: 'stopped' })
 
     // The SDK inventory only targets AMA control-plane endpoints; nothing leaks a local endpoint.

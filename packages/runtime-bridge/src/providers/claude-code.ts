@@ -1,15 +1,20 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Message, MessageContentBlock, ToolResult } from '@ama/runtime-contracts/session-events'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import {
-  reasoning,
+  messageCompleted,
+  messageEvent,
+  messageStarted,
+  messageUpdated,
+  randomId,
+  reasoningBlock,
   runtimeError,
-  runtimeEvent,
-  textMessage,
-  toolEnd,
-  toolStart,
+  textBlock,
+  toolCallBlock,
+  toolResultBlock,
   turnEnd,
   usageEvent,
 } from '../events/ama'
@@ -22,7 +27,7 @@ import {
   type RuntimeProviderRequest,
   type RuntimeUsageWindow,
 } from '../protocol'
-import { hostHome, normalizeProviderUsage, objectValue, resolveCliPath, sdkEnv } from './cli-host'
+import { hostHome, objectValue, resolveCliPath, sdkEnv } from './cli-host'
 
 const CLAUDE_USAGE_API = 'https://api.anthropic.com/api/oauth/usage'
 const CLAUDE_WINDOW_LABELS: Record<string, string> = {
@@ -80,11 +85,51 @@ function normalizeToolName(name: string) {
   }
 }
 
-function usageFromResult(msg: Record<string, unknown>) {
-  return {
-    ...normalizeProviderUsage(objectValue(msg.usage)),
-    costMicros: typeof msg.total_cost_usd === 'number' ? Math.round(msg.total_cost_usd * 1_000_000) : undefined,
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function usageEventsFromResult(msg: Record<string, unknown>): AmaRuntimeEvent[] {
+  const modelUsage = objectValue(msg.modelUsage)
+  const events = Object.entries(modelUsage).flatMap(([model, value]) => {
+    if (!model) return []
+    const usage = objectValue(value)
+    const inputTokens = numberValue(usage.inputTokens) ?? 0
+    const outputTokens = numberValue(usage.outputTokens) ?? 0
+    const cachedInputTokens = numberValue(usage.cacheReadInputTokens) ?? 0
+    const cacheCreationInputTokens = numberValue(usage.cacheCreationInputTokens) ?? 0
+    const costUSD = numberValue(usage.costUSD)
+    return [
+      usageEvent({
+        model,
+        inputTokens,
+        outputTokens,
+        cachedInputTokens,
+        cacheCreationInputTokens,
+        totalTokens: inputTokens + outputTokens + cachedInputTokens + cacheCreationInputTokens,
+        ...(costUSD !== undefined ? { costMicros: Math.round(costUSD * 1_000_000) } : {}),
+      }),
+    ]
+  })
+  if (events.length > 0) return events
+  return []
+}
+
+function claudeToolResult(content: unknown): ToolResult {
+  if (typeof content === 'string') {
+    return { content: content ? [{ type: 'text', text: content }] : [] }
   }
+  if (Array.isArray(content)) {
+    return {
+      content: content.flatMap((value) => {
+        const block = objectValue(value)
+        return block.type === 'text' && typeof block.text === 'string'
+          ? [{ type: 'text' as const, text: block.text }]
+          : []
+      }),
+    }
+  }
+  return { content: [{ type: 'json', value: content }] }
 }
 
 function parseClaudeOAuthToken(raw: string): string | undefined {
@@ -132,51 +177,120 @@ function claudeSdkEnv(request: RuntimeProviderRequest) {
   return env
 }
 
-function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
-  switch (msg.type) {
-    case 'assistant': {
-      const anyMsg = msg as unknown as Record<string, unknown>
-      if (anyMsg.error) {
-        yield runtimeError(String(anyMsg.error), 'claude_error', anyMsg)
-        return
+class ClaudeEventMapper {
+  private activeMessageId: string | null = null
+  private text = ''
+  private reasoning = ''
+
+  map(msg: SDKMessage): AmaRuntimeEvent[] {
+    switch (msg.type) {
+      case 'stream_event':
+        return this.mapStreamEvent(msg as unknown as Record<string, unknown>)
+      case 'assistant': {
+        const anyMsg = msg as unknown as Record<string, unknown>
+        if (anyMsg.error) {
+          return [runtimeError(String(anyMsg.error), 'claude_error', anyMsg)]
+        }
+        const content = claudeAssistantContent(msg.message.content)
+        if (content.length > 0) {
+          const message = claudeMessage('assistant', msg, content)
+          const event = this.activeMessageId === message.id ? messageCompleted(message) : messageEvent(message)
+          this.clearActiveMessage(message.id)
+          return [event]
+        }
+        return []
       }
-      yield runtimeEvent('turn.started')
-      for (const block of Array.isArray(msg.message.content) ? msg.message.content : []) {
-        if (block.type === 'text' && block.text) {
-          yield runtimeEvent('message.completed', { message: textMessage('assistant', block.text) })
-        }
-        if (block.type === 'thinking' && block.thinking) {
-          yield reasoning(block.thinking)
-        }
-        if (block.type === 'tool_use') {
-          const args = normalizeToolInput(block.name, objectValue(block.input))
-          yield toolStart(block.id, normalizeToolName(block.name), args)
-        }
+      case 'user': {
+        const content = msg.message.content
+        if (!Array.isArray(content)) return []
+        const blocks = claudeUserContent(content)
+        return blocks.length > 0 ? [messageEvent(claudeMessage('tool', msg, blocks))] : []
       }
-      return
-    }
-    case 'user': {
-      const content = msg.message.content
-      if (!Array.isArray(content)) return
-      for (const block of content) {
-        if (block.type === 'tool_result') {
-          yield toolEnd(block.tool_use_id, 'tool', {}, block.content, Boolean(block.is_error))
-        }
+      case 'result': {
+        return [...usageEventsFromResult(msg as unknown as Record<string, unknown>), turnEnd()]
       }
-      return
+      default:
+        return []
     }
-    case 'result': {
-      yield usageEvent(usageFromResult(msg as unknown as Record<string, unknown>))
-      yield turnEnd()
-      return
-    }
-    case 'system': {
-      yield runtimeEvent('runtime.status', { data: msg as unknown as Record<string, unknown> })
-      return
-    }
-    default:
-      yield runtimeEvent('runtime.status', { data: msg as unknown as Record<string, unknown> })
   }
+
+  private mapStreamEvent(msg: Record<string, unknown>): AmaRuntimeEvent[] {
+    const event = objectValue(msg.event)
+    if (event.type === 'message_start') {
+      const message = objectValue(event.message)
+      const id = stringValue(msg.uuid) ?? stringValue(message.id) ?? randomId('msg')
+      this.activeMessageId = id
+      this.text = ''
+      this.reasoning = ''
+      return [messageStarted({ id, role: 'assistant', content: [] })]
+    }
+    if (event.type === 'content_block_delta') {
+      const id = this.activeMessageId ?? stringValue(msg.uuid) ?? randomId('msg')
+      this.activeMessageId = id
+      const delta = objectValue(event.delta)
+      if (delta.type === 'text_delta' && typeof delta.text === 'string') this.text += delta.text
+      if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') this.reasoning += delta.thinking
+      const content: MessageContentBlock[] = []
+      if (this.reasoning) content.push(reasoningBlock(this.reasoning))
+      if (this.text) content.push(textBlock(this.text))
+      return [messageUpdated({ id, role: 'assistant', content })]
+    }
+    if (event.type === 'message_stop') return []
+    return []
+  }
+
+  private clearActiveMessage(id: string) {
+    if (this.activeMessageId !== id) return
+    this.activeMessageId = null
+    this.text = ''
+    this.reasoning = ''
+  }
+}
+
+function claudeMessage(role: Message['role'], msg: SDKMessage, content: MessageContentBlock[]): Message {
+  const raw = msg as unknown as Record<string, unknown>
+  const providerMessage = objectValue(raw.message)
+  return {
+    id: stringValue(raw.uuid) ?? randomId('msg'),
+    role,
+    content,
+    ...(stringValue(providerMessage.id) ? { providerMessageId: stringValue(providerMessage.id)! } : {}),
+    ...(stringValue(raw.parent_tool_use_id) ? { parentToolCallId: stringValue(raw.parent_tool_use_id)! } : {}),
+  }
+}
+
+function claudeAssistantContent(content: unknown): MessageContentBlock[] {
+  if (!Array.isArray(content)) return []
+  return content.map((value): MessageContentBlock => {
+    const block = objectValue(value)
+    if (block.type === 'text' && typeof block.text === 'string') return textBlock(block.text)
+    if (block.type === 'thinking' && typeof block.thinking === 'string') return reasoningBlock(block.thinking)
+    if (block.type === 'tool_use') {
+      const id = stringValue(block.id) ?? randomId('tool')
+      const name = typeof block.name === 'string' ? block.name : 'tool'
+      return toolCallBlock({
+        id,
+        name: normalizeToolName(name),
+        input: normalizeToolInput(name, objectValue(block.input)),
+      })
+    }
+    return { type: 'text', text: JSON.stringify(value) }
+  })
+}
+
+function claudeUserContent(content: unknown[]): MessageContentBlock[] {
+  return content
+    .map((value): MessageContentBlock | null => {
+      const block = objectValue(value)
+      if (block.type !== 'tool_result') return null
+      const toolCallId = stringValue(block.tool_use_id) ?? randomId('tool')
+      return toolResultBlock(toolCallId, claudeToolResult(block.content), Boolean(block.is_error))
+    })
+    .filter((block): block is MessageContentBlock => Boolean(block))
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value ? value : null
 }
 
 export const claudeCodeProvider: RuntimeProvider = {
@@ -219,10 +333,11 @@ export const claudeCodeProvider: RuntimeProvider = {
     // generator to their initial null, breaking optional chaining.
     const promptInput: { current: ReturnType<typeof createAsyncPushQueue<SDKUserMessage>> | null } = { current: null }
     const events = (async function* () {
+      const mapper = new ClaudeEventMapper()
       for await (const msg of q) {
         const sessionId = (msg as unknown as { session_id?: unknown }).session_id
         if (typeof sessionId === 'string' && sessionId) resumeToken = sessionId
-        yield* mapClaudeMessage(msg)
+        yield* mapper.map(msg)
         if (msg.type === 'result') {
           if (pendingInjectedPrompts === 0) break
           pendingInjectedPrompts -= 1

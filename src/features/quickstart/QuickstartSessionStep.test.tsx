@@ -82,16 +82,14 @@ function buildEventRecord(overrides: EventRecordOverrides = {}): EventRecord {
     payload = overrides.event?.payload ?? {
       message: { role: 'assistant', content: 'Hello from the agent' },
     },
-    metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
     ...recordOverrides
   } = overrides
   return {
     id: 'event_1',
-    projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
+    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
     createdAt: now,
     ...recordOverrides,
   }
@@ -656,7 +654,7 @@ describe('QuickstartSessionStep — session preview with messages', () => {
           durationMs: null,
           createdAt: now,
           updatedAt: now,
-          eventType: 'tool_call.completed',
+          eventType: 'tool_result',
         },
       ],
     })
@@ -703,7 +701,7 @@ describe('QuickstartSessionStep — debug tab', () => {
 
   it('renders debug events list when runtime has debug events', async () => {
     mockRuntime({
-      debugEvents: [{ id: 'dbg_1', type: 'agent.started', payload: { test: true }, createdAt: now }],
+      debugEvents: [{ id: 'dbg_1', type: 'runtime.started', payload: {}, createdAt: now }],
     })
     server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
@@ -782,7 +780,7 @@ describe('QuickstartSessionStep — session preview with mixed transcript', () =
           durationMs: null,
           createdAt: '2026-05-23T00:00:01.000Z',
           updatedAt: '2026-05-23T00:00:01.000Z',
-          eventType: 'tool_call.completed',
+          eventType: 'tool_result',
         },
       ],
     })

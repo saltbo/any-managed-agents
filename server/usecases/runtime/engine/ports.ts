@@ -9,6 +9,7 @@
 import type { ToolExecutionInput, ToolExecutionResult } from '@ama/runtime-contracts/sandbox-tools'
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import type { AssistantMessage, Context, Model } from '@earendil-works/pi-ai'
+import type { AmaEvent } from '@shared/session-events'
 
 export type { ToolExecutionInput, ToolExecutionResult }
 
@@ -40,7 +41,7 @@ export type RuntimeToolPolicyDecision = {
 // D1; the runner forwards over its channel. A suppression decorator (approval
 // gate) wraps this without the engine knowing.
 export interface RuntimeEventSink {
-  emit(event: Record<string, unknown>, metadata?: Record<string, unknown>): Promise<void>
+  emit(event: AmaEvent): Promise<void>
 }
 
 // Gates a tool call before execution (sandbox/network policy + approval).

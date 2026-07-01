@@ -111,16 +111,14 @@ function buildEvent(overrides: EventRecordOverrides = {}): EventRecord {
       type: 'message.completed',
       message: { role: 'assistant', content: 'Hello' },
     },
-    metadata = overrides.event?.metadata ?? {},
     event: eventOverride,
     ...recordOverrides
   } = overrides
   return {
     id: 'event_1',
-    projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    event: eventOverride ?? ({ type, payload, metadata } as EventRecord['event']),
+    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
     createdAt: now,
     ...recordOverrides,
   }
@@ -434,28 +432,35 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
 
-  it('calls onEventsChanged after tool_call.completed', async () => {
+  it('calls onEventsChanged after a tool result message', async () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
     lastSocket!.emit({
       type: 'event',
       record: buildEvent({
-        type: 'tool_call.completed',
-        payload: { type: 'tool_call.completed', toolCallId: 'tc_1', toolName: 'exec', result: {}, isError: false },
+        type: 'message.completed',
+        payload: {
+          message: {
+            id: 'msg_tool_result',
+            role: 'tool',
+            parentToolCallId: 'tc_1',
+            content: [{ type: 'tool_result', toolCallId: 'tc_1', result: { content: [] } }],
+          },
+        },
       }),
     })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })
   })
 
-  it('calls onEventsChanged after agent.completed', async () => {
+  it('calls onEventsChanged after runtime.completed', async () => {
     const cb = vi.fn()
     await renderLive('idle', makeCallbackRef(cb))
 
     lastSocket!.emit({
       type: 'event',
-      record: buildEvent({ type: 'agent.completed', payload: { type: 'agent.completed' } }),
+      record: buildEvent({ type: 'runtime.completed', payload: {} }),
     })
 
     await waitFor(() => expect(cb).toHaveBeenCalled(), { timeout: 5000 })

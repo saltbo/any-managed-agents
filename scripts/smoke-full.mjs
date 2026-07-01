@@ -499,14 +499,11 @@ async function main() {
 
     socket = watchSocket(await openSocket(socketURL(origin, token, sessionId)))
     runner = startRunner(runnerBinary, origin, token, environmentId, stateDir, workDir)
-    await waitForRunner(origin, token, environmentId)
-    await socket.waitFor(
-      (frame) =>
-        frame.type === 'event' &&
-        frame.record?.event?.type === 'runner.status' &&
-        frame.record.event.payload?.data?.stage === 'session_started',
-      'runner.status/session_started',
-    )
+	    await waitForRunner(origin, token, environmentId)
+	    await socket.waitFor(
+	      (frame) => frame.type === 'event' && frame.record?.event?.type === 'runtime.started',
+	      'runtime.started',
+	    )
     await socket.waitFor((frame) => frame.type === 'event' && frameContains(frame, DONE_MARKER), DONE_MARKER)
 
     const completedSession = await waitFor(async () => {

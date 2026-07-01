@@ -2,6 +2,7 @@ import { z } from '@hono/zod-openapi'
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const StringMapSchema = z.record(z.string(), z.string())
+const RunnerOpaqueJsonObjectSchema = z.object({}).catchall(z.unknown()).openapi('RunnerOpaqueJsonObject')
 
 export const RunnerMemorySnapshotSchema = z
   .object({
@@ -78,8 +79,8 @@ export const RunnerVolumeMountSchema = z
 
 export const RunnerToolCallSchema = z
   .object({
-    id: z.string().optional().openapi({ example: 'call_abc123' }),
-    name: z.string().optional().openapi({ example: 'bash' }),
+    id: z.string().openapi({ example: 'call_abc123' }),
+    name: z.string().openapi({ example: 'bash' }),
     arguments: JsonObjectSchema.optional(),
     input: JsonObjectSchema.optional(),
     approved: z.boolean().optional(),
@@ -117,8 +118,8 @@ export const RunnerWorkPayloadSchema = z
 
 export const RunnerRuntimeToolCallSchema = z
   .object({
-    id: z.string().optional().openapi({ example: 'tool_1' }),
-    name: z.string().optional().openapi({ example: 'bash' }),
+    id: z.string().openapi({ example: 'tool_1' }),
+    name: z.string().openapi({ example: 'bash' }),
     input: JsonObjectSchema.optional(),
     arguments: JsonObjectSchema.optional(),
   })
@@ -132,23 +133,15 @@ export const RunnerRuntimeRequestSchema = z
   .strict()
   .openapi('RunnerRuntimeRequest')
 
-export const RunnerSessionCommandSchema = z
-  .object({
-    id: z.string().optional().openapi({ example: 'runnercmd_abc123' }),
-    type: z.string().openapi({ example: 'send' }),
-    path: z.string().optional().openapi({ example: '/rpc' }),
-    message: z.string().optional().openapi({ example: 'continue' }),
-    reason: z.string().optional().openapi({ example: 'user cancelled' }),
-    permissionId: z.string().optional().openapi({ example: 'perm_abc123' }),
-    allowed: z.boolean().optional(),
-    body: RunnerRuntimeRequestSchema.optional(),
-  })
-  .strict()
-  .openapi('RunnerSessionCommand')
+// Opaque by design: the runner relays this JSON object to the TS bridge without
+// interpreting command-specific fields. The bridge owns the control-message shape.
+export const RunnerSessionCommandSchema = RunnerOpaqueJsonObjectSchema.openapi('RunnerSessionCommand')
 
 export const RunnerSandboxRequestSchema = z
   .object({
-    type: z.string().openapi({ example: 'sandbox.execute' }),
+    type: z
+      .enum(['sandbox.execute', 'sandbox.stop', 'sandbox.readMemoryStores'])
+      .openapi({ example: 'sandbox.execute' }),
     toolCallId: z.string().optional().openapi({ example: 'call_abc123' }),
     toolName: z.string().optional().openapi({ example: 'bash' }),
     input: JsonObjectSchema.optional(),
@@ -159,19 +152,78 @@ export const RunnerSandboxRequestSchema = z
   .openapi('RunnerSandboxRequest')
 
 export const RunnerChannelMessageSchema = z
-  .object({
-    type: z.string().openapi({ example: 'session.command' }),
-    eventId: z.string().optional(),
-    requestId: z.string().optional(),
-    message: z.string().optional(),
-    sessionId: z.string().optional().openapi({ example: 'session_abc123' }),
-    runnerId: z.string().optional().openapi({ example: 'runner_abc123' }),
-    leaseId: z.string().optional().openapi({ example: 'lease_abc123' }),
-    workItemId: z.string().optional().openapi({ example: 'work_abc123' }),
-    command: RunnerSessionCommandSchema.optional(),
-    request: RunnerSandboxRequestSchema.optional(),
-  })
-  .strict()
+  .discriminatedUnion('type', [
+    z
+      .object({
+        type: z.literal('runner.channel.accepted'),
+        runnerId: z.string().optional().openapi({ example: 'runner_abc123' }),
+        environmentId: z.string().optional(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('work.assigned'),
+        runnerId: z.string().optional().openapi({ example: 'runner_abc123' }),
+        lease: RunnerOpaqueJsonObjectSchema,
+        workItem: RunnerOpaqueJsonObjectSchema,
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('session.command'),
+        sessionId: z.string().openapi({ example: 'session_abc123' }),
+        runnerId: z.string().optional().openapi({ example: 'runner_abc123' }),
+        command: RunnerSessionCommandSchema,
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('sandbox.request'),
+        requestId: z.string(),
+        sessionId: z.string().openapi({ example: 'session_abc123' }),
+        runnerId: z.string().optional().openapi({ example: 'runner_abc123' }),
+        request: RunnerSandboxRequestSchema,
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('sandbox.response'),
+        requestId: z.string(),
+        sessionId: z.string().openapi({ example: 'session_abc123' }),
+        runnerId: z.string().optional().openapi({ example: 'runner_abc123' }),
+        ok: z.boolean(),
+        result: RunnerOpaqueJsonObjectSchema.optional(),
+        error: z.string().optional(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('session.backfill_request'),
+        eventId: z.string(),
+        sessionId: z.string().openapi({ example: 'session_abc123' }),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('session.backfill_response'),
+        eventId: z.string(),
+        sessionId: z.string().openapi({ example: 'session_abc123' }),
+        events: z.array(RunnerOpaqueJsonObjectSchema),
+        error: z.string().optional(),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal('runner.event'),
+        sessionId: z.string().openapi({ example: 'session_abc123' }),
+        record: RunnerOpaqueJsonObjectSchema,
+      })
+      .strict(),
+    z.object({ type: z.literal('runner.event.accepted'), eventId: z.string() }).strict(),
+    z
+      .object({ type: z.literal('session.channel.error'), eventId: z.string().optional(), message: z.string() })
+      .strict(),
+  ])
   .openapi('RunnerChannelMessage')
 
 export const RUNNER_PROTOCOL_SCHEMAS = {
@@ -186,6 +238,7 @@ export const RUNNER_PROTOCOL_SCHEMAS = {
   RunnerWorkPayload: RunnerWorkPayloadSchema,
   RunnerRuntimeToolCall: RunnerRuntimeToolCallSchema,
   RunnerRuntimeRequest: RunnerRuntimeRequestSchema,
+  RunnerOpaqueJsonObject: RunnerOpaqueJsonObjectSchema,
   RunnerSessionCommand: RunnerSessionCommandSchema,
   RunnerSandboxRequest: RunnerSandboxRequestSchema,
   RunnerChannelMessage: RunnerChannelMessageSchema,

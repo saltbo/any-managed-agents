@@ -1,8 +1,8 @@
 import { computeModelCostMicros, isProviderErrorCategory, providerFamily } from '@server/domain/provider-adapter'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import type { AmaEvent } from '../../../shared/session-events'
-import { providerModels, providers, sessions, usageRecords } from '../../db/schema'
+import type { AmaEvent, ToolCall } from '../../../shared/session-events'
+import { providerModels, providers, sessions, sessionEvents, usageRecords } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -46,11 +46,18 @@ async function sessionAttribution(db: Db, scope: UsageRecordingScope) {
         agentId: sessions.agentId,
         agentVersionId: sessions.agentVersionId,
         modelProvider: sessions.modelProvider,
+        environmentSnapshot: sessions.environmentSnapshot,
       })
       .from(sessions)
       .where(and(eq(sessions.id, scope.sessionId), eq(sessions.projectId, scope.projectId)))
       .get()) ?? null
   )
+}
+
+function sessionHostingMode(session: Awaited<ReturnType<typeof sessionAttribution>>) {
+  const snapshot = session?.environmentSnapshot ? safeObject(session.environmentSnapshot) : {}
+  const type = snapshot.type
+  return type === 'cloud' || type === 'self_hosted' ? type : null
 }
 
 // Resolves the global vendor row backing a runtime provider name: a vendor id
@@ -101,7 +108,10 @@ async function recordModelUsage(
     return
   }
   const session = await sessionAttribution(db, scope)
-  const provider = stringField(payload, 'provider') ?? session?.modelProvider ?? 'workers-ai'
+  const provider = sessionHostingMode(session) === 'cloud' ? session?.modelProvider : null
+  if (!provider) {
+    return
+  }
   const modelId = stringField(payload, 'model') ?? 'unknown'
   const config = await resolveProviderConfig(db, provider)
   // Vendor ids carry no family information themselves; the vendor slug is the
@@ -141,15 +151,10 @@ async function recordToolUsage(
   db: Db,
   scope: UsageRecordingScope,
   sessionEventId: string,
+  toolCall: ToolCall,
   payload: Record<string, unknown>,
 ) {
-  const toolCall = objectField(payload, 'toolCall')
-  const toolName = stringField(toolCall, 'name')
-  if (!toolName) {
-    return
-  }
   const session = await sessionAttribution(db, scope)
-  const toolCallId = stringField(toolCall, 'id')
   await db.insert(usageRecords).values({
     id: newId('usage'),
     organizationId: scope.organizationId,
@@ -158,11 +163,11 @@ async function recordToolUsage(
     agentVersionId: session?.agentVersionId ?? null,
     sessionId: scope.sessionId,
     sessionEventId,
-    correlationId: toolCallId ? `tool:${toolCallId}` : null,
+    correlationId: `tool:${toolCall.id}`,
     providerId: null,
     providerType: 'sandbox',
-    modelId: toolName,
-    state: payload.isError === true ? 'error' : 'success',
+    modelId: toolCall.name,
+    state: payload.error ? 'error' : 'success',
     promptTokens: 0,
     completionTokens: 0,
     totalTokens: 0,
@@ -173,6 +178,45 @@ async function recordToolUsage(
     metadata: '{}',
     createdAt: new Date().toISOString(),
   })
+}
+
+async function resolveToolCall(db: Db, scope: UsageRecordingScope, toolCallId: string): Promise<ToolCall | null> {
+  const rows = await db
+    .select({ payload: sessionEvents.payload })
+    .from(sessionEvents)
+    .where(and(eq(sessionEvents.projectId, scope.projectId), eq(sessionEvents.sessionId, scope.sessionId)))
+    .orderBy(asc(sessionEvents.sequence))
+    .all()
+  for (const row of rows) {
+    const payload = safeObject(row.payload)
+    const message = objectField(payload, 'message')
+    const content = Array.isArray(message.content) ? message.content : []
+    for (const item of content) {
+      const block = objectValue(item)
+      if (block.type !== 'tool_call') continue
+      const toolCall = objectField(block, 'toolCall')
+      if (stringField(toolCall, 'id') === toolCallId) {
+        return {
+          id: toolCallId,
+          name: stringField(toolCall, 'name') ?? 'tool',
+          input: toolCall.input ?? {},
+        }
+      }
+    }
+  }
+  return null
+}
+
+function safeObject(value: string): Record<string, unknown> {
+  try {
+    return objectValue(JSON.parse(value))
+  } catch {
+    return {}
+  }
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 // Normalized provider errors carry a stable category; persist the latest one
@@ -210,8 +254,8 @@ async function recordProviderError(db: Db, scope: UsageRecordingScope, payload: 
 
 // Canonical-event seam for provider-domain accounting: model usage rows from
 // usage.recorded events (cloud runtime turns and runner-ingested events share
-// this insert path), tool usage rows from tool executions, and provider
-// lastError health from normalized runtime errors.
+// this insert path), tool usage rows from tool result message blocks, and
+// provider lastError health from normalized runtime errors.
 export function createUsageWriteRepo(db: Db): UsageWriteRepo {
   return {
     async recordProviderSignals(scope, sessionEventId, canonicalEvent) {
@@ -219,8 +263,17 @@ export function createUsageWriteRepo(db: Db): UsageWriteRepo {
         await recordModelUsage(db, scope, sessionEventId, canonicalEvent.payload)
         return
       }
-      if (canonicalEvent.type === 'tool_call.completed') {
-        await recordToolUsage(db, scope, sessionEventId, canonicalEvent.payload)
+      if (canonicalEvent.type === 'message.completed') {
+        for (const block of canonicalEvent.payload.message.content) {
+          if (block.type === 'tool_result') {
+            const toolCall = await resolveToolCall(db, scope, block.toolCallId)
+            if (!toolCall) continue
+            await recordToolUsage(db, scope, sessionEventId, toolCall, {
+              result: block.result,
+              ...(block.error ? { error: block.error } : {}),
+            })
+          }
+        }
         return
       }
       if (canonicalEvent.type === 'runtime.error') {

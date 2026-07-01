@@ -143,7 +143,6 @@ export interface SessionMessage {
 
 export interface EventRecord {
   id: string
-  projectId: string
   sessionId: string
   sequence: number
   event: AmaEvent

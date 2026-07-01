@@ -5,24 +5,15 @@ package sessionevent
 
 // Defines values for AmaSessionEventType.
 const (
-	EventTypeAgentCompleted      AmaSessionEventType = "agent.completed"
-	EventTypeAgentStarted        AmaSessionEventType = "agent.started"
 	EventTypeMessageCompleted    AmaSessionEventType = "message.completed"
 	EventTypeMessageStarted      AmaSessionEventType = "message.started"
 	EventTypeMessageUpdated      AmaSessionEventType = "message.updated"
 	EventTypePermissionDenied    AmaSessionEventType = "permission.denied"
 	EventTypePermissionRequested AmaSessionEventType = "permission.requested"
 	EventTypePermissionResolved  AmaSessionEventType = "permission.resolved"
-	EventTypeRunnerStatus        AmaSessionEventType = "runner.status"
+	EventTypeRuntimeCompleted    AmaSessionEventType = "runtime.completed"
 	EventTypeRuntimeError        AmaSessionEventType = "runtime.error"
-	EventTypeRuntimeOutput       AmaSessionEventType = "runtime.output"
-	EventTypeRuntimeStatus       AmaSessionEventType = "runtime.status"
-	EventTypeSessionCheckpointed AmaSessionEventType = "session.checkpointed"
-	EventTypeSessionResumed      AmaSessionEventType = "session.resumed"
-	EventTypeSessionStopped      AmaSessionEventType = "session.stopped"
-	EventTypeToolCallCompleted   AmaSessionEventType = "tool_call.completed"
-	EventTypeToolCallStarted     AmaSessionEventType = "tool_call.started"
-	EventTypeToolCallUpdated     AmaSessionEventType = "tool_call.updated"
+	EventTypeRuntimeStarted      AmaSessionEventType = "runtime.started"
 	EventTypeTurnCompleted       AmaSessionEventType = "turn.completed"
 	EventTypeTurnStarted         AmaSessionEventType = "turn.started"
 	EventTypeUsageRecorded       AmaSessionEventType = "usage.recorded"
@@ -31,10 +22,6 @@ const (
 // Valid indicates whether the value is a known member of the AmaSessionEventType enum.
 func (e AmaSessionEventType) Valid() bool {
 	switch e {
-	case EventTypeAgentCompleted:
-		return true
-	case EventTypeAgentStarted:
-		return true
 	case EventTypeMessageCompleted:
 		return true
 	case EventTypeMessageStarted:
@@ -47,25 +34,11 @@ func (e AmaSessionEventType) Valid() bool {
 		return true
 	case EventTypePermissionResolved:
 		return true
-	case EventTypeRunnerStatus:
+	case EventTypeRuntimeCompleted:
 		return true
 	case EventTypeRuntimeError:
 		return true
-	case EventTypeRuntimeOutput:
-		return true
-	case EventTypeRuntimeStatus:
-		return true
-	case EventTypeSessionCheckpointed:
-		return true
-	case EventTypeSessionResumed:
-		return true
-	case EventTypeSessionStopped:
-		return true
-	case EventTypeToolCallCompleted:
-		return true
-	case EventTypeToolCallStarted:
-		return true
-	case EventTypeToolCallUpdated:
+	case EventTypeRuntimeStarted:
 		return true
 	case EventTypeTurnCompleted:
 		return true

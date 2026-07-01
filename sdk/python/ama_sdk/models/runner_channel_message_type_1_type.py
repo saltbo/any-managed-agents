@@ -1,7 +1,7 @@
 from enum import Enum
 
-class AmaEventType20Type(str, Enum):
-    RUNNER_STATUS = "runner.status"
+class RunnerChannelMessageType1Type(str, Enum):
+    WORK_ASSIGNED = "work.assigned"
 
     def __str__(self) -> str:
         return str(self.value)

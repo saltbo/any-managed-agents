@@ -4,12 +4,7 @@
 
 import { now } from '@server/domain/runtime/util'
 import type { SessionRow } from '@shared/runtime-rows'
-import {
-  type AmaEvent,
-  amaEventFromRuntimeEvent,
-  isAmaSessionEventType,
-  normalizeAmaEvent,
-} from '@shared/session-events'
+import type { AmaEvent } from '@shared/session-events'
 import type { AuditPort, AuthScope, EventStore, SessionOrchestrationStore } from '../ports'
 import { runtimeMessagesFromEvents } from './engine/transcript'
 
@@ -25,25 +20,18 @@ export async function appendAmaEvent(
 
 export async function appendRuntimeEvent(
   deps: { sessionEventStore: EventStore },
-  values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
+  values: { auth: AuthScope; sessionId: string; event: AmaEvent },
 ) {
-  if (typeof values.event.type === 'string' && isAmaSessionEventType(values.event.type) && 'payload' in values.event) {
-    return appendAmaEvent(deps, {
-      auth: values.auth,
-      sessionId: values.sessionId,
-      event: normalizeAmaEvent(values.event as AmaEvent),
-    })
-  }
   return appendAmaEvent(deps, {
     auth: values.auth,
     sessionId: values.sessionId,
-    event: amaEventFromRuntimeEvent(values.event, values.metadata ?? { source: 'runtime' }),
+    event: values.event,
   })
 }
 
 export async function appendUserPromptEvent(
   deps: { sessionEventStore: EventStore },
-  values: { auth: AuthScope; sessionId: string; prompt: string; metadata?: Record<string, unknown> },
+  values: { auth: AuthScope; sessionId: string; prompt: string },
 ) {
   return appendAmaEvent(deps, {
     auth: values.auth,
@@ -52,11 +40,11 @@ export async function appendUserPromptEvent(
       type: 'message.completed',
       payload: {
         message: {
+          id: crypto.randomUUID(),
           role: 'user',
           content: [{ type: 'text', text: values.prompt }],
         },
       },
-      metadata: { source: 'user-prompt', ...(values.metadata ?? {}) },
     },
   })
 }

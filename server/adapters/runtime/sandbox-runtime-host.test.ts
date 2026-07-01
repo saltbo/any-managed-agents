@@ -231,14 +231,14 @@ describe('session-runtime', () => {
     )
     expect(events.map((event) => event.type)).toEqual(
       expect.arrayContaining([
-        'agent.started',
+        'runtime.started',
         'message.completed',
-        'tool_call.started',
-        'tool_call.completed',
         'usage.recorded',
-        'agent.completed',
+        'runtime.completed',
       ]),
     )
+    expect(JSON.stringify(events)).toContain('"type":"tool_call"')
+    expect(JSON.stringify(events)).toContain('"type":"tool_result"')
     expect(JSON.stringify(events)).toContain('Tool result observed: clean')
     expect(JSON.stringify(events)).not.toContain('Message accepted by AMA runtime.')
     expect(JSON.stringify(events)).not.toContain('Received:')
@@ -301,7 +301,7 @@ describe('session-runtime', () => {
     // The tool-call turn completed and persisted, then the run paused instead
     // of starting the next model turn.
     expect(first).toEqual({ status: 'paused' })
-    expect(JSON.stringify(firstEvents)).toContain('tool_call.completed')
+    expect(JSON.stringify(firstEvents)).toContain('"type":"tool_result"')
     expect(JSON.stringify(firstEvents)).not.toContain('Tool result observed')
 
     const secondEvents: Record<string, unknown>[] = []
@@ -322,37 +322,23 @@ describe('session-runtime', () => {
     expect(JSON.stringify(secondEvents)).toContain('Tool result observed')
   })
 
-  it('uses latest agent.completed messages as canonical persisted context', () => {
+  it('uses completed messages as canonical persisted context', () => {
     const messages = runtimeMessagesFromEvents([
       {
         payload: {
           type: 'message.completed',
-          message: { role: 'user', content: 'stale fallback', timestamp: 1 },
+          message: { id: 'msg_user', role: 'user', content: [{ type: 'text', text: 'canonical user' }] },
         },
       },
       {
         payload: {
-          type: 'agent.completed',
-          messages: [
-            { role: 'user', content: 'canonical user', timestamp: 2 },
-            {
-              role: 'assistant',
-              content: [{ type: 'text', text: 'canonical assistant' }],
-              api: 'ama-workers-ai',
-              provider: 'cloudflare-workers-ai',
-              model: '@cf/moonshotai/kimi-k2.6',
-              usage: {
-                input: 0,
-                output: 0,
-                cacheRead: 0,
-                cacheWrite: 0,
-                totalTokens: 0,
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-              },
-              stopReason: 'stop',
-              timestamp: 3,
-            },
-          ],
+          type: 'message.completed',
+          message: {
+            id: 'msg_assistant',
+            role: 'assistant',
+            content: [{ type: 'text', text: 'canonical assistant' }],
+            stopReason: 'stop',
+          },
         },
       },
     ])
@@ -366,18 +352,20 @@ describe('session-runtime', () => {
       {
         type: 'message.updated',
         payload: {
-          message: { role: 'assistant', content: 'partial assistant text' },
+          message: { role: 'assistant', content: [{ type: 'text', text: 'partial assistant text' }] },
         },
       },
       {
         type: 'message.completed',
         payload: {
-          message: { role: 'assistant', content: 'completed assistant text' },
+          message: { role: 'assistant', content: [{ type: 'text', text: 'completed assistant text' }] },
         },
       },
     ])
 
-    expect(messages).toEqual([{ role: 'assistant', content: 'completed assistant text' }])
+    expect(messages).toMatchObject([
+      { role: 'assistant', content: [{ type: 'text', text: 'completed assistant text' }] },
+    ])
   })
 
   it('sends canonical string assistant history to the live provider', async () => {
@@ -391,7 +379,10 @@ describe('session-runtime', () => {
       model: '@cf/moonshotai/kimi-k2.6',
       agentSnapshot: { systemPrompt: 'Continue from history.', allowedTools: [] },
       messages: runtimeMessagesFromEvents([
-        { type: 'message.completed', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
+        {
+          type: 'message.completed',
+          payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'Acknowledged.' }] } },
+        },
       ]),
       prompt: 'Continue',
       onEvent: async (event) => {
@@ -459,11 +450,12 @@ describe('session-runtime', () => {
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'tool_call.completed',
-          payload: expect.objectContaining({ isError: true }),
+          type: 'message.completed',
+          payload: expect.any(Object),
         }),
       ]),
     )
+    expect(JSON.stringify(events)).toContain('Tool bash not found')
   })
 
   it('grants the full sandbox toolset when the agent has no explicit allow-list', async () => {

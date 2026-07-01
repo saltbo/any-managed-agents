@@ -23,6 +23,14 @@ import {
   type Usage,
 } from '@earendil-works/pi-ai'
 import { AMA_SANDBOX_TOOL_NAMES, type AmaSandboxToolName } from '@shared/agent-tools'
+import type {
+  AmaEvent,
+  ToolCall as AmaToolCall,
+  Message,
+  MessageContentBlock,
+  ToolResult,
+  ToolResultValueContentBlock,
+} from '@shared/session-events'
 import {
   CANCELLATION_REASON,
   isRuntimeTurnCancelled,
@@ -46,11 +54,6 @@ import { reduceTurnStatus, type TurnStatus } from './turn-status'
 // runtimeMessagesFromEvents moved to ./transcript; re-exported here for the
 // existing import paths.
 export { runtimeMessagesFromEvents } from './transcript'
-
-const EVENT_META = {
-  source: 'ama-cloud-runtime',
-  piCorePackage: '@earendil-works/pi-agent-core',
-}
 
 export const ZERO_USAGE: Usage = {
   input: 0,
@@ -352,18 +355,218 @@ function createTurnStreamFn(
   }
 }
 
-function usageEvent(message: AgentMessage, provider: string, model: string) {
+function usageEvent(message: AgentMessage, model: string): AmaEvent<'usage.recorded'> | null {
   if (message.role !== 'assistant') {
     return null
   }
   return {
-    type: 'usage',
-    provider,
-    model,
-    promptTokens: message.usage.input,
-    completionTokens: message.usage.output,
-    totalTokens: message.usage.totalTokens,
+    type: 'usage.recorded',
+    payload: {
+      model,
+      promptTokens: message.usage.input,
+      completionTokens: message.usage.output,
+      totalTokens: message.usage.totalTokens,
+    },
   }
+}
+
+class PiAgentEventMapper {
+  private activeMessageId: string | null = null
+  private lastMessageId: string | null = null
+  private readonly toolMessageIds = new Map<string, string>()
+
+  map(event: AgentEvent): AmaEvent[] {
+    switch (event.type) {
+      case 'agent_start':
+        return [{ type: 'runtime.started', payload: {} }]
+      case 'agent_end':
+        return [{ type: 'runtime.completed', payload: {} }]
+      case 'turn_start':
+        return [{ type: 'turn.started', payload: {} }]
+      case 'turn_end':
+        return [
+          {
+            type: 'turn.completed',
+            payload: { message: amaMessage(event.message, this.messageIdFor(event.message, this.lastMessageId)) },
+          },
+        ]
+      case 'message_start': {
+        const id = this.startMessage(event.message)
+        return [{ type: 'message.started', payload: { message: amaMessage(event.message, id) } }]
+      }
+      case 'message_update':
+        return [
+          {
+            type: 'message.updated',
+            payload: { message: amaMessage(event.message, this.messageIdFor(event.message, this.activeMessageId)) },
+          },
+        ]
+      case 'message_end': {
+        const id = this.messageIdFor(event.message, this.activeMessageId)
+        this.lastMessageId = id
+        this.activeMessageId = null
+        return [{ type: 'message.completed', payload: { message: amaMessage(event.message, id) } }]
+      }
+      case 'tool_execution_update':
+        return [
+          {
+            type: 'message.updated',
+            payload: {
+              message: amaToolResultMessage(
+                { ...event, result: event.partialResult },
+                this.toolMessageId(event.toolCallId),
+              ),
+            },
+          },
+        ]
+      case 'tool_execution_start':
+      case 'tool_execution_end':
+        return []
+    }
+  }
+
+  private startMessage(message: AgentMessage) {
+    const id = this.messageIdFor(message, this.activeMessageId)
+    this.activeMessageId = id
+    this.lastMessageId = id
+    return id
+  }
+
+  private messageIdFor(message: AgentMessage, fallback: string | null) {
+    if (message.role === 'toolResult' && typeof message.toolCallId === 'string') {
+      return this.toolMessageId(message.toolCallId)
+    }
+    return messageId(message, fallback ?? undefined)
+  }
+
+  private toolMessageId(toolCallId: string) {
+    const existing = this.toolMessageIds.get(toolCallId)
+    if (existing) {
+      return existing
+    }
+    const id = crypto.randomUUID()
+    this.toolMessageIds.set(toolCallId, id)
+    return id
+  }
+}
+
+function amaMessage(message: AgentMessage, id?: string): Message {
+  if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'toolResult') {
+    return {
+      id: id ?? crypto.randomUUID(),
+      role: 'system',
+      content: [{ type: 'text', text: JSON.stringify(message) }],
+    }
+  }
+  return {
+    id: messageId(message, id),
+    role: message.role === 'toolResult' ? 'tool' : message.role,
+    content: amaContentBlocks(message),
+    ...(message.role === 'assistant' ? { stopReason: message.stopReason } : {}),
+    ...(message.role === 'toolResult' && typeof message.toolCallId === 'string'
+      ? { parentToolCallId: message.toolCallId }
+      : {}),
+  }
+}
+
+function messageId(message: AgentMessage, fallback?: string) {
+  const record = message as unknown as Record<string, unknown>
+  return typeof record.id === 'string' && record.id ? record.id : (fallback ?? crypto.randomUUID())
+}
+
+function amaContentBlocks(message: AgentMessage): MessageContentBlock[] {
+  if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'toolResult') {
+    return [{ type: 'text', text: JSON.stringify(message) }]
+  }
+  if (message.role === 'toolResult') {
+    const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : ''
+    const result = amaToolResult(message)
+    return [
+      {
+        type: 'tool_result',
+        toolCallId,
+        result,
+        ...(message.isError ? { error: { message: toolResultText(result) || 'Tool execution failed' } } : {}),
+      },
+    ]
+  }
+  if (message.role === 'user' && typeof message.content === 'string') {
+    return message.content ? [{ type: 'text', text: message.content }] : []
+  }
+  const content = Array.isArray(message.content) ? message.content : []
+  return content.flatMap((block): MessageContentBlock[] => {
+    if (block.type === 'text') {
+      return [{ type: 'text', text: block.text }]
+    }
+    if (block.type === 'thinking') {
+      return [{ type: 'reasoning', text: block.thinking }]
+    }
+    if (block.type === 'toolCall') {
+      return [{ type: 'tool_call', toolCall: amaToolCall(block) }]
+    }
+    if (block.type === 'image') {
+      return [{ type: 'image', data: block.data, mediaType: block.mimeType }]
+    }
+    return []
+  })
+}
+
+function amaToolCall(block: ToolCall): AmaToolCall {
+  return { id: block.id, name: block.name, input: block.arguments }
+}
+
+function amaToolResultMessage(
+  event: { toolCallId: string; result: AgentToolResult<unknown>; isError?: boolean },
+  id: string = crypto.randomUUID(),
+): Message {
+  const result = amaToolResultFromAgentResult(event.result)
+  return {
+    id,
+    role: 'tool',
+    parentToolCallId: event.toolCallId,
+    content: [
+      {
+        type: 'tool_result',
+        toolCallId: event.toolCallId,
+        result,
+        ...(event.isError ? { error: { message: toolResultText(result) || 'Tool execution failed' } } : {}),
+      },
+    ],
+  }
+}
+
+function amaToolResult(message: Extract<AgentMessage, { role: 'toolResult' }>): ToolResult {
+  return {
+    content: message.content.flatMap((block): ToolResultValueContentBlock[] => {
+      if (block.type === 'text') {
+        return [{ type: 'text', text: block.text }]
+      }
+      if (block.type === 'image') {
+        return [{ type: 'image', data: block.data, mediaType: block.mimeType }]
+      }
+      return [{ type: 'json', value: block }]
+    }),
+    ...(message.details !== undefined ? { structuredContent: message.details } : {}),
+  }
+}
+
+function amaToolResultFromAgentResult(result: AgentToolResult<unknown>): ToolResult {
+  return {
+    content: result.content.flatMap((block): ToolResultValueContentBlock[] => {
+      if (block.type === 'text') {
+        return [{ type: 'text', text: block.text }]
+      }
+      if (block.type === 'image') {
+        return [{ type: 'image', data: block.data, mediaType: block.mimeType }]
+      }
+      return [{ type: 'json', value: block }]
+    }),
+    ...(result.details !== undefined ? { structuredContent: result.details } : {}),
+  }
+}
+
+function toolResultText(result: ToolResult) {
+  return result.content.map((block) => (block.type === 'text' ? block.text : '')).join('')
 }
 
 function turnFailureMessage(event: AgentEvent) {
@@ -454,6 +657,8 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
     sessionId: input.sessionId,
   })
 
+  const eventMapper = new PiAgentEventMapper()
+
   agent.subscribe(async (event: AgentEvent) => {
     // Everything after a pause is filler from the synthetic paused message;
     // completed turns are already persisted and the continuation rebuilds them.
@@ -477,29 +682,28 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
         eventFailure === CANCELLATION_REASON ? { type: 'cancel' } : { type: 'fail', message: eventFailure },
       )
     }
-    await input.sink.emit({ ...event }, EVENT_META)
+    for (const amaEvent of eventMapper.map(event)) {
+      await input.sink.emit(amaEvent)
+    }
     if (event.type === 'message_end') {
-      const usage = usageEvent(event.message, provider, modelId)
+      const usage = usageEvent(event.message, modelId)
       if (usage) {
-        await input.sink.emit(usage, EVENT_META)
+        await input.sink.emit(usage)
       }
       // Surface adapter-normalized provider failures as canonical runtime.error
       // events: stable category, safe message, retry metadata.
       if (event.message.role === 'assistant' && event.message.stopReason === 'error' && providerError) {
         const normalized: RuntimeProviderError = providerError
         providerError = null
-        await input.sink.emit(
-          {
-            type: 'error',
+        await input.sink.emit({
+          type: 'runtime.error',
+          payload: {
             message: normalized.message,
             category: normalized.category,
             retryable: normalized.retryable,
             ...(normalized.retryAfterSeconds !== undefined ? { retryAfterSeconds: normalized.retryAfterSeconds } : {}),
-            provider,
-            model: modelId,
           },
-          EVENT_META,
-        )
+        })
       }
     }
   })

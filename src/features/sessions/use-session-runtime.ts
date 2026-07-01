@@ -165,10 +165,18 @@ function shouldRefreshAfterMessage(message: SessionSocketServerMessage) {
     return false
   }
   const eventType = message.record.event.type
-  return (
-    eventType === 'agent.completed' ||
-    eventType === 'turn.completed' ||
-    eventType === 'tool_call.completed' ||
+	  return (
+	    eventType === 'runtime.completed' ||
+	    eventType === 'turn.completed' ||
+    hasToolResult(message.record.event.payload) ||
     eventType === 'runtime.error'
   )
+}
+
+function hasToolResult(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false
+  const message = (payload as { message?: unknown }).message
+  if (!message || typeof message !== 'object' || Array.isArray(message)) return false
+  const content = (message as { content?: unknown }).content
+  return Array.isArray(content) && content.some((item) => item && typeof item === 'object' && (item as { type?: unknown }).type === 'tool_result')
 }

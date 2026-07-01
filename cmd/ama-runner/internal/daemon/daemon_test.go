@@ -245,15 +245,39 @@ func runtimeEvent(eventType string, payload ama.JSON) RuntimeEventRecord {
 	return RuntimeEventRecord{Event: ama.JSON{"type": eventType, "payload": payload}}
 }
 
-func runtimeToolEvent(eventType, toolCallID, toolName string, input ama.JSON, fields ama.JSON) RuntimeEventRecord {
-	payload := lo.Assign(ama.JSON{
-		"toolCall": ama.JSON{
-			"id":    toolCallID,
-			"name":  toolName,
-			"input": input,
+func runtimeToolCallMessage(toolCallID, toolName string, input ama.JSON) RuntimeEventRecord {
+	return runtimeEvent("message.completed", ama.JSON{
+		"message": ama.JSON{
+			"id":   "msg_" + toolCallID,
+			"role": "assistant",
+			"content": []any{ama.JSON{
+				"type": "tool_call",
+				"toolCall": ama.JSON{
+					"id":    toolCallID,
+					"name":  toolName,
+					"input": input,
+				},
+			}},
 		},
-	}, fields)
-	return runtimeEvent(eventType, payload)
+	})
+}
+
+func runtimeToolResultMessage(toolCallID string, output ama.JSON) RuntimeEventRecord {
+	return runtimeEvent("message.completed", ama.JSON{
+		"message": ama.JSON{
+			"id":               "msg_result_" + toolCallID,
+			"role":             "tool",
+			"parentToolCallId": toolCallID,
+			"content": []any{ama.JSON{
+				"type":       "tool_result",
+				"toolCallId": toolCallID,
+				"result": ama.JSON{
+					"content":           []any{ama.JSON{"type": "text", "text": "ok"}},
+					"structuredContent": output,
+				},
+			}},
+		},
+	})
 }
 
 type fakeSessionChannel struct {
@@ -396,7 +420,11 @@ func (a *fakeRuntimeAdapter) Run(ctx context.Context, request runtime.Request, w
 	if len(events) == 0 {
 		events = []RuntimeEventRecord{
 			runtimeEvent("message.completed", ama.JSON{
-				"message": ama.JSON{"role": "assistant", "content": "runtime ok"},
+				"message": ama.JSON{
+					"id":      "msg_runtime_ok",
+					"role":    "assistant",
+					"content": []any{ama.JSON{"type": "text", "text": "runtime ok"}},
+				},
 			}),
 		}
 	}
@@ -526,12 +554,10 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 			return nil
 		},
 		events: []RuntimeEventRecord{
-			runtimeEvent("runtime.status", ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}),
 			runtimeEvent("message.completed", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "prompt:build the feature"}}}}),
-			runtimeToolEvent("tool_call.started", "tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, nil),
-			runtimeToolEvent("tool_call.completed", "tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, ama.JSON{"result": ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}, "durationMs": 3}),
-			runtimeEvent("usage", ama.JSON{"provider": "provider_codex", "model": "gpt-5.3-codex", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
-			runtimeEvent("runtime.output", ama.JSON{"stream": "bridge", "content": "diagnostic line"}),
+			runtimeToolCallMessage("tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}),
+			runtimeToolResultMessage("tool_1", ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}),
+			runtimeEvent("usage.recorded", ama.JSON{"provider": "provider_codex", "model": "gpt-5.3-codex", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
 		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -542,7 +568,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	// events to appear on hubChannel before asserting.
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.status to be relayed over the hub channel.
+	// Wait for the first canonical runtime event to be relayed over the hub channel.
 	waitForChannelWriteCount(t, hubChannel, 1, done)
 	if err := <-done; err != nil {
 		t.Fatalf("expected codex run success, got %v", err)
@@ -576,13 +602,8 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	}
 	gotTypes := hubChannel.writtenEvents()
 	for _, want := range []string{
-		"runner.status",
-		"runtime.status",
 		"message.completed",
-		"tool_call.started",
-		"tool_call.completed",
-		"usage",
-		"runtime.output",
+		"usage.recorded",
 	} {
 		if !lo.Contains(gotTypes, want) {
 			t.Fatalf("expected channel/uploaded events to include %q, got %v", want, gotTypes)
@@ -601,9 +622,8 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		!strings.Contains(serializedEvents, `"role":"user"`) ||
 		!strings.Contains(serializedEvents, `"text":"build the feature"`) ||
 		!strings.Contains(serializedEvents, "provider_codex") ||
-		!strings.Contains(serializedEvents, "gpt-5.3-codex") ||
-		!strings.Contains(serializedEvents, "diagnostic line") {
-		t.Fatalf("expected prompt/provider/model/stderr events, got %s", serializedEvents)
+		!strings.Contains(serializedEvents, "gpt-5.3-codex") {
+		t.Fatalf("expected prompt/provider/model events, got %s", serializedEvents)
 	}
 }
 
@@ -679,16 +699,13 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 7, "stderr": "bad failure"},
 		err:    errors.New("codex runtime bridge failed"),
-		events: []RuntimeEventRecord{
-			runtimeEvent("runtime.output", ama.JSON{"stream": "stderr", "content": "bad failure"}),
-		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.status + runtime.error to be relayed.
+	// Wait for the initial user prompt and runtime.error to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	if err := <-done; err == nil || !strings.Contains(err.Error(), "codex runtime bridge failed") {
 		t.Fatalf("expected codex bridge error after failed lease update, got %v", err)
@@ -700,7 +717,7 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 		t.Fatalf("expected failed codex session to write runtime events on channel without HTTP uploads, got %#v", client.events)
 	}
 	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
-	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "codex runtime bridge failed") || !strings.Contains(serializedEvents, "bad failure") {
+	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "codex runtime bridge failed") {
 		t.Fatalf("expected runtime error events, got %s", serializedEvents)
 	}
 }
@@ -729,7 +746,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	daemon.RuntimeAdapter = runtimeAdapter
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.status + message.completed to be relayed.
+	// Wait for the initial user prompt to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	if err := <-done; err != nil {
 		t.Fatalf("expected claude runtime success, got %v", err)
@@ -747,7 +764,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
 	got := hubChannel.writtenEvents()
-	want := []string{"runner.status", "message.completed", "message.completed"}
+	want := []string{"message.completed", "message.completed"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
 	}
@@ -776,7 +793,7 @@ func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning
 
 			done := make(chan error, 1)
 			go func() { done <- daemon.RunOnce(context.Background()) }()
-			// Wait for runner.status + message.completed before asserting completion.
+			// Wait for the prompt and default runtime message before asserting completion.
 			waitForChannelWriteCount(t, hubChannel, 2, done)
 			if err := <-done; err != nil {
 				t.Fatalf("expected successful runtime result to complete despite warning, got %v", err)
@@ -1418,7 +1435,7 @@ func TestRunOnceFailsLeaseWhenSessionExceedsMaxDuration(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.status + runtime.error to be relayed.
+	// Wait for the initial user prompt and runtime.error to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "exceeded max duration") {
@@ -1484,12 +1501,10 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "copilot_thread_1"},
 		events: []RuntimeEventRecord{
-			runtimeEvent("runtime.status", ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}),
 			runtimeEvent("message.completed", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "copilot prompt ok"}}}}),
-			runtimeToolEvent("tool_call.started", "copilot_tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, nil),
-			runtimeToolEvent("tool_call.completed", "copilot_tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}, ama.JSON{"result": ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}, "durationMs": 3}),
-			runtimeEvent("usage", ama.JSON{"provider": "provider_copilot", "model": "copilot-cli", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
-			runtimeEvent("runtime.output", ama.JSON{"stream": "bridge", "content": "copilot diagnostic"}),
+			runtimeToolCallMessage("copilot_tool_1", "sandbox.exec", ama.JSON{"command": "printf ok"}),
+			runtimeToolResultMessage("copilot_tool_1", ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}),
+			runtimeEvent("usage.recorded", ama.JSON{"provider": "provider_copilot", "model": "copilot-cli", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}),
 		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -1519,12 +1534,8 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	}
 	gotTypes := hubChannel.writtenEvents()
 	for _, want := range []string{
-		"runtime.status",
 		"message.completed",
-		"tool_call.started",
-		"tool_call.completed",
-		"usage",
-		"runtime.output",
+		"usage.recorded",
 	} {
 		if !lo.Contains(gotTypes, want) {
 			t.Fatalf("expected channel event %s in %v", want, gotTypes)
@@ -1535,8 +1546,7 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 		t.Fatalf("expected stored session events, got %v", err)
 	}
 	serializedStoredEvents := mustJSON(t, storedEvents)
-	if !strings.Contains(serializedStoredEvents, "runner.status") ||
-		!strings.Contains(serializedStoredEvents, `"role":"user"`) ||
+	if !strings.Contains(serializedStoredEvents, `"role":"user"`) ||
 		!strings.Contains(serializedStoredEvents, `"text":"copilot prompt"`) {
 		t.Fatalf("expected initial prompt to be durable in runner log, got %s", serializedStoredEvents)
 	}
@@ -1551,7 +1561,6 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 		"copilot prompt ok",
 		"provider_copilot",
 		"copilot-cli",
-		"copilot diagnostic",
 	} {
 		if !strings.Contains(serializedEvents, want) {
 			t.Fatalf("expected %q in copilot events, got %s", want, serializedEvents)
@@ -1569,15 +1578,12 @@ func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 7, "stderr": "bad failure"},
 		err:    errors.New("copilot runtime bridge failed"),
-		events: []RuntimeEventRecord{
-			runtimeEvent("runtime.output", ama.JSON{"stream": "stderr", "content": "bad failure"}),
-		},
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.status + runtime.error to be relayed.
+	// Wait for the initial user prompt and runtime.error to be relayed.
 	waitForChannelWriteCount(t, hubChannel, 2, done)
 	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "copilot runtime bridge failed") {
@@ -1587,7 +1593,7 @@ func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
 		t.Fatalf("expected failed copilot lease update, got %#v", client.updates)
 	}
 	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
-	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "copilot runtime bridge failed") || !strings.Contains(serializedEvents, "bad failure") {
+	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "copilot runtime bridge failed") {
 		t.Fatalf("expected runtime error events, got %s", serializedEvents)
 	}
 	failedUpdate := client.updates[len(client.updates)-1]

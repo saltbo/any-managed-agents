@@ -64,10 +64,6 @@ actions:
     remove: true
   - target: $.components.schemas['SessionEnvironmentJsonObject'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['LifecyclePayload'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['EventMetadata'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['UsageRecordedPayload']['properties']['details'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['PermissionDeniedPayload']['properties']['details'].additionalProperties.nullable
@@ -75,8 +71,6 @@ actions:
   - target: $.components.schemas['PermissionRequestPayload']['properties']['details'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['PermissionResolvedPayload']['properties']['details'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['StatusPayload']['properties']['data'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['RunnerToolCall']['properties']['arguments'].additionalProperties.nullable
     remove: true

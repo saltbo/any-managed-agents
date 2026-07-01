@@ -144,18 +144,18 @@ func TestRelayRoutesCommandToRegisteredSession(t *testing.T) {
 
 	var received string
 	router.RegisterControlSender(func(command runtime.BridgeControlFrame) error {
-		received = command.Message
+		received = string(command)
 		return nil
 	})
 
 	hub.routeCommand(protocol.RunnerChannelMessage{
 		Type:      "session.command",
 		SessionId: ptr("session_1"),
-		Command:   &protocol.RunnerSessionCommand{Type: "send", Message: ptr("build it")},
+		Command:   protocol.RunnerSessionCommand(`{"type":"send","message":"build it"}`),
 	})
 
-	if received != "build it" {
-		t.Fatalf("expected prompt routed to session, got %q", received)
+	if received != `{"type":"send","message":"build it"}` {
+		t.Fatalf("expected opaque command routed to session, got %q", received)
 	}
 }
 
@@ -166,18 +166,18 @@ func TestRelayRoutesStopCommandToRegisteredSession(t *testing.T) {
 
 	var received string
 	router.RegisterControlSender(func(command runtime.BridgeControlFrame) error {
-		received = command.Reason
+		received = string(command)
 		return nil
 	})
 
 	hub.routeCommand(protocol.RunnerChannelMessage{
 		Type:      "session.command",
 		SessionId: ptr("session_1"),
-		Command:   &protocol.RunnerSessionCommand{Type: "abort", Reason: ptr("user cancelled")},
+		Command:   protocol.RunnerSessionCommand(`{"type":"abort","reason":"user cancelled"}`),
 	})
 
-	if received != "user cancelled" {
-		t.Fatalf("expected stop routed to session, got %q", received)
+	if received != `{"type":"abort","reason":"user cancelled"}` {
+		t.Fatalf("expected stop command routed to session unchanged, got %q", received)
 	}
 }
 
@@ -187,20 +187,19 @@ func TestRelayRoutesPermissionCommandToRegisteredSession(t *testing.T) {
 	hub.Register("session_1", router)
 
 	var gotID string
-	var gotAllowed bool
 	router.RegisterControlSender(func(command runtime.BridgeControlFrame) error {
-		gotID, gotAllowed = command.PermissionID, command.Allowed
+		gotID = string(command)
 		return nil
 	})
 
 	hub.routeCommand(protocol.RunnerChannelMessage{
 		Type:      "session.command",
 		SessionId: ptr("session_1"),
-		Command:   &protocol.RunnerSessionCommand{Type: "permissionDecision", PermissionId: ptr("perm_3"), Allowed: ptr(true)},
+		Command:   protocol.RunnerSessionCommand(`{"type":"permissionDecision","permissionId":"perm_3","allowed":true}`),
 	})
 
-	if gotID != "perm_3" || !gotAllowed {
-		t.Fatalf("expected permission routed to session, got id=%q allowed=%v", gotID, gotAllowed)
+	if gotID != `{"type":"permissionDecision","permissionId":"perm_3","allowed":true}` {
+		t.Fatalf("expected permission command routed unchanged, got %q", gotID)
 	}
 }
 
@@ -210,7 +209,7 @@ func TestRelayDropsCommandForUnregisteredSession(t *testing.T) {
 	hub.routeCommand(protocol.RunnerChannelMessage{
 		Type:      "session.command",
 		SessionId: ptr("ghost_session"),
-		Command:   &protocol.RunnerSessionCommand{Type: "send", Message: ptr("hello")},
+		Command:   protocol.RunnerSessionCommand(`{"type":"send","message":"hello"}`),
 	})
 }
 
@@ -219,39 +218,45 @@ func TestRelayDropsCommandWithEmptySessionID(t *testing.T) {
 	// A command with no sessionId must be silently dropped
 	hub.routeCommand(protocol.RunnerChannelMessage{
 		Type:    "session.command",
-		Command: &protocol.RunnerSessionCommand{Type: "send", Message: ptr("hello")},
+		Command: protocol.RunnerSessionCommand(`{"type":"send","message":"hello"}`),
 	})
 }
 
-func TestRelayDropsUnknownCommandType(t *testing.T) {
+func TestRelayRoutesUnknownCommandTypeOpaque(t *testing.T) {
 	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
 	router := NewHostHandle("session_1")
 	hub.Register("session_1", router)
-	// Unknown command type must not panic
+	var received string
+	router.RegisterControlSender(func(command runtime.BridgeControlFrame) error {
+		received = string(command)
+		return nil
+	})
 	hub.routeCommand(protocol.RunnerChannelMessage{
 		Type:      "session.command",
 		SessionId: ptr("session_1"),
-		Command:   &protocol.RunnerSessionCommand{Type: "unknown_cmd"},
+		Command:   protocol.RunnerSessionCommand(`{"type":"unknown_cmd","payload":{"keep":true}}`),
 	})
+	if received != `{"type":"unknown_cmd","payload":{"keep":true}}` {
+		t.Fatalf("expected unknown command routed opaquely, got %q", received)
+	}
 }
 
-func TestRelayDropsPromptCommandWithEmptyMessage(t *testing.T) {
+func TestRelayRoutesPromptCommandWithEmptyMessageOpaque(t *testing.T) {
 	hub := NewRelay(&fakeOpener{}, "runner_1", "test", t.TempDir())
 	router := NewHostHandle("session_1")
 	hub.Register("session_1", router)
 	var received []string
 	router.RegisterControlSender(func(command runtime.BridgeControlFrame) error {
-		received = append(received, command.Message)
+		received = append(received, string(command))
 		return nil
 	})
-	// Empty message must be dropped
 	hub.routeCommand(protocol.RunnerChannelMessage{
 		Type:      "session.command",
 		SessionId: ptr("session_1"),
-		Command:   &protocol.RunnerSessionCommand{Type: "send", Message: ptr("")},
+		Command:   protocol.RunnerSessionCommand(`{"type":"send","message":""}`),
 	})
-	if len(received) != 0 {
-		t.Fatalf("expected empty prompt to be dropped, got %v", received)
+	if len(received) != 1 || received[0] != `{"type":"send","message":""}` {
+		t.Fatalf("expected empty prompt command routed opaquely, got %v", received)
 	}
 }
 
@@ -263,8 +268,16 @@ func TestRelayHandlesBackfillForCompletedSession(t *testing.T) {
 	}
 	logPath := EventLogPath(sessionDir)
 	events := []Event{
-		{ID: "evt_1", Sequence: 1, Event: ama.JSON{"type": "message.completed", "payload": ama.JSON{"text": "hi"}}, CreatedAt: "2026-01-01T00:00:01Z"},
-		{ID: "evt_2", Sequence: 2, Event: ama.JSON{"type": "usage", "payload": ama.JSON{"tokens": 42}}, CreatedAt: "2026-01-01T00:00:02Z"},
+		{
+			ID: "evt_1", SessionID: "completed_session", Sequence: 1,
+			Event:     ama.JSON{"type": "message.completed", "payload": ama.JSON{"text": "hi"}},
+			CreatedAt: "2026-01-01T00:00:01Z",
+		},
+		{
+			ID: "evt_2", SessionID: "completed_session", Sequence: 2,
+			Event:     ama.JSON{"type": "usage", "payload": ama.JSON{"tokens": 42}},
+			CreatedAt: "2026-01-01T00:00:02Z",
+		},
 	}
 	f, err := os.Create(logPath)
 	if err != nil {

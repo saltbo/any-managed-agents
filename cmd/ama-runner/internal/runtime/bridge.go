@@ -24,12 +24,7 @@ type Bridge struct {
 	ShutdownGraceInterval time.Duration
 }
 
-const (
-	eventTypeRuntimeMetadata = "runtime.status"
-	eventTypeRuntimeOutput   = "runtime.output"
-
-	runtimeInventoryTimeout = 30 * time.Second
-)
+const runtimeInventoryTimeout = 30 * time.Second
 
 func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JSON, error) {
 	if request.Runtime == "" {
@@ -94,7 +89,7 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	var stderrText bytes.Buffer
 	stderrDone := make(chan error, 1)
 	go func() {
-		stderrDone <- streamBridgeStderr(stderrReader, &stderrText, request.Runtime, writeSerialized)
+		stderrDone <- streamBridgeStderr(stderrReader, &stderrText)
 	}()
 	stdoutScanner := protocol.scanner(stdoutReader)
 	if err := protocol.waitReady(stdoutScanner); err != nil {
@@ -106,12 +101,6 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		}
 		return nil, err
 	}
-	if err := writeSerialized(JSON{"type": eventTypeRuntimeMetadata, "payload": JSON{"data": JSON{"runtime": request.Runtime, "stage": "sdk_bridge_started", "status": "running"}}}); err != nil {
-		b.stopProcess(cmd)
-		_ = cmd.Wait()
-		return nil, err
-	}
-
 	runRequest := runtimebridge.RuntimeBridgeRunMessage{
 		Type:          runtimebridge.BridgeMessageTypeRun,
 		RequestID:     requestID,
@@ -136,7 +125,11 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	}
 	if request.RegisterControlSender != nil {
 		request.RegisterControlSender(func(command BridgeControlFrame) error {
-			return stdin.WriteJSON(protocol.controlFrame(requestID, command))
+			frame, err := protocol.controlFrame(requestID, command)
+			if err != nil {
+				return err
+			}
+			return stdin.WriteJSON(frame)
 		})
 	}
 
@@ -172,9 +165,6 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	if waitErr != nil {
 		final["error"] = waitErr.Error()
 		return final, fmt.Errorf("%s runtime bridge exited with code %d", request.Runtime, exitCode(waitErr))
-	}
-	if err := writeSerialized(JSON{"type": eventTypeRuntimeMetadata, "payload": JSON{"data": JSON{"runtime": request.Runtime, "stage": "sdk_bridge_exited", "status": "completed"}}}); err != nil {
-		final["finalEventError"] = err.Error()
 	}
 	return final, nil
 }
@@ -338,18 +328,12 @@ func (s *bridgeStdin) Close() error {
 	return s.writer.Close()
 }
 
-func streamBridgeStderr(reader io.Reader, output *bytes.Buffer, runtimeName string, write EventWriter) error {
+func streamBridgeStderr(reader io.Reader, output *bytes.Buffer) error {
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		line := scanner.Text()
 		output.WriteString(line)
 		output.WriteByte('\n')
-		if err := write(JSON{
-			"type":    "runtime.output",
-			"payload": JSON{"stream": "stderr", "content": line, "runtime": runtimeName},
-		}); err != nil {
-			return err
-		}
 	}
 	return scanner.Err()
 }

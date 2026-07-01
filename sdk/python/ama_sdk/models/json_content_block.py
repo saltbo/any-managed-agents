@@ -8,21 +8,28 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..models.json_content_block_type import JsonContentBlockType
+from ..types import UNSET, Unset
 
 
 
 
 
 
-T = TypeVar("T", bound="StatusPayloadData")
+T = TypeVar("T", bound="JsonContentBlock")
 
 
 
 @_attrs_define
-class StatusPayloadData:
+class JsonContentBlock:
     """ 
+        Attributes:
+            type_ (JsonContentBlockType):
+            value (Any | Unset):
      """
 
+    type_: JsonContentBlockType
+    value: Any | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -30,9 +37,18 @@ class StatusPayloadData:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+        type_ = self.type_.value
+
+        value = self.value
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
+        field_dict.update({
+            "type": type_,
+        })
+        if value is not UNSET:
+            field_dict["value"] = value
 
         return field_dict
 
@@ -41,12 +57,21 @@ class StatusPayloadData:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        status_payload_data = cls(
+        type_ = JsonContentBlockType(d.pop("type"))
+
+
+
+
+        value = d.pop("value", UNSET)
+
+        json_content_block = cls(
+            type_=type_,
+            value=value,
         )
 
 
-        status_payload_data.additional_properties = d
-        return status_payload_data
+        json_content_block.additional_properties = d
+        return json_content_block
 
     @property
     def additional_keys(self) -> list[str]:

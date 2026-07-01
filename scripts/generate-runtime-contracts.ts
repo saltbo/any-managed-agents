@@ -4,11 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { z } from 'zod'
 import {
-  RuntimeBridgeControlMessageSchema,
-  RuntimeBridgeErrorSchema,
   RuntimeBridgeInventoryMessageSchema,
   RuntimeBridgeInventoryResultSchema,
-  RuntimeBridgeOutputMessageSchema,
   RuntimeBridgeRunMessageSchema,
   RuntimeInventoryEntrySchema,
   RuntimeUsageWindowSchema,
@@ -98,7 +95,7 @@ function runtimeBridgeOpenApiDocument(): OpenApiDocument {
         RuntimeBridgeControlMessage: bridgeControlMessageSchema(),
         RuntimeBridgeInventoryMessage: bridgeInventoryMessageSchema(),
         RuntimeBridgeOutputMessage: bridgeOutputMessageSchema(),
-        RuntimeBridgeError: openApiSchema(RuntimeBridgeErrorSchema),
+        RuntimeBridgeError: bridgeErrorSchema(),
         RuntimeBridgeInventoryResult: bridgeInventoryResultSchema(),
         RuntimeBridgeInventoryRuntime: bridgeInventoryRuntimeSchema(),
         RuntimeBridgeUsageWindow: openApiSchema(RuntimeUsageWindowSchema),
@@ -138,7 +135,19 @@ function bridgeRunMessageSchema() {
 }
 
 function bridgeControlMessageSchema() {
-  const schema = openApiSchema(RuntimeBridgeControlMessageSchema)
+  const schema: JSONSchema = {
+    type: 'object',
+    required: ['type', 'requestId'],
+    additionalProperties: false,
+    properties: {
+      type: { type: 'string', enum: ['abort', 'send', 'permissionDecision'] },
+      requestId: { type: 'string' },
+      message: { type: 'string' },
+      permissionId: { type: 'string' },
+      allowed: { type: 'boolean' },
+      reason: { type: 'string' },
+    },
+  }
   setPropertyGoName(schema, 'requestId', 'RequestID')
   setPropertyGoName(schema, 'permissionId', 'PermissionID')
   setPropertyEnumNames(schema, 'type', [
@@ -157,8 +166,33 @@ function bridgeInventoryMessageSchema() {
   return schema
 }
 
+function bridgeErrorSchema() {
+  return {
+    type: 'object',
+    required: ['message'],
+    additionalProperties: false,
+    properties: {
+      message: { type: 'string' },
+      code: { type: 'string' },
+      details: {},
+    },
+  }
+}
+
 function bridgeOutputMessageSchema() {
-  const schema = openApiSchema(RuntimeBridgeOutputMessageSchema)
+  const schema: JSONSchema = {
+    type: 'object',
+    required: ['type'],
+    additionalProperties: false,
+    properties: {
+      type: { type: 'string', enum: ['ready', 'runtime.event', 'resumeToken', 'result', 'error'] },
+      requestId: { type: 'string' },
+      event: { $ref: '#/components/schemas/JSON' },
+      result: { $ref: '#/components/schemas/JSON' },
+      error: { $ref: '#/components/schemas/RuntimeBridgeError' },
+      resumeToken: { type: 'string' },
+    },
+  }
   setPropertyRef(schema, 'event', 'JSON')
   setPropertyRef(schema, 'result', 'JSON')
   setPropertyRef(schema, 'error', 'RuntimeBridgeError')
@@ -212,6 +246,7 @@ function normalizeJSONSchema(value: unknown) {
     return
   }
   const record = value as JSONSchema
+  delete record.$defs
   delete record.propertyNames
   if (record.additionalProperties && typeof record.additionalProperties === 'object') {
     const additionalProperties = record.additionalProperties as JSONSchema

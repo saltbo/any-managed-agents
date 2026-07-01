@@ -581,7 +581,7 @@ describe('workersAiModelClient — tool_call edge cases', () => {
     expect(toolCall).toMatchObject({ name: 'bash' })
   })
 
-  it('generates a fallback id when tool_call has no string id', async () => {
+  it('ignores tool_call entries without a stable id', async () => {
     const aiRun = vi.fn().mockResolvedValue({
       choices: [
         {
@@ -598,9 +598,7 @@ describe('workersAiModelClient — tool_call edge cases', () => {
 
     const result = await client.complete(model, context)
 
-    const toolCall = result.content.find((b) => b.type === 'toolCall')
-    // No id provided → fallback: `tool_${index + 1}` = 'tool_1'
-    expect((toolCall as { id: string }).id).toBe('tool_1')
+    expect(result.content.some((block) => block.type === 'toolCall')).toBe(false)
   })
 
   it('returns empty object when tool_call function.arguments is null', async () => {

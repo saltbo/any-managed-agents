@@ -52,13 +52,9 @@ function startBridge() {
       return
     }
     outputs.push(msg)
-    if (msg.type === 'sessionEvent') {
-      events.push({
-        type: msg.eventType,
-        payload: msg.payload,
-        ...(msg.metadata ? { metadata: msg.metadata } : {}),
-      })
-    }
+	    if (msg.type === 'runtime.event' && msg.event && typeof msg.event.type === 'string') {
+	      events.push(msg.event)
+	    }
     notify()
   })
   child.stderr.on('data', () => {})
@@ -78,9 +74,9 @@ function startBridge() {
   const waitReady = (ms = 5000) => until(() => outputs.some((message) => message.type === 'ready'), ms)
   const waitForResult = (requestId, ms = 10000) =>
     until(() => outputs.some((message) => message.type === 'result' && message.requestId === requestId), ms)
-  const waitForError = (requestId, ms = 10000) =>
-    until(() => outputs.some((message) => message.type === 'error' && message.requestId === requestId), ms)
-  const waitForEventCount = (type, n, ms = 10000) => until(() => events.filter((event) => event.type === type).length >= n, ms)
+	  const waitForError = (requestId, ms = 10000) =>
+	    until(() => outputs.some((message) => message.type === 'error' && message.requestId === requestId), ms)
+	  const waitForEventCount = (type, n, ms = 10000) => until(() => events.filter((event) => event.type === type).length >= n, ms)
 
   return {
     child,
@@ -88,12 +84,13 @@ function startBridge() {
     outputs,
     send,
     waitReady,
-    waitForResult,
-    waitForError,
-    waitForEventCount,
-    stop: () => {
-      if (child.exitCode === null) child.kill()
-    },
+	    waitForResult,
+	    waitForError,
+	    waitForEventCount,
+	    waitUntil: until,
+	    stop: () => {
+	      if (child.exitCode === null) child.kill()
+	    },
   }
 }
 
@@ -137,13 +134,15 @@ async function deterministicRun(runtime) {
   const requestId = `run_${runtime.replace(/[^a-z0-9]/gi, '_')}`
   bridge.send(requestBase(runtime, requestId))
   await bridge.waitForResult(requestId)
-  const types = bridge.events.map((event) => event.type)
-  const result = bridge.outputs.find((message) => message.requestId === requestId && message.type === 'result')?.result
-  ok('emitted turn.started', types.includes('turn.started'))
-  ok('emitted assistant message', types.includes('message.completed'))
-  ok('emitted sandbox tool events', types.includes('tool_call.started') && types.includes('tool_call.completed'))
-  ok('emitted usage.recorded', types.includes('usage.recorded'))
-  ok('emitted turn.completed', types.includes('turn.completed'))
+	  const types = bridge.events.map((event) => event.type)
+	  const payloads = bridge.events.map((event) => JSON.stringify(event.payload)).join('\n')
+	  const result = bridge.outputs.find((message) => message.requestId === requestId && message.type === 'result')?.result
+	  ok('emitted turn.started', types.includes('turn.started'))
+	  ok('emitted assistant message', types.includes('message.completed'))
+	  ok('emitted sandbox tool call block', payloads.includes('"type":"tool_call"'))
+	  ok('emitted sandbox tool result block', payloads.includes('"type":"tool_result"'))
+	  ok('emitted usage.recorded', types.includes('usage.recorded'))
+	  ok('emitted turn.completed', types.includes('turn.completed'))
   ok('returned resume token', typeof result?.resumeToken === 'string' && result.resumeToken.length > 0)
   bridge.stop()
 }
@@ -189,11 +188,11 @@ async function livePermissionFlow() {
       model: 'copilot-cli',
     }),
   )
-  await bridge.waitForEventCount('permission.requested', 1)
-  const permission = bridge.events.find((event) => event.type === 'permission.requested')?.payload
-  bridge.send({ type: 'permissionDecision', requestId, permissionId: permission?.permissionId, allowed: true })
-  await bridge.waitForEventCount('tool_call.completed', 1)
-  bridge.send({ type: 'abort', requestId })
+	  await bridge.waitForEventCount('permission.requested', 1)
+	  const permission = bridge.events.find((event) => event.type === 'permission.requested')?.payload
+	  bridge.send({ type: 'permissionDecision', requestId, permissionId: permission?.permissionId, allowed: true })
+	  await bridge.waitUntil(() => bridge.events.some((event) => JSON.stringify(event.payload).includes('permission-ok')))
+	  bridge.send({ type: 'abort', requestId })
   await bridge.waitForResult(requestId)
   const payloads = bridge.events.map((event) => JSON.stringify(event.payload)).join('\n')
   ok('permission request emitted', typeof permission?.permissionId === 'string' && permission.permissionId.length > 0)

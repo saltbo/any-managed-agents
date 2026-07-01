@@ -229,13 +229,13 @@ func (h *Relay) routeCommand(message protocol.RunnerChannelMessage) {
 		// The session is not live on this runner (completed, or never ran here), so a
 		// command for it cannot be delivered to a runtime handle.
 		slog.Info("runner relay command for an inactive session; dropping",
-			"sessionId", sessionID, "commandType", command.Type)
+			"sessionId", sessionID)
 		return
 	}
 	commandHandler, ok := router.(CommandHandler)
 	if !ok {
 		slog.Info("runner relay command for session without command handler; dropping",
-			"sessionId", sessionID, "commandType", command.Type)
+			"sessionId", sessionID)
 		return
 	}
 	commandHandler.DeliverCommand(command)
@@ -312,12 +312,10 @@ func (h *Relay) RelayEvent(ctx context.Context, sessionID string, event ama.JSON
 	}
 	record := ama.JSON{
 		"id":        recordID,
+		"sessionId": sessionID,
 		"sequence":  time.Now().UnixMilli(),
 		"createdAt": time.Now().UTC().Format(time.RFC3339Nano),
-		"event": withRelayMetadata(event, ama.JSON{
-			"runnerId": h.runnerID,
-			"executor": h.executor,
-		}),
+		"event":     event,
 	}
 	if relay != nil {
 		record["id"] = relay.ID
@@ -340,28 +338,6 @@ func (h *Relay) RelayEvent(ctx context.Context, sessionID string, event ama.JSON
 	if err := h.conn.WriteJSON(ctx, message); err != nil {
 		slog.Warn("runner failed to relay event live", "sessionId", sessionID, "error", err)
 	}
-}
-
-func withRelayMetadata(event ama.JSON, metadata ama.JSON) ama.JSON {
-	next := ama.JSON{}
-	for key, value := range event {
-		next[key] = value
-	}
-	existing, _ := next["metadata"].(ama.JSON)
-	if existing == nil {
-		if record, ok := next["metadata"].(map[string]any); ok {
-			existing = ama.JSON(record)
-		}
-	}
-	merged := ama.JSON{}
-	for key, value := range existing {
-		merged[key] = value
-	}
-	for key, value := range metadata {
-		merged[key] = value
-	}
-	next["metadata"] = merged
-	return next
 }
 
 func (h *Relay) NotifyWorkFinished(ctx context.Context, sessionID string, leaseID string, state string) {

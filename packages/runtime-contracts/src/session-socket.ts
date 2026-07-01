@@ -1,4 +1,4 @@
-import type { EventRecord } from './session-events'
+import { type AmaSessionEventType, type EventRecord, isAmaSessionEventType } from './session-events'
 
 export type SessionSocketPromptMessage = {
   id: string
@@ -24,7 +24,7 @@ export type SessionSocketBackfillRequestMessage = {
   requestId?: string
   cursor?: number
   limit?: number
-  eventType?: string
+  eventType?: AmaSessionEventType
 }
 
 export type SessionSocketClientMessage =
@@ -81,12 +81,26 @@ export function sessionSocketClientMessageFrom(value: unknown): SessionSocketCli
     return { id: message.id, type: 'abort', ...(typeof message.reason === 'string' ? { reason: message.reason } : {}) }
   }
   if (message.type === 'backfill') {
+    if (
+      message.eventType !== undefined &&
+      (typeof message.eventType !== 'string' || !isAmaSessionEventType(message.eventType))
+    ) {
+      return null
+    }
+    const cursor = message.cursor
+    if (cursor !== undefined && (typeof cursor !== 'number' || !Number.isInteger(cursor) || cursor < 0)) {
+      return null
+    }
+    const limit = message.limit
+    if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1)) {
+      return null
+    }
     return {
       id: message.id,
       type: 'backfill',
       requestId: typeof message.requestId === 'string' ? message.requestId : message.id,
-      ...(typeof message.cursor === 'number' ? { cursor: message.cursor } : {}),
-      ...(typeof message.limit === 'number' ? { limit: message.limit } : {}),
+      ...(typeof cursor === 'number' ? { cursor } : {}),
+      ...(typeof limit === 'number' ? { limit } : {}),
       ...(typeof message.eventType === 'string' ? { eventType: message.eventType } : {}),
     }
   }
@@ -128,7 +142,6 @@ function isEventRecord(value: unknown): value is EventRecord {
   const event = objectValue(record.event)
   return (
     typeof record.id === 'string' &&
-    typeof record.projectId === 'string' &&
     typeof record.sessionId === 'string' &&
     typeof record.sequence === 'number' &&
     typeof record.createdAt === 'string' &&

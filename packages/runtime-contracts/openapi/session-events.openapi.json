@@ -10,50 +10,32 @@
       "AmaSessionEventType": {
         "type": "string",
         "enum": [
-          "agent.started",
-          "agent.completed",
+          "runtime.started",
+          "runtime.completed",
           "turn.started",
           "turn.completed",
-          "session.stopped",
-          "session.checkpointed",
-          "session.resumed",
           "message.started",
           "message.updated",
           "message.completed",
-          "tool_call.started",
-          "tool_call.updated",
-          "tool_call.completed",
           "usage.recorded",
           "permission.requested",
           "permission.resolved",
           "permission.denied",
-          "runtime.error",
-          "runtime.status",
-          "runtime.output",
-          "runner.status"
+          "runtime.error"
         ],
         "x-enum-varnames": [
-          "EventTypeAgentStarted",
-          "EventTypeAgentCompleted",
+          "EventTypeRuntimeStarted",
+          "EventTypeRuntimeCompleted",
           "EventTypeTurnStarted",
           "EventTypeTurnCompleted",
-          "EventTypeSessionStopped",
-          "EventTypeSessionCheckpointed",
-          "EventTypeSessionResumed",
           "EventTypeMessageStarted",
           "EventTypeMessageUpdated",
           "EventTypeMessageCompleted",
-          "EventTypeToolCallStarted",
-          "EventTypeToolCallUpdated",
-          "EventTypeToolCallCompleted",
           "EventTypeUsageRecorded",
           "EventTypePermissionRequested",
           "EventTypePermissionResolved",
           "EventTypePermissionDenied",
-          "EventTypeRuntimeError",
-          "EventTypeRuntimeStatus",
-          "EventTypeRuntimeOutput",
-          "EventTypeRunnerStatus"
+          "EventTypeRuntimeError"
         ]
       }
     }

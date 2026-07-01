@@ -24,13 +24,13 @@ const (
 
 // Defines values for AmaEvent0Type.
 const (
-	AmaEvent0TypeAgentStarted AmaEvent0Type = "agent.started"
+	AmaEvent0TypeRuntimeStarted AmaEvent0Type = "runtime.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent0Type enum.
 func (e AmaEvent0Type) Valid() bool {
 	switch e {
-	case AmaEvent0TypeAgentStarted:
+	case AmaEvent0TypeRuntimeStarted:
 		return true
 	default:
 		return false
@@ -39,13 +39,13 @@ func (e AmaEvent0Type) Valid() bool {
 
 // Defines values for AmaEvent1Type.
 const (
-	AgentCompleted AmaEvent1Type = "agent.completed"
+	RuntimeCompleted AmaEvent1Type = "runtime.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent1Type enum.
 func (e AmaEvent1Type) Valid() bool {
 	switch e {
-	case AgentCompleted:
+	case RuntimeCompleted:
 		return true
 	default:
 		return false
@@ -84,56 +84,11 @@ func (e AmaEvent3Type) Valid() bool {
 
 // Defines values for AmaEvent4Type.
 const (
-	SessionStopped AmaEvent4Type = "session.stopped"
+	MessageStarted AmaEvent4Type = "message.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent4Type enum.
 func (e AmaEvent4Type) Valid() bool {
-	switch e {
-	case SessionStopped:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent5Type.
-const (
-	SessionCheckpointed AmaEvent5Type = "session.checkpointed"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent5Type enum.
-func (e AmaEvent5Type) Valid() bool {
-	switch e {
-	case SessionCheckpointed:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent6Type.
-const (
-	SessionResumed AmaEvent6Type = "session.resumed"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent6Type enum.
-func (e AmaEvent6Type) Valid() bool {
-	switch e {
-	case SessionResumed:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent7Type.
-const (
-	MessageStarted AmaEvent7Type = "message.started"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent7Type enum.
-func (e AmaEvent7Type) Valid() bool {
 	switch e {
 	case MessageStarted:
 		return true
@@ -142,13 +97,13 @@ func (e AmaEvent7Type) Valid() bool {
 	}
 }
 
-// Defines values for AmaEvent8Type.
+// Defines values for AmaEvent5Type.
 const (
-	MessageUpdated AmaEvent8Type = "message.updated"
+	MessageUpdated AmaEvent5Type = "message.updated"
 )
 
-// Valid indicates whether the value is a known member of the AmaEvent8Type enum.
-func (e AmaEvent8Type) Valid() bool {
+// Valid indicates whether the value is a known member of the AmaEvent5Type enum.
+func (e AmaEvent5Type) Valid() bool {
 	switch e {
 	case MessageUpdated:
 		return true
@@ -157,13 +112,13 @@ func (e AmaEvent8Type) Valid() bool {
 	}
 }
 
-// Defines values for AmaEvent9Type.
+// Defines values for AmaEvent6Type.
 const (
-	MessageCompleted AmaEvent9Type = "message.completed"
+	MessageCompleted AmaEvent6Type = "message.completed"
 )
 
-// Valid indicates whether the value is a known member of the AmaEvent9Type enum.
-func (e AmaEvent9Type) Valid() bool {
+// Valid indicates whether the value is a known member of the AmaEvent6Type enum.
+func (e AmaEvent6Type) Valid() bool {
 	switch e {
 	case MessageCompleted:
 		return true
@@ -172,58 +127,13 @@ func (e AmaEvent9Type) Valid() bool {
 	}
 }
 
-// Defines values for AmaEvent10Type.
+// Defines values for AmaEvent7Type.
 const (
-	ToolCallStarted AmaEvent10Type = "tool_call.started"
+	UsageRecorded AmaEvent7Type = "usage.recorded"
 )
 
-// Valid indicates whether the value is a known member of the AmaEvent10Type enum.
-func (e AmaEvent10Type) Valid() bool {
-	switch e {
-	case ToolCallStarted:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent11Type.
-const (
-	ToolCallUpdated AmaEvent11Type = "tool_call.updated"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent11Type enum.
-func (e AmaEvent11Type) Valid() bool {
-	switch e {
-	case ToolCallUpdated:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent12Type.
-const (
-	ToolCallCompleted AmaEvent12Type = "tool_call.completed"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent12Type enum.
-func (e AmaEvent12Type) Valid() bool {
-	switch e {
-	case ToolCallCompleted:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent13Type.
-const (
-	UsageRecorded AmaEvent13Type = "usage.recorded"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent13Type enum.
-func (e AmaEvent13Type) Valid() bool {
+// Valid indicates whether the value is a known member of the AmaEvent7Type enum.
+func (e AmaEvent7Type) Valid() bool {
 	switch e {
 	case UsageRecorded:
 		return true
@@ -232,13 +142,13 @@ func (e AmaEvent13Type) Valid() bool {
 	}
 }
 
-// Defines values for AmaEvent14Type.
+// Defines values for AmaEvent8Type.
 const (
-	PermissionRequested AmaEvent14Type = "permission.requested"
+	PermissionRequested AmaEvent8Type = "permission.requested"
 )
 
-// Valid indicates whether the value is a known member of the AmaEvent14Type enum.
-func (e AmaEvent14Type) Valid() bool {
+// Valid indicates whether the value is a known member of the AmaEvent8Type enum.
+func (e AmaEvent8Type) Valid() bool {
 	switch e {
 	case PermissionRequested:
 		return true
@@ -247,13 +157,13 @@ func (e AmaEvent14Type) Valid() bool {
 	}
 }
 
-// Defines values for AmaEvent15Type.
+// Defines values for AmaEvent9Type.
 const (
-	PermissionResolved AmaEvent15Type = "permission.resolved"
+	PermissionResolved AmaEvent9Type = "permission.resolved"
 )
 
-// Valid indicates whether the value is a known member of the AmaEvent15Type enum.
-func (e AmaEvent15Type) Valid() bool {
+// Valid indicates whether the value is a known member of the AmaEvent9Type enum.
+func (e AmaEvent9Type) Valid() bool {
 	switch e {
 	case PermissionResolved:
 		return true
@@ -262,13 +172,13 @@ func (e AmaEvent15Type) Valid() bool {
 	}
 }
 
-// Defines values for AmaEvent16Type.
+// Defines values for AmaEvent10Type.
 const (
-	PermissionDenied AmaEvent16Type = "permission.denied"
+	PermissionDenied AmaEvent10Type = "permission.denied"
 )
 
-// Valid indicates whether the value is a known member of the AmaEvent16Type enum.
-func (e AmaEvent16Type) Valid() bool {
+// Valid indicates whether the value is a known member of the AmaEvent10Type enum.
+func (e AmaEvent10Type) Valid() bool {
 	switch e {
 	case PermissionDenied:
 		return true
@@ -277,60 +187,15 @@ func (e AmaEvent16Type) Valid() bool {
 	}
 }
 
-// Defines values for AmaEvent17Type.
+// Defines values for AmaEvent11Type.
 const (
-	RuntimeError AmaEvent17Type = "runtime.error"
+	RuntimeError AmaEvent11Type = "runtime.error"
 )
 
-// Valid indicates whether the value is a known member of the AmaEvent17Type enum.
-func (e AmaEvent17Type) Valid() bool {
+// Valid indicates whether the value is a known member of the AmaEvent11Type enum.
+func (e AmaEvent11Type) Valid() bool {
 	switch e {
 	case RuntimeError:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent18Type.
-const (
-	RuntimeStatus AmaEvent18Type = "runtime.status"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent18Type enum.
-func (e AmaEvent18Type) Valid() bool {
-	switch e {
-	case RuntimeStatus:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent19Type.
-const (
-	RuntimeOutput AmaEvent19Type = "runtime.output"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent19Type enum.
-func (e AmaEvent19Type) Valid() bool {
-	switch e {
-	case RuntimeOutput:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for AmaEvent20Type.
-const (
-	RunnerStatus AmaEvent20Type = "runner.status"
-)
-
-// Valid indicates whether the value is a known member of the AmaEvent20Type enum.
-func (e AmaEvent20Type) Valid() bool {
-	switch e {
-	case RunnerStatus:
 		return true
 	default:
 		return false
@@ -891,11 +756,10 @@ func (e EnvironmentType) Valid() bool {
 
 // Defines values for EventMessageRole.
 const (
-	EventMessageRoleAssistant  EventMessageRole = "assistant"
-	EventMessageRoleSystem     EventMessageRole = "system"
-	EventMessageRoleTool       EventMessageRole = "tool"
-	EventMessageRoleToolResult EventMessageRole = "toolResult"
-	EventMessageRoleUser       EventMessageRole = "user"
+	EventMessageRoleAssistant EventMessageRole = "assistant"
+	EventMessageRoleSystem    EventMessageRole = "system"
+	EventMessageRoleTool      EventMessageRole = "tool"
+	EventMessageRoleUser      EventMessageRole = "user"
 )
 
 // Valid indicates whether the value is a known member of the EventMessageRole enum.
@@ -906,8 +770,6 @@ func (e EventMessageRole) Valid() bool {
 	case EventMessageRoleSystem:
 		return true
 	case EventMessageRoleTool:
-		return true
-	case EventMessageRoleToolResult:
 		return true
 	case EventMessageRoleUser:
 		return true
@@ -985,6 +847,21 @@ const (
 func (e ImageContentBlockType) Valid() bool {
 	switch e {
 	case Image:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for JsonContentBlockType.
+const (
+	Json JsonContentBlockType = "json"
+)
+
+// Valid indicates whether the value is a known member of the JsonContentBlockType enum.
+func (e JsonContentBlockType) Valid() bool {
+	switch e {
+	case Json:
 		return true
 	default:
 		return false
@@ -1146,13 +1023,13 @@ func (e PutRunnerHeartbeatRequestState) Valid() bool {
 
 // Defines values for ReasoningContentBlockType.
 const (
-	ReasoningContentBlockTypeReasoning ReasoningContentBlockType = "reasoning"
+	Reasoning ReasoningContentBlockType = "reasoning"
 )
 
 // Valid indicates whether the value is a known member of the ReasoningContentBlockType enum.
 func (e ReasoningContentBlockType) Valid() bool {
 	switch e {
-	case ReasoningContentBlockTypeReasoning:
+	case Reasoning:
 		return true
 	default:
 		return false
@@ -1225,6 +1102,156 @@ func (e RunnerState) Valid() bool {
 	}
 }
 
+// Defines values for RunnerChannelMessage0Type.
+const (
+	RunnerChannelAccepted RunnerChannelMessage0Type = "runner.channel.accepted"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage0Type enum.
+func (e RunnerChannelMessage0Type) Valid() bool {
+	switch e {
+	case RunnerChannelAccepted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage1Type.
+const (
+	WorkAssigned RunnerChannelMessage1Type = "work.assigned"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage1Type enum.
+func (e RunnerChannelMessage1Type) Valid() bool {
+	switch e {
+	case WorkAssigned:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage2Type.
+const (
+	SessionCommand RunnerChannelMessage2Type = "session.command"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage2Type enum.
+func (e RunnerChannelMessage2Type) Valid() bool {
+	switch e {
+	case SessionCommand:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage3Type.
+const (
+	SandboxRequest RunnerChannelMessage3Type = "sandbox.request"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage3Type enum.
+func (e RunnerChannelMessage3Type) Valid() bool {
+	switch e {
+	case SandboxRequest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage4Type.
+const (
+	SandboxResponse RunnerChannelMessage4Type = "sandbox.response"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage4Type enum.
+func (e RunnerChannelMessage4Type) Valid() bool {
+	switch e {
+	case SandboxResponse:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage5Type.
+const (
+	SessionBackfillRequest RunnerChannelMessage5Type = "session.backfill_request"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage5Type enum.
+func (e RunnerChannelMessage5Type) Valid() bool {
+	switch e {
+	case SessionBackfillRequest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage6Type.
+const (
+	SessionBackfillResponse RunnerChannelMessage6Type = "session.backfill_response"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage6Type enum.
+func (e RunnerChannelMessage6Type) Valid() bool {
+	switch e {
+	case SessionBackfillResponse:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage7Type.
+const (
+	RunnerEvent RunnerChannelMessage7Type = "runner.event"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage7Type enum.
+func (e RunnerChannelMessage7Type) Valid() bool {
+	switch e {
+	case RunnerEvent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage8Type.
+const (
+	RunnerEventAccepted RunnerChannelMessage8Type = "runner.event.accepted"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage8Type enum.
+func (e RunnerChannelMessage8Type) Valid() bool {
+	switch e {
+	case RunnerEventAccepted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMessage9Type.
+const (
+	SessionChannelError RunnerChannelMessage9Type = "session.channel.error"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMessage9Type enum.
+func (e RunnerChannelMessage9Type) Valid() bool {
+	switch e {
+	case SessionChannelError:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunnerChannelMetadataUpgrade.
 const (
 	Websocket RunnerChannelMetadataUpgrade = "websocket"
@@ -1288,6 +1315,27 @@ func (e RunnerRuntimeInventoryState) Valid() bool {
 	case RunnerRuntimeInventoryStateUnauthorized:
 		return true
 	case RunnerRuntimeInventoryStateUnhealthy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerSandboxRequestType.
+const (
+	SandboxExecute          RunnerSandboxRequestType = "sandbox.execute"
+	SandboxReadMemoryStores RunnerSandboxRequestType = "sandbox.readMemoryStores"
+	SandboxStop             RunnerSandboxRequestType = "sandbox.stop"
+)
+
+// Valid indicates whether the value is a known member of the RunnerSandboxRequestType enum.
+func (e RunnerSandboxRequestType) Valid() bool {
+	switch e {
+	case SandboxExecute:
+		return true
+	case SandboxReadMemoryStores:
+		return true
+	case SandboxStop:
 		return true
 	default:
 		return false
@@ -1384,33 +1432,6 @@ func (e RuntimeName) Valid() bool {
 	case RuntimeNameCodex:
 		return true
 	case RuntimeNameCopilot:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RuntimeOutputPayloadStream.
-const (
-	RuntimeOutputPayloadStreamBridge    RuntimeOutputPayloadStream = "bridge"
-	RuntimeOutputPayloadStreamReasoning RuntimeOutputPayloadStream = "reasoning"
-	RuntimeOutputPayloadStreamRuntime   RuntimeOutputPayloadStream = "runtime"
-	RuntimeOutputPayloadStreamStderr    RuntimeOutputPayloadStream = "stderr"
-	RuntimeOutputPayloadStreamStdout    RuntimeOutputPayloadStream = "stdout"
-)
-
-// Valid indicates whether the value is a known member of the RuntimeOutputPayloadStream enum.
-func (e RuntimeOutputPayloadStream) Valid() bool {
-	switch e {
-	case RuntimeOutputPayloadStreamBridge:
-		return true
-	case RuntimeOutputPayloadStreamReasoning:
-		return true
-	case RuntimeOutputPayloadStreamRuntime:
-		return true
-	case RuntimeOutputPayloadStreamStderr:
-		return true
-	case RuntimeOutputPayloadStreamStdout:
 		return true
 	default:
 		return false
@@ -1764,13 +1785,13 @@ func (e ToolCallContentBlockType) Valid() bool {
 
 // Defines values for ToolResultContentBlockType.
 const (
-	ToolResult ToolResultContentBlockType = "tool_result"
+	ToolResultContentBlockTypeToolResult ToolResultContentBlockType = "tool_result"
 )
 
 // Valid indicates whether the value is a known member of the ToolResultContentBlockType enum.
 func (e ToolResultContentBlockType) Valid() bool {
 	switch e {
-	case ToolResult:
+	case ToolResultContentBlockTypeToolResult:
 		return true
 	default:
 		return false
@@ -1837,21 +1858,6 @@ const (
 func (e TriggerSource1Type) Valid() bool {
 	switch e {
 	case TriggerSource1TypeHttp:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for UnknownContentBlockType.
-const (
-	UnknownContentBlockTypeUnknown UnknownContentBlockType = "unknown"
-)
-
-// Valid indicates whether the value is a known member of the UnknownContentBlockType enum.
-func (e UnknownContentBlockType) Valid() bool {
-	switch e {
-	case UnknownContentBlockTypeUnknown:
 		return true
 	default:
 		return false
@@ -2439,24 +2445,15 @@ func (e ListSessionEventsParamsOrder) Valid() bool {
 
 // Defines values for ListSessionEventsParamsType.
 const (
-	ListSessionEventsParamsTypeAgentCompleted      ListSessionEventsParamsType = "agent.completed"
-	ListSessionEventsParamsTypeAgentStarted        ListSessionEventsParamsType = "agent.started"
 	ListSessionEventsParamsTypeMessageCompleted    ListSessionEventsParamsType = "message.completed"
 	ListSessionEventsParamsTypeMessageStarted      ListSessionEventsParamsType = "message.started"
 	ListSessionEventsParamsTypeMessageUpdated      ListSessionEventsParamsType = "message.updated"
 	ListSessionEventsParamsTypePermissionDenied    ListSessionEventsParamsType = "permission.denied"
 	ListSessionEventsParamsTypePermissionRequested ListSessionEventsParamsType = "permission.requested"
 	ListSessionEventsParamsTypePermissionResolved  ListSessionEventsParamsType = "permission.resolved"
-	ListSessionEventsParamsTypeRunnerStatus        ListSessionEventsParamsType = "runner.status"
+	ListSessionEventsParamsTypeRuntimeCompleted    ListSessionEventsParamsType = "runtime.completed"
 	ListSessionEventsParamsTypeRuntimeError        ListSessionEventsParamsType = "runtime.error"
-	ListSessionEventsParamsTypeRuntimeOutput       ListSessionEventsParamsType = "runtime.output"
-	ListSessionEventsParamsTypeRuntimeStatus       ListSessionEventsParamsType = "runtime.status"
-	ListSessionEventsParamsTypeSessionCheckpointed ListSessionEventsParamsType = "session.checkpointed"
-	ListSessionEventsParamsTypeSessionResumed      ListSessionEventsParamsType = "session.resumed"
-	ListSessionEventsParamsTypeSessionStopped      ListSessionEventsParamsType = "session.stopped"
-	ListSessionEventsParamsTypeToolCallCompleted   ListSessionEventsParamsType = "tool_call.completed"
-	ListSessionEventsParamsTypeToolCallStarted     ListSessionEventsParamsType = "tool_call.started"
-	ListSessionEventsParamsTypeToolCallUpdated     ListSessionEventsParamsType = "tool_call.updated"
+	ListSessionEventsParamsTypeRuntimeStarted      ListSessionEventsParamsType = "runtime.started"
 	ListSessionEventsParamsTypeTurnCompleted       ListSessionEventsParamsType = "turn.completed"
 	ListSessionEventsParamsTypeTurnStarted         ListSessionEventsParamsType = "turn.started"
 	ListSessionEventsParamsTypeUsageRecorded       ListSessionEventsParamsType = "usage.recorded"
@@ -2465,10 +2462,6 @@ const (
 // Valid indicates whether the value is a known member of the ListSessionEventsParamsType enum.
 func (e ListSessionEventsParamsType) Valid() bool {
 	switch e {
-	case ListSessionEventsParamsTypeAgentCompleted:
-		return true
-	case ListSessionEventsParamsTypeAgentStarted:
-		return true
 	case ListSessionEventsParamsTypeMessageCompleted:
 		return true
 	case ListSessionEventsParamsTypeMessageStarted:
@@ -2481,25 +2474,11 @@ func (e ListSessionEventsParamsType) Valid() bool {
 		return true
 	case ListSessionEventsParamsTypePermissionResolved:
 		return true
-	case ListSessionEventsParamsTypeRunnerStatus:
+	case ListSessionEventsParamsTypeRuntimeCompleted:
 		return true
 	case ListSessionEventsParamsTypeRuntimeError:
 		return true
-	case ListSessionEventsParamsTypeRuntimeOutput:
-		return true
-	case ListSessionEventsParamsTypeRuntimeStatus:
-		return true
-	case ListSessionEventsParamsTypeSessionCheckpointed:
-		return true
-	case ListSessionEventsParamsTypeSessionResumed:
-		return true
-	case ListSessionEventsParamsTypeSessionStopped:
-		return true
-	case ListSessionEventsParamsTypeToolCallCompleted:
-		return true
-	case ListSessionEventsParamsTypeToolCallStarted:
-		return true
-	case ListSessionEventsParamsTypeToolCallUpdated:
+	case ListSessionEventsParamsTypeRuntimeStarted:
 		return true
 	case ListSessionEventsParamsTypeTurnCompleted:
 		return true
@@ -2592,16 +2571,16 @@ func (e ReadUsageSummaryParamsGroupBy) Valid() bool {
 
 // Defines values for ListVaultsParamsArchived.
 const (
-	ListVaultsParamsArchivedFalse ListVaultsParamsArchived = "false"
-	ListVaultsParamsArchivedTrue  ListVaultsParamsArchived = "true"
+	False ListVaultsParamsArchived = "false"
+	True  ListVaultsParamsArchived = "true"
 )
 
 // Valid indicates whether the value is a known member of the ListVaultsParamsArchived enum.
 func (e ListVaultsParamsArchived) Valid() bool {
 	switch e {
-	case ListVaultsParamsArchivedFalse:
+	case False:
 		return true
-	case ListVaultsParamsArchivedTrue:
+	case True:
 		return true
 	default:
 		return false
@@ -2753,9 +2732,8 @@ type AmaEvent struct {
 
 // AmaEvent0 defines model for .
 type AmaEvent0 struct {
-	Metadata *EventMetadata   `json:"metadata,omitempty"`
-	Payload  LifecyclePayload `json:"payload"`
-	Type     AmaEvent0Type    `json:"type"`
+	Payload RuntimeLifecyclePayload `json:"payload"`
+	Type    AmaEvent0Type           `json:"type"`
 }
 
 // AmaEvent0Type defines model for AmaEvent.0.Type.
@@ -2763,9 +2741,8 @@ type AmaEvent0Type string
 
 // AmaEvent1 defines model for .
 type AmaEvent1 struct {
-	Metadata *EventMetadata   `json:"metadata,omitempty"`
-	Payload  LifecyclePayload `json:"payload"`
-	Type     AmaEvent1Type    `json:"type"`
+	Payload RuntimeLifecyclePayload `json:"payload"`
+	Type    AmaEvent1Type           `json:"type"`
 }
 
 // AmaEvent1Type defines model for AmaEvent.1.Type.
@@ -2773,9 +2750,8 @@ type AmaEvent1Type string
 
 // AmaEvent2 defines model for .
 type AmaEvent2 struct {
-	Metadata *EventMetadata `json:"metadata,omitempty"`
-	Payload  TurnPayload    `json:"payload"`
-	Type     AmaEvent2Type  `json:"type"`
+	Payload TurnPayload   `json:"payload"`
+	Type    AmaEvent2Type `json:"type"`
 }
 
 // AmaEvent2Type defines model for AmaEvent.2.Type.
@@ -2783,9 +2759,8 @@ type AmaEvent2Type string
 
 // AmaEvent3 defines model for .
 type AmaEvent3 struct {
-	Metadata *EventMetadata `json:"metadata,omitempty"`
-	Payload  TurnPayload    `json:"payload"`
-	Type     AmaEvent3Type  `json:"type"`
+	Payload TurnPayload   `json:"payload"`
+	Type    AmaEvent3Type `json:"type"`
 }
 
 // AmaEvent3Type defines model for AmaEvent.3.Type.
@@ -2793,9 +2768,8 @@ type AmaEvent3Type string
 
 // AmaEvent4 defines model for .
 type AmaEvent4 struct {
-	Metadata *EventMetadata     `json:"metadata,omitempty"`
-	Payload  SessionStopPayload `json:"payload"`
-	Type     AmaEvent4Type      `json:"type"`
+	Payload MessageEventPayload `json:"payload"`
+	Type    AmaEvent4Type       `json:"type"`
 }
 
 // AmaEvent4Type defines model for AmaEvent.4.Type.
@@ -2803,9 +2777,8 @@ type AmaEvent4Type string
 
 // AmaEvent5 defines model for .
 type AmaEvent5 struct {
-	Metadata *EventMetadata           `json:"metadata,omitempty"`
-	Payload  SessionCheckpointPayload `json:"payload"`
-	Type     AmaEvent5Type            `json:"type"`
+	Payload MessageEventPayload `json:"payload"`
+	Type    AmaEvent5Type       `json:"type"`
 }
 
 // AmaEvent5Type defines model for AmaEvent.5.Type.
@@ -2813,9 +2786,8 @@ type AmaEvent5Type string
 
 // AmaEvent6 defines model for .
 type AmaEvent6 struct {
-	Metadata *EventMetadata       `json:"metadata,omitempty"`
-	Payload  SessionResumePayload `json:"payload"`
-	Type     AmaEvent6Type        `json:"type"`
+	Payload MessageEventPayload `json:"payload"`
+	Type    AmaEvent6Type       `json:"type"`
 }
 
 // AmaEvent6Type defines model for AmaEvent.6.Type.
@@ -2823,9 +2795,8 @@ type AmaEvent6Type string
 
 // AmaEvent7 defines model for .
 type AmaEvent7 struct {
-	Metadata *EventMetadata      `json:"metadata,omitempty"`
-	Payload  MessageEventPayload `json:"payload"`
-	Type     AmaEvent7Type       `json:"type"`
+	Payload UsageRecordedPayload `json:"payload"`
+	Type    AmaEvent7Type        `json:"type"`
 }
 
 // AmaEvent7Type defines model for AmaEvent.7.Type.
@@ -2833,9 +2804,8 @@ type AmaEvent7Type string
 
 // AmaEvent8 defines model for .
 type AmaEvent8 struct {
-	Metadata *EventMetadata      `json:"metadata,omitempty"`
-	Payload  MessageEventPayload `json:"payload"`
-	Type     AmaEvent8Type       `json:"type"`
+	Payload PermissionRequestPayload `json:"payload"`
+	Type    AmaEvent8Type            `json:"type"`
 }
 
 // AmaEvent8Type defines model for AmaEvent.8.Type.
@@ -2843,9 +2813,8 @@ type AmaEvent8Type string
 
 // AmaEvent9 defines model for .
 type AmaEvent9 struct {
-	Metadata *EventMetadata      `json:"metadata,omitempty"`
-	Payload  MessageEventPayload `json:"payload"`
-	Type     AmaEvent9Type       `json:"type"`
+	Payload PermissionResolvedPayload `json:"payload"`
+	Type    AmaEvent9Type             `json:"type"`
 }
 
 // AmaEvent9Type defines model for AmaEvent.9.Type.
@@ -2853,9 +2822,8 @@ type AmaEvent9Type string
 
 // AmaEvent10 defines model for .
 type AmaEvent10 struct {
-	Metadata *EventMetadata     `json:"metadata,omitempty"`
-	Payload  ToolStartedPayload `json:"payload"`
-	Type     AmaEvent10Type     `json:"type"`
+	Payload PermissionDeniedPayload `json:"payload"`
+	Type    AmaEvent10Type          `json:"type"`
 }
 
 // AmaEvent10Type defines model for AmaEvent.10.Type.
@@ -2863,103 +2831,12 @@ type AmaEvent10Type string
 
 // AmaEvent11 defines model for .
 type AmaEvent11 struct {
-	Metadata *EventMetadata     `json:"metadata,omitempty"`
-	Payload  ToolUpdatedPayload `json:"payload"`
-	Type     AmaEvent11Type     `json:"type"`
+	Payload EventError     `json:"payload"`
+	Type    AmaEvent11Type `json:"type"`
 }
 
 // AmaEvent11Type defines model for AmaEvent.11.Type.
 type AmaEvent11Type string
-
-// AmaEvent12 defines model for .
-type AmaEvent12 struct {
-	Metadata *EventMetadata       `json:"metadata,omitempty"`
-	Payload  ToolCompletedPayload `json:"payload"`
-	Type     AmaEvent12Type       `json:"type"`
-}
-
-// AmaEvent12Type defines model for AmaEvent.12.Type.
-type AmaEvent12Type string
-
-// AmaEvent13 defines model for .
-type AmaEvent13 struct {
-	Metadata *EventMetadata       `json:"metadata,omitempty"`
-	Payload  UsageRecordedPayload `json:"payload"`
-	Type     AmaEvent13Type       `json:"type"`
-}
-
-// AmaEvent13Type defines model for AmaEvent.13.Type.
-type AmaEvent13Type string
-
-// AmaEvent14 defines model for .
-type AmaEvent14 struct {
-	Metadata *EventMetadata           `json:"metadata,omitempty"`
-	Payload  PermissionRequestPayload `json:"payload"`
-	Type     AmaEvent14Type           `json:"type"`
-}
-
-// AmaEvent14Type defines model for AmaEvent.14.Type.
-type AmaEvent14Type string
-
-// AmaEvent15 defines model for .
-type AmaEvent15 struct {
-	Metadata *EventMetadata            `json:"metadata,omitempty"`
-	Payload  PermissionResolvedPayload `json:"payload"`
-	Type     AmaEvent15Type            `json:"type"`
-}
-
-// AmaEvent15Type defines model for AmaEvent.15.Type.
-type AmaEvent15Type string
-
-// AmaEvent16 defines model for .
-type AmaEvent16 struct {
-	Metadata *EventMetadata          `json:"metadata,omitempty"`
-	Payload  PermissionDeniedPayload `json:"payload"`
-	Type     AmaEvent16Type          `json:"type"`
-}
-
-// AmaEvent16Type defines model for AmaEvent.16.Type.
-type AmaEvent16Type string
-
-// AmaEvent17 defines model for .
-type AmaEvent17 struct {
-	Metadata *EventMetadata `json:"metadata,omitempty"`
-	Payload  EventError     `json:"payload"`
-	Type     AmaEvent17Type `json:"type"`
-}
-
-// AmaEvent17Type defines model for AmaEvent.17.Type.
-type AmaEvent17Type string
-
-// AmaEvent18 defines model for .
-type AmaEvent18 struct {
-	Metadata *EventMetadata `json:"metadata,omitempty"`
-	Payload  StatusPayload  `json:"payload"`
-	Type     AmaEvent18Type `json:"type"`
-}
-
-// AmaEvent18Type defines model for AmaEvent.18.Type.
-type AmaEvent18Type string
-
-// AmaEvent19 defines model for .
-type AmaEvent19 struct {
-	Metadata *EventMetadata       `json:"metadata,omitempty"`
-	Payload  RuntimeOutputPayload `json:"payload"`
-	Type     AmaEvent19Type       `json:"type"`
-}
-
-// AmaEvent19Type defines model for AmaEvent.19.Type.
-type AmaEvent19Type string
-
-// AmaEvent20 defines model for .
-type AmaEvent20 struct {
-	Metadata *EventMetadata `json:"metadata,omitempty"`
-	Payload  StatusPayload  `json:"payload"`
-	Type     AmaEvent20Type `json:"type"`
-}
-
-// AmaEvent20Type defines model for AmaEvent.20.Type.
-type AmaEvent20Type string
 
 // AuditRecord defines model for AuditRecord.
 type AuditRecord struct {
@@ -3454,33 +3331,29 @@ type EventError struct {
 	Code              *string     `json:"code,omitempty"`
 	Details           interface{} `json:"details,omitempty"`
 	Message           string      `json:"message"`
-	Model             *string     `json:"model,omitempty"`
-	Provider          *string     `json:"provider,omitempty"`
 	RetryAfterSeconds *float32    `json:"retryAfterSeconds,omitempty"`
 	Retryable         *bool       `json:"retryable,omitempty"`
 }
 
 // EventMessage defines model for EventMessage.
 type EventMessage struct {
-	Content    []MessageContentBlock `json:"content"`
-	Id         *string               `json:"id,omitempty"`
-	Role       EventMessageRole      `json:"role"`
-	StopReason *string               `json:"stopReason,omitempty"`
-	Timestamp  *float32              `json:"timestamp,omitempty"`
+	Content           []MessageContentBlock `json:"content"`
+	Id                string                `json:"id"`
+	ParentMessageId   *string               `json:"parentMessageId,omitempty"`
+	ParentToolCallId  *string               `json:"parentToolCallId,omitempty"`
+	ProviderMessageId *string               `json:"providerMessageId,omitempty"`
+	Role              EventMessageRole      `json:"role"`
+	StopReason        *string               `json:"stopReason,omitempty"`
 }
 
 // EventMessageRole defines model for EventMessage.Role.
 type EventMessageRole string
-
-// EventMetadata defines model for EventMetadata.
-type EventMetadata map[string]interface{}
 
 // EventRecord defines model for EventRecord.
 type EventRecord struct {
 	CreatedAt time.Time `json:"createdAt"`
 	Event     AmaEvent  `json:"event"`
 	Id        string    `json:"id"`
-	ProjectId string    `json:"projectId"`
 	Sequence  int       `json:"sequence"`
 	SessionId string    `json:"sessionId"`
 }
@@ -3564,6 +3437,15 @@ type ImageContentBlock struct {
 // ImageContentBlockType defines model for ImageContentBlock.Type.
 type ImageContentBlockType string
 
+// JsonContentBlock defines model for JsonContentBlock.
+type JsonContentBlock struct {
+	Type  JsonContentBlockType `json:"type"`
+	Value interface{}          `json:"value,omitempty"`
+}
+
+// JsonContentBlockType defines model for JsonContentBlock.Type.
+type JsonContentBlockType string
+
 // Lease defines model for Lease.
 type Lease struct {
 	CreatedAt   time.Time  `json:"createdAt"`
@@ -3585,9 +3467,6 @@ type LeaseListResponse struct {
 	Data       []Lease        `json:"data"`
 	Pagination ListPagination `json:"pagination"`
 }
-
-// LifecyclePayload defines model for LifecyclePayload.
-type LifecyclePayload map[string]interface{}
 
 // ListPagination defines model for ListPagination.
 type ListPagination struct {
@@ -3886,17 +3765,117 @@ type RunnerState string
 
 // RunnerChannelMessage defines model for RunnerChannelMessage.
 type RunnerChannelMessage struct {
-	Command    *RunnerSessionCommand `json:"command,omitempty"`
-	EventId    *string               `json:"eventId,omitempty"`
-	LeaseId    *string               `json:"leaseId,omitempty"`
-	Message    *string               `json:"message,omitempty"`
-	Request    *RunnerSandboxRequest `json:"request,omitempty"`
-	RequestId  *string               `json:"requestId,omitempty"`
-	RunnerId   *string               `json:"runnerId,omitempty"`
-	SessionId  *string               `json:"sessionId,omitempty"`
-	Type       string                `json:"type"`
-	WorkItemId *string               `json:"workItemId,omitempty"`
+	union json.RawMessage
 }
+
+// RunnerChannelMessage0 defines model for .
+type RunnerChannelMessage0 struct {
+	EnvironmentId *string                   `json:"environmentId,omitempty"`
+	RunnerId      *string                   `json:"runnerId,omitempty"`
+	Type          RunnerChannelMessage0Type `json:"type"`
+}
+
+// RunnerChannelMessage0Type defines model for RunnerChannelMessage.0.Type.
+type RunnerChannelMessage0Type string
+
+// RunnerChannelMessage1 defines model for .
+type RunnerChannelMessage1 struct {
+	Lease    RunnerOpaqueJsonObject    `json:"lease"`
+	RunnerId *string                   `json:"runnerId,omitempty"`
+	Type     RunnerChannelMessage1Type `json:"type"`
+	WorkItem RunnerOpaqueJsonObject    `json:"workItem"`
+}
+
+// RunnerChannelMessage1Type defines model for RunnerChannelMessage.1.Type.
+type RunnerChannelMessage1Type string
+
+// RunnerChannelMessage2 defines model for .
+type RunnerChannelMessage2 struct {
+	Command   RunnerSessionCommand      `json:"command"`
+	RunnerId  *string                   `json:"runnerId,omitempty"`
+	SessionId string                    `json:"sessionId"`
+	Type      RunnerChannelMessage2Type `json:"type"`
+}
+
+// RunnerChannelMessage2Type defines model for RunnerChannelMessage.2.Type.
+type RunnerChannelMessage2Type string
+
+// RunnerChannelMessage3 defines model for .
+type RunnerChannelMessage3 struct {
+	Request   RunnerSandboxRequest      `json:"request"`
+	RequestId string                    `json:"requestId"`
+	RunnerId  *string                   `json:"runnerId,omitempty"`
+	SessionId string                    `json:"sessionId"`
+	Type      RunnerChannelMessage3Type `json:"type"`
+}
+
+// RunnerChannelMessage3Type defines model for RunnerChannelMessage.3.Type.
+type RunnerChannelMessage3Type string
+
+// RunnerChannelMessage4 defines model for .
+type RunnerChannelMessage4 struct {
+	Error     *string                   `json:"error,omitempty"`
+	Ok        bool                      `json:"ok"`
+	RequestId string                    `json:"requestId"`
+	Result    *RunnerOpaqueJsonObject   `json:"result,omitempty"`
+	RunnerId  *string                   `json:"runnerId,omitempty"`
+	SessionId string                    `json:"sessionId"`
+	Type      RunnerChannelMessage4Type `json:"type"`
+}
+
+// RunnerChannelMessage4Type defines model for RunnerChannelMessage.4.Type.
+type RunnerChannelMessage4Type string
+
+// RunnerChannelMessage5 defines model for .
+type RunnerChannelMessage5 struct {
+	EventId   string                    `json:"eventId"`
+	SessionId string                    `json:"sessionId"`
+	Type      RunnerChannelMessage5Type `json:"type"`
+}
+
+// RunnerChannelMessage5Type defines model for RunnerChannelMessage.5.Type.
+type RunnerChannelMessage5Type string
+
+// RunnerChannelMessage6 defines model for .
+type RunnerChannelMessage6 struct {
+	Error     *string                   `json:"error,omitempty"`
+	EventId   string                    `json:"eventId"`
+	Events    []RunnerOpaqueJsonObject  `json:"events"`
+	SessionId string                    `json:"sessionId"`
+	Type      RunnerChannelMessage6Type `json:"type"`
+}
+
+// RunnerChannelMessage6Type defines model for RunnerChannelMessage.6.Type.
+type RunnerChannelMessage6Type string
+
+// RunnerChannelMessage7 defines model for .
+type RunnerChannelMessage7 struct {
+	Record    RunnerOpaqueJsonObject    `json:"record"`
+	SessionId string                    `json:"sessionId"`
+	Type      RunnerChannelMessage7Type `json:"type"`
+}
+
+// RunnerChannelMessage7Type defines model for RunnerChannelMessage.7.Type.
+type RunnerChannelMessage7Type string
+
+// RunnerChannelMessage8 defines model for .
+type RunnerChannelMessage8 struct {
+	EventId string                    `json:"eventId"`
+	Type    RunnerChannelMessage8Type `json:"type"`
+}
+
+// RunnerChannelMessage8Type defines model for RunnerChannelMessage.8.Type.
+type RunnerChannelMessage8Type string
+
+// RunnerChannelMessage9 defines model for .
+type RunnerChannelMessage9 struct {
+	EventId *string                   `json:"eventId,omitempty"`
+	Message string                    `json:"message"`
+	Type    RunnerChannelMessage9Type `json:"type"`
+}
+
+// RunnerChannelMessage9Type defines model for RunnerChannelMessage.9.Type.
+type RunnerChannelMessage9Type string
 
 // RunnerChannelMetadata defines model for RunnerChannelMetadata.
 type RunnerChannelMetadata struct {
@@ -3937,6 +3916,9 @@ type RunnerMemorySnapshot struct {
 	Path    string `json:"path"`
 }
 
+// RunnerOpaqueJsonObject defines model for RunnerOpaqueJsonObject.
+type RunnerOpaqueJsonObject map[string]*interface{}
+
 // RunnerRuntimeInventory defines model for RunnerRuntimeInventory.
 type RunnerRuntimeInventory struct {
 	Detail  *string                     `json:"detail,omitempty"`
@@ -3956,40 +3938,34 @@ type RunnerRuntimeRequest struct {
 // RunnerRuntimeToolCall defines model for RunnerRuntimeToolCall.
 type RunnerRuntimeToolCall struct {
 	Arguments *map[string]interface{} `json:"arguments,omitempty"`
-	Id        *string                 `json:"id,omitempty"`
+	Id        string                  `json:"id"`
 	Input     *map[string]interface{} `json:"input,omitempty"`
-	Name      *string                 `json:"name,omitempty"`
+	Name      string                  `json:"name"`
 }
 
 // RunnerSandboxRequest defines model for RunnerSandboxRequest.
 type RunnerSandboxRequest struct {
-	Input        *map[string]interface{} `json:"input,omitempty"`
-	ToolCallId   *string                 `json:"toolCallId,omitempty"`
-	ToolName     *string                 `json:"toolName,omitempty"`
-	Type         string                  `json:"type"`
-	VolumeMounts *[]RunnerVolumeMount    `json:"volumeMounts,omitempty"`
-	Volumes      *[]RunnerVolume         `json:"volumes,omitempty"`
+	Input        *map[string]interface{}  `json:"input,omitempty"`
+	ToolCallId   *string                  `json:"toolCallId,omitempty"`
+	ToolName     *string                  `json:"toolName,omitempty"`
+	Type         RunnerSandboxRequestType `json:"type"`
+	VolumeMounts *[]RunnerVolumeMount     `json:"volumeMounts,omitempty"`
+	Volumes      *[]RunnerVolume          `json:"volumes,omitempty"`
 }
 
+// RunnerSandboxRequestType defines model for RunnerSandboxRequest.Type.
+type RunnerSandboxRequestType string
+
 // RunnerSessionCommand defines model for RunnerSessionCommand.
-type RunnerSessionCommand struct {
-	Allowed      *bool                 `json:"allowed,omitempty"`
-	Body         *RunnerRuntimeRequest `json:"body,omitempty"`
-	Id           *string               `json:"id,omitempty"`
-	Message      *string               `json:"message,omitempty"`
-	Path         *string               `json:"path,omitempty"`
-	PermissionId *string               `json:"permissionId,omitempty"`
-	Reason       *string               `json:"reason,omitempty"`
-	Type         string                `json:"type"`
-}
+type RunnerSessionCommand map[string]*interface{}
 
 // RunnerToolCall defines model for RunnerToolCall.
 type RunnerToolCall struct {
 	Approved  *bool                   `json:"approved,omitempty"`
 	Arguments *map[string]interface{} `json:"arguments,omitempty"`
-	Id        *string                 `json:"id,omitempty"`
+	Id        string                  `json:"id"`
 	Input     *map[string]interface{} `json:"input,omitempty"`
-	Name      *string                 `json:"name,omitempty"`
+	Name      string                  `json:"name"`
 }
 
 // RunnerVolume defines model for RunnerVolume.
@@ -4077,17 +4053,13 @@ type RunnerWorkspaceMount struct {
 // RunnerWorkspaceMountType defines model for RunnerWorkspaceMount.Type.
 type RunnerWorkspaceMountType string
 
-// RuntimeName defines model for RuntimeName.
-type RuntimeName string
-
-// RuntimeOutputPayload defines model for RuntimeOutputPayload.
-type RuntimeOutputPayload struct {
-	Content interface{}                `json:"content,omitempty"`
-	Stream  RuntimeOutputPayloadStream `json:"stream"`
+// RuntimeLifecyclePayload defines model for RuntimeLifecyclePayload.
+type RuntimeLifecyclePayload struct {
+	Reason *string `json:"reason,omitempty"`
 }
 
-// RuntimeOutputPayloadStream defines model for RuntimeOutputPayload.Stream.
-type RuntimeOutputPayloadStream string
+// RuntimeName defines model for RuntimeName.
+type RuntimeName string
 
 // RuntimeUsage defines model for RuntimeUsage.
 type RuntimeUsage struct {
@@ -4189,12 +4161,6 @@ type SessionBindings struct {
 	Runtime RuntimeName `json:"runtime"`
 }
 
-// SessionCheckpointPayload defines model for SessionCheckpointPayload.
-type SessionCheckpointPayload struct {
-	ResumeTokenRef *string `json:"resumeTokenRef,omitempty"`
-	Scope          *string `json:"scope,omitempty"`
-}
-
 // SessionCondition defines model for SessionCondition.
 type SessionCondition struct {
 	LastTransitionAt time.Time              `json:"lastTransitionAt"`
@@ -4292,12 +4258,6 @@ type SessionPlacement struct {
 	HostingMode EnvironmentHostingMode `json:"hostingMode"`
 	Model       *string                `json:"model"`
 	Provider    string                 `json:"provider"`
-}
-
-// SessionResumePayload defines model for SessionResumePayload.
-type SessionResumePayload struct {
-	FromCheckpoint *string `json:"fromCheckpoint,omitempty"`
-	Reason         *string `json:"reason,omitempty"`
 }
 
 // SessionSocketAbortMessage defines model for SessionSocketAbortMessage.
@@ -4426,11 +4386,6 @@ type SessionStatus struct {
 // SessionStatusPhase defines model for SessionStatus.Phase.
 type SessionStatusPhase string
 
-// SessionStopPayload defines model for SessionStopPayload.
-type SessionStopPayload struct {
-	Reason *string `json:"reason,omitempty"`
-}
-
 // SessionSubagent defines model for SessionSubagent.
 type SessionSubagent struct {
 	AllowedTools  []string `json:"allowedTools"`
@@ -4447,11 +4402,6 @@ type SessionUpdateMetadata struct {
 	Annotations *map[string]string `json:"annotations,omitempty"`
 	Labels      *map[string]string `json:"labels,omitempty"`
 	Name        *string            `json:"name,omitempty"`
-}
-
-// StatusPayload defines model for StatusPayload.
-type StatusPayload struct {
-	Data map[string]interface{} `json:"data"`
 }
 
 // TextContentBlock defines model for TextContentBlock.
@@ -4472,19 +4422,17 @@ type ToolCallContentBlock struct {
 // ToolCallContentBlockType defines model for ToolCallContentBlock.Type.
 type ToolCallContentBlockType string
 
-// ToolCompletedPayload defines model for ToolCompletedPayload.
-type ToolCompletedPayload struct {
-	DurationMs *float32      `json:"durationMs,omitempty"`
-	Error      *EventError   `json:"error,omitempty"`
-	IsError    *bool         `json:"isError,omitempty"`
-	Result     interface{}   `json:"result,omitempty"`
-	ToolCall   EventToolCall `json:"toolCall"`
+// ToolResult defines model for ToolResult.
+type ToolResult struct {
+	Content           []ToolResultValueContentBlock `json:"content"`
+	ExitCode          *float32                      `json:"exitCode,omitempty"`
+	StructuredContent interface{}                   `json:"structuredContent,omitempty"`
 }
 
 // ToolResultContentBlock defines model for ToolResultContentBlock.
 type ToolResultContentBlock struct {
-	IsError    *bool                      `json:"isError,omitempty"`
-	Result     interface{}                `json:"result,omitempty"`
+	Error      *EventError                `json:"error,omitempty"`
+	Result     ToolResult                 `json:"result"`
 	ToolCallId string                     `json:"toolCallId"`
 	Type       ToolResultContentBlockType `json:"type"`
 }
@@ -4492,15 +4440,9 @@ type ToolResultContentBlock struct {
 // ToolResultContentBlockType defines model for ToolResultContentBlock.Type.
 type ToolResultContentBlockType string
 
-// ToolStartedPayload defines model for ToolStartedPayload.
-type ToolStartedPayload struct {
-	ToolCall EventToolCall `json:"toolCall"`
-}
-
-// ToolUpdatedPayload defines model for ToolUpdatedPayload.
-type ToolUpdatedPayload struct {
-	PartialResult interface{}   `json:"partialResult,omitempty"`
-	ToolCall      EventToolCall `json:"toolCall"`
+// ToolResultValueContentBlock defines model for ToolResultValueContentBlock.
+type ToolResultValueContentBlock struct {
+	union json.RawMessage
 }
 
 // Trigger defines model for Trigger.
@@ -4633,21 +4575,10 @@ type TriggerUpdateMetadata struct {
 
 // TurnPayload defines model for TurnPayload.
 type TurnPayload struct {
-	Marker      *string         `json:"marker,omitempty"`
-	Message     *EventMessage   `json:"message,omitempty"`
-	Stage       *string         `json:"stage,omitempty"`
-	Status      *string         `json:"status,omitempty"`
-	ToolResults *[]*interface{} `json:"toolResults,omitempty"`
+	Message *EventMessage `json:"message,omitempty"`
+	Reason  *string       `json:"reason,omitempty"`
+	Status  *string       `json:"status,omitempty"`
 }
-
-// UnknownContentBlock defines model for UnknownContentBlock.
-type UnknownContentBlock struct {
-	Type  UnknownContentBlockType `json:"type"`
-	Value interface{}             `json:"value,omitempty"`
-}
-
-// UnknownContentBlockType defines model for UnknownContentBlock.Type.
-type UnknownContentBlockType string
 
 // UpdateAgentRequest defines model for UpdateAgentRequest.
 type UpdateAgentRequest struct {
@@ -4871,7 +4802,6 @@ type UsageRecordedPayload struct {
 	Model             *string                 `json:"model,omitempty"`
 	OutputTokens      *float32                `json:"outputTokens,omitempty"`
 	PromptTokens      *float32                `json:"promptTokens,omitempty"`
-	Provider          *string                 `json:"provider,omitempty"`
 	ReasoningTokens   *float32                `json:"reasoningTokens,omitempty"`
 	ToolTokens        *float32                `json:"toolTokens,omitempty"`
 	TotalTokens       *float32                `json:"totalTokens,omitempty"`
@@ -5810,240 +5740,6 @@ func (t *AmaEvent) MergeAmaEvent11(v AmaEvent11) error {
 	return err
 }
 
-// AsAmaEvent12 returns the union data inside the AmaEvent as a AmaEvent12
-func (t AmaEvent) AsAmaEvent12() (AmaEvent12, error) {
-	var body AmaEvent12
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent12 overwrites any union data inside the AmaEvent as the provided AmaEvent12
-func (t *AmaEvent) FromAmaEvent12(v AmaEvent12) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent12 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent12
-func (t *AmaEvent) MergeAmaEvent12(v AmaEvent12) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent13 returns the union data inside the AmaEvent as a AmaEvent13
-func (t AmaEvent) AsAmaEvent13() (AmaEvent13, error) {
-	var body AmaEvent13
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent13 overwrites any union data inside the AmaEvent as the provided AmaEvent13
-func (t *AmaEvent) FromAmaEvent13(v AmaEvent13) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent13 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent13
-func (t *AmaEvent) MergeAmaEvent13(v AmaEvent13) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent14 returns the union data inside the AmaEvent as a AmaEvent14
-func (t AmaEvent) AsAmaEvent14() (AmaEvent14, error) {
-	var body AmaEvent14
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent14 overwrites any union data inside the AmaEvent as the provided AmaEvent14
-func (t *AmaEvent) FromAmaEvent14(v AmaEvent14) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent14 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent14
-func (t *AmaEvent) MergeAmaEvent14(v AmaEvent14) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent15 returns the union data inside the AmaEvent as a AmaEvent15
-func (t AmaEvent) AsAmaEvent15() (AmaEvent15, error) {
-	var body AmaEvent15
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent15 overwrites any union data inside the AmaEvent as the provided AmaEvent15
-func (t *AmaEvent) FromAmaEvent15(v AmaEvent15) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent15 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent15
-func (t *AmaEvent) MergeAmaEvent15(v AmaEvent15) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent16 returns the union data inside the AmaEvent as a AmaEvent16
-func (t AmaEvent) AsAmaEvent16() (AmaEvent16, error) {
-	var body AmaEvent16
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent16 overwrites any union data inside the AmaEvent as the provided AmaEvent16
-func (t *AmaEvent) FromAmaEvent16(v AmaEvent16) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent16 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent16
-func (t *AmaEvent) MergeAmaEvent16(v AmaEvent16) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent17 returns the union data inside the AmaEvent as a AmaEvent17
-func (t AmaEvent) AsAmaEvent17() (AmaEvent17, error) {
-	var body AmaEvent17
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent17 overwrites any union data inside the AmaEvent as the provided AmaEvent17
-func (t *AmaEvent) FromAmaEvent17(v AmaEvent17) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent17 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent17
-func (t *AmaEvent) MergeAmaEvent17(v AmaEvent17) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent18 returns the union data inside the AmaEvent as a AmaEvent18
-func (t AmaEvent) AsAmaEvent18() (AmaEvent18, error) {
-	var body AmaEvent18
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent18 overwrites any union data inside the AmaEvent as the provided AmaEvent18
-func (t *AmaEvent) FromAmaEvent18(v AmaEvent18) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent18 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent18
-func (t *AmaEvent) MergeAmaEvent18(v AmaEvent18) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent19 returns the union data inside the AmaEvent as a AmaEvent19
-func (t AmaEvent) AsAmaEvent19() (AmaEvent19, error) {
-	var body AmaEvent19
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent19 overwrites any union data inside the AmaEvent as the provided AmaEvent19
-func (t *AmaEvent) FromAmaEvent19(v AmaEvent19) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent19 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent19
-func (t *AmaEvent) MergeAmaEvent19(v AmaEvent19) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsAmaEvent20 returns the union data inside the AmaEvent as a AmaEvent20
-func (t AmaEvent) AsAmaEvent20() (AmaEvent20, error) {
-	var body AmaEvent20
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromAmaEvent20 overwrites any union data inside the AmaEvent as the provided AmaEvent20
-func (t *AmaEvent) FromAmaEvent20(v AmaEvent20) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeAmaEvent20 performs a merge with any union data inside the AmaEvent, using the provided AmaEvent20
-func (t *AmaEvent) MergeAmaEvent20(v AmaEvent20) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
 func (t AmaEvent) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
@@ -6284,34 +5980,6 @@ func (t *MessageContentBlock) MergeFileContentBlock(v FileContentBlock) error {
 	return err
 }
 
-// AsUnknownContentBlock returns the union data inside the MessageContentBlock as a UnknownContentBlock
-func (t MessageContentBlock) AsUnknownContentBlock() (UnknownContentBlock, error) {
-	var body UnknownContentBlock
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromUnknownContentBlock overwrites any union data inside the MessageContentBlock as the provided UnknownContentBlock
-func (t *MessageContentBlock) FromUnknownContentBlock(v UnknownContentBlock) error {
-	v.Type = "unknown"
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeUnknownContentBlock performs a merge with any union data inside the MessageContentBlock, using the provided UnknownContentBlock
-func (t *MessageContentBlock) MergeUnknownContentBlock(v UnknownContentBlock) error {
-	v.Type = "unknown"
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
 func (t MessageContentBlock) Discriminator() (string, error) {
 	var discriminator struct {
 		Discriminator string `json:"type"`
@@ -6338,8 +6006,6 @@ func (t MessageContentBlock) ValueByDiscriminator() (interface{}, error) {
 		return t.AsToolCallContentBlock()
 	case "tool_result":
 		return t.AsToolResultContentBlock()
-	case "unknown":
-		return t.AsUnknownContentBlock()
 	default:
 		return nil, errors.New("unknown discriminator value: " + discriminator)
 	}
@@ -6351,6 +6017,276 @@ func (t MessageContentBlock) MarshalJSON() ([]byte, error) {
 }
 
 func (t *MessageContentBlock) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsRunnerChannelMessage0 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage0
+func (t RunnerChannelMessage) AsRunnerChannelMessage0() (RunnerChannelMessage0, error) {
+	var body RunnerChannelMessage0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage0 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage0
+func (t *RunnerChannelMessage) FromRunnerChannelMessage0(v RunnerChannelMessage0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage0 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage0
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage0(v RunnerChannelMessage0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage1 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage1
+func (t RunnerChannelMessage) AsRunnerChannelMessage1() (RunnerChannelMessage1, error) {
+	var body RunnerChannelMessage1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage1 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage1
+func (t *RunnerChannelMessage) FromRunnerChannelMessage1(v RunnerChannelMessage1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage1 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage1
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage1(v RunnerChannelMessage1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage2 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage2
+func (t RunnerChannelMessage) AsRunnerChannelMessage2() (RunnerChannelMessage2, error) {
+	var body RunnerChannelMessage2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage2 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage2
+func (t *RunnerChannelMessage) FromRunnerChannelMessage2(v RunnerChannelMessage2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage2 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage2
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage2(v RunnerChannelMessage2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage3 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage3
+func (t RunnerChannelMessage) AsRunnerChannelMessage3() (RunnerChannelMessage3, error) {
+	var body RunnerChannelMessage3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage3 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage3
+func (t *RunnerChannelMessage) FromRunnerChannelMessage3(v RunnerChannelMessage3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage3 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage3
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage3(v RunnerChannelMessage3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage4 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage4
+func (t RunnerChannelMessage) AsRunnerChannelMessage4() (RunnerChannelMessage4, error) {
+	var body RunnerChannelMessage4
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage4 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage4
+func (t *RunnerChannelMessage) FromRunnerChannelMessage4(v RunnerChannelMessage4) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage4 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage4
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage4(v RunnerChannelMessage4) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage5 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage5
+func (t RunnerChannelMessage) AsRunnerChannelMessage5() (RunnerChannelMessage5, error) {
+	var body RunnerChannelMessage5
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage5 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage5
+func (t *RunnerChannelMessage) FromRunnerChannelMessage5(v RunnerChannelMessage5) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage5 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage5
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage5(v RunnerChannelMessage5) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage6 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage6
+func (t RunnerChannelMessage) AsRunnerChannelMessage6() (RunnerChannelMessage6, error) {
+	var body RunnerChannelMessage6
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage6 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage6
+func (t *RunnerChannelMessage) FromRunnerChannelMessage6(v RunnerChannelMessage6) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage6 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage6
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage6(v RunnerChannelMessage6) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage7 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage7
+func (t RunnerChannelMessage) AsRunnerChannelMessage7() (RunnerChannelMessage7, error) {
+	var body RunnerChannelMessage7
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage7 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage7
+func (t *RunnerChannelMessage) FromRunnerChannelMessage7(v RunnerChannelMessage7) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage7 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage7
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage7(v RunnerChannelMessage7) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage8 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage8
+func (t RunnerChannelMessage) AsRunnerChannelMessage8() (RunnerChannelMessage8, error) {
+	var body RunnerChannelMessage8
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage8 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage8
+func (t *RunnerChannelMessage) FromRunnerChannelMessage8(v RunnerChannelMessage8) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage8 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage8
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage8(v RunnerChannelMessage8) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRunnerChannelMessage9 returns the union data inside the RunnerChannelMessage as a RunnerChannelMessage9
+func (t RunnerChannelMessage) AsRunnerChannelMessage9() (RunnerChannelMessage9, error) {
+	var body RunnerChannelMessage9
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRunnerChannelMessage9 overwrites any union data inside the RunnerChannelMessage as the provided RunnerChannelMessage9
+func (t *RunnerChannelMessage) FromRunnerChannelMessage9(v RunnerChannelMessage9) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRunnerChannelMessage9 performs a merge with any union data inside the RunnerChannelMessage, using the provided RunnerChannelMessage9
+func (t *RunnerChannelMessage) MergeRunnerChannelMessage9(v RunnerChannelMessage9) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t RunnerChannelMessage) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *RunnerChannelMessage) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -6679,6 +6615,155 @@ func (t SessionSocketServerMessage) MarshalJSON() ([]byte, error) {
 }
 
 func (t *SessionSocketServerMessage) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsTextContentBlock returns the union data inside the ToolResultValueContentBlock as a TextContentBlock
+func (t ToolResultValueContentBlock) AsTextContentBlock() (TextContentBlock, error) {
+	var body TextContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTextContentBlock overwrites any union data inside the ToolResultValueContentBlock as the provided TextContentBlock
+func (t *ToolResultValueContentBlock) FromTextContentBlock(v TextContentBlock) error {
+	v.Type = "text"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTextContentBlock performs a merge with any union data inside the ToolResultValueContentBlock, using the provided TextContentBlock
+func (t *ToolResultValueContentBlock) MergeTextContentBlock(v TextContentBlock) error {
+	v.Type = "text"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsImageContentBlock returns the union data inside the ToolResultValueContentBlock as a ImageContentBlock
+func (t ToolResultValueContentBlock) AsImageContentBlock() (ImageContentBlock, error) {
+	var body ImageContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromImageContentBlock overwrites any union data inside the ToolResultValueContentBlock as the provided ImageContentBlock
+func (t *ToolResultValueContentBlock) FromImageContentBlock(v ImageContentBlock) error {
+	v.Type = "image"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeImageContentBlock performs a merge with any union data inside the ToolResultValueContentBlock, using the provided ImageContentBlock
+func (t *ToolResultValueContentBlock) MergeImageContentBlock(v ImageContentBlock) error {
+	v.Type = "image"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFileContentBlock returns the union data inside the ToolResultValueContentBlock as a FileContentBlock
+func (t ToolResultValueContentBlock) AsFileContentBlock() (FileContentBlock, error) {
+	var body FileContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFileContentBlock overwrites any union data inside the ToolResultValueContentBlock as the provided FileContentBlock
+func (t *ToolResultValueContentBlock) FromFileContentBlock(v FileContentBlock) error {
+	v.Type = "file"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFileContentBlock performs a merge with any union data inside the ToolResultValueContentBlock, using the provided FileContentBlock
+func (t *ToolResultValueContentBlock) MergeFileContentBlock(v FileContentBlock) error {
+	v.Type = "file"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsJsonContentBlock returns the union data inside the ToolResultValueContentBlock as a JsonContentBlock
+func (t ToolResultValueContentBlock) AsJsonContentBlock() (JsonContentBlock, error) {
+	var body JsonContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromJsonContentBlock overwrites any union data inside the ToolResultValueContentBlock as the provided JsonContentBlock
+func (t *ToolResultValueContentBlock) FromJsonContentBlock(v JsonContentBlock) error {
+	v.Type = "json"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeJsonContentBlock performs a merge with any union data inside the ToolResultValueContentBlock, using the provided JsonContentBlock
+func (t *ToolResultValueContentBlock) MergeJsonContentBlock(v JsonContentBlock) error {
+	v.Type = "json"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ToolResultValueContentBlock) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"type"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t ToolResultValueContentBlock) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "file":
+		return t.AsFileContentBlock()
+	case "image":
+		return t.AsImageContentBlock()
+	case "json":
+		return t.AsJsonContentBlock()
+	case "text":
+		return t.AsTextContentBlock()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t ToolResultValueContentBlock) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ToolResultValueContentBlock) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

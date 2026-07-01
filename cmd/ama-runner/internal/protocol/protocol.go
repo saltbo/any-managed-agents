@@ -60,9 +60,21 @@ type WorkspaceManifest struct {
 	Mounts []WorkspaceMount `json:"mounts"`
 }
 
-type RunnerChannelMessage = ama.RunnerChannelMessage
+type RunnerChannelMessage struct {
+	Command    json.RawMessage           `json:"command,omitempty"`
+	EventId    *string                   `json:"eventId,omitempty"`
+	LeaseId    *string                   `json:"leaseId,omitempty"`
+	Message    *string                   `json:"message,omitempty"`
+	Request    *ama.RunnerSandboxRequest `json:"request,omitempty"`
+	RequestId  *string                   `json:"requestId,omitempty"`
+	RunnerId   *string                   `json:"runnerId,omitempty"`
+	SessionId  *string                   `json:"sessionId,omitempty"`
+	Type       string                    `json:"type"`
+	WorkItemId *string                   `json:"workItemId,omitempty"`
+}
+
 type RunnerSandboxRequest = ama.RunnerSandboxRequest
-type RunnerSessionCommand = ama.RunnerSessionCommand
+type RunnerSessionCommand = json.RawMessage
 type RunnerRuntimeRequest = ama.RunnerRuntimeRequest
 type RunnerRuntimeToolCall = ama.RunnerRuntimeToolCall
 
@@ -178,8 +190,8 @@ func toolCallFromSDK(toolCall *ama.RunnerToolCall) *ToolCall {
 		return nil
 	}
 	return &ToolCall{
-		ID:        stringValue(toolCall.Id),
-		Name:      stringValue(toolCall.Name),
+		ID:        toolCall.Id,
+		Name:      toolCall.Name,
 		Arguments: jsonMap(toolCall.Arguments),
 		Input:     jsonMap(toolCall.Input),
 		Approved:  boolValue(toolCall.Approved),
@@ -291,10 +303,10 @@ func MessageSessionID(message RunnerChannelMessage) string {
 }
 
 func MessageCommand(message RunnerChannelMessage) RunnerSessionCommand {
-	if message.Command == nil {
-		return RunnerSessionCommand{}
+	if len(message.Command) == 0 {
+		return nil
 	}
-	return *message.Command
+	return append(json.RawMessage(nil), message.Command...)
 }
 
 func MessageSandboxRequest(message RunnerChannelMessage) RunnerSandboxRequest {
@@ -304,24 +316,8 @@ func MessageSandboxRequest(message RunnerChannelMessage) RunnerSandboxRequest {
 	return *message.Request
 }
 
-func CommandMessage(command RunnerSessionCommand) string {
-	return stringValue(command.Message)
-}
-
-func CommandReason(command RunnerSessionCommand) string {
-	return stringValue(command.Reason)
-}
-
-func CommandPermissionID(command RunnerSessionCommand) string {
-	return stringValue(command.PermissionId)
-}
-
-func CommandAllowed(command RunnerSessionCommand) bool {
-	return boolValue(command.Allowed)
-}
-
 func SandboxRequestType(request RunnerSandboxRequest) string {
-	return request.Type
+	return string(request.Type)
 }
 
 func SandboxRequestToolCallID(request RunnerSandboxRequest) string {

@@ -225,12 +225,12 @@ describe('[CF] per-runner relay end-to-end', () => {
         sessionId: session.id,
         record: {
           id: 'event_aaa',
+          sessionId: session.id,
           sequence: 1,
           createdAt: '2026-06-20T00:00:00.000Z',
           event: {
             type: 'message.completed',
-            payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
-            metadata: {},
+            payload: { message: { id: 'msg_live', role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
           },
         },
       }),
@@ -285,12 +285,18 @@ describe('[CF] per-runner relay end-to-end', () => {
         events: [
           {
             id: 'event_history',
+            sessionId: session.id,
             sequence: 1,
             createdAt: '2026-06-20T00:00:00.000Z',
             event: {
               type: 'message.completed',
-              payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'history from runner' }] } },
-              metadata: {},
+              payload: {
+                message: {
+                  id: 'msg_history',
+                  role: 'assistant',
+                  content: [{ type: 'text', text: 'history from runner' }],
+                },
+              },
             },
           },
         ],
@@ -384,12 +390,14 @@ describe('[CF] per-runner relay end-to-end', () => {
         sessionId: session.id,
         record: {
           id: 'event_bbb',
+          sessionId: session.id,
           sequence: 1,
           createdAt: '2026-06-20T00:00:00.000Z',
           event: {
             type: 'message.completed',
-            payload: { message: { role: 'assistant', content: [{ type: 'text', text: 'reconnect works' }] } },
-            metadata: {},
+            payload: {
+              message: { id: 'msg_reconnect', role: 'assistant', content: [{ type: 'text', text: 'reconnect works' }] },
+            },
           },
         },
       }),

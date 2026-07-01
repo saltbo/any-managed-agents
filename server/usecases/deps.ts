@@ -1,3 +1,4 @@
+import type { AmaEvent } from '@shared/session-events'
 import type {
   AgentRepo,
   AmaTurnExecutor,
@@ -41,7 +42,7 @@ type CreateApprovalGate = (values: {
   auth: AuthScope
   sessionId: string
   sessionMetadata: Record<string, unknown>
-  appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>
+  appendEvent: (event: AmaEvent) => Promise<string>
 }) => ToolApprovalGate
 
 // Aggregates every port a usecase may reach for. Constructed once per request

@@ -16,26 +16,8 @@ from .ama_event_type_10 import AmaEventType10
 from .ama_event_type_10_type import AmaEventType10Type
 from .ama_event_type_11 import AmaEventType11
 from .ama_event_type_11_type import AmaEventType11Type
-from .ama_event_type_12 import AmaEventType12
-from .ama_event_type_12_type import AmaEventType12Type
-from .ama_event_type_13 import AmaEventType13
-from .ama_event_type_13_type import AmaEventType13Type
-from .ama_event_type_14 import AmaEventType14
-from .ama_event_type_14_type import AmaEventType14Type
-from .ama_event_type_15 import AmaEventType15
-from .ama_event_type_15_type import AmaEventType15Type
-from .ama_event_type_16 import AmaEventType16
-from .ama_event_type_16_type import AmaEventType16Type
-from .ama_event_type_17 import AmaEventType17
-from .ama_event_type_17_type import AmaEventType17Type
-from .ama_event_type_18 import AmaEventType18
-from .ama_event_type_18_type import AmaEventType18Type
-from .ama_event_type_19 import AmaEventType19
-from .ama_event_type_19_type import AmaEventType19Type
 from .ama_event_type_1_type import AmaEventType1Type
 from .ama_event_type_2 import AmaEventType2
-from .ama_event_type_20 import AmaEventType20
-from .ama_event_type_20_type import AmaEventType20Type
 from .ama_event_type_2_type import AmaEventType2Type
 from .ama_event_type_3 import AmaEventType3
 from .ama_event_type_3_type import AmaEventType3Type
@@ -163,7 +145,6 @@ from .error_response_error_details import ErrorResponseErrorDetails
 from .event_error import EventError
 from .event_message import EventMessage
 from .event_message_role import EventMessageRole
-from .event_metadata import EventMetadata
 from .event_record import EventRecord
 from .event_record_list_response import EventRecordListResponse
 from .event_tool_call import EventToolCall
@@ -178,10 +159,11 @@ from .health_response_runtime import HealthResponseRuntime
 from .health_response_status import HealthResponseStatus
 from .image_content_block import ImageContentBlock
 from .image_content_block_type import ImageContentBlockType
+from .json_content_block import JsonContentBlock
+from .json_content_block_type import JsonContentBlockType
 from .lease import Lease
 from .lease_list_response import LeaseListResponse
 from .lease_state import LeaseState
-from .lifecycle_payload import LifecyclePayload
 from .list_agents_archived import ListAgentsArchived
 from .list_connectors_availability import ListConnectorsAvailability
 from .list_environments_archived import ListEnvironmentsArchived
@@ -252,7 +234,26 @@ from .resource_phase import ResourcePhase
 from .resource_update_metadata import ResourceUpdateMetadata
 from .runner import Runner
 from .runner_auth_mode import RunnerAuthMode
-from .runner_channel_message import RunnerChannelMessage
+from .runner_channel_message_type_0 import RunnerChannelMessageType0
+from .runner_channel_message_type_0_type import RunnerChannelMessageType0Type
+from .runner_channel_message_type_1 import RunnerChannelMessageType1
+from .runner_channel_message_type_1_type import RunnerChannelMessageType1Type
+from .runner_channel_message_type_2 import RunnerChannelMessageType2
+from .runner_channel_message_type_2_type import RunnerChannelMessageType2Type
+from .runner_channel_message_type_3 import RunnerChannelMessageType3
+from .runner_channel_message_type_3_type import RunnerChannelMessageType3Type
+from .runner_channel_message_type_4 import RunnerChannelMessageType4
+from .runner_channel_message_type_4_type import RunnerChannelMessageType4Type
+from .runner_channel_message_type_5 import RunnerChannelMessageType5
+from .runner_channel_message_type_5_type import RunnerChannelMessageType5Type
+from .runner_channel_message_type_6 import RunnerChannelMessageType6
+from .runner_channel_message_type_6_type import RunnerChannelMessageType6Type
+from .runner_channel_message_type_7 import RunnerChannelMessageType7
+from .runner_channel_message_type_7_type import RunnerChannelMessageType7Type
+from .runner_channel_message_type_8 import RunnerChannelMessageType8
+from .runner_channel_message_type_8_type import RunnerChannelMessageType8Type
+from .runner_channel_message_type_9 import RunnerChannelMessageType9
+from .runner_channel_message_type_9_type import RunnerChannelMessageType9Type
 from .runner_channel_metadata import RunnerChannelMetadata
 from .runner_channel_metadata_upgrade import RunnerChannelMetadataUpgrade
 from .runner_git_credential import RunnerGitCredential
@@ -261,6 +262,7 @@ from .runner_heartbeat_state import RunnerHeartbeatState
 from .runner_list_response import RunnerListResponse
 from .runner_memory_snapshot import RunnerMemorySnapshot
 from .runner_metadata import RunnerMetadata
+from .runner_opaque_json_object import RunnerOpaqueJsonObject
 from .runner_runtime_inventory import RunnerRuntimeInventory
 from .runner_runtime_inventory_state import RunnerRuntimeInventoryState
 from .runner_runtime_request import RunnerRuntimeRequest
@@ -269,6 +271,7 @@ from .runner_runtime_tool_call_arguments import RunnerRuntimeToolCallArguments
 from .runner_runtime_tool_call_input import RunnerRuntimeToolCallInput
 from .runner_sandbox_request import RunnerSandboxRequest
 from .runner_sandbox_request_input import RunnerSandboxRequestInput
+from .runner_sandbox_request_type import RunnerSandboxRequestType
 from .runner_session_command import RunnerSessionCommand
 from .runner_state import RunnerState
 from .runner_tool_call import RunnerToolCall
@@ -289,9 +292,8 @@ from .runner_workspace_manifest import RunnerWorkspaceManifest
 from .runner_workspace_manifest_root import RunnerWorkspaceManifestRoot
 from .runner_workspace_mount import RunnerWorkspaceMount
 from .runner_workspace_mount_type import RunnerWorkspaceMountType
+from .runtime_lifecycle_payload import RuntimeLifecyclePayload
 from .runtime_name import RuntimeName
-from .runtime_output_payload import RuntimeOutputPayload
-from .runtime_output_payload_stream import RuntimeOutputPayloadStream
 from .runtime_usage import RuntimeUsage
 from .runtime_usage_window import RuntimeUsageWindow
 from .secret_volume import SecretVolume
@@ -309,7 +311,6 @@ from .session_approval_state import SessionApprovalState
 from .session_bindings import SessionBindings
 from .session_bindings_agent import SessionBindingsAgent
 from .session_bindings_environment import SessionBindingsEnvironment
-from .session_checkpoint_payload import SessionCheckpointPayload
 from .session_condition import SessionCondition
 from .session_condition_status import SessionConditionStatus
 from .session_condition_type import SessionConditionType
@@ -329,7 +330,6 @@ from .session_metadata import SessionMetadata
 from .session_metadata_annotations import SessionMetadataAnnotations
 from .session_metadata_labels import SessionMetadataLabels
 from .session_placement_type_0 import SessionPlacementType0
-from .session_resume_payload import SessionResumePayload
 from .session_socket_abort_message import SessionSocketAbortMessage
 from .session_socket_abort_message_type import SessionSocketAbortMessageType
 from .session_socket_ack_message import SessionSocketAckMessage
@@ -351,22 +351,17 @@ from .session_socket_steer_message_type import SessionSocketSteerMessageType
 from .session_spec import SessionSpec
 from .session_status import SessionStatus
 from .session_status_phase import SessionStatusPhase
-from .session_stop_payload import SessionStopPayload
 from .session_subagent import SessionSubagent
 from .session_update_metadata import SessionUpdateMetadata
 from .session_update_metadata_annotations import SessionUpdateMetadataAnnotations
 from .session_update_metadata_labels import SessionUpdateMetadataLabels
-from .status_payload import StatusPayload
-from .status_payload_data import StatusPayloadData
 from .text_content_block import TextContentBlock
 from .text_content_block_type import TextContentBlockType
 from .tool_call_content_block import ToolCallContentBlock
 from .tool_call_content_block_type import ToolCallContentBlockType
-from .tool_completed_payload import ToolCompletedPayload
+from .tool_result import ToolResult
 from .tool_result_content_block import ToolResultContentBlock
 from .tool_result_content_block_type import ToolResultContentBlockType
-from .tool_started_payload import ToolStartedPayload
-from .tool_updated_payload import ToolUpdatedPayload
 from .trigger import Trigger
 from .trigger_create_metadata import TriggerCreateMetadata
 from .trigger_list_response import TriggerListResponse
@@ -391,8 +386,6 @@ from .trigger_template_metadata_labels import TriggerTemplateMetadataLabels
 from .trigger_template_spec import TriggerTemplateSpec
 from .trigger_update_metadata import TriggerUpdateMetadata
 from .turn_payload import TurnPayload
-from .unknown_content_block import UnknownContentBlock
-from .unknown_content_block_type import UnknownContentBlockType
 from .update_agent_request import UpdateAgentRequest
 from .update_agent_request_spec import UpdateAgentRequestSpec
 from .update_budget_request import UpdateBudgetRequest
@@ -491,26 +484,8 @@ __all__ = (
     "AmaEventType10Type",
     "AmaEventType11",
     "AmaEventType11Type",
-    "AmaEventType12",
-    "AmaEventType12Type",
-    "AmaEventType13",
-    "AmaEventType13Type",
-    "AmaEventType14",
-    "AmaEventType14Type",
-    "AmaEventType15",
-    "AmaEventType15Type",
-    "AmaEventType16",
-    "AmaEventType16Type",
-    "AmaEventType17",
-    "AmaEventType17Type",
-    "AmaEventType18",
-    "AmaEventType18Type",
-    "AmaEventType19",
-    "AmaEventType19Type",
     "AmaEventType1Type",
     "AmaEventType2",
-    "AmaEventType20",
-    "AmaEventType20Type",
     "AmaEventType2Type",
     "AmaEventType3",
     "AmaEventType3Type",
@@ -638,7 +613,6 @@ __all__ = (
     "EventError",
     "EventMessage",
     "EventMessageRole",
-    "EventMetadata",
     "EventRecord",
     "EventRecordListResponse",
     "EventToolCall",
@@ -653,10 +627,11 @@ __all__ = (
     "HealthResponseStatus",
     "ImageContentBlock",
     "ImageContentBlockType",
+    "JsonContentBlock",
+    "JsonContentBlockType",
     "Lease",
     "LeaseListResponse",
     "LeaseState",
-    "LifecyclePayload",
     "ListAgentsArchived",
     "ListConnectorsAvailability",
     "ListEnvironmentsArchived",
@@ -727,7 +702,26 @@ __all__ = (
     "ResourceUpdateMetadata",
     "Runner",
     "RunnerAuthMode",
-    "RunnerChannelMessage",
+    "RunnerChannelMessageType0",
+    "RunnerChannelMessageType0Type",
+    "RunnerChannelMessageType1",
+    "RunnerChannelMessageType1Type",
+    "RunnerChannelMessageType2",
+    "RunnerChannelMessageType2Type",
+    "RunnerChannelMessageType3",
+    "RunnerChannelMessageType3Type",
+    "RunnerChannelMessageType4",
+    "RunnerChannelMessageType4Type",
+    "RunnerChannelMessageType5",
+    "RunnerChannelMessageType5Type",
+    "RunnerChannelMessageType6",
+    "RunnerChannelMessageType6Type",
+    "RunnerChannelMessageType7",
+    "RunnerChannelMessageType7Type",
+    "RunnerChannelMessageType8",
+    "RunnerChannelMessageType8Type",
+    "RunnerChannelMessageType9",
+    "RunnerChannelMessageType9Type",
     "RunnerChannelMetadata",
     "RunnerChannelMetadataUpgrade",
     "RunnerGitCredential",
@@ -736,6 +730,7 @@ __all__ = (
     "RunnerListResponse",
     "RunnerMemorySnapshot",
     "RunnerMetadata",
+    "RunnerOpaqueJsonObject",
     "RunnerRuntimeInventory",
     "RunnerRuntimeInventoryState",
     "RunnerRuntimeRequest",
@@ -744,6 +739,7 @@ __all__ = (
     "RunnerRuntimeToolCallInput",
     "RunnerSandboxRequest",
     "RunnerSandboxRequestInput",
+    "RunnerSandboxRequestType",
     "RunnerSessionCommand",
     "RunnerState",
     "RunnerToolCall",
@@ -764,9 +760,8 @@ __all__ = (
     "RunnerWorkspaceManifestRoot",
     "RunnerWorkspaceMount",
     "RunnerWorkspaceMountType",
+    "RuntimeLifecyclePayload",
     "RuntimeName",
-    "RuntimeOutputPayload",
-    "RuntimeOutputPayloadStream",
     "RuntimeUsage",
     "RuntimeUsageWindow",
     "SecretVolume",
@@ -784,7 +779,6 @@ __all__ = (
     "SessionBindings",
     "SessionBindingsAgent",
     "SessionBindingsEnvironment",
-    "SessionCheckpointPayload",
     "SessionCondition",
     "SessionConditionStatus",
     "SessionConditionType",
@@ -804,7 +798,6 @@ __all__ = (
     "SessionMetadataAnnotations",
     "SessionMetadataLabels",
     "SessionPlacementType0",
-    "SessionResumePayload",
     "SessionSocketAbortMessage",
     "SessionSocketAbortMessageType",
     "SessionSocketAckMessage",
@@ -826,22 +819,17 @@ __all__ = (
     "SessionSpec",
     "SessionStatus",
     "SessionStatusPhase",
-    "SessionStopPayload",
     "SessionSubagent",
     "SessionUpdateMetadata",
     "SessionUpdateMetadataAnnotations",
     "SessionUpdateMetadataLabels",
-    "StatusPayload",
-    "StatusPayloadData",
     "TextContentBlock",
     "TextContentBlockType",
     "ToolCallContentBlock",
     "ToolCallContentBlockType",
-    "ToolCompletedPayload",
+    "ToolResult",
     "ToolResultContentBlock",
     "ToolResultContentBlockType",
-    "ToolStartedPayload",
-    "ToolUpdatedPayload",
     "Trigger",
     "TriggerCreateMetadata",
     "TriggerListResponse",
@@ -866,8 +854,6 @@ __all__ = (
     "TriggerTemplateSpec",
     "TriggerUpdateMetadata",
     "TurnPayload",
-    "UnknownContentBlock",
-    "UnknownContentBlockType",
     "UpdateAgentRequest",
     "UpdateAgentRequestSpec",
     "UpdateBudgetRequest",

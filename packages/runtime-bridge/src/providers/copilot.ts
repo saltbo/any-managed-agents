@@ -1,7 +1,21 @@
 import { execSync } from 'node:child_process'
+import type { MessageContentBlock, ToolResult } from '@ama/runtime-contracts/session-events'
 import '@github/copilot/sdk'
 import { approveAll, CopilotClient } from '@github/copilot-sdk'
-import { reasoning, runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, turnEnd } from '../events/ama'
+import {
+  messageEvent,
+  messageStarted,
+  messageUpdated,
+  randomId,
+  reasoningBlock,
+  runtimeError,
+  runtimeEvent,
+  textBlock,
+  toolCallBlock,
+  toolResultMessage,
+  turnEnd,
+  usageEvent,
+} from '../events/ama'
 import {
   type AmaRuntimeEvent,
   agentSystemPrompt,
@@ -28,14 +42,12 @@ function readGhToken(home: string | undefined): string | null {
   }
 }
 
-type CopilotState = {
-  pendingTools: Map<string, { toolName: string; args: Record<string, unknown> }>
-}
-
 type CopilotEvent = {
   type: string
   data: {
     content?: string
+    deltaContent?: string
+    messageId?: string
     message?: unknown
     toolRequests?: Array<{ name: string; arguments: unknown; toolCallId: string }>
     toolCallId?: string
@@ -43,6 +55,10 @@ type CopilotEvent = {
     success?: boolean
     [key: string]: unknown
   }
+}
+
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 function normalizeTool(name: string, args: Record<string, unknown>) {
@@ -63,50 +79,123 @@ function normalizeTool(name: string, args: Record<string, unknown>) {
   }
 }
 
-function* mapCopilotEvent(event: CopilotEvent, state: CopilotState): Generator<AmaRuntimeEvent> {
-  switch (event.type) {
-    case 'assistant.turn.started':
-      yield runtimeEvent('turn.started')
-      return
-    case 'assistant.reasoning':
-      if (event.data.content) yield reasoning(event.data.content)
-      return
-    case 'assistant.message':
-      if (event.data.content)
-        yield runtimeEvent('message.completed', { message: textMessage('assistant', event.data.content) })
-      for (const request of event.data.toolRequests ?? []) {
-        const normalized = normalizeTool(request.name, objectValue(request.arguments))
-        state.pendingTools.set(request.toolCallId, normalized)
-        yield toolStart(request.toolCallId, normalized.toolName, normalized.args)
+class CopilotEventMapper {
+  private activeMessageId: string | null = null
+  private text = ''
+  private reasoning = ''
+
+  map(event: CopilotEvent): AmaRuntimeEvent[] {
+    switch (event.type) {
+      case 'assistant.turn.started':
+        return [runtimeEvent('turn.started')]
+      case 'assistant.message_delta':
+        return this.messageDelta(event, 'text')
+      case 'assistant.reasoning_delta':
+        return this.messageDelta(event, 'reasoning')
+      case 'assistant.reasoning':
+        if (event.data.content) {
+          const id = this.activeMessageId ?? event.data.messageId ?? randomId('msg')
+          const mapped = messageEvent({ id, role: 'assistant', content: [reasoningBlock(event.data.content)] })
+          this.clearActiveMessage(id)
+          return [mapped]
+        }
+        return []
+      case 'assistant.message': {
+        const id = this.activeMessageId ?? event.data.messageId ?? randomId('msg')
+        const content: MessageContentBlock[] = event.data.content ? [textBlock(event.data.content)] : []
+        for (const request of event.data.toolRequests ?? []) {
+          const normalized = normalizeTool(request.name, objectValue(request.arguments))
+          content.push(toolCallBlock({ id: request.toolCallId, name: normalized.toolName, input: normalized.args }))
+        }
+        const mapped = content.length > 0 ? [messageEvent({ id, role: 'assistant', content })] : []
+        this.clearActiveMessage(id)
+        return mapped
       }
-      return
-    case 'tool.execution_complete': {
-      const toolCallId = typeof event.data.toolCallId === 'string' ? event.data.toolCallId : 'tool'
-      const pending = state.pendingTools.get(toolCallId)
-      state.pendingTools.delete(toolCallId)
-      yield toolEnd(
-        toolCallId,
-        pending?.toolName ?? 'tool',
-        pending?.args ?? {},
-        copilotResultContent(event.data.result),
-        !event.data.success,
-      )
-      return
+      case 'tool.execution_complete': {
+        const toolCallId = typeof event.data.toolCallId === 'string' ? event.data.toolCallId : 'tool'
+        return [messageEvent(toolResultMessage(toolCallId, copilotToolResult(event.data.result), !event.data.success))]
+      }
+      case 'assistant.usage': {
+        const model = typeof event.data.model === 'string' && event.data.model ? event.data.model : null
+        if (!model) return []
+        const inputTokens = numberValue(event.data.inputTokens) ?? 0
+        const outputTokens = numberValue(event.data.outputTokens) ?? 0
+        const cachedInputTokens = numberValue(event.data.cacheReadTokens) ?? 0
+        const cacheCreationInputTokens = numberValue(event.data.cacheWriteTokens) ?? 0
+        const reasoningTokens = numberValue(event.data.reasoningTokens)
+        return [
+          usageEvent({
+            model,
+            inputTokens,
+            outputTokens,
+            cachedInputTokens,
+            cacheCreationInputTokens,
+            ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+            totalTokens:
+              inputTokens + outputTokens + cachedInputTokens + cacheCreationInputTokens + (reasoningTokens ?? 0),
+          }),
+        ]
+      }
+      case 'session.idle':
+        return [turnEnd()]
+      case 'session.error':
+        return [runtimeError(String(event.data.message ?? 'Copilot session error'), 'copilot_error', event.data)]
+      default:
+        return []
     }
-    case 'session.idle':
-      yield turnEnd()
-      return
-    case 'session.error':
-      yield runtimeError(String(event.data.message ?? 'Copilot session error'), 'copilot_error', event.data)
-      return
-    default:
-      yield runtimeEvent('runtime.status', { data: event as unknown as Record<string, unknown> })
+  }
+
+  private messageDelta(event: CopilotEvent, kind: 'text' | 'reasoning'): AmaRuntimeEvent[] {
+    const delta = event.data.deltaContent
+    if (!delta) return []
+    const id = this.activeMessageId ?? event.data.messageId ?? randomId('msg')
+    const events: AmaRuntimeEvent[] = []
+    if (!this.activeMessageId) {
+      this.activeMessageId = id
+      events.push(messageStarted({ id, role: 'assistant', content: [] }))
+    }
+    if (kind === 'reasoning') this.reasoning += delta
+    else this.text += delta
+    const content: MessageContentBlock[] = []
+    if (this.reasoning) content.push(reasoningBlock(this.reasoning))
+    if (this.text) content.push(textBlock(this.text))
+    events.push(messageUpdated({ id, role: 'assistant', content }))
+    return events
+  }
+
+  private clearActiveMessage(id: string) {
+    if (this.activeMessageId !== id) return
+    this.activeMessageId = null
+    this.text = ''
+    this.reasoning = ''
   }
 }
 
-function copilotResultContent(result: unknown) {
+function copilotToolResult(result: unknown): ToolResult {
   const object = objectValue(result)
-  return 'content' in object ? object.content : result
+  const content = 'content' in object ? object.content : result
+  if (typeof content === 'string') {
+    return { content: content ? [{ type: 'text', text: content }] : [] }
+  }
+  if (Array.isArray(content)) {
+    return {
+      content: content.map((value) => {
+        const block = objectValue(value)
+        if (block.type === 'text' && typeof block.text === 'string') {
+          return { type: 'text', text: block.text }
+        }
+        if (block.type === 'image' && typeof block.data === 'string') {
+          return {
+            type: 'image',
+            data: block.data,
+            ...(typeof block.mediaType === 'string' ? { mediaType: block.mediaType } : {}),
+          }
+        }
+        return { type: 'json', value }
+      }),
+    }
+  }
+  return { content: [{ type: 'json', value: content }] }
 }
 
 export const copilotProvider: RuntimeProvider = {
@@ -128,6 +217,7 @@ export const copilotProvider: RuntimeProvider = {
     await client.start()
     const sessionConfig = {
       ...(request.model ? { model: request.model } : {}),
+      streaming: true,
       workingDirectory: request.cwd,
       onPermissionRequest: approveAll,
       ...(systemPrompt ? { systemMessage: { content: systemPrompt } } : {}),
@@ -138,10 +228,10 @@ export const copilotProvider: RuntimeProvider = {
         : await client.createSession({ sessionId: request.sessionId, ...sessionConfig })
 
     const queue: AmaRuntimeEvent[] = []
+    const mapper = new CopilotEventMapper()
     let done = false
     let queueError: unknown
     let notify: (() => void) | null = null
-    const state: CopilotState = { pendingTools: new Map() }
     const finish = (err?: unknown) => {
       done = true
       queueError = err
@@ -149,7 +239,7 @@ export const copilotProvider: RuntimeProvider = {
     }
     const unsubscribe = session.on((event) => {
       try {
-        for (const mapped of mapCopilotEvent(event as CopilotEvent, state)) queue.push(mapped)
+        for (const mapped of mapper.map(event as CopilotEvent)) queue.push(mapped)
         if (event.type === 'session.idle') finish()
         if (event.type === 'session.error') finish()
         notify?.()

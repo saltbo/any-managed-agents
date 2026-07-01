@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/pkg/runtimebridge"
 )
@@ -23,12 +24,13 @@ type Request struct {
 	// OnResumeToken is invoked as soon as the runtime learns (or rotates) its
 	// resume token, so the runner can persist it before the run completes.
 	OnResumeToken func(resumeToken string)
-	// RegisterControlSender hands the runner a function that forwards standard
-	// bridge control frames (send/abort/permissionDecision) into the live runtime.
+	// RegisterControlSender hands the runner a function that forwards opaque
+	// bridge control messages into the live runtime. The runner injects only the
+	// active requestId and does not interpret command-specific fields.
 	RegisterControlSender func(send func(BridgeControlFrame) error)
 }
 
-type BridgeControlFrame = runtimebridge.RuntimeBridgeControlMessage
+type BridgeControlFrame = json.RawMessage
 type BridgeControlType = runtimebridge.RuntimeBridgeControlMessageType
 
 type EventWriter func(event JSON) error

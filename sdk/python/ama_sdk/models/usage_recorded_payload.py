@@ -26,7 +26,6 @@ T = TypeVar("T", bound="UsageRecordedPayload")
 class UsageRecordedPayload:
     """ 
         Attributes:
-            provider (str | Unset):
             model (str | Unset):
             prompt_tokens (float | Unset):
             completion_tokens (float | Unset):
@@ -40,7 +39,6 @@ class UsageRecordedPayload:
             details (UsageRecordedPayloadDetails | Unset):
      """
 
-    provider: str | Unset = UNSET
     model: str | Unset = UNSET
     prompt_tokens: float | Unset = UNSET
     completion_tokens: float | Unset = UNSET
@@ -59,8 +57,6 @@ class UsageRecordedPayload:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.usage_recorded_payload_details import UsageRecordedPayloadDetails
-        provider = self.provider
-
         model = self.model
 
         prompt_tokens = self.prompt_tokens
@@ -90,8 +86,6 @@ class UsageRecordedPayload:
 
         field_dict.update({
         })
-        if provider is not UNSET:
-            field_dict["provider"] = provider
         if model is not UNSET:
             field_dict["model"] = model
         if prompt_tokens is not UNSET:
@@ -123,8 +117,6 @@ class UsageRecordedPayload:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.usage_recorded_payload_details import UsageRecordedPayloadDetails
         d = dict(src_dict)
-        provider = d.pop("provider", UNSET)
-
         model = d.pop("model", UNSET)
 
         prompt_tokens = d.pop("promptTokens", UNSET)
@@ -156,7 +148,6 @@ class UsageRecordedPayload:
 
 
         usage_recorded_payload = cls(
-            provider=provider,
             model=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,

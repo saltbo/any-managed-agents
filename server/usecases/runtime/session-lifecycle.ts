@@ -28,7 +28,6 @@ import type {
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
-import { appendRuntimeEvent } from './events'
 
 type LifecycleDeps = {
   sessionOrchestration: SessionOrchestrationStore
@@ -122,12 +121,6 @@ async function stopSessionRow(
     requestId: requestIdFrom(requestId),
     sessionId: session.id,
     metadata: { reason, sandboxId: session.sandboxId, piRuntimeId: session.piRuntimeId },
-  })
-  await appendRuntimeEvent(deps, {
-    auth,
-    sessionId: session.id,
-    event: { type: 'session.stopped', reason },
-    metadata: { source: 'control-plane', sandboxId: session.sandboxId },
   })
   await archiveTerminalSession(deps, auth, session.id)
   const stopped = await store.findSession(auth.project.id, session.id)
@@ -240,12 +233,6 @@ async function stopSelfHostedSession(
     requestId: requestIdFrom(requestId),
     sessionId: session.id,
     metadata: { reason, hostingMode: 'self_hosted', cancelledWorkItems: activeWorkItems.length },
-  })
-  await appendRuntimeEvent(deps, {
-    auth,
-    sessionId: session.id,
-    event: { type: 'session.stopped', reason },
-    metadata: { source: 'control-plane', hostingMode: 'self_hosted' },
   })
   await archiveTerminalSession(deps, auth, session.id)
 

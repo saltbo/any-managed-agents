@@ -282,7 +282,6 @@ function exportableEvents(
       }
       return {
         id: event.id,
-        projectId: '',
         sessionId: '',
         sequence: persistedEvents.length + index + 1,
         event: { type: event.type, payload: event.payload as EventRecord['event']['payload'] },

@@ -37,7 +37,7 @@ import {
 } from '@server/domain/runtime/turn'
 import { now, RUNTIME_START_TIMEOUT_MS, stringify, withTimeout } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
-import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
+import { type AmaEvent, SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import type {
   AmaTurnExecutor,
   AuditPort,
@@ -66,7 +66,7 @@ type CreateApprovalGate = (values: {
   auth: AuthScope
   sessionId: string
   sessionMetadata: Record<string, unknown>
-  appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>
+  appendEvent: (event: AmaEvent) => Promise<string>
 }) => ToolApprovalGate
 
 export type CloudTurnDeps = {
@@ -261,7 +261,6 @@ export async function executeCloudSessionTurn(
         auth,
         sessionId: session.id,
         prompt: work.prompt,
-        metadata: { auditAction },
       })
     }
     callbacks = buildSessionTurnCallbacks(deps, {
@@ -276,16 +275,19 @@ export async function executeCloudSessionTurn(
           auth,
           sessionId: session.id,
           event: {
-            type: 'permission_denied',
-            category: blocked.decision.category,
-            ruleId: blocked.decision.rule,
-            resourceType: blocked.operation.resourceType,
-            resourceId: blocked.operation.resourceId,
-            decision: blocked.decision,
-            operation: blocked.operation.operation,
-            ...operationFields,
+            type: 'permission.denied',
+            payload: {
+              reason: blocked.decision.category,
+              resourceType: blocked.operation.resourceType,
+              resourceId: blocked.operation.resourceId,
+              operation: blocked.operation.operation,
+              details: {
+                ruleId: blocked.decision.rule,
+                decision: blocked.decision,
+                ...operationFields,
+              },
+            },
           },
-          metadata: { source: 'policy' },
         })
         await deps.audit.record(auth, {
           action: 'runtime_sandbox.operation',

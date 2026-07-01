@@ -15,12 +15,12 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="SessionStopPayload")
+T = TypeVar("T", bound="RuntimeLifecyclePayload")
 
 
 
 @_attrs_define
-class SessionStopPayload:
+class RuntimeLifecyclePayload:
     """ 
         Attributes:
             reason (str | Unset):
@@ -52,9 +52,9 @@ class SessionStopPayload:
         d = dict(src_dict)
         reason = d.pop("reason", UNSET)
 
-        session_stop_payload = cls(
+        runtime_lifecycle_payload = cls(
             reason=reason,
         )
 
-        return session_stop_payload
+        return runtime_lifecycle_payload
 
