@@ -45,6 +45,52 @@ func TestMaterializeSecretMountWritableAndRejectsUnsafePaths(t *testing.T) {
 	if _, err := materializeSecretMount(root, protocol.WorkspaceMount{MountPath: "/workspace/secrets", Files: []protocol.WorkspaceFile{{Path: "../TOKEN"}}}); err == nil {
 		t.Fatal("expected unsafe secret file path error")
 	}
+	if _, err := materializeSecretMount(root, protocol.WorkspaceMount{MountPath: ""}); err == nil {
+		t.Fatal("expected missing secret mount path error")
+	}
+	if _, err := materializeSecretMount(root, protocol.WorkspaceMount{MountPath: "/workspace"}); err == nil {
+		t.Fatal("expected workspace root secret mount path error")
+	}
+	if _, err := materializeSecretMount(root, protocol.WorkspaceMount{MountPath: "/workspace/../secrets"}); err == nil {
+		t.Fatal("expected escaping secret mount path error")
+	}
+}
+
+func TestMaterializeSecretMountReadOnly(t *testing.T) {
+	root := t.TempDir()
+	path, err := materializeSecretMount(root, protocol.WorkspaceMount{
+		MountPath: "/workspace/secrets",
+		ReadOnly:  true,
+		Files:     []protocol.WorkspaceFile{{Path: "nested/TOKEN", Content: "value"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize readonly secret: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = filepath.WalkDir(path, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return os.Chmod(path, 0o755)
+			}
+			return os.Chmod(path, 0o644)
+		})
+	})
+	info, err := os.Stat(filepath.Join(path, "nested", "TOKEN"))
+	if err != nil {
+		t.Fatalf("stat secret file: %v", err)
+	}
+	if info.Mode().Perm() != 0o400 {
+		t.Fatalf("secret file mode = %o, want 0400", info.Mode().Perm())
+	}
+	dirInfo, err := os.Stat(filepath.Join(path, "nested"))
+	if err != nil {
+		t.Fatalf("stat secret dir: %v", err)
+	}
+	if dirInfo.Mode().Perm() != 0o500 {
+		t.Fatalf("secret dir mode = %o, want 0500", dirInfo.Mode().Perm())
+	}
 }
 
 func TestMaterializeMemoryStoreRejectsInvalidRefsAndPaths(t *testing.T) {
@@ -63,6 +109,35 @@ func TestMaterializeMemoryStoreRejectsInvalidRefsAndPaths(t *testing.T) {
 		MountPath: "/outside",
 	}); err == nil {
 		t.Fatal("expected unsafe memory mount path error")
+	}
+}
+
+func TestMaterializeMemoryStoreReadOnlyAndResetPermissions(t *testing.T) {
+	root := t.TempDir()
+	path, err := materializeMemoryStore(root, protocol.WorkspaceMount{
+		MemoryRef: "ama://memories/store_1",
+		Access:    "read_only",
+		Files:     []protocol.WorkspaceFile{{Path: "notes/plan.md", Content: "ship"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize memory: %v", err)
+	}
+	fileInfo, err := os.Stat(filepath.Join(path, "notes", "plan.md"))
+	if err != nil {
+		t.Fatalf("stat memory file: %v", err)
+	}
+	if fileInfo.Mode().Perm() != 0o444 {
+		t.Fatalf("memory file mode = %o, want 0444", fileInfo.Mode().Perm())
+	}
+	if err := resetMemoryStorePermissions(path); err != nil {
+		t.Fatalf("reset memory permissions: %v", err)
+	}
+	fileInfo, err = os.Stat(filepath.Join(path, "notes", "plan.md"))
+	if err != nil {
+		t.Fatalf("stat reset memory file: %v", err)
+	}
+	if fileInfo.Mode().Perm() != 0o644 {
+		t.Fatalf("reset memory file mode = %o, want 0644", fileInfo.Mode().Perm())
 	}
 }
 
@@ -112,6 +187,15 @@ func TestDefaultMountPathHelpers(t *testing.T) {
 	}
 	if _, err := defaultMemoryStoreMountPath(protocol.WorkspaceMount{MemoryRef: "ama://memories/"}); err == nil {
 		t.Fatal("expected empty memory store id to fail")
+	}
+	for _, memoryRef := range []string{
+		"ama://vaults/store_1",
+		"ama://memories/store_1/nested",
+		"ama://memories/%2F",
+	} {
+		if _, err := memoryStoreIDFromRef(memoryRef); err == nil {
+			t.Fatalf("expected invalid memory ref %q to fail", memoryRef)
+		}
 	}
 }
 
@@ -215,6 +299,23 @@ func TestEnsureRepositoryCacheRejectsInvalidURL(t *testing.T) {
 	err := ensureRepositoryCache(context.Background(), filepath.Join(t.TempDir(), "cache"), protocol.WorkspaceMount{URL: "bad-url"}, "")
 	if err == nil {
 		t.Fatal("expected invalid repository URL error")
+	}
+}
+
+func TestParseGitRepositoryURLRejectsUnsafeForms(t *testing.T) {
+	for _, rawURL := range []string{
+		"http://github.com/saltbo/slink.git",
+		"https://user@github.com/saltbo/slink.git",
+		"https://github.com/saltbo/slink.git?token=secret",
+		"https://github.com/saltbo/slink.git#main",
+		"https://github.com/saltbo",
+		"https://github.com/saltbo/../slink",
+		"https://github.com/saltbo/slink space",
+		"https://github.com/saltbo/%2e%2e/slink",
+	} {
+		if _, err := parseGitRepositoryURL(rawURL); err == nil {
+			t.Fatalf("expected unsafe git URL %q to fail", rawURL)
+		}
 	}
 }
 

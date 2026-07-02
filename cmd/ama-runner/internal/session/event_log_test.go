@@ -83,6 +83,36 @@ func TestReadEventLogReturnsNilForMissingFile(t *testing.T) {
 	}
 }
 
+func TestEventLogAppendValidatesTypeAndNormalizesPayload(t *testing.T) {
+	store, err := OpenEventLog(t.TempDir(), "session_1")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := store.Append(ama.JSON{"payload": ama.JSON{}}); err == nil || !strings.Contains(err.Error(), "missing type") {
+		t.Fatalf("expected missing type error, got %v", err)
+	}
+	if _, err := store.Append(ama.JSON{"type": ""}); err == nil || !strings.Contains(err.Error(), "missing type") {
+		t.Fatalf("expected empty type error, got %v", err)
+	}
+	event, err := store.Append(ama.JSON{"type": "tool.result", "payload": map[string]any{"toolCallId": "call_1"}})
+	if err != nil {
+		t.Fatalf("append map payload: %v", err)
+	}
+	if event.Sequence != 3 {
+		t.Fatalf("sequence should advance for each append attempt, got %d", event.Sequence)
+	}
+	if event.Payload["toolCallId"] != "call_1" {
+		t.Fatalf("expected normalized payload, got %#v", event.Payload)
+	}
+	event, err = store.Append(ama.JSON{"type": "message.completed", "payload": "ignored"})
+	if err != nil {
+		t.Fatalf("append scalar payload: %v", err)
+	}
+	if len(event.Payload) != 0 {
+		t.Fatalf("expected scalar payload to normalize to empty object, got %#v", event.Payload)
+	}
+}
+
 func TestEventLogReportsInvalidAndUnwritableLogs(t *testing.T) {
 	dir := t.TempDir()
 	logPath := EventLogPath(dir)

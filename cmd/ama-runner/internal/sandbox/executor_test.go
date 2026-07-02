@@ -470,6 +470,33 @@ func TestProcessCommandEnvironmentKeepsOrdinaryWorkspaceDirsLocal(t *testing.T) 
 	}
 }
 
+func TestProcessEnvironmentHelpersValidateExistingDirs(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRoot := ProcessEnvironmentRoot(root)
+	if envRoot != root {
+		t.Fatalf("ordinary workdir environment root = %q, want %q", envRoot, root)
+	}
+	home, err := PrepareProcessEnvironmentDir(root, ".home")
+	if err != nil {
+		t.Fatalf("expected process env dir creation success, got %v", err)
+	}
+	if home != filepath.Join(root, ".home") {
+		t.Fatalf("unexpected process env dir %q", home)
+	}
+	if _, err := PrepareProcessEnvironmentDir(root, ".home"); err != nil {
+		t.Fatalf("expected existing process env dir success, got %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".tmp"), []byte("file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PrepareProcessEnvironmentDir(root, ".tmp"); err == nil || !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("expected file process env dir error, got %v", err)
+	}
+}
+
 func TestProcessCommandEnvironmentFailsWhenWorkspaceHomeOrTempCannotBeCreated(t *testing.T) {
 	fileWorkDir := filepath.Join(t.TempDir(), "workspace-file")
 	if err := os.WriteFile(fileWorkDir, []byte("not a directory"), 0o644); err != nil {

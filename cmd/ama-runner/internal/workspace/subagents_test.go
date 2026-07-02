@@ -51,6 +51,42 @@ Be strict about error handling.
 	}
 }
 
+func TestAgentSubagentProfilesFiltersInvalidSnapshotItems(t *testing.T) {
+	profiles := agentSubagentProfiles(map[string]any{
+		"subagents": []any{
+			"skip",
+			map[string]any{
+				"name":          "reviewer",
+				"description":   " Reviews code ",
+				"systemPrompt":  "Be direct.",
+				"model":         "gpt-5.3-codex",
+				"allowedTools":  []any{"read", "", " ", 42, "grep"},
+				"skills":        []any{"review", nil},
+				"mcpConnectors": []any{"github", ""},
+			},
+		},
+	})
+	if len(profiles) != 1 {
+		t.Fatalf("expected one valid profile, got %#v", profiles)
+	}
+	profile := profiles[0]
+	if profile.Name != "reviewer" || profile.Description != " Reviews code " || profile.SystemPrompt != "Be direct." {
+		t.Fatalf("unexpected profile strings %#v", profile)
+	}
+	if strings.Join(profile.AllowedTools, ",") != "read,grep" {
+		t.Fatalf("unexpected allowed tools %#v", profile.AllowedTools)
+	}
+	if strings.Join(profile.Skills, ",") != "review" {
+		t.Fatalf("unexpected skills %#v", profile.Skills)
+	}
+	if strings.Join(profile.MCPConnectors, ",") != "github" {
+		t.Fatalf("unexpected mcp connectors %#v", profile.MCPConnectors)
+	}
+	if profiles := agentSubagentProfiles(map[string]any{"subagents": "none"}); profiles != nil {
+		t.Fatalf("expected non-array subagents to return nil, got %#v", profiles)
+	}
+}
+
 func TestPrepareAgentWorkspaceWritesCopilotCommonSubagentDefinition(t *testing.T) {
 	cwd := t.TempDir()
 	if err := (&Workspace{Cwd: cwd}).PrepareAgent(context.Background(), "copilot", reviewerSnapshot()); err != nil {
@@ -163,6 +199,34 @@ func TestMaterializeSubagentsRejectsUnsafeNamesAndUnsupportedRuntimes(t *testing
 	}
 	if err := materializeSubagents(cwd, "ama", []subagentProfile{{Name: "reviewer"}}); err != nil {
 		t.Fatalf("expected ama runtime to ignore workspace subagent files, got %v", err)
+	}
+}
+
+func TestClaudeToolNamesMapsCanonicalSandboxTools(t *testing.T) {
+	got := claudeToolNames([]string{
+		"read",
+		"bash",
+		"edit",
+		"write",
+		"grep",
+		"find",
+		"fetch",
+		"web_search",
+		"custom_tool",
+	})
+	want := []string{
+		"Read",
+		"Bash",
+		"Edit",
+		"Write",
+		"Grep",
+		"Glob",
+		"WebFetch",
+		"WebSearch",
+		"custom_tool",
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("claude tool names = %#v, want %#v", got, want)
 	}
 }
 
