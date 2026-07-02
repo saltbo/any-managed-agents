@@ -41,9 +41,7 @@ function redactToolResultValue(value: unknown, parentKey?: string): unknown {
     return value.map((item) => redactToolResultValue(item))
   }
   if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [key, redactToolResultValue(child, key)]),
-    )
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, redactToolResultValue(child, key)]))
   }
   return value
 }
