@@ -44,6 +44,10 @@ function redactToolResultValue(value: unknown, parentKey?: string): unknown {
   return value
 }
 
+export function redactSensitiveValue(value: unknown): unknown {
+  return redactToolResultValue(value)
+}
+
 function redactToolResultBlock(block: Record<string, unknown>): Record<string, unknown> {
   return {
     ...block,
@@ -64,11 +68,12 @@ export function redactToolResultsFromPayload(payload: unknown): unknown {
   if (!Array.isArray(content)) {
     return payload
   }
+  const contentBlocks: unknown[] = content
   return {
     ...(payload as Record<string, unknown>),
     message: {
       ...(message as Record<string, unknown>),
-      content: content.map((block) => {
+      content: contentBlocks.map((block) => {
         if (!block || typeof block !== 'object' || Array.isArray(block)) {
           return block
         }
