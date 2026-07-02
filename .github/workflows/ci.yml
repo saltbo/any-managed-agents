@@ -77,7 +77,18 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: sdk/go/go.sum
+      - uses: astral-sh/setup-uv@v6
       - run: pnpm install --frozen-lockfile
+      # server/sdk-layout.test.ts runs openapi:check inside the unit suite.
+      - run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1
+      - run: uv tool install openapi-python-client==0.29.0
+      - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
+      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       # Coverage gate: unit + web (v8). Fails below 95% business / 90% else, per-file.
       - run: pnpm run test:coverage
 
