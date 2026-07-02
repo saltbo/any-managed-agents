@@ -113,6 +113,44 @@ async function* repeatedCommandEvents() {
   yield* commandEvents()
 }
 
+async function* repeatedAgentMessageEvents() {
+  yield { type: 'turn.started' }
+  yield {
+    type: 'item.completed',
+    item: {
+      id: 'item_1',
+      type: 'agent_message',
+      text: 'first turn',
+    },
+  }
+  yield {
+    type: 'item.completed',
+    item: {
+      id: 'item_2',
+      type: 'reasoning',
+      text: 'first reasoning',
+    },
+  }
+  yield { type: 'turn.completed' }
+  yield { type: 'turn.started' }
+  yield {
+    type: 'item.completed',
+    item: {
+      id: 'item_1',
+      type: 'agent_message',
+      text: 'second turn',
+    },
+  }
+  yield {
+    type: 'item.completed',
+    item: {
+      id: 'item_2',
+      type: 'reasoning',
+      text: 'second reasoning',
+    },
+  }
+}
+
 afterEach(() => {
   codexConstructorMock.mockClear()
   startThreadMock.mockClear()
@@ -238,6 +276,26 @@ describe('codexProvider', () => {
       })
 
     expect(toolCallIds).toEqual(['item_1', 'item_1', 'item_1', 'item_1'])
+  })
+
+  it('keeps AMA message ids unique when Codex reuses text item ids across turns', async () => {
+    runStreamedMock.mockResolvedValue({ events: repeatedAgentMessageEvents() })
+    startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
+
+    const handle = await codexProvider.execute(request())
+    const events = []
+    for await (const event of handle.events) {
+      events.push(event)
+    }
+
+    const messages = events
+      .map((event) => (event.payload as { message?: { id?: string; providerMessageId?: string } }).message)
+      .filter((message): message is { id: string; providerMessageId?: string } => Boolean(message))
+
+    expect(messages.map((message) => message.providerMessageId)).toEqual(['item_1', 'item_2', 'item_1', 'item_2'])
+    expect(new Set(messages.map((message) => message.id)).size).toBe(messages.length)
+    expect(messages.map((message) => message.id)).not.toContain('item_1')
+    expect(messages.map((message) => message.id)).not.toContain('item_2')
   })
 
   it('does not map Codex file change observations to tool calls', async () => {

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ToolResult } from '@ama/runtime-contracts/session-events'
+import type { MessageContentBlock, ToolResult } from '@ama/runtime-contracts/session-events'
 import { Codex, type ThreadEvent } from '@openai/codex-sdk'
 import {
   messageEvent,
@@ -8,7 +8,6 @@ import {
   reasoningBlock,
   runtimeError,
   runtimeEvent,
-  textMessage,
   toolCallBlock,
   toolResultMessage,
   turnEnd,
@@ -110,6 +109,15 @@ function codexToolStructuredContent(item: Record<string, unknown>): Record<strin
   return Object.keys(structured).length > 0 ? structured : undefined
 }
 
+function codexAssistantMessage(content: MessageContentBlock[], providerMessageId: string | null) {
+  return {
+    id: randomId('msg'),
+    role: 'assistant' as const,
+    content,
+    ...(providerMessageId ? { providerMessageId } : {}),
+  }
+}
+
 class CodexEventMapper {
   *map(event: ThreadEvent): Generator<AmaRuntimeEvent> {
     switch (event.type) {
@@ -138,17 +146,11 @@ class CodexEventMapper {
           return
         }
         if (item.type === 'agent_message' && typeof item.text === 'string' && item.text) {
-          yield runtimeEvent('message.completed', {
-            message: textMessage('assistant', item.text, typeof item.id === 'string' ? item.id : undefined),
-          })
+          yield messageEvent(codexAssistantMessage([{ type: 'text', text: item.text }], itemId(item)))
           return
         }
         if (item.type === 'reasoning' && typeof item.text === 'string' && item.text) {
-          yield messageEvent({
-            id: typeof item.id === 'string' ? item.id : randomId('msg'),
-            role: 'assistant',
-            content: [reasoningBlock(item.text)],
-          })
+          yield messageEvent(codexAssistantMessage([reasoningBlock(item.text)], itemId(item)))
           return
         }
         const shape = codexToolShape(item)
