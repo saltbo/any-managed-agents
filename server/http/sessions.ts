@@ -18,7 +18,7 @@ import {
 } from '../contracts/execution-spec'
 import { ResourceMetadataSchema } from '../contracts/resource-contracts'
 import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
-import type { EventRecord, Session, SessionApproval, SessionMessage } from '../domain/session'
+import type { Session, SessionApproval, SessionEvent, SessionMessage } from '../domain/session'
 import type { Env } from '../env'
 import { type ErrorType, errorResponse } from '../errors'
 import {
@@ -396,6 +396,22 @@ function eventSchema<TType extends (typeof AMA_SESSION_EVENT_TYPES)[number]>(typ
   return z.object({ type: z.literal(type), payload }).strict()
 }
 
+function sessionEventSchema<TType extends (typeof AMA_SESSION_EVENT_TYPES)[number]>(
+  type: TType,
+  payload: z.ZodTypeAny,
+) {
+  return z
+    .object({
+      id: z.string(),
+      sessionId: z.string(),
+      sequence: z.number().int(),
+      createdAt: z.string().datetime(),
+      type: z.literal(type),
+      payload,
+    })
+    .strict()
+}
+
 const AmaEventSchema = z
   .discriminatedUnion('type', [
     eventSchema('runtime.started', RuntimeLifecyclePayloadSchema),
@@ -413,15 +429,22 @@ const AmaEventSchema = z
   ])
   .openapi('AmaEvent')
 
-const EventRecordSchema = z
-  .object({
-    id: z.string(),
-    sessionId: z.string(),
-    sequence: z.number().int(),
-    event: AmaEventSchema,
-    createdAt: z.string().datetime(),
-  })
-  .openapi('EventRecord')
+const SessionEventSchema = z
+  .discriminatedUnion('type', [
+    sessionEventSchema('runtime.started', RuntimeLifecyclePayloadSchema),
+    sessionEventSchema('runtime.completed', RuntimeLifecyclePayloadSchema),
+    sessionEventSchema('turn.started', TurnPayloadSchema),
+    sessionEventSchema('turn.completed', TurnPayloadSchema),
+    sessionEventSchema('message.started', MessageEventPayloadSchema),
+    sessionEventSchema('message.updated', MessageEventPayloadSchema),
+    sessionEventSchema('message.completed', MessageEventPayloadSchema),
+    sessionEventSchema('usage.recorded', UsageRecordedPayloadSchema),
+    sessionEventSchema('permission.requested', PermissionRequestPayloadSchema),
+    sessionEventSchema('permission.resolved', PermissionResolvedPayloadSchema),
+    sessionEventSchema('permission.denied', PermissionDeniedPayloadSchema),
+    sessionEventSchema('runtime.error', EventErrorSchema),
+  ])
+  .openapi('SessionEvent')
 
 // ── browser session socket message schemas ───────────────────────────────────
 // OpenAPI 3.x cannot describe a WebSocket message protocol, only the HTTP upgrade
@@ -431,13 +454,13 @@ const EventRecordSchema = z
 
 // server → client
 const SessionSocketEventMessageSchema = z
-  .object({ type: z.literal('event'), record: EventRecordSchema })
+  .object({ type: z.literal('event'), record: SessionEventSchema })
   .openapi('SessionSocketEventMessage')
 const SessionSocketBackfillMessageSchema = z
   .object({
     type: z.literal('backfill'),
     requestId: z.string().nullable(),
-    events: z.array(EventRecordSchema),
+    events: z.array(SessionEventSchema),
     nextCursor: z.number().int().nullable(),
     hasMore: z.boolean(),
   })
@@ -657,7 +680,7 @@ const EventsQuerySchema = eventListQuerySchema().extend({
     .openapi({ param: { name: 'createdTo', in: 'query' }, example: '2026-05-31T23:59:59.999Z' }),
 })
 const SessionListResponseSchema = listResponseSchema('SessionListResponse', SessionSchema)
-const EventRecordListResponseSchema = listResponseSchema('EventRecordListResponse', EventRecordSchema)
+const SessionEventListResponseSchema = listResponseSchema('SessionEventListResponse', SessionEventSchema)
 const SessionMessageListResponseSchema = listResponseSchema('SessionMessageListResponse', SessionMessageSchema)
 const SessionApprovalListResponseSchema = listResponseSchema('SessionApprovalListResponse', SessionApprovalSchema)
 
@@ -761,8 +784,8 @@ function asSessionApprovalResponse(record: SessionApproval): z.infer<typeof Sess
   return record as z.infer<typeof SessionApprovalSchema>
 }
 
-function asEventRecordResponse(record: EventRecord): z.infer<typeof EventRecordSchema> {
-  return record as z.infer<typeof EventRecordSchema>
+function asSessionEventResponse(record: SessionEvent): z.infer<typeof SessionEventSchema> {
+  return record as z.infer<typeof SessionEventSchema>
 }
 
 function pendingApprovalResponse(
@@ -819,7 +842,7 @@ async function eventsJsonResponse(c: Context<DepsEnv>, sessionId: string, query:
   const last = page.rows.at(-1)
   const nextCursor = page.hasMore && last ? String(last.sequence) : null
   return c.json(
-    { data: page.rows.map(asEventRecordResponse), pagination: { limit, nextCursor, hasMore: page.hasMore } },
+    { data: page.rows.map(asSessionEventResponse), pagination: { limit, nextCursor, hasMore: page.hasMore } },
     200,
   )
 }
@@ -834,9 +857,9 @@ async function eventsCsvResponse(c: Context<DepsEnv>, sessionId: string, query: 
     record.id,
     record.sessionId,
     String(record.sequence),
-    record.event.type,
+    record.type,
     record.createdAt,
-    JSON.stringify(record.event.payload),
+    JSON.stringify(record.payload),
     '{}',
   ])
   return csvResponse(c, `session-${sessionId}-events.csv`, header, csvRows)
@@ -880,9 +903,7 @@ function eventsSseResponse(c: Context<DepsEnv>, sessionId: string, query: Events
           for (const record of rows) {
             lastSequence = record.sequence
             streamController.enqueue(
-              encoder.encode(
-                `id: ${record.sequence}\nevent: ${record.event.type}\ndata: ${JSON.stringify(record)}\n\n`,
-              ),
+              encoder.encode(`id: ${record.sequence}\nevent: ${record.type}\ndata: ${JSON.stringify(record)}\n\n`),
             )
           }
           if (rows.length >= limit) {
@@ -1073,7 +1094,7 @@ const listEventsRoute = createRoute({
     200: {
       description: 'Session events',
       content: {
-        'application/json': { schema: EventRecordListResponseSchema },
+        'application/json': { schema: SessionEventListResponseSchema },
         'text/csv': { schema: z.string() },
         'text/event-stream': { schema: z.string() },
       },

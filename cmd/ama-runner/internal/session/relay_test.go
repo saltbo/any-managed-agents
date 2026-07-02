@@ -140,12 +140,8 @@ func TestRelayEventWritesSessionTaggedFrame(t *testing.T) {
 	if record["id"] != "evt-7" {
 		t.Fatalf("expected record id evt-7, got %v", record["id"])
 	}
-	event, _ := record["event"].(map[string]any)
-	if event == nil {
-		t.Fatal("expected record event field in frame")
-	}
-	if event["type"] != "message.completed" {
-		t.Fatalf("expected event type message.completed, got %v", event["type"])
+	if record["type"] != "message.completed" {
+		t.Fatalf("expected event type message.completed, got %v", record["type"])
 	}
 }
 
@@ -463,12 +459,14 @@ func TestRelayHandlesBackfillForCompletedSession(t *testing.T) {
 	events := []Event{
 		{
 			ID: "evt_1", SessionID: "completed_session", Sequence: 1,
-			Event:     ama.JSON{"type": "message.completed", "payload": ama.JSON{"text": "hi"}},
+			Type:      "message.completed",
+			Payload:   ama.JSON{"text": "hi"},
 			CreatedAt: "2026-01-01T00:00:01Z",
 		},
 		{
 			ID: "evt_2", SessionID: "completed_session", Sequence: 2,
-			Event:     ama.JSON{"type": "usage", "payload": ama.JSON{"tokens": 42}},
+			Type:      "usage.recorded",
+			Payload:   ama.JSON{"tokens": 42},
 			CreatedAt: "2026-01-01T00:00:02Z",
 		},
 	}

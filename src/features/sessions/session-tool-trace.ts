@@ -1,4 +1,4 @@
-import type { EventRecord } from '@/lib/amarpc'
+import type { SessionEvent } from '@/lib/amarpc'
 
 export type SessionToolTraceStatus = 'running' | 'completed' | 'failed'
 export type SessionToolTraceApproval = 'approved' | 'denied' | 'approval required'
@@ -30,7 +30,7 @@ interface TraceAccumulator extends SessionToolTraceEntry {
 // blocks. Pairing uses toolCall.id and tool_result.toolCallId; results without
 // a recorded call degrade into explicit orphaned entries instead of being
 // dropped.
-export function buildSessionToolTrace(events: EventRecord[]): SessionToolTraceEntry[] {
+export function buildSessionToolTrace(events: SessionEvent[]): SessionToolTraceEntry[] {
   const ordered = [...events].sort((left, right) => left.sequence - right.sequence)
   const entries: TraceAccumulator[] = []
   for (const record of ordered) {
@@ -50,9 +50,9 @@ export function buildSessionToolTrace(events: EventRecord[]): SessionToolTraceEn
   }
   const permissionEvents = ordered.filter(
     (record) =>
-      record.event.type === 'permission.requested' ||
-      record.event.type === 'permission.resolved' ||
-      record.event.type === 'permission.denied',
+      record.type === 'permission.requested' ||
+      record.type === 'permission.resolved' ||
+      record.type === 'permission.denied',
   )
   return entries.map((entry) => ({ ...entry, approval: approvalState(entry, permissionEvents) }))
 }
@@ -65,7 +65,7 @@ export function summarizeToolValue(value: unknown): string {
   return truncate(text.replace(/\s+/g, ' ').trim(), VALUE_SUMMARY_LIMIT)
 }
 
-function entryFromToolCall(record: EventRecord, block: Record<string, unknown>): TraceAccumulator {
+function entryFromToolCall(record: SessionEvent, block: Record<string, unknown>): TraceAccumulator {
   const toolCall = objectValue(block.toolCall)
   return {
     key: record.id,
@@ -85,7 +85,7 @@ function entryFromToolCall(record: EventRecord, block: Record<string, unknown>):
   }
 }
 
-function completeEntry(entry: TraceAccumulator, record: EventRecord, block: Record<string, unknown>) {
+function completeEntry(entry: TraceAccumulator, record: SessionEvent, block: Record<string, unknown>) {
   const failed = Boolean(block.error)
   entry.status = failed ? 'failed' : 'completed'
   entry.output = block.result
@@ -97,7 +97,7 @@ function completeEntry(entry: TraceAccumulator, record: EventRecord, block: Reco
   entry.endSequence = record.sequence
 }
 
-function orphanedEntryFromToolResult(record: EventRecord, block: Record<string, unknown>): TraceAccumulator {
+function orphanedEntryFromToolResult(record: SessionEvent, block: Record<string, unknown>): TraceAccumulator {
   const failed = Boolean(block.error)
   return {
     key: record.id,
@@ -131,7 +131,7 @@ function findOpenEntry(entries: TraceAccumulator[], key: string) {
 
 // Permission events recorded inside the same turn while the tool call was in
 // flight are the canonical approval outcome for that call.
-function approvalState(entry: TraceAccumulator, permissionEvents: EventRecord[]): SessionToolTraceApproval {
+function approvalState(entry: TraceAccumulator, permissionEvents: SessionEvent[]): SessionToolTraceApproval {
   const command = stringField(objectValue(entry.input), 'command')
   const relatedEvents = permissionEvents.filter((record) => {
     if (entry.startSequence === null) {
@@ -140,19 +140,19 @@ function approvalState(entry: TraceAccumulator, permissionEvents: EventRecord[])
     if (record.sequence < entry.startSequence || (entry.endSequence !== null && record.sequence > entry.endSequence)) {
       return false
     }
-    const payload = objectValue(record.event.payload)
+    const payload = objectValue(record.payload)
     const toolCall = objectValue(payload.toolCall)
     const permissionCommand = stringField(payload, 'command') ?? stringField(objectValue(toolCall.input), 'command')
     return !command || !permissionCommand || permissionCommand === command
   })
-  const resolved = [...relatedEvents].reverse().find((record) => record.event.type === 'permission.resolved')
+  const resolved = [...relatedEvents].reverse().find((record) => record.type === 'permission.resolved')
   if (resolved) {
-    return objectValue(resolved.event.payload).allowed === false ? 'denied' : 'approved'
+    return objectValue(resolved.payload).allowed === false ? 'denied' : 'approved'
   }
-  if (relatedEvents.some((record) => record.event.type === 'permission.denied')) {
+  if (relatedEvents.some((record) => record.type === 'permission.denied')) {
     return 'denied'
   }
-  if (relatedEvents.some((record) => record.event.type === 'permission.requested')) {
+  if (relatedEvents.some((record) => record.type === 'permission.requested')) {
     return 'approval required'
   }
   if (relatedEvents.length === 0) {
@@ -189,15 +189,11 @@ function toolValueText(value: unknown): string {
   return JSON.stringify(value) ?? ''
 }
 
-function messageContent(record: EventRecord): Record<string, unknown>[] {
-  if (
-    record.event.type !== 'message.started' &&
-    record.event.type !== 'message.updated' &&
-    record.event.type !== 'message.completed'
-  ) {
+function messageContent(record: SessionEvent): Record<string, unknown>[] {
+  if (record.type !== 'message.started' && record.type !== 'message.updated' && record.type !== 'message.completed') {
     return []
   }
-  const message = objectValue(objectValue(record.event.payload).message)
+  const message = objectValue(objectValue(record.payload).message)
   return Array.isArray(message.content) ? message.content.map(objectValue) : []
 }
 

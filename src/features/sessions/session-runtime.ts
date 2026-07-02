@@ -1,6 +1,6 @@
 import type { SessionSocketClientMessage } from '@ama/runtime-contracts/session-socket'
 import type { AmaSessionEventType } from '@shared/session-events'
-import type { EventRecord } from '@/lib/amarpc'
+import type { SessionEvent } from '@/lib/amarpc'
 import { getStoredAccessToken } from '@/lib/oidc'
 
 export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
@@ -37,7 +37,7 @@ export interface SessionRuntimeState {
   runState: SessionRuntimeRunState
   messages: SessionRuntimeMessage[]
   tools: SessionRuntimeToolTrace[]
-  eventRecords: EventRecord[]
+  sessionEvents: SessionEvent[]
   eventKeys: string[]
   error: string | null
 }
@@ -46,15 +46,15 @@ export type SessionRuntimeAction =
   | { type: 'reset' }
   | { type: 'connection'; state: SessionRuntimeConnectionState; error?: string | null }
   | { type: 'command_sent'; command: SessionRuntimeCommand; at: string }
-  | { type: 'event'; item: EventRecord; at?: string }
-  | { type: 'event_records'; events: EventRecord[] }
+  | { type: 'event'; item: SessionEvent; at?: string }
+  | { type: 'session_events'; events: SessionEvent[] }
 
 export const initialSessionRuntimeState: SessionRuntimeState = {
   connection: 'connecting',
   runState: 'idle',
   messages: [],
   tools: [],
-  eventRecords: [],
+  sessionEvents: [],
   eventKeys: [],
   error: null,
 }
@@ -70,7 +70,7 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
       error: action.error ?? (action.state === 'error' ? state.error : null),
     }
   }
-  if (action.type === 'event_records') {
+  if (action.type === 'session_events') {
     return mergePersistedEvents(state, action.events)
   }
   if (action.type === 'event') {
@@ -105,8 +105,8 @@ export function sessionSocketUrl(socketPath: string) {
   return url.toString()
 }
 
-function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[]) {
-  const runtimeEvents = uniquePersistedRuntimeEvents(events, runtimeEventContext(state.eventRecords)).filter(
+function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]) {
+  const runtimeEvents = uniquePersistedRuntimeEvents(events, runtimeEventContext(state.sessionEvents)).filter(
     ({ key }) => {
       return !key || !state.eventKeys.includes(key)
     },
@@ -151,17 +151,17 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
     return type === 'runtime.completed' || type === 'turn.completed'
   })
   const hasErrorEvent = runtimeEvents.some(({ stored }) => {
-    return stored.event.type === 'runtime.error'
+    return stored.type === 'runtime.error'
   })
-  const latestError = [...runtimeEvents].reverse().find(({ stored }) => stored.event.type === 'runtime.error')
+  const latestError = [...runtimeEvents].reverse().find(({ stored }) => stored.type === 'runtime.error')
   return {
     ...state,
     runState: hasErrorEvent ? 'error' : hasTerminalEvent ? 'idle' : state.runState,
     error: latestError ? runtimeErrorMessage(latestError.payload) : state.error,
     messages: messages.reduce((next, message) => upsertMessage(next, message), state.messages),
     tools: state.tools.length === 0 ? tools : tools.reduce((next, tool) => upsertTool(next, tool), state.tools),
-    eventRecords: mergeEventRecords(
-      state.eventRecords,
+    sessionEvents: mergeSessionEvents(
+      state.sessionEvents,
       runtimeEvents.map(({ stored }) => stored),
     ),
     eventKeys: mergeEventKeys(eventKeys, state.eventKeys),
@@ -169,7 +169,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: EventRecord[])
 }
 
 type StoredRuntimeEvent = {
-  stored: EventRecord
+  stored: SessionEvent
   payload: Record<string, unknown>
   key: string | null
 }
@@ -180,7 +180,7 @@ type RuntimeEventContext = {
 }
 
 function uniquePersistedRuntimeEvents(
-  events: EventRecord[],
+  events: SessionEvent[],
   initialContext: RuntimeEventContext = { turnIndex: 0, turnKey: null },
 ): StoredRuntimeEvent[] {
   const seen = new Set<string>()
@@ -190,7 +190,7 @@ function uniquePersistedRuntimeEvents(
   events
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((stored) => {
-      const payload = objectValue(stored.event.payload)
+      const payload = objectValue(stored.payload)
       const type = sessionEventType(stored, payload)
       if (type === 'turn.started' || isUserMessage(payload, type)) {
         turnIndex += 1
@@ -212,13 +212,13 @@ function uniquePersistedRuntimeEvents(
   return uniqueEvents
 }
 
-function runtimeEventContext(events: EventRecord[]): RuntimeEventContext {
+function runtimeEventContext(events: SessionEvent[]): RuntimeEventContext {
   return events
     .slice()
     .sort((left, right) => left.sequence - right.sequence)
     .reduce<RuntimeEventContext>(
       (context, stored) => {
-        const payload = objectValue(stored.event.payload)
+        const payload = objectValue(stored.payload)
         const type = sessionEventType(stored, payload)
         if (type === 'turn.started' || isUserMessage(payload, type)) {
           context.turnIndex += 1
@@ -241,8 +241,8 @@ function isUserMessage(event: Record<string, unknown>, eventType: string) {
   return stringField(objectValue(event.message), 'role') === 'user'
 }
 
-function sessionEventType(stored: EventRecord, _payload: Record<string, unknown>): AmaSessionEventType {
-  return stored.event.type
+function sessionEventType(stored: SessionEvent, _payload: Record<string, unknown>): AmaSessionEventType {
+  return stored.type
 }
 
 function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
@@ -291,7 +291,7 @@ function messageRenderId(message: Record<string, unknown>, role: SessionRuntimeM
 }
 
 function messageFromStoredSessionEvent(
-  stored: EventRecord,
+  stored: SessionEvent,
   event: Record<string, unknown>,
   status: SessionRuntimeMessage['status'],
 ) {
@@ -504,7 +504,7 @@ function mergeEventKeys(left: string[], right: string[]) {
   return [...new Set([...left, ...right])].slice(-800)
 }
 
-function mergeEventRecords(existing: EventRecord[], incoming: EventRecord[]) {
+function mergeSessionEvents(existing: SessionEvent[], incoming: SessionEvent[]) {
   const byId = new Map(existing.map((record) => [record.id, record]))
   for (const record of incoming) {
     byId.set(record.id, record)

@@ -228,22 +228,18 @@ describe('[CF] per-runner relay end-to-end', () => {
           sessionId: session.id,
           sequence: 1,
           createdAt: '2026-06-20T00:00:00.000Z',
-          event: {
-            type: 'message.completed',
-            payload: { message: { id: 'msg_live', role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
-          },
+          type: 'message.completed',
+          payload: { message: { id: 'msg_live', role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
         },
       }),
     )
 
     // Browser must receive a fanned {type:'event'} frame with the canonical event.
     const live = await browser.waitForFrame(
-      (f) =>
-        f.type === 'event' &&
-        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message.completed',
+      (f) => f.type === 'event' && ((f.record as { type?: string } | undefined)?.type ?? '') === 'message.completed',
       'event:message.completed',
     )
-    expect((live.record as { event: { type: string } }).event.type).toBe('message.completed')
+    expect((live.record as { type: string }).type).toBe('message.completed')
 
     runnerCh.ws.close()
     browser.ws.close()
@@ -288,14 +284,12 @@ describe('[CF] per-runner relay end-to-end', () => {
             sessionId: session.id,
             sequence: 1,
             createdAt: '2026-06-20T00:00:00.000Z',
-            event: {
-              type: 'message.completed',
-              payload: {
-                message: {
-                  id: 'msg_history',
-                  role: 'assistant',
-                  content: [{ type: 'text', text: 'history from runner' }],
-                },
+            type: 'message.completed',
+            payload: {
+              message: {
+                id: 'msg_history',
+                role: 'assistant',
+                content: [{ type: 'text', text: 'history from runner' }],
               },
             },
           },
@@ -306,7 +300,7 @@ describe('[CF] per-runner relay end-to-end', () => {
     const backfill = await browser.waitForFrame(
       (f) =>
         f.type === 'backfill' &&
-        (f.events as Array<{ event?: { type?: string } }>).some((record) => record.event?.type === 'message.completed'),
+        (f.events as Array<{ type?: string }>).some((record) => record.type === 'message.completed'),
       'browser backfill from runner',
     )
     expect((backfill.events as Array<{ id: string }>)[0].id).toBe('event_history')
@@ -393,23 +387,19 @@ describe('[CF] per-runner relay end-to-end', () => {
           sessionId: session.id,
           sequence: 1,
           createdAt: '2026-06-20T00:00:00.000Z',
-          event: {
-            type: 'message.completed',
-            payload: {
-              message: { id: 'msg_reconnect', role: 'assistant', content: [{ type: 'text', text: 'reconnect works' }] },
-            },
+          type: 'message.completed',
+          payload: {
+            message: { id: 'msg_reconnect', role: 'assistant', content: [{ type: 'text', text: 'reconnect works' }] },
           },
         },
       }),
     )
 
     const live = await browser.waitForFrame(
-      (f) =>
-        f.type === 'event' &&
-        ((f.record as { event?: { type: string } } | undefined)?.event?.type ?? '') === 'message.completed',
+      (f) => f.type === 'event' && ((f.record as { type?: string } | undefined)?.type ?? '') === 'message.completed',
       'event:message.completed after reconnect',
     )
-    expect((live.record as { event: { type: string } }).event.type).toBe('message.completed')
+    expect((live.record as { type: string }).type).toBe('message.completed')
 
     second.ws.close()
     browser.ws.close()

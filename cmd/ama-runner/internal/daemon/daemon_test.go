@@ -263,22 +263,22 @@ type fakeAdapter struct {
 
 type fakeRuntimeAdapter struct {
 	request       runtime.Request
-	events        []RuntimeEventRecord
+	events        []RuntimeEvent
 	result        ama.JSON
 	err           error
 	inspect       func(runtime.Request) error
 	waitForCancel bool
 }
 
-type RuntimeEventRecord struct {
+type RuntimeEvent struct {
 	Event ama.JSON
 }
 
-func runtimeEvent(eventType string, payload ama.JSON) RuntimeEventRecord {
-	return RuntimeEventRecord{Event: ama.JSON{"type": eventType, "payload": payload}}
+func runtimeEvent(eventType string, payload ama.JSON) RuntimeEvent {
+	return RuntimeEvent{Event: ama.JSON{"type": eventType, "payload": payload}}
 }
 
-func runtimeToolCallMessage(toolCallID, toolName string, input ama.JSON) RuntimeEventRecord {
+func runtimeToolCallMessage(toolCallID, toolName string, input ama.JSON) RuntimeEvent {
 	return runtimeEvent("message.completed", ama.JSON{
 		"message": ama.JSON{
 			"id":   "msg_" + toolCallID,
@@ -295,7 +295,7 @@ func runtimeToolCallMessage(toolCallID, toolName string, input ama.JSON) Runtime
 	})
 }
 
-func runtimeToolResultMessage(toolCallID string, output ama.JSON) RuntimeEventRecord {
+func runtimeToolResultMessage(toolCallID string, output ama.JSON) RuntimeEvent {
 	return runtimeEvent("message.completed", ama.JSON{
 		"message": ama.JSON{
 			"id":               "msg_result_" + toolCallID,
@@ -361,11 +361,7 @@ func (ch *fakeSessionChannel) WriteJSON(_ context.Context, value any) error {
 	if decoded["type"] == "runner.event" {
 		record, _ := decoded["record"].(map[string]any)
 		if eventID, ok := record["id"].(string); ok && eventID != "" {
-			event, _ := record["event"].(map[string]any)
-			if event == nil {
-				event, _ = record["event"].(ama.JSON)
-			}
-			eventType, _ := event["type"].(string)
+			eventType, _ := record["type"].(string)
 			if message := ch.eventErrors[eventType]; message != "" {
 				ch.reads <- ama.JSON{"type": "session.channel.error", "eventId": eventID, "message": message}
 			} else if ch.autoAck {
@@ -410,12 +406,8 @@ func (ch *fakeSessionChannel) writtenEvents() []string {
 	events := make([]string, 0, len(ch.writes))
 	for _, write := range ch.writes {
 		record, _ := write["record"].(map[string]any)
-		event, _ := record["event"].(map[string]any)
-		if event == nil {
-			event, _ = record["event"].(ama.JSON)
-		}
-		if event != nil {
-			events = append(events, event["type"].(string))
+		if eventType, ok := record["type"].(string); ok {
+			events = append(events, eventType)
 		}
 	}
 	return events
@@ -451,7 +443,7 @@ func (a *fakeRuntimeAdapter) Run(ctx context.Context, request runtime.Request, w
 	}
 	events := a.events
 	if len(events) == 0 {
-		events = []RuntimeEventRecord{
+		events = []RuntimeEvent{
 			runtimeEvent("message.completed", ama.JSON{
 				"message": ama.JSON{
 					"id":      "msg_runtime_ok",
@@ -586,7 +578,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 			}
 			return nil
 		},
-		events: []RuntimeEventRecord{
+		events: []RuntimeEvent{
 			runtimeEvent("message.completed", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "prompt:build the feature"}}}}),
 			runtimeToolCallMessage("tool_1", "bash", ama.JSON{"command": "printf ok"}),
 			runtimeToolResultMessage("tool_1", ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}),
@@ -2050,7 +2042,7 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	client := &fakeAMAServer{lease: copilotSessionStartLease("copilot prompt"), hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "copilot_thread_1"},
-		events: []RuntimeEventRecord{
+		events: []RuntimeEvent{
 			runtimeEvent("message.completed", ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "copilot prompt ok"}}}}),
 			runtimeToolCallMessage("copilot_tool_1", "bash", ama.JSON{"command": "printf ok"}),
 			runtimeToolResultMessage("copilot_tool_1", ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}),

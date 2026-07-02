@@ -140,7 +140,7 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
     runState: 'idle',
     messages: [],
     tools: [],
-    eventRecords: [],
+    sessionEvents: [],
     eventKeys: [],
     error: null,
     ...state,

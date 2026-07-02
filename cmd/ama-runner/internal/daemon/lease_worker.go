@@ -580,7 +580,7 @@ func (r LeaseWorker) relayStoredEvent(ctx context.Context, store *runnersession.
 	if err != nil {
 		return err
 	}
-	return relay(ctx, stored.Event, &runnersession.RelayStamp{Sequence: stored.Sequence, ID: stored.ID, CreatedAt: stored.CreatedAt})
+	return relay(ctx, stored.AmaEvent(), &runnersession.RelayStamp{Sequence: stored.Sequence, ID: stored.ID, CreatedAt: stored.CreatedAt})
 }
 
 func runnerEvent(eventType string, payload ama.JSON) ama.JSON {

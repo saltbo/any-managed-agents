@@ -10,7 +10,7 @@
 // effects (usage accounting, browser fan-out, R2 archive); this module owns the
 // rows.
 
-import type { EventRecord } from '@server/domain/session'
+import type { SessionEvent } from '@server/domain/session'
 import { redactSensitiveValue } from '@server/redaction'
 import type { EventPage, EventQuery } from '@server/usecases/ports'
 import { type AmaEvent, isAmaSessionEventType, normalizeAmaEvent } from '@shared/session-events'
@@ -78,7 +78,7 @@ export function appendCanonicalEventToSql(
   sql: SqlStorage,
   scope: EventWriteContext,
   event: AmaEvent,
-): { id: string; sequence: number; record: EventRecord } {
+): { id: string; sequence: number; record: SessionEvent } {
   const normalized = normalizeAmaEvent(event)
   const eventId = newEventId()
   const maxSequence =
@@ -159,11 +159,12 @@ export interface RelayedRunnerEvent {
   sessionId: string
   sequence: number
   createdAt: string
-  event: AmaEvent
+  type: AmaEvent['type']
+  payload: AmaEvent['payload']
 }
 
 export function stepRelayEvent(raw: RelayedRunnerEvent, scope: EventWriteContext): EventRow {
-  const event = normalizeAmaEvent(raw.event)
+  const event = normalizeAmaEvent({ type: raw.type, payload: raw.payload } as AmaEvent)
   return {
     id: raw.id,
     organization_id: scope.organizationId,
@@ -191,7 +192,7 @@ export function pageRelayedEvents(
         if (query.order === 'asc' && record.sequence <= query.cursor) return false
         if (query.order === 'desc' && record.sequence >= query.cursor) return false
       }
-      if (query.type && record.event.type !== query.type) return false
+      if (query.type && record.type !== query.type) return false
       if (query.createdFrom && record.createdAt < query.createdFrom) return false
       if (query.createdTo && record.createdAt > query.createdTo) return false
       return true
@@ -224,26 +225,18 @@ export function exportSessionEventsJsonl(sql: SqlStorage, sessionId: string): st
   return rows.map((row) => JSON.stringify(serializeRow(row))).join('\n')
 }
 
-// Row -> EventRecord. The store only accepts canonical AMA event rows.
-export function serializeRow(row: EventRow): EventRecord {
+// Row -> SessionEvent. The store only accepts canonical AMA event rows.
+export function serializeRow(row: EventRow): SessionEvent {
   if (!isAmaSessionEventType(row.type)) {
     throw new Error(`Unsupported session event type: ${row.type}`)
   }
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
-  const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
-  const event = {
-    type: row.type,
-    payload: rawPayload,
-    metadata: rawMetadata,
-  } as AmaEvent
   return {
     id: row.id,
     sessionId: row.session_id,
     sequence: row.sequence,
-    event: {
-      type: event.type,
-      payload: redactSensitiveValue(event.payload) as typeof event.payload,
-    } as AmaEvent,
     createdAt: row.created_at,
-  }
+    type: row.type,
+    payload: redactSensitiveValue(rawPayload) as AmaEvent['payload'],
+  } as SessionEvent
 }

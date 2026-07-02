@@ -464,7 +464,7 @@ function createControlPlane(runtime, gitConfig) {
           if (message.type === 'runner.event' && runnerEventId) {
             sendWebSocket(socket, { type: 'runner.event.accepted', eventId: runnerEventId })
           }
-          const runnerEvent = message.record?.event ?? message.event
+          const runnerEvent = message.record
           if (
             runtime.name === 'codex' &&
             message.type === 'runner.event' &&
@@ -739,24 +739,25 @@ function findWorkspace(workDir) {
 
 function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   const { sessionDir, workspace } = findWorkspace(workDir)
-	  const eventLog = join(sessionDir, 'events.jsonl')
-	  const events = readJSONL(eventLog)
-	  const eventTypes = events.map((record) => record.event?.type ?? record.type)
-	  for (const required of ['runtime.started', 'message.completed']) {
-	    if (!eventTypes.includes(required)) fail(`event log is missing ${required}`, `events: ${eventTypes.join(', ')}`)
-	  }
+  const eventLog = join(sessionDir, 'events.jsonl')
+  const events = readJSONL(eventLog)
+  const eventTypes = events.map((record) => record.type)
+  for (const required of ['runtime.started', 'message.completed']) {
+    if (!eventTypes.includes(required)) fail(`event log is missing ${required}`, `events: ${eventTypes.join(', ')}`)
+  }
   const serializedEvents = JSON.stringify(events)
   if (!serializedEvents.includes(SMOKE_DONE_MARKER)) fail(`runtime response did not include ${SMOKE_DONE_MARKER}`, eventLog)
   if (runtime.name === 'codex' && !serializedEvents.includes(FOLLOW_UP_MARKER)) {
     fail(`Codex multi-turn response did not include ${FOLLOW_UP_MARKER}`, eventLog)
   }
   if (!controlPlaneState.channelAccepted) fail('runner relay channel was not accepted')
-	  const liveEventTypes = controlPlaneState.channelMessages
-	    .filter((message) => message.type === 'runner.event')
-	    .map((message) => message.record?.event?.type ?? message.event?.type)
-	  for (const required of ['runtime.started', 'message.completed']) {
-	    if (!liveEventTypes.includes(required)) fail(`live relay is missing ${required}`, liveEventTypes.join(', '))
-	  }
+  const liveEventTypes = controlPlaneState.channelMessages
+    .filter((message) => message.type === 'runner.event')
+    .map((message) => message.record?.type)
+    .filter(Boolean)
+  for (const required of ['runtime.started', 'message.completed']) {
+    if (!liveEventTypes.includes(required)) fail(`live relay is missing ${required}`, liveEventTypes.join(', '))
+  }
 
   const completed = controlPlaneState.leaseUpdates.find((update) => update.state === 'completed')
   if (!completed) fail('lease never completed', JSON.stringify(controlPlaneState.leaseUpdates, null, 2))
@@ -822,35 +823,27 @@ function startRunner(runnerPath, origin, stateDir, workDir) {
   runnerEnv.AMA_API_SERVER = origin
   runnerEnv.AMA_PROJECT_ID = PROJECT_ID
   runnerEnv.AMA_RUNNER_ALLOW_UNSAFE_PROCESS = 'true'
+  runnerEnv.AMA_RUNNER_HEARTBEAT_INTERVAL = '2s'
+  runnerEnv.AMA_RUNNER_LEASE_SECONDS = '30'
+  runnerEnv.AMA_RUNNER_RENEW_INTERVAL = '2s'
+  runnerEnv.AMA_RUNNER_COMMAND_TIMEOUT = '3m'
+  runnerEnv.AMA_RUNNER_SHUTDOWN_GRACE = '1s'
+  runnerEnv.AMA_RUNNER_MAX_SESSION_DURATION = '3m'
 
   return spawn(
     runnerPath,
     [
       '--api-server',
       origin,
-      '--token',
-      TOKEN,
       '--project-id',
       PROJECT_ID,
       '--state-dir',
       stateDir,
-      '--workdir',
+      '--work-dir',
       workDir,
       '--allow-unsafe-process',
       '--max-concurrent',
       '1',
-      '--heartbeat-interval',
-      '2s',
-      '--lease-seconds',
-      '30',
-      '--renew-interval',
-      '2s',
-      '--command-timeout',
-      '3m',
-      '--shutdown-grace',
-      '1s',
-      '--max-session-duration',
-      '3m',
     ],
     {
       cwd: ROOT,

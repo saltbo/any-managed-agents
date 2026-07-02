@@ -6,7 +6,8 @@ const record = {
   sessionId: 'session_1',
   sequence: 1,
   createdAt: '2026-01-01T00:00:00.000Z',
-  event: { type: 'message.completed', payload: { providerShape: { remains: 'opaque' } } },
+  type: 'message.completed',
+  payload: { providerShape: { remains: 'opaque' } },
 }
 
 describe('sessionSocketClientMessageFrom', () => {
@@ -107,12 +108,15 @@ describe('sessionSocketServerMessageFrom', () => {
     expect(sessionSocketServerMessageFrom(null)).toBeNull()
     expect(sessionSocketServerMessageFrom({ type: 'backfill' })).toBeNull()
     expect(
-      sessionSocketServerMessageFrom({ type: 'event', record: { ...record, event: { type: 1, payload: {} } } }),
+      sessionSocketServerMessageFrom({
+        type: 'event',
+        record: { ...record, type: 1, payload: {} },
+      }),
     ).toBeNull()
     expect(
       sessionSocketServerMessageFrom({
         type: 'event',
-        record: { ...record, event: { type: 'message.completed', payload: [] } },
+        record: { ...record, payload: [] },
       }),
     ).toBeNull()
     expect(sessionSocketServerMessageFrom({ type: 'ack', id: 1 })).toBeNull()

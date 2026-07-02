@@ -148,8 +148,6 @@ from .error_response_error_details import ErrorResponseErrorDetails
 from .event_error import EventError
 from .event_message import EventMessage
 from .event_message_role import EventMessageRole
-from .event_record import EventRecord
-from .event_record_list_response import EventRecordListResponse
 from .event_tool_call_type_0 import EventToolCallType0
 from .event_tool_call_type_0_name import EventToolCallType0Name
 from .event_tool_call_type_1 import EventToolCallType1
@@ -346,6 +344,31 @@ from .session_create_metadata_annotations import SessionCreateMetadataAnnotation
 from .session_create_metadata_labels import SessionCreateMetadataLabels
 from .session_environment_json_object import SessionEnvironmentJsonObject
 from .session_environment_snapshot_type_0 import SessionEnvironmentSnapshotType0
+from .session_event_list_response import SessionEventListResponse
+from .session_event_type_0 import SessionEventType0
+from .session_event_type_0_type import SessionEventType0Type
+from .session_event_type_1 import SessionEventType1
+from .session_event_type_10 import SessionEventType10
+from .session_event_type_10_type import SessionEventType10Type
+from .session_event_type_11 import SessionEventType11
+from .session_event_type_11_type import SessionEventType11Type
+from .session_event_type_1_type import SessionEventType1Type
+from .session_event_type_2 import SessionEventType2
+from .session_event_type_2_type import SessionEventType2Type
+from .session_event_type_3 import SessionEventType3
+from .session_event_type_3_type import SessionEventType3Type
+from .session_event_type_4 import SessionEventType4
+from .session_event_type_4_type import SessionEventType4Type
+from .session_event_type_5 import SessionEventType5
+from .session_event_type_5_type import SessionEventType5Type
+from .session_event_type_6 import SessionEventType6
+from .session_event_type_6_type import SessionEventType6Type
+from .session_event_type_7 import SessionEventType7
+from .session_event_type_7_type import SessionEventType7Type
+from .session_event_type_8 import SessionEventType8
+from .session_event_type_8_type import SessionEventType8Type
+from .session_event_type_9 import SessionEventType9
+from .session_event_type_9_type import SessionEventType9Type
 from .session_events_accepted import SessionEventsAccepted
 from .session_list_response import SessionListResponse
 from .session_message import SessionMessage
@@ -646,8 +669,6 @@ __all__ = (
     "EventError",
     "EventMessage",
     "EventMessageRole",
-    "EventRecord",
-    "EventRecordListResponse",
     "EventToolCallType0",
     "EventToolCallType0Name",
     "EventToolCallType1",
@@ -844,7 +865,32 @@ __all__ = (
     "SessionCreateMetadataLabels",
     "SessionEnvironmentJsonObject",
     "SessionEnvironmentSnapshotType0",
+    "SessionEventListResponse",
     "SessionEventsAccepted",
+    "SessionEventType0",
+    "SessionEventType0Type",
+    "SessionEventType1",
+    "SessionEventType10",
+    "SessionEventType10Type",
+    "SessionEventType11",
+    "SessionEventType11Type",
+    "SessionEventType1Type",
+    "SessionEventType2",
+    "SessionEventType2Type",
+    "SessionEventType3",
+    "SessionEventType3Type",
+    "SessionEventType4",
+    "SessionEventType4Type",
+    "SessionEventType5",
+    "SessionEventType5Type",
+    "SessionEventType6",
+    "SessionEventType6Type",
+    "SessionEventType7",
+    "SessionEventType7Type",
+    "SessionEventType8",
+    "SessionEventType8Type",
+    "SessionEventType9",
+    "SessionEventType9Type",
     "SessionListResponse",
     "SessionMessage",
     "SessionMessageDelivery",

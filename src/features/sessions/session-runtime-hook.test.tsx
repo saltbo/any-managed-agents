@@ -21,7 +21,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useCallback } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EventRecord, Session } from '@/lib/amarpc'
+import type { Session, SessionEvent } from '@/lib/amarpc'
 import * as oidcModule from '@/lib/oidc'
 import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { useSessionRuntimeSession } from './use-session-runtime'
@@ -89,17 +89,17 @@ function buildSession(overrides: TestSessionOverrides = {}): Session {
   return buildTestSession({ name: 'Test session', ...overrides })
 }
 
-type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
-  type?: EventRecord['event']['type']
+type SessionEventOverrides = Partial<Omit<SessionEvent, 'type' | 'payload'>> & {
+  type?: SessionEvent['type']
   payload?: Record<string, unknown>
   metadata?: Record<string, unknown>
-  event?: EventRecord['event']
+  event?: Pick<SessionEvent, 'type' | 'payload'>
 }
 
-function buildEvent(overrides: EventRecordOverrides = {}): EventRecord {
+function buildEvent(overrides: SessionEventOverrides = {}): SessionEvent {
   const {
-    type = overrides.event?.type ?? 'message.completed',
-    payload = overrides.event?.payload ?? {
+    type = 'message.completed',
+    payload = {
       type: 'message.completed',
       message: { role: 'assistant', content: [{ type: 'text', text: 'Hello' }] },
     },
@@ -110,7 +110,8 @@ function buildEvent(overrides: EventRecordOverrides = {}): EventRecord {
     id: 'event_1',
     sessionId: 'session_1',
     sequence: 1,
-    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
+    type,
+    payload: payload as SessionEvent['payload'],
     createdAt: now,
     ...recordOverrides,
   }
@@ -216,7 +217,7 @@ describe('useSessionRuntimeSession — null/stopped session', () => {
   })
 
   it('connects a stopped session socket and dispatches backfilled message.completed events', async () => {
-    const events: EventRecord[] = [
+    const events: SessionEvent[] = [
       buildEvent(),
       buildEvent({ id: 'event_2', sequence: 2, type: 'turn.completed', payload: { type: 'turn.completed' } }),
     ]

@@ -143,9 +143,9 @@ async function unwrap<TData>(call: Promise<{ data: TData | undefined; error?: un
 }
 
 export interface SessionStream {
-  events: AsyncIterable<types.EventRecord>
+  events: AsyncIterable<types.SessionEvent>
   send(message: types.SessionSocketClientMessage): Promise<void>
-  backfill(options?: { cursor?: number; limit?: number; eventType?: string; visibility?: string }): Promise<types.SessionSocketBackfillMessage>
+  backfill(options?: { cursor?: number; limit?: number; eventType?: string }): Promise<types.SessionSocketBackfillMessage>
   close(): void
 }
 
@@ -156,7 +156,7 @@ export interface RunnerChannel {
 }
 
 type SessionSocketServerMessage =
-  | { type: 'event'; record: types.EventRecord }
+  | { type: 'event'; record: types.SessionEvent }
   | (types.SessionSocketBackfillMessage & { type: 'backfill' })
   | { type: 'runner_unavailable'; message: string }
 
@@ -174,8 +174,8 @@ function websocketURL(config: AmaClientConfig, path: string): URL {
 
 function createSessionStream(config: AmaClientConfig, sessionId: string): SessionStream {
   const socket = new WebSocket(websocketURL(config, \`/api/v1/sessions/\${encodeURIComponent(sessionId)}/socket\`).toString())
-  const buffered: types.EventRecord[] = []
-  const waiters: Array<(result: IteratorResult<types.EventRecord>) => void> = []
+  const buffered: types.SessionEvent[] = []
+  const waiters: Array<(result: IteratorResult<types.SessionEvent>) => void> = []
   const backfillWaiters = new Map<string, (response: types.SessionSocketBackfillMessage) => void>()
   let done = false
 
@@ -215,7 +215,7 @@ function createSessionStream(config: AmaClientConfig, sessionId: string): Sessio
     events: {
       [Symbol.asyncIterator]() {
         return {
-          next(): Promise<IteratorResult<types.EventRecord>> {
+          next(): Promise<IteratorResult<types.SessionEvent>> {
             const value = buffered.shift()
             if (value !== undefined) {
               return Promise.resolve({ value, done: false })

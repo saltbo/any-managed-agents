@@ -7,11 +7,11 @@ import type { ModelAvailability, ModelCatalogState } from '@server/domain/provid
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type { EnvFromEntry, MemoryVolume, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import type {
-  EventRecord,
   MessageDelivery,
   MessageState,
   Session,
   SessionApproval,
+  SessionEvent,
   SessionMessage,
   SessionState,
 } from '@server/domain/session'
@@ -36,7 +36,7 @@ export type {
   VolumeMount,
 } from '@server/domain/runtime/execution-inputs'
 
-export type { EventRecord, Session, SessionApproval, SessionMessage }
+export type { Session, SessionApproval, SessionEvent, SessionMessage }
 
 // A port-level error so the http layer can map orchestration validation
 // failures to a 400 without importing usecases internals or adapters. The
@@ -1875,14 +1875,14 @@ export interface EventQuery {
 }
 
 export interface EventPage {
-  rows: EventRecord[]
+  rows: SessionEvent[]
   hasMore: boolean
 }
 
 // "Storage follows the loop": the canonical event store that routes cloud-loop
 // (ama) sessions to the per-session Session DO (SQLite hot + R2 cold) and leaves
 // pre-migration cloud + self-hosted CLI sessions on D1. One contract over both
-// backends; the read shape (EventRecord/Page) is identical either way.
+// backends; the read shape (SessionEvent/Page) is identical either way.
 export interface EventStore {
   appendEvent(scope: { organizationId: string; projectId: string; sessionId: string }, event: AmaEvent): Promise<string>
   // Batch ingest (the POST /events endpoint). Returns the count.

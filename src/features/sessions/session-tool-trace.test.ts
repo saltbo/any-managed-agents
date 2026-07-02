@@ -1,35 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import type { EventRecord } from '@/lib/amarpc'
+import type { SessionEvent } from '@/lib/amarpc'
 import { buildSessionToolTrace, summarizeToolValue } from './session-tool-trace'
 
 let sequence = 0
 
-type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
-  type?: EventRecord['event']['type']
+type SessionEventOverrides = Partial<Omit<SessionEvent, 'type' | 'payload'>> & {
+  type?: SessionEvent['type']
   payload?: Record<string, unknown>
   metadata?: Record<string, unknown>
-  event?: EventRecord['event']
+  event?: Pick<SessionEvent, 'type' | 'payload'>
 }
 
-function buildEvent(overrides: EventRecordOverrides): EventRecord {
+function buildEvent(overrides: SessionEventOverrides): SessionEvent {
   sequence += 1
-  const {
-    type = overrides.event?.type ?? 'message.completed',
-    payload = overrides.event?.payload ?? {},
-    event: eventOverride,
-    ...recordOverrides
-  } = overrides
+  const { type = 'message.completed', payload = {}, event: eventOverride, ...recordOverrides } = overrides
   return {
     id: `event_${sequence}`,
     sessionId: 'session_1',
     sequence,
-    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
+    type,
+    payload: payload as SessionEvent['payload'],
     createdAt: '2026-05-23T00:00:00.000Z',
     ...recordOverrides,
   }
 }
 
-function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
+function toolStart(toolCallId: string, overrides: SessionEventOverrides = {}) {
   const overrideToolCall = objectValue(overrides.payload?.toolCall)
   const toolCall = {
     id: toolCallId,
@@ -49,7 +45,7 @@ function toolStart(toolCallId: string, overrides: EventRecordOverrides = {}) {
   })
 }
 
-function toolEnd(toolCallId: string, overrides: EventRecordOverrides = {}) {
+function toolEnd(toolCallId: string, overrides: SessionEventOverrides = {}) {
   const overridePayload = objectValue(overrides.payload)
   const failed = Boolean(overridePayload.error)
   return buildEvent({
@@ -76,7 +72,7 @@ function toolEnd(toolCallId: string, overrides: EventRecordOverrides = {}) {
   })
 }
 
-function withoutPayload(overrides: EventRecordOverrides): EventRecordOverrides {
+function withoutPayload(overrides: SessionEventOverrides): SessionEventOverrides {
   const { payload: _payload, type: _type, ...rest } = overrides
   return rest
 }

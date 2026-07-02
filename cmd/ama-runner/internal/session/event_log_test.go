@@ -38,8 +38,8 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 	if len(events) != 3 {
 		t.Fatalf("len = %d, want 3", len(events))
 	}
-	if events[0].Event["type"] != "a" || events[2].Event["type"] != "c" {
-		t.Fatalf("order wrong: %s..%s", events[0].Event["type"], events[2].Event["type"])
+	if events[0].Type != "a" || events[2].Type != "c" {
+		t.Fatalf("order wrong: %s..%s", events[0].Type, events[2].Type)
 	}
 	if events[0].Sequence != 1 || events[2].Sequence != 3 {
 		t.Fatalf("sequences = %d,%d want 1,3", events[0].Sequence, events[2].Sequence)
@@ -60,6 +60,13 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "events.jsonl")); err != nil {
 		t.Fatalf("durable log missing: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read durable log: %v", err)
+	}
+	if strings.Contains(string(raw), `"event"`) {
+		t.Fatalf("event log must use flattened SessionEvent records, got %s", string(raw))
 	}
 }
 

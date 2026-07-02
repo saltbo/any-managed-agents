@@ -205,18 +205,18 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
           )}
         </TabsContent>
         <TabsContent value="debug" className="mt-2">
-          {runtime.state.eventRecords.length === 0 ? (
+          {runtime.state.sessionEvents.length === 0 ? (
             <p className="text-sm text-muted-foreground">Runtime diagnostics appear here as the agent runs.</p>
           ) : (
             <ul className="grid gap-2" aria-label="Quickstart session debug events">
-              {runtime.state.eventRecords.map((record) => (
+              {runtime.state.sessionEvents.map((record) => (
                 <li key={record.id} className="rounded-md bg-muted/40 px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge value={record.event.type} />
+                    <StatusBadge value={record.type} />
                     <span className="font-mono text-xs text-muted-foreground">{record.id}</span>
                   </div>
                   <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">
-                    {stringifyJson(record.event.payload)}
+                    {stringifyJson(record.payload)}
                   </pre>
                 </li>
               ))}

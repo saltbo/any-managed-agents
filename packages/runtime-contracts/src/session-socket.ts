@@ -1,4 +1,4 @@
-import { type AmaSessionEventType, type EventRecord, isAmaSessionEventType } from './session-events'
+import { type AmaSessionEventType, isAmaSessionEventType, type SessionEvent } from './session-events'
 
 export type SessionSocketPromptMessage = {
   id: string
@@ -35,13 +35,13 @@ export type SessionSocketClientMessage =
 
 export type SessionSocketEventMessage = {
   type: 'event'
-  record: EventRecord
+  record: SessionEvent
 }
 
 export type SessionSocketBackfillMessage = {
   type: 'backfill'
   requestId: string | null
-  events: EventRecord[]
+  events: SessionEvent[]
   nextCursor: number | null
   hasMore: boolean
 }
@@ -114,14 +114,14 @@ export function sessionSocketServerMessageFrom(value: unknown): SessionSocketSer
       ? {
           type: 'backfill',
           requestId: typeof message.requestId === 'string' ? message.requestId : null,
-          events: message.events.filter(isEventRecord),
+          events: message.events.filter(isSessionEvent),
           nextCursor: typeof message.nextCursor === 'number' ? message.nextCursor : null,
           hasMore: message.hasMore === true,
         }
       : null
   }
   if (message.type === 'event') {
-    return isEventRecord(message.record) ? { type: 'event', record: message.record } : null
+    return isSessionEvent(message.record) ? { type: 'event', record: message.record } : null
   }
   if (message.type === 'ack') {
     return typeof message.id === 'string' ? { type: 'ack', id: message.id } : null
@@ -137,16 +137,16 @@ export function sessionSocketServerMessageFrom(value: unknown): SessionSocketSer
   return null
 }
 
-function isEventRecord(value: unknown): value is EventRecord {
+function isSessionEvent(value: unknown): value is SessionEvent {
   const record = objectValue(value)
-  const event = objectValue(record.event)
   return (
     typeof record.id === 'string' &&
     typeof record.sessionId === 'string' &&
     typeof record.sequence === 'number' &&
     typeof record.createdAt === 'string' &&
-    typeof event.type === 'string' &&
-    isObject(event.payload)
+    typeof record.type === 'string' &&
+    isAmaSessionEventType(record.type) &&
+    isObject(record.payload)
   )
 }
 

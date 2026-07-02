@@ -574,26 +574,27 @@ describe('[CF] /api/v1/sessions', () => {
     const events = (await eventsRes.json()) as {
       data: Array<{
         sequence: number
-        event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> }
+        type: string
+        payload: Record<string, unknown>
       }>
       pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
     }
     expect(events.data.map((event) => event.sequence)).toEqual(events.data.map((_, index) => index + 1))
     expect(events.pagination).toMatchObject({ limit: 100, hasMore: false, nextCursor: null })
-    expect(events.data.map((record) => record.event.type)).toEqual(
+    expect(events.data.map((record) => record.type)).toEqual(
       expect.arrayContaining(['turn.completed', 'message.updated', 'message.completed']),
     )
     const toolCallEvent = events.data.find(
       (record) =>
-        record.event.type === 'message.completed' &&
-        JSON.stringify(record.event.payload).includes('"type":"tool_call"') &&
-        JSON.stringify(record.event.payload).includes('"id":"call_git_status"'),
+        record.type === 'message.completed' &&
+        JSON.stringify(record.payload).includes('"type":"tool_call"') &&
+        JSON.stringify(record.payload).includes('"id":"call_git_status"'),
     )
     const toolResultEvent = events.data.find(
       (record) =>
-        record.event.type === 'message.completed' &&
-        JSON.stringify(record.event.payload).includes('"type":"tool_result"') &&
-        JSON.stringify(record.event.payload).includes('"toolCallId":"call_git_status"'),
+        record.type === 'message.completed' &&
+        JSON.stringify(record.payload).includes('"type":"tool_result"') &&
+        JSON.stringify(record.payload).includes('"toolCallId":"call_git_status"'),
     )
     expect(toolCallEvent).toBeTruthy()
     expect(toolResultEvent).toBeTruthy()
@@ -630,12 +631,10 @@ describe('[CF] /api/v1/sessions', () => {
       authorization,
     )
     const filteredEvents = (await filteredEventsRes.json()) as {
-      data: Array<{ sequence: number; event: { type: string } }>
+      data: Array<{ sequence: number; type: string }>
     }
     expect(filteredEvents.data).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ event: expect.objectContaining({ type: 'message.completed' }) }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ type: 'message.completed' })]),
     )
 
     // CSV export via content negotiation replaces /events/export (§1.2.6).
@@ -1307,22 +1306,20 @@ describe('[CF] /api/v1/sessions', () => {
     )
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as {
-      data: Array<{ event: { type: string; payload: Record<string, unknown> } }>
+      data: Array<{ type: string; payload: Record<string, unknown> }>
     }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'message.completed',
-            payload: expect.objectContaining({
-              message: expect.objectContaining({
-                content: expect.arrayContaining([
-                  expect.objectContaining({
-                    type: 'tool_call',
-                    toolCall: { id: 'call_pi', name: 'bash', input: { command: 'npm test' } },
-                  }),
-                ]),
-              }),
+          type: 'message.completed',
+          payload: expect.objectContaining({
+            message: expect.objectContaining({
+              content: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'tool_call',
+                  toolCall: { id: 'call_pi', name: 'bash', input: { command: 'npm test' } },
+                }),
+              ]),
             }),
           }),
         }),
@@ -1347,15 +1344,13 @@ describe('[CF] /api/v1/sessions', () => {
       authorization,
     )
     const runtimeErrorEvents = (await runtimeErrorEventsRes.json()) as {
-      data: Array<{ event: { type: string; payload: Record<string, unknown> } }>
+      data: Array<{ type: string; payload: Record<string, unknown> }>
     }
     expect(runtimeErrorEvents.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'runtime.error',
-            payload: expect.objectContaining({ message: 'Runtime failed safely', code: 'runtime_exit' }),
-          }),
+          type: 'runtime.error',
+          payload: expect.objectContaining({ message: 'Runtime failed safely', code: 'runtime_exit' }),
         }),
       ]),
     )
@@ -1398,14 +1393,12 @@ describe('[CF] /api/v1/sessions', () => {
       authorization,
     )
     const events = (await eventsRes.json()) as {
-      data: Array<{ event: { type: string; metadata?: Record<string, unknown> } }>
+      data: Array<{ type: string }>
     }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'turn.completed',
-          }),
+          type: 'turn.completed',
         }),
       ]),
     )
@@ -1465,8 +1458,8 @@ describe('[CF] /api/v1/sessions', () => {
     const events = (await archived!.text())
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line) as { event: { type: string } })
-    expect(events.some((record) => record.event.type === 'turn.completed')).toBe(true)
+      .map((line) => JSON.parse(line) as { type: string })
+    expect(events.some((record) => record.type === 'turn.completed')).toBe(true)
   })
 
   it('streams backfill history and live events over the browser WebSocket', async () => {
@@ -1528,9 +1521,7 @@ describe('[CF] /api/v1/sessions', () => {
 
     ws.send(JSON.stringify({ id: 'r1', type: 'backfill', requestId: 'r1', limit: 100 }))
     const backfill = await waitForFrame((frame) => frame.type === 'backfill' && frame.requestId === 'r1')
-    expect(
-      (backfill.events as Array<{ event: { type: string } }>).some((record) => record.event.type === 'message.started'),
-    ).toBe(true)
+    expect((backfill.events as Array<{ type: string }>).some((record) => record.type === 'message.started')).toBe(true)
 
     // A live append fans out to the open socket without polling.
     await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, authorization, {
@@ -1551,11 +1542,9 @@ describe('[CF] /api/v1/sessions', () => {
       }),
     })
     const live = await waitForFrame(
-      (frame) =>
-        frame.type === 'event' &&
-        ((frame.record as { event?: { type: string } }).event?.type ?? '') === 'message.completed',
+      (frame) => frame.type === 'event' && ((frame.record as { type?: string }).type ?? '') === 'message.completed',
     )
-    expect((live.record as { event: { type: string } }).event.type).toBe('message.completed')
+    expect((live.record as { type: string }).type).toBe('message.completed')
 
     ws.close()
   })
@@ -1688,15 +1677,15 @@ describe('[CF] /api/v1/sessions', () => {
     const eventsRes = await jsonFetch(`/api/v1/sessions/${createdId}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as {
-      data: Array<{ event: { type: string; payload: Record<string, unknown> } }>
+      data: Array<{ type: string; payload: Record<string, unknown> }>
     }
     const successfulAssistantCompletions = events.data.filter((record) => {
       const message = (
-        record.event.payload as { message?: { content?: Array<{ text?: string }>; role?: string; stopReason?: string } }
+        record.payload as { message?: { content?: Array<{ text?: string }>; role?: string; stopReason?: string } }
       ).message
       const text = message?.content?.map((part) => part.text ?? '').join('\n') ?? ''
       return (
-        record.event.type === 'message.completed' &&
+        record.type === 'message.completed' &&
         message?.role === 'assistant' &&
         message.stopReason === 'stop' &&
         text.includes('Wait for cancellation before completing')
@@ -1744,40 +1733,34 @@ describe('[CF] /api/v1/sessions', () => {
     const eventsRes = await jsonFetch(`/api/v1/sessions/${created.metadata.uid}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as {
-      data: Array<{ sequence: number; event: { type: string; payload: Record<string, unknown> } }>
+      data: Array<{ sequence: number; type: string; payload: Record<string, unknown> }>
     }
     expect(events.data.map((event) => event.sequence)).toEqual(events.data.map((_, index) => index + 1))
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'message.completed',
-            payload: expect.objectContaining({
-              message: expect.objectContaining({
-                role: 'user',
-                content: [
-                  expect.objectContaining({ type: 'text', text: 'Research current Canadian banking bonus offers.' }),
-                ],
-              }),
+          type: 'message.completed',
+          payload: expect.objectContaining({
+            message: expect.objectContaining({
+              role: 'user',
+              content: [
+                expect.objectContaining({ type: 'text', text: 'Research current Canadian banking bonus offers.' }),
+              ],
             }),
           }),
         }),
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'message.completed',
-            payload: expect.objectContaining({
-              message: expect.objectContaining({ role: 'assistant' }),
-            }),
+          type: 'message.completed',
+          payload: expect.objectContaining({
+            message: expect.objectContaining({ role: 'assistant' }),
           }),
         }),
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'usage.recorded',
-            payload: expect.objectContaining({
-              model: expect.any(String),
-              promptTokens: expect.any(Number),
-              completionTokens: expect.any(Number),
-            }),
+          type: 'usage.recorded',
+          payload: expect.objectContaining({
+            model: expect.any(String),
+            promptTokens: expect.any(Number),
+            completionTokens: expect.any(Number),
           }),
         }),
       ]),
@@ -2049,42 +2032,38 @@ describe('[CF] /api/v1/sessions', () => {
 
     const eventsRes = await jsonFetch(`/api/v1/sessions/${session.metadata.uid}/events`, authorization)
     const events = (await eventsRes.json()) as {
-      data: Array<{ event: { type: string; payload: Record<string, unknown> } }>
+      data: Array<{ type: string; payload: Record<string, unknown> }>
     }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'permission.denied',
-            payload: expect.objectContaining({
-              reason: 'sandbox_command',
-              resourceType: 'sandbox_command',
-              resourceId: 'git',
-              operation: 'command',
-              details: expect.objectContaining({
-                ruleId: 'sandboxPolicy.blockedCommands',
-                command: 'git status',
-              }),
+          type: 'permission.denied',
+          payload: expect.objectContaining({
+            reason: 'sandbox_command',
+            resourceType: 'sandbox_command',
+            resourceId: 'git',
+            operation: 'command',
+            details: expect.objectContaining({
+              ruleId: 'sandboxPolicy.blockedCommands',
+              command: 'git status',
             }),
           }),
         }),
         expect.objectContaining({
-          event: expect.objectContaining({
-            type: 'message.completed',
-            payload: expect.objectContaining({
-              message: expect.objectContaining({
-                role: 'tool',
-                parentToolCallId: 'call_git_status',
-                content: expect.arrayContaining([
-                  expect.objectContaining({
-                    type: 'tool_result',
-                    toolCallId: 'call_git_status',
-                    error: expect.objectContaining({
-                      message: 'Sandbox command is blocked by policy.',
-                    }),
+          type: 'message.completed',
+          payload: expect.objectContaining({
+            message: expect.objectContaining({
+              role: 'tool',
+              parentToolCallId: 'call_git_status',
+              content: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'tool_result',
+                  toolCallId: 'call_git_status',
+                  error: expect.objectContaining({
+                    message: 'Sandbox command is blocked by policy.',
                   }),
-                ]),
-              }),
+                }),
+              ]),
             }),
           }),
         }),

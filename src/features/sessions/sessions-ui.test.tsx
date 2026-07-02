@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTime } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { type Agent, ApiError, type Environment, type EventRecord, type Session } from '@/lib/amarpc'
+import { type Agent, ApiError, type Environment, type Session, type SessionEvent } from '@/lib/amarpc'
 import {
   type AgentOverrides,
   type EnvironmentOverrides,
@@ -51,17 +51,17 @@ function buildEnvironment(overrides: EnvironmentOverrides = {}): Environment {
   })
 }
 
-type EventRecordOverrides = Partial<Omit<EventRecord, 'event'>> & {
-  type?: EventRecord['event']['type']
+type SessionEventOverrides = Partial<Omit<SessionEvent, 'type' | 'payload'>> & {
+  type?: SessionEvent['type']
   payload?: Record<string, unknown>
   metadata?: Record<string, unknown>
-  event?: EventRecord['event']
+  event?: Pick<SessionEvent, 'type' | 'payload'>
 }
 
-function buildPersistedEvent(overrides: EventRecordOverrides = {}): EventRecord {
+function buildPersistedEvent(overrides: SessionEventOverrides = {}): SessionEvent {
   const {
-    type = overrides.event?.type ?? 'message.completed',
-    payload = overrides.event?.payload ?? {
+    type = 'message.completed',
+    payload = {
       message: { role: 'assistant', content: 'Runtime failed to start' },
     },
     event: eventOverride,
@@ -71,7 +71,8 @@ function buildPersistedEvent(overrides: EventRecordOverrides = {}): EventRecord 
     id: 'event_1',
     sessionId: 'session_1',
     sequence: 1,
-    event: eventOverride ?? ({ type, payload } as EventRecord['event']),
+    type,
+    payload: payload as SessionEvent['payload'],
     createdAt: '2026-05-23T00:00:00.000Z',
     ...recordOverrides,
   }
@@ -91,7 +92,7 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
       },
     ],
     tools: [],
-    eventRecords: [
+    sessionEvents: [
       buildPersistedEvent({
         type: 'runtime.error',
         payload: {
@@ -296,7 +297,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          runtime={buildRuntimeState({ messages: [], tools: [], eventRecords: [], error: null })}
+          runtime={buildRuntimeState({ messages: [], tools: [], sessionEvents: [], error: null })}
           onStop={vi.fn()}
           onArchive={vi.fn()}
           onReconnectRuntime={vi.fn()}
@@ -341,7 +342,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           session={session}
           agentName="Coding agent"
           environmentName="Node workspace"
-          runtime={buildRuntimeState({ messages: [], tools: [], eventRecords: [], error: null })}
+          runtime={buildRuntimeState({ messages: [], tools: [], sessionEvents: [], error: null })}
           onStop={vi.fn()}
           onArchive={vi.fn()}
           onReconnectRuntime={vi.fn()}
@@ -408,7 +409,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         },
       ],
       tools: [],
-      eventRecords: persistedEvents,
+      sessionEvents: persistedEvents,
       error: null,
     })
 
@@ -458,7 +459,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           eventType: 'tool_result',
         },
       ],
-      eventRecords: AMA_SESSION_EVENT_TYPES.map((type, index) =>
+      sessionEvents: AMA_SESSION_EVENT_TYPES.map((type, index) =>
         buildPersistedEvent({
           id: `debug_${type}`,
           sequence: index + 1,
@@ -503,7 +504,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
   it('renders transcript and debug empty states', async () => {
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState({ messages: [], tools: [], eventRecords: [], error: null })}
+        runtime={buildRuntimeState({ messages: [], tools: [], sessionEvents: [], error: null })}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -543,7 +544,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       }
       return element
     })
-    const eventRecords = [
+    const sessionEvents = [
       buildPersistedEvent(),
       buildPersistedEvent({
         id: 'live_only_event',
@@ -557,7 +558,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     render(
       <SessionRuntimePanel
         runtime={buildRuntimeState({
-          eventRecords,
+          sessionEvents,
         })}
         message=""
         setMessage={vi.fn()}
@@ -588,7 +589,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         runtime={buildRuntimeState({
           messages: [],
           tools: [],
-          eventRecords: [
+          sessionEvents: [
             buildPersistedEvent({
               id: 'debug_message',
               sequence: 1,
@@ -688,7 +689,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
               eventType: 'tool_result',
             },
           ],
-          eventRecords: [],
+          sessionEvents: [],
         })}
         message=""
         setMessage={vi.fn()}
@@ -754,7 +755,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
         runtime={buildRuntimeState({
           messages: [],
           tools: [],
-          eventRecords: [
+          sessionEvents: [
             buildPersistedEvent({
               id: 'debug_message',
               sequence: 1,

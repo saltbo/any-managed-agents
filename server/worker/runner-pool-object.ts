@@ -1,4 +1,4 @@
-import { type AmaEvent, isAmaSessionEventType } from '@shared/session-events'
+import { isAmaSessionEventType } from '@shared/session-events'
 import { createDeps } from '../composition'
 import type { Env } from '../env'
 import { claimLease, materializeWorkItemPayload } from '../usecases/leases'
@@ -571,18 +571,16 @@ async function fanOutRelayedEvent(env: Env, body: { scope: EventWriteContext; ra
 
 function relayedRunnerEventFrom(value: unknown): RelayedRunnerEvent | null {
   const record = objectRecord(value)
-  const event = objectRecord(record?.event)
-  const payload = objectRecord(event?.payload)
+  const payload = objectRecord(record?.payload)
   if (
     !record ||
-    !event ||
     !payload ||
     typeof record.id !== 'string' ||
     typeof record.sessionId !== 'string' ||
     typeof record.sequence !== 'number' ||
     typeof record.createdAt !== 'string' ||
-    typeof event.type !== 'string' ||
-    !isAmaSessionEventType(event.type)
+    typeof record.type !== 'string' ||
+    !isAmaSessionEventType(record.type)
   ) {
     return null
   }
@@ -591,10 +589,8 @@ function relayedRunnerEventFrom(value: unknown): RelayedRunnerEvent | null {
     sessionId: record.sessionId,
     sequence: record.sequence,
     createdAt: record.createdAt,
-    event: {
-      type: event.type,
-      payload,
-    } as AmaEvent,
+    type: record.type,
+    payload,
   }
 }
 

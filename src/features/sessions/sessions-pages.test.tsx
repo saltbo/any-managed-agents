@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Agent, Environment, EventRecord, ListResponse, MemoryStore, Session } from '@/lib/amarpc'
+import type { Agent, Environment, ListResponse, MemoryStore, Session, SessionEvent } from '@/lib/amarpc'
 import { ApiError } from '@/lib/amarpc'
 import { HttpResponse, http, server } from '@/test/msw'
 import {
@@ -112,23 +112,21 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
     runState: 'idle',
     messages: [],
     tools: [],
-    eventRecords: [],
+    sessionEvents: [],
     eventKeys: [],
     error: null,
     ...overrides,
   }
 }
 
-function buildMessageEvent(sessionId: string, sequence: number, content: string): EventRecord {
+function buildMessageEvent(sessionId: string, sequence: number, content: string): SessionEvent {
   return {
     id: `event_${sequence}`,
     sessionId,
     sequence,
-    event: {
-      type: 'message.completed',
-      payload: {
-        message: { id: `message_${sequence}`, role: 'assistant', content: [{ type: 'text', text: content }] },
-      },
+    type: 'message.completed',
+    payload: {
+      message: { id: `message_${sequence}`, role: 'assistant', content: [{ type: 'text', text: content }] },
     },
     createdAt: new Date(sequence * 1000).toISOString(),
   }
@@ -1072,19 +1070,20 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
       value: vi.fn(),
       configurable: true,
     })
-    const persistedEvents: EventRecord[] = [
+    const persistedEvents: SessionEvent[] = [
       {
         id: 'persisted_debug_1',
         sessionId: 'session_1',
         sequence: 1,
-        event: { type: 'message.completed', payload: { type: 'message.completed' } },
+        type: 'message.completed',
+        payload: { message: { id: 'message_1', role: 'assistant', content: [] } },
         createdAt: now,
       },
     ]
 
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState({ eventRecords: persistedEvents })}
+        runtime={buildRuntimeState({ sessionEvents: persistedEvents })}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -1121,19 +1120,20 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
       value: vi.fn(),
       configurable: true,
     })
-    const persistedEvents: EventRecord[] = [
+    const persistedEvents: SessionEvent[] = [
       {
         id: 'transcript_only_ev',
         sessionId: 'session_1',
         sequence: 1,
-        event: { type: 'message.completed', payload: { type: 'message.completed' } },
+        type: 'message.completed',
+        payload: { message: { id: 'message_1', role: 'assistant', content: [] } },
         createdAt: now,
       },
     ]
 
     render(
       <SessionRuntimePanel
-        runtime={buildRuntimeState({ eventRecords: persistedEvents })}
+        runtime={buildRuntimeState({ sessionEvents: persistedEvents })}
         message=""
         setMessage={vi.fn()}
         onSend={vi.fn()}
@@ -1153,7 +1153,7 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
     expect(screen.getByText('transcript_only_ev')).toBeTruthy()
   })
 
-  it('renders event records from the runtime state once', async () => {
+  it('renders session events from the runtime state once', async () => {
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
       value: vi.fn(() => false),
       configurable: true,
@@ -1170,16 +1170,17 @@ describe('SessionRuntimePanel — toolbar and busy state', () => {
       value: vi.fn(),
       configurable: true,
     })
-    const persistedEvents: EventRecord[] = [
+    const persistedEvents: SessionEvent[] = [
       {
         id: 'shared_event_1',
         sessionId: 'session_1',
         sequence: 1,
-        event: { type: 'message.completed', payload: { type: 'message.completed' } },
+        type: 'message.completed',
+        payload: { message: { id: 'message_1', role: 'assistant', content: [] } },
         createdAt: now,
       },
     ]
-    const runtimeWithSameEvent = buildRuntimeState({ eventRecords: persistedEvents })
+    const runtimeWithSameEvent = buildRuntimeState({ sessionEvents: persistedEvents })
 
     render(
       <SessionRuntimePanel

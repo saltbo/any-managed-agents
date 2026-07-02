@@ -750,7 +750,7 @@ func (s SessionsService) GetMessage(ctx context.Context, sessionID string, messa
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
 }
 
-func (s SessionsService) ListEvents(ctx context.Context, sessionID string, params *ListSessionEventsParams) (*EventRecordListResponse, error) {
+func (s SessionsService) ListEvents(ctx context.Context, sessionID string, params *ListSessionEventsParams) (*SessionEventListResponse, error) {
 	response, err := s.client.raw.ListSessionEventsWithResponse(ctx, sessionID, params)
 	if err != nil {
 		return nil, err

@@ -15,16 +15,17 @@ import (
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
-// Event is one canonical event in the runner's local log. The id and
-// sequence are assigned once at append so they stay stable across relayed reads
-// (the browser dedups by them); the server canonicalises type→visibility/role,
-// threads parent/correlation, and redacts on the way out.
+// Event is one canonical event in the runner's local log. The id and sequence
+// are assigned once at append so they stay stable across live relay and backfill
+// reads; the browser dedups by them. The JSON shape intentionally matches the
+// AMA SessionEvent transport record.
 type Event struct {
 	ID        string   `json:"id"`
 	SessionID string   `json:"sessionId"`
 	Sequence  int64    `json:"sequence"`
 	CreatedAt string   `json:"createdAt"`
-	Event     ama.JSON `json:"event"`
+	Type      string   `json:"type"`
+	Payload   ama.JSON `json:"payload"`
 }
 
 // EventLog is the runner's local, durable, per-session event log for
@@ -80,12 +81,26 @@ func (s *EventLog) Append(body ama.JSON) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
+	eventType, ok := body["type"].(string)
+	if !ok || eventType == "" {
+		return Event{}, fmt.Errorf("session event is missing type")
+	}
+	payload, ok := body["payload"].(ama.JSON)
+	if !ok {
+		payloadRecord, ok := body["payload"].(map[string]any)
+		if !ok {
+			payload = ama.JSON{}
+		} else {
+			payload = ama.JSON(payloadRecord)
+		}
+	}
 	event := Event{
 		ID:        id,
 		SessionID: s.sessionID,
 		Sequence:  s.seq,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-		Event:     body,
+		Type:      eventType,
+		Payload:   payload,
 	}
 	line, err := json.Marshal(event)
 	if err != nil {
@@ -100,6 +115,10 @@ func (s *EventLog) Append(body ama.JSON) (Event, error) {
 		return event, err
 	}
 	return event, nil
+}
+
+func (e Event) AmaEvent() ama.JSON {
+	return ama.JSON{"type": e.Type, "payload": e.Payload}
 }
 
 // ReadAll returns the full ordered log. The server applies the cursor/type/

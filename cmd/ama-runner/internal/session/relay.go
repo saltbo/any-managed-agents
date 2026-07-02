@@ -315,7 +315,8 @@ func (h *Relay) RelayEvent(ctx context.Context, sessionID string, event ama.JSON
 		"sessionId": sessionID,
 		"sequence":  time.Now().UnixMilli(),
 		"createdAt": time.Now().UTC().Format(time.RFC3339Nano),
-		"event":     event,
+		"type":      event["type"],
+		"payload":   event["payload"],
 	}
 	if relay != nil {
 		record["id"] = relay.ID

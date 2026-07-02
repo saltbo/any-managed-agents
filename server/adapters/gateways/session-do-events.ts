@@ -2,7 +2,7 @@
 // Session DO; self-hosted runner events are relayed through the RunnerPool and
 // remain durable only in the runner's local JSONL log.
 
-import type { EventRecord } from '@server/domain/session'
+import type { SessionEvent } from '@server/domain/session'
 import type { EventPage, EventQuery } from '@server/usecases/ports'
 import type { AmaEvent } from '@shared/session-events'
 import type { Env } from '../../env'
@@ -43,7 +43,7 @@ export interface SessionDoEventStore {
   append(
     scope: EventWriteContext,
     canonicalEvent: AmaEvent,
-  ): Promise<{ id: string; sequence: number; record: EventRecord }>
+  ): Promise<{ id: string; sequence: number; record: SessionEvent }>
   query(sessionId: string, query: EventQuery): Promise<EventPage>
   relayQuery(
     sessionId: string,

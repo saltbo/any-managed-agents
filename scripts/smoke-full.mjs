@@ -202,37 +202,30 @@ function startRunner(binary, origin, token, environmentId, stateDir, workDir) {
     [
       '--api-server',
       origin,
-      '--token',
-      token.accessToken,
       '--project-id',
       token.projectId,
       '--environment-id',
       environmentId,
       '--state-dir',
       stateDir,
-      '--workdir',
+      '--work-dir',
       workDir,
       '--allow-unsafe-process',
       '--max-concurrent',
       '1',
-      '--heartbeat-interval',
-      '5s',
-      '--lease-seconds',
-      '30',
-      '--renew-interval',
-      '10s',
-      '--command-timeout',
-      '4m',
-      '--shutdown-grace',
-      '5s',
-      '--max-session-duration',
-      '4m',
     ],
     {
       cwd: ROOT,
       prefix: 'ama-runner',
       env: {
         ...process.env,
+        AMA_TOKEN: token.accessToken,
+        AMA_RUNNER_HEARTBEAT_INTERVAL: '5s',
+        AMA_RUNNER_LEASE_SECONDS: '30',
+        AMA_RUNNER_RENEW_INTERVAL: '10s',
+        AMA_RUNNER_COMMAND_TIMEOUT: '4m',
+        AMA_RUNNER_SHUTDOWN_GRACE: '5s',
+        AMA_RUNNER_MAX_SESSION_DURATION: '4m',
         AMA_RUNTIME_BRIDGE_HOST_HOME: process.env.AMA_RUNTIME_BRIDGE_HOST_HOME ?? process.env.HOME ?? '',
       },
     },
@@ -354,7 +347,7 @@ function eventRecord(value) {
 
 function hasAssistantText(value, marker) {
   const record = eventRecord(value)
-  const message = record?.event?.payload?.message
+  const message = record?.payload?.message
   return (
     message?.role === 'assistant' &&
     Array.isArray(message.content) &&
@@ -365,7 +358,7 @@ function hasAssistantText(value, marker) {
 function eventTypes(frames) {
   return frames
     .filter((frame) => frame.type === 'event')
-    .map((frame) => frame.record?.event?.type)
+    .map((frame) => frame.record?.type)
     .filter(Boolean)
 }
 
@@ -526,7 +519,7 @@ async function main() {
     runner = startRunner(runnerBinary, origin, token, environmentId, stateDir, workDir)
     await waitForRunner(origin, token, environmentId)
     await socket.waitFor(
-      (frame) => frame.type === 'event' && frame.record?.event?.type === 'runtime.started',
+      (frame) => frame.type === 'event' && frame.record?.type === 'runtime.started',
       'runtime.started',
     )
     await socket.waitFor((frame) => frame.type === 'event' && hasAssistantText(frame, DONE_MARKER), DONE_MARKER)

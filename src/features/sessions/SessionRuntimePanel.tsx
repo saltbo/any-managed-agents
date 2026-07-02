@@ -38,17 +38,17 @@ export function SessionRuntimePanel({
   const [transcriptType, setTranscriptType] = useState<TranscriptFilter>('all')
   const [eventType, setEventType] = useState<EventFilter>('all')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
-  const eventRecords = runtime.eventRecords
-  const eventsById = useMemo(() => new Map(eventRecords.map((event) => [event.id, event])), [eventRecords])
+  const sessionEvents = runtime.sessionEvents
+  const eventsById = useMemo(() => new Map(sessionEvents.map((event) => [event.id, event])), [sessionEvents])
   const eventRows = useMemo(
     () =>
-      eventRecords.map((record) => ({
+      sessionEvents.map((record) => ({
         id: record.id,
-        type: record.event.type,
-        payload: record.event.payload,
+        type: record.type,
+        payload: record.payload,
         createdAt: record.createdAt,
       })),
-    [eventRecords],
+    [sessionEvents],
   )
   const debugEventTypes = useMemo<string[]>(
     () => [...new Set(eventRows.map((event) => event.type))].sort((left, right) => left.localeCompare(right)),
@@ -57,7 +57,7 @@ export function SessionRuntimePanel({
   const selectedEventType = eventType === 'all' || debugEventTypes.includes(eventType) ? eventType : 'all'
   const filteredDebugEvents =
     selectedEventType === 'all' ? eventRows : eventRows.filter((event) => event.type === selectedEventType)
-  const eventExport = stringifyJson(eventRecords)
+  const eventExport = stringifyJson(sessionEvents)
   const transcriptItems = useMemo(
     () =>
       [
@@ -276,11 +276,11 @@ export function SessionRuntimePanel({
   )
 }
 
-function EventDetailAside({ event }: { event: SessionRuntimeState['eventRecords'][number] }) {
+function EventDetailAside({ event }: { event: SessionRuntimeState['sessionEvents'][number] }) {
   return (
     <aside className="min-h-0 overflow-y-auto border-t bg-muted/20 p-4 lg:border-t-0 lg:border-l">
       <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-        <StatusBadge value={event.event.type} />
+        <StatusBadge value={event.type} />
         <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
         <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
       </div>

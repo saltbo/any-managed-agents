@@ -166,12 +166,11 @@ export type AmaEvent<TType extends AmaSessionEventType = AmaSessionEventType> = 
   }
 }[TType]
 
-export type EventRecord = {
+export type SessionEvent = AmaEvent & {
   id: string
   sessionId: string
   sequence: number
   createdAt: string
-  event: AmaEvent
 }
 
 export const JsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
@@ -394,15 +393,33 @@ export const AmaEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('runtime.error'), payload: EventErrorSchema }).strict(),
 ])
 
-export const EventRecordSchema = z
-  .object({
-    id: z.string(),
-    sessionId: z.string(),
-    sequence: z.number(),
-    createdAt: z.string(),
-    event: AmaEventSchema,
-  })
-  .strict()
+function sessionEventSchema<TType extends AmaSessionEventType>(type: TType, payload: z.ZodTypeAny) {
+  return z
+    .object({
+      id: z.string(),
+      sessionId: z.string(),
+      sequence: z.number(),
+      createdAt: z.string(),
+      type: z.literal(type),
+      payload,
+    })
+    .strict()
+}
+
+export const SessionEventSchema = z.discriminatedUnion('type', [
+  sessionEventSchema('runtime.started', RuntimeLifecyclePayloadSchema),
+  sessionEventSchema('runtime.completed', RuntimeLifecyclePayloadSchema),
+  sessionEventSchema('turn.started', TurnPayloadSchema),
+  sessionEventSchema('turn.completed', TurnPayloadSchema),
+  sessionEventSchema('message.started', MessageEventPayloadSchema),
+  sessionEventSchema('message.updated', MessageEventPayloadSchema),
+  sessionEventSchema('message.completed', MessageEventPayloadSchema),
+  sessionEventSchema('usage.recorded', UsageRecordedPayloadSchema),
+  sessionEventSchema('permission.requested', PermissionRequestPayloadSchema),
+  sessionEventSchema('permission.resolved', PermissionResolvedPayloadSchema),
+  sessionEventSchema('permission.denied', PermissionDeniedPayloadSchema),
+  sessionEventSchema('runtime.error', EventErrorSchema),
+])
 
 export function isAmaSessionEventType(value: string): value is AmaSessionEventType {
   return AMA_SESSION_EVENT_TYPE_SET.has(value)

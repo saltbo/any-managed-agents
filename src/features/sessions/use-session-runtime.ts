@@ -1,6 +1,6 @@
 import { type SessionSocketServerMessage, sessionSocketServerMessageFrom } from '@ama/runtime-contracts/session-socket'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import type { EventRecord, Session } from '@/lib/amarpc'
+import type { Session, SessionEvent } from '@/lib/amarpc'
 import {
   initialSessionRuntimeState,
   type SessionRuntimeCommand,
@@ -73,7 +73,7 @@ export function useSessionRuntimeSession({
         return
       }
       if (socketMessage.type === 'backfill') {
-        dispatch({ type: 'event_records', events: socketMessage.events as EventRecord[] })
+        dispatch({ type: 'session_events', events: socketMessage.events as SessionEvent[] })
         if (socketMessage.hasMore && typeof socketMessage.nextCursor === 'number') {
           socket.send(
             JSON.stringify({
@@ -85,7 +85,7 @@ export function useSessionRuntimeSession({
           )
         }
       } else {
-        dispatch({ type: 'event_records', events: [socketMessage.record as EventRecord] })
+        dispatch({ type: 'session_events', events: [socketMessage.record as SessionEvent] })
       }
       if (shouldRefreshAfterMessage(socketMessage)) {
         window.clearTimeout(refreshTimerRef.current ?? undefined)
@@ -178,11 +178,11 @@ function shouldRefreshAfterMessage(message: SessionSocketServerMessage) {
   if (message.type !== 'event') {
     return false
   }
-  const eventType = message.record.event.type
+  const eventType = message.record.type
   return (
     eventType === 'runtime.completed' ||
     eventType === 'turn.completed' ||
-    hasToolResult(message.record.event.payload) ||
+    hasToolResult(message.record.payload) ||
     eventType === 'runtime.error'
   )
 }

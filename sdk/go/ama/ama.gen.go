@@ -39,13 +39,13 @@ func (e AmaEvent0Type) Valid() bool {
 
 // Defines values for AmaEvent1Type.
 const (
-	RuntimeCompleted AmaEvent1Type = "runtime.completed"
+	AmaEvent1TypeRuntimeCompleted AmaEvent1Type = "runtime.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent1Type enum.
 func (e AmaEvent1Type) Valid() bool {
 	switch e {
-	case RuntimeCompleted:
+	case AmaEvent1TypeRuntimeCompleted:
 		return true
 	default:
 		return false
@@ -54,13 +54,13 @@ func (e AmaEvent1Type) Valid() bool {
 
 // Defines values for AmaEvent2Type.
 const (
-	TurnStarted AmaEvent2Type = "turn.started"
+	AmaEvent2TypeTurnStarted AmaEvent2Type = "turn.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent2Type enum.
 func (e AmaEvent2Type) Valid() bool {
 	switch e {
-	case TurnStarted:
+	case AmaEvent2TypeTurnStarted:
 		return true
 	default:
 		return false
@@ -69,13 +69,13 @@ func (e AmaEvent2Type) Valid() bool {
 
 // Defines values for AmaEvent3Type.
 const (
-	TurnCompleted AmaEvent3Type = "turn.completed"
+	AmaEvent3TypeTurnCompleted AmaEvent3Type = "turn.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent3Type enum.
 func (e AmaEvent3Type) Valid() bool {
 	switch e {
-	case TurnCompleted:
+	case AmaEvent3TypeTurnCompleted:
 		return true
 	default:
 		return false
@@ -84,13 +84,13 @@ func (e AmaEvent3Type) Valid() bool {
 
 // Defines values for AmaEvent4Type.
 const (
-	MessageStarted AmaEvent4Type = "message.started"
+	AmaEvent4TypeMessageStarted AmaEvent4Type = "message.started"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent4Type enum.
 func (e AmaEvent4Type) Valid() bool {
 	switch e {
-	case MessageStarted:
+	case AmaEvent4TypeMessageStarted:
 		return true
 	default:
 		return false
@@ -99,13 +99,13 @@ func (e AmaEvent4Type) Valid() bool {
 
 // Defines values for AmaEvent5Type.
 const (
-	MessageUpdated AmaEvent5Type = "message.updated"
+	AmaEvent5TypeMessageUpdated AmaEvent5Type = "message.updated"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent5Type enum.
 func (e AmaEvent5Type) Valid() bool {
 	switch e {
-	case MessageUpdated:
+	case AmaEvent5TypeMessageUpdated:
 		return true
 	default:
 		return false
@@ -114,13 +114,13 @@ func (e AmaEvent5Type) Valid() bool {
 
 // Defines values for AmaEvent6Type.
 const (
-	MessageCompleted AmaEvent6Type = "message.completed"
+	AmaEvent6TypeMessageCompleted AmaEvent6Type = "message.completed"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent6Type enum.
 func (e AmaEvent6Type) Valid() bool {
 	switch e {
-	case MessageCompleted:
+	case AmaEvent6TypeMessageCompleted:
 		return true
 	default:
 		return false
@@ -129,13 +129,13 @@ func (e AmaEvent6Type) Valid() bool {
 
 // Defines values for AmaEvent7Type.
 const (
-	UsageRecorded AmaEvent7Type = "usage.recorded"
+	AmaEvent7TypeUsageRecorded AmaEvent7Type = "usage.recorded"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent7Type enum.
 func (e AmaEvent7Type) Valid() bool {
 	switch e {
-	case UsageRecorded:
+	case AmaEvent7TypeUsageRecorded:
 		return true
 	default:
 		return false
@@ -144,13 +144,13 @@ func (e AmaEvent7Type) Valid() bool {
 
 // Defines values for AmaEvent8Type.
 const (
-	PermissionRequested AmaEvent8Type = "permission.requested"
+	AmaEvent8TypePermissionRequested AmaEvent8Type = "permission.requested"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent8Type enum.
 func (e AmaEvent8Type) Valid() bool {
 	switch e {
-	case PermissionRequested:
+	case AmaEvent8TypePermissionRequested:
 		return true
 	default:
 		return false
@@ -159,13 +159,13 @@ func (e AmaEvent8Type) Valid() bool {
 
 // Defines values for AmaEvent9Type.
 const (
-	PermissionResolved AmaEvent9Type = "permission.resolved"
+	AmaEvent9TypePermissionResolved AmaEvent9Type = "permission.resolved"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent9Type enum.
 func (e AmaEvent9Type) Valid() bool {
 	switch e {
-	case PermissionResolved:
+	case AmaEvent9TypePermissionResolved:
 		return true
 	default:
 		return false
@@ -174,13 +174,13 @@ func (e AmaEvent9Type) Valid() bool {
 
 // Defines values for AmaEvent10Type.
 const (
-	PermissionDenied AmaEvent10Type = "permission.denied"
+	AmaEvent10TypePermissionDenied AmaEvent10Type = "permission.denied"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent10Type enum.
 func (e AmaEvent10Type) Valid() bool {
 	switch e {
-	case PermissionDenied:
+	case AmaEvent10TypePermissionDenied:
 		return true
 	default:
 		return false
@@ -189,13 +189,13 @@ func (e AmaEvent10Type) Valid() bool {
 
 // Defines values for AmaEvent11Type.
 const (
-	RuntimeError AmaEvent11Type = "runtime.error"
+	AmaEvent11TypeRuntimeError AmaEvent11Type = "runtime.error"
 )
 
 // Valid indicates whether the value is a known member of the AmaEvent11Type enum.
 func (e AmaEvent11Type) Valid() bool {
 	switch e {
-	case RuntimeError:
+	case AmaEvent11TypeRuntimeError:
 		return true
 	default:
 		return false
@@ -1672,6 +1672,186 @@ func (e SessionConditionType) Valid() bool {
 	}
 }
 
+// Defines values for SessionEvent0Type.
+const (
+	SessionEvent0TypeRuntimeStarted SessionEvent0Type = "runtime.started"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent0Type enum.
+func (e SessionEvent0Type) Valid() bool {
+	switch e {
+	case SessionEvent0TypeRuntimeStarted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent1Type.
+const (
+	SessionEvent1TypeRuntimeCompleted SessionEvent1Type = "runtime.completed"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent1Type enum.
+func (e SessionEvent1Type) Valid() bool {
+	switch e {
+	case SessionEvent1TypeRuntimeCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent2Type.
+const (
+	SessionEvent2TypeTurnStarted SessionEvent2Type = "turn.started"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent2Type enum.
+func (e SessionEvent2Type) Valid() bool {
+	switch e {
+	case SessionEvent2TypeTurnStarted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent3Type.
+const (
+	SessionEvent3TypeTurnCompleted SessionEvent3Type = "turn.completed"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent3Type enum.
+func (e SessionEvent3Type) Valid() bool {
+	switch e {
+	case SessionEvent3TypeTurnCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent4Type.
+const (
+	SessionEvent4TypeMessageStarted SessionEvent4Type = "message.started"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent4Type enum.
+func (e SessionEvent4Type) Valid() bool {
+	switch e {
+	case SessionEvent4TypeMessageStarted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent5Type.
+const (
+	SessionEvent5TypeMessageUpdated SessionEvent5Type = "message.updated"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent5Type enum.
+func (e SessionEvent5Type) Valid() bool {
+	switch e {
+	case SessionEvent5TypeMessageUpdated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent6Type.
+const (
+	SessionEvent6TypeMessageCompleted SessionEvent6Type = "message.completed"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent6Type enum.
+func (e SessionEvent6Type) Valid() bool {
+	switch e {
+	case SessionEvent6TypeMessageCompleted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent7Type.
+const (
+	SessionEvent7TypeUsageRecorded SessionEvent7Type = "usage.recorded"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent7Type enum.
+func (e SessionEvent7Type) Valid() bool {
+	switch e {
+	case SessionEvent7TypeUsageRecorded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent8Type.
+const (
+	SessionEvent8TypePermissionRequested SessionEvent8Type = "permission.requested"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent8Type enum.
+func (e SessionEvent8Type) Valid() bool {
+	switch e {
+	case SessionEvent8TypePermissionRequested:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent9Type.
+const (
+	SessionEvent9TypePermissionResolved SessionEvent9Type = "permission.resolved"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent9Type enum.
+func (e SessionEvent9Type) Valid() bool {
+	switch e {
+	case SessionEvent9TypePermissionResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent10Type.
+const (
+	SessionEvent10TypePermissionDenied SessionEvent10Type = "permission.denied"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent10Type enum.
+func (e SessionEvent10Type) Valid() bool {
+	switch e {
+	case SessionEvent10TypePermissionDenied:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionEvent11Type.
+const (
+	SessionEvent11TypeRuntimeError SessionEvent11Type = "runtime.error"
+)
+
+// Valid indicates whether the value is a known member of the SessionEvent11Type enum.
+func (e SessionEvent11Type) Valid() bool {
+	switch e {
+	case SessionEvent11TypeRuntimeError:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SessionMessageDelivery.
 const (
 	Live   SessionMessageDelivery = "live"
@@ -2580,46 +2760,46 @@ func (e ListSessionEventsParamsOrder) Valid() bool {
 
 // Defines values for ListSessionEventsParamsType.
 const (
-	ListSessionEventsParamsTypeMessageCompleted    ListSessionEventsParamsType = "message.completed"
-	ListSessionEventsParamsTypeMessageStarted      ListSessionEventsParamsType = "message.started"
-	ListSessionEventsParamsTypeMessageUpdated      ListSessionEventsParamsType = "message.updated"
-	ListSessionEventsParamsTypePermissionDenied    ListSessionEventsParamsType = "permission.denied"
-	ListSessionEventsParamsTypePermissionRequested ListSessionEventsParamsType = "permission.requested"
-	ListSessionEventsParamsTypePermissionResolved  ListSessionEventsParamsType = "permission.resolved"
-	ListSessionEventsParamsTypeRuntimeCompleted    ListSessionEventsParamsType = "runtime.completed"
-	ListSessionEventsParamsTypeRuntimeError        ListSessionEventsParamsType = "runtime.error"
-	ListSessionEventsParamsTypeRuntimeStarted      ListSessionEventsParamsType = "runtime.started"
-	ListSessionEventsParamsTypeTurnCompleted       ListSessionEventsParamsType = "turn.completed"
-	ListSessionEventsParamsTypeTurnStarted         ListSessionEventsParamsType = "turn.started"
-	ListSessionEventsParamsTypeUsageRecorded       ListSessionEventsParamsType = "usage.recorded"
+	MessageCompleted    ListSessionEventsParamsType = "message.completed"
+	MessageStarted      ListSessionEventsParamsType = "message.started"
+	MessageUpdated      ListSessionEventsParamsType = "message.updated"
+	PermissionDenied    ListSessionEventsParamsType = "permission.denied"
+	PermissionRequested ListSessionEventsParamsType = "permission.requested"
+	PermissionResolved  ListSessionEventsParamsType = "permission.resolved"
+	RuntimeCompleted    ListSessionEventsParamsType = "runtime.completed"
+	RuntimeError        ListSessionEventsParamsType = "runtime.error"
+	RuntimeStarted      ListSessionEventsParamsType = "runtime.started"
+	TurnCompleted       ListSessionEventsParamsType = "turn.completed"
+	TurnStarted         ListSessionEventsParamsType = "turn.started"
+	UsageRecorded       ListSessionEventsParamsType = "usage.recorded"
 )
 
 // Valid indicates whether the value is a known member of the ListSessionEventsParamsType enum.
 func (e ListSessionEventsParamsType) Valid() bool {
 	switch e {
-	case ListSessionEventsParamsTypeMessageCompleted:
+	case MessageCompleted:
 		return true
-	case ListSessionEventsParamsTypeMessageStarted:
+	case MessageStarted:
 		return true
-	case ListSessionEventsParamsTypeMessageUpdated:
+	case MessageUpdated:
 		return true
-	case ListSessionEventsParamsTypePermissionDenied:
+	case PermissionDenied:
 		return true
-	case ListSessionEventsParamsTypePermissionRequested:
+	case PermissionRequested:
 		return true
-	case ListSessionEventsParamsTypePermissionResolved:
+	case PermissionResolved:
 		return true
-	case ListSessionEventsParamsTypeRuntimeCompleted:
+	case RuntimeCompleted:
 		return true
-	case ListSessionEventsParamsTypeRuntimeError:
+	case RuntimeError:
 		return true
-	case ListSessionEventsParamsTypeRuntimeStarted:
+	case RuntimeStarted:
 		return true
-	case ListSessionEventsParamsTypeTurnCompleted:
+	case TurnCompleted:
 		return true
-	case ListSessionEventsParamsTypeTurnStarted:
+	case TurnStarted:
 		return true
-	case ListSessionEventsParamsTypeUsageRecorded:
+	case UsageRecorded:
 		return true
 	default:
 		return false
@@ -3499,21 +3679,6 @@ type EventMessage struct {
 
 // EventMessageRole defines model for EventMessage.Role.
 type EventMessageRole string
-
-// EventRecord defines model for EventRecord.
-type EventRecord struct {
-	CreatedAt time.Time `json:"createdAt"`
-	Event     AmaEvent  `json:"event"`
-	Id        string    `json:"id"`
-	Sequence  int       `json:"sequence"`
-	SessionId string    `json:"sessionId"`
-}
-
-// EventRecordListResponse defines model for EventRecordListResponse.
-type EventRecordListResponse struct {
-	Data       []EventRecord  `json:"data"`
-	Pagination ListPagination `json:"pagination"`
-}
 
 // EventToolCall defines model for EventToolCall.
 type EventToolCall struct {
@@ -4483,6 +4648,173 @@ type SessionEnvironmentSnapshot struct {
 	Version       int                          `json:"version"`
 }
 
+// SessionEvent defines model for SessionEvent.
+type SessionEvent struct {
+	union json.RawMessage
+}
+
+// SessionEvent0 defines model for .
+type SessionEvent0 struct {
+	CreatedAt time.Time               `json:"createdAt"`
+	Id        string                  `json:"id"`
+	Payload   RuntimeLifecyclePayload `json:"payload"`
+	Sequence  int                     `json:"sequence"`
+	SessionId string                  `json:"sessionId"`
+	Type      SessionEvent0Type       `json:"type"`
+}
+
+// SessionEvent0Type defines model for SessionEvent.0.Type.
+type SessionEvent0Type string
+
+// SessionEvent1 defines model for .
+type SessionEvent1 struct {
+	CreatedAt time.Time               `json:"createdAt"`
+	Id        string                  `json:"id"`
+	Payload   RuntimeLifecyclePayload `json:"payload"`
+	Sequence  int                     `json:"sequence"`
+	SessionId string                  `json:"sessionId"`
+	Type      SessionEvent1Type       `json:"type"`
+}
+
+// SessionEvent1Type defines model for SessionEvent.1.Type.
+type SessionEvent1Type string
+
+// SessionEvent2 defines model for .
+type SessionEvent2 struct {
+	CreatedAt time.Time         `json:"createdAt"`
+	Id        string            `json:"id"`
+	Payload   TurnPayload       `json:"payload"`
+	Sequence  int               `json:"sequence"`
+	SessionId string            `json:"sessionId"`
+	Type      SessionEvent2Type `json:"type"`
+}
+
+// SessionEvent2Type defines model for SessionEvent.2.Type.
+type SessionEvent2Type string
+
+// SessionEvent3 defines model for .
+type SessionEvent3 struct {
+	CreatedAt time.Time         `json:"createdAt"`
+	Id        string            `json:"id"`
+	Payload   TurnPayload       `json:"payload"`
+	Sequence  int               `json:"sequence"`
+	SessionId string            `json:"sessionId"`
+	Type      SessionEvent3Type `json:"type"`
+}
+
+// SessionEvent3Type defines model for SessionEvent.3.Type.
+type SessionEvent3Type string
+
+// SessionEvent4 defines model for .
+type SessionEvent4 struct {
+	CreatedAt time.Time           `json:"createdAt"`
+	Id        string              `json:"id"`
+	Payload   MessageEventPayload `json:"payload"`
+	Sequence  int                 `json:"sequence"`
+	SessionId string              `json:"sessionId"`
+	Type      SessionEvent4Type   `json:"type"`
+}
+
+// SessionEvent4Type defines model for SessionEvent.4.Type.
+type SessionEvent4Type string
+
+// SessionEvent5 defines model for .
+type SessionEvent5 struct {
+	CreatedAt time.Time           `json:"createdAt"`
+	Id        string              `json:"id"`
+	Payload   MessageEventPayload `json:"payload"`
+	Sequence  int                 `json:"sequence"`
+	SessionId string              `json:"sessionId"`
+	Type      SessionEvent5Type   `json:"type"`
+}
+
+// SessionEvent5Type defines model for SessionEvent.5.Type.
+type SessionEvent5Type string
+
+// SessionEvent6 defines model for .
+type SessionEvent6 struct {
+	CreatedAt time.Time           `json:"createdAt"`
+	Id        string              `json:"id"`
+	Payload   MessageEventPayload `json:"payload"`
+	Sequence  int                 `json:"sequence"`
+	SessionId string              `json:"sessionId"`
+	Type      SessionEvent6Type   `json:"type"`
+}
+
+// SessionEvent6Type defines model for SessionEvent.6.Type.
+type SessionEvent6Type string
+
+// SessionEvent7 defines model for .
+type SessionEvent7 struct {
+	CreatedAt time.Time            `json:"createdAt"`
+	Id        string               `json:"id"`
+	Payload   UsageRecordedPayload `json:"payload"`
+	Sequence  int                  `json:"sequence"`
+	SessionId string               `json:"sessionId"`
+	Type      SessionEvent7Type    `json:"type"`
+}
+
+// SessionEvent7Type defines model for SessionEvent.7.Type.
+type SessionEvent7Type string
+
+// SessionEvent8 defines model for .
+type SessionEvent8 struct {
+	CreatedAt time.Time                `json:"createdAt"`
+	Id        string                   `json:"id"`
+	Payload   PermissionRequestPayload `json:"payload"`
+	Sequence  int                      `json:"sequence"`
+	SessionId string                   `json:"sessionId"`
+	Type      SessionEvent8Type        `json:"type"`
+}
+
+// SessionEvent8Type defines model for SessionEvent.8.Type.
+type SessionEvent8Type string
+
+// SessionEvent9 defines model for .
+type SessionEvent9 struct {
+	CreatedAt time.Time                 `json:"createdAt"`
+	Id        string                    `json:"id"`
+	Payload   PermissionResolvedPayload `json:"payload"`
+	Sequence  int                       `json:"sequence"`
+	SessionId string                    `json:"sessionId"`
+	Type      SessionEvent9Type         `json:"type"`
+}
+
+// SessionEvent9Type defines model for SessionEvent.9.Type.
+type SessionEvent9Type string
+
+// SessionEvent10 defines model for .
+type SessionEvent10 struct {
+	CreatedAt time.Time               `json:"createdAt"`
+	Id        string                  `json:"id"`
+	Payload   PermissionDeniedPayload `json:"payload"`
+	Sequence  int                     `json:"sequence"`
+	SessionId string                  `json:"sessionId"`
+	Type      SessionEvent10Type      `json:"type"`
+}
+
+// SessionEvent10Type defines model for SessionEvent.10.Type.
+type SessionEvent10Type string
+
+// SessionEvent11 defines model for .
+type SessionEvent11 struct {
+	CreatedAt time.Time          `json:"createdAt"`
+	Id        string             `json:"id"`
+	Payload   EventError         `json:"payload"`
+	Sequence  int                `json:"sequence"`
+	SessionId string             `json:"sessionId"`
+	Type      SessionEvent11Type `json:"type"`
+}
+
+// SessionEvent11Type defines model for SessionEvent.11.Type.
+type SessionEvent11Type string
+
+// SessionEventListResponse defines model for SessionEventListResponse.
+type SessionEventListResponse struct {
+	Data       []SessionEvent `json:"data"`
+	Pagination ListPagination `json:"pagination"`
+}
+
 // SessionEventsAccepted defines model for SessionEventsAccepted.
 type SessionEventsAccepted struct {
 	Accepted int `json:"accepted"`
@@ -4563,7 +4895,7 @@ type SessionSocketAckMessageType string
 
 // SessionSocketBackfillMessage defines model for SessionSocketBackfillMessage.
 type SessionSocketBackfillMessage struct {
-	Events     []EventRecord                    `json:"events"`
+	Events     []SessionEvent                   `json:"events"`
 	HasMore    bool                             `json:"hasMore"`
 	NextCursor *int                             `json:"nextCursor"`
 	RequestId  *string                          `json:"requestId"`
@@ -4603,7 +4935,7 @@ type SessionSocketErrorMessageType string
 
 // SessionSocketEventMessage defines model for SessionSocketEventMessage.
 type SessionSocketEventMessage struct {
-	Record EventRecord                   `json:"record"`
+	Record SessionEvent                  `json:"record"`
 	Type   SessionSocketEventMessageType `json:"type"`
 }
 
@@ -6854,6 +7186,328 @@ func (t RunnerChannelMessage) MarshalJSON() ([]byte, error) {
 }
 
 func (t *RunnerChannelMessage) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsSessionEvent0 returns the union data inside the SessionEvent as a SessionEvent0
+func (t SessionEvent) AsSessionEvent0() (SessionEvent0, error) {
+	var body SessionEvent0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent0 overwrites any union data inside the SessionEvent as the provided SessionEvent0
+func (t *SessionEvent) FromSessionEvent0(v SessionEvent0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent0 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent0
+func (t *SessionEvent) MergeSessionEvent0(v SessionEvent0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent1 returns the union data inside the SessionEvent as a SessionEvent1
+func (t SessionEvent) AsSessionEvent1() (SessionEvent1, error) {
+	var body SessionEvent1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent1 overwrites any union data inside the SessionEvent as the provided SessionEvent1
+func (t *SessionEvent) FromSessionEvent1(v SessionEvent1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent1 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent1
+func (t *SessionEvent) MergeSessionEvent1(v SessionEvent1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent2 returns the union data inside the SessionEvent as a SessionEvent2
+func (t SessionEvent) AsSessionEvent2() (SessionEvent2, error) {
+	var body SessionEvent2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent2 overwrites any union data inside the SessionEvent as the provided SessionEvent2
+func (t *SessionEvent) FromSessionEvent2(v SessionEvent2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent2 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent2
+func (t *SessionEvent) MergeSessionEvent2(v SessionEvent2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent3 returns the union data inside the SessionEvent as a SessionEvent3
+func (t SessionEvent) AsSessionEvent3() (SessionEvent3, error) {
+	var body SessionEvent3
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent3 overwrites any union data inside the SessionEvent as the provided SessionEvent3
+func (t *SessionEvent) FromSessionEvent3(v SessionEvent3) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent3 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent3
+func (t *SessionEvent) MergeSessionEvent3(v SessionEvent3) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent4 returns the union data inside the SessionEvent as a SessionEvent4
+func (t SessionEvent) AsSessionEvent4() (SessionEvent4, error) {
+	var body SessionEvent4
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent4 overwrites any union data inside the SessionEvent as the provided SessionEvent4
+func (t *SessionEvent) FromSessionEvent4(v SessionEvent4) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent4 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent4
+func (t *SessionEvent) MergeSessionEvent4(v SessionEvent4) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent5 returns the union data inside the SessionEvent as a SessionEvent5
+func (t SessionEvent) AsSessionEvent5() (SessionEvent5, error) {
+	var body SessionEvent5
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent5 overwrites any union data inside the SessionEvent as the provided SessionEvent5
+func (t *SessionEvent) FromSessionEvent5(v SessionEvent5) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent5 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent5
+func (t *SessionEvent) MergeSessionEvent5(v SessionEvent5) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent6 returns the union data inside the SessionEvent as a SessionEvent6
+func (t SessionEvent) AsSessionEvent6() (SessionEvent6, error) {
+	var body SessionEvent6
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent6 overwrites any union data inside the SessionEvent as the provided SessionEvent6
+func (t *SessionEvent) FromSessionEvent6(v SessionEvent6) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent6 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent6
+func (t *SessionEvent) MergeSessionEvent6(v SessionEvent6) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent7 returns the union data inside the SessionEvent as a SessionEvent7
+func (t SessionEvent) AsSessionEvent7() (SessionEvent7, error) {
+	var body SessionEvent7
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent7 overwrites any union data inside the SessionEvent as the provided SessionEvent7
+func (t *SessionEvent) FromSessionEvent7(v SessionEvent7) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent7 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent7
+func (t *SessionEvent) MergeSessionEvent7(v SessionEvent7) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent8 returns the union data inside the SessionEvent as a SessionEvent8
+func (t SessionEvent) AsSessionEvent8() (SessionEvent8, error) {
+	var body SessionEvent8
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent8 overwrites any union data inside the SessionEvent as the provided SessionEvent8
+func (t *SessionEvent) FromSessionEvent8(v SessionEvent8) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent8 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent8
+func (t *SessionEvent) MergeSessionEvent8(v SessionEvent8) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent9 returns the union data inside the SessionEvent as a SessionEvent9
+func (t SessionEvent) AsSessionEvent9() (SessionEvent9, error) {
+	var body SessionEvent9
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent9 overwrites any union data inside the SessionEvent as the provided SessionEvent9
+func (t *SessionEvent) FromSessionEvent9(v SessionEvent9) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent9 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent9
+func (t *SessionEvent) MergeSessionEvent9(v SessionEvent9) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent10 returns the union data inside the SessionEvent as a SessionEvent10
+func (t SessionEvent) AsSessionEvent10() (SessionEvent10, error) {
+	var body SessionEvent10
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent10 overwrites any union data inside the SessionEvent as the provided SessionEvent10
+func (t *SessionEvent) FromSessionEvent10(v SessionEvent10) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent10 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent10
+func (t *SessionEvent) MergeSessionEvent10(v SessionEvent10) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionEvent11 returns the union data inside the SessionEvent as a SessionEvent11
+func (t SessionEvent) AsSessionEvent11() (SessionEvent11, error) {
+	var body SessionEvent11
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionEvent11 overwrites any union data inside the SessionEvent as the provided SessionEvent11
+func (t *SessionEvent) FromSessionEvent11(v SessionEvent11) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionEvent11 performs a merge with any union data inside the SessionEvent, using the provided SessionEvent11
+func (t *SessionEvent) MergeSessionEvent11(v SessionEvent11) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t SessionEvent) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *SessionEvent) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -16920,7 +17574,7 @@ func (r DecideSessionApprovalResponse) ContentType() string {
 type ListSessionEventsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *EventRecordListResponse
+	JSON200      *SessionEventListResponse
 	JSON400      *ErrorResponse
 	JSON401      *ErrorResponse
 	JSON404      *ErrorResponse
@@ -21610,7 +22264,7 @@ func ParseListSessionEventsResponse(rsp *http.Response) (*ListSessionEventsRespo
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest EventRecordListResponse
+		var dest SessionEventListResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

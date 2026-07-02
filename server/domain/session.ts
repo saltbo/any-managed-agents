@@ -1,4 +1,4 @@
-import type { AmaEvent } from '@shared/session-events'
+import type { SessionEvent } from '@shared/session-events'
 import type { AgentSubagent } from './agent'
 import type {
   EnvironmentNetworking,
@@ -9,6 +9,8 @@ import type {
 } from './environment'
 import type { EnvFromEntry, Volume, VolumeMount } from './runtime/execution-inputs'
 import type { RuntimeName } from './runtime-catalog'
+
+export type { SessionEvent }
 
 // Pure session rules and entities. No drizzle, no env, no hono. The operational state
 // machine, hosting-mode derivation, prompt-delivery decision, approval-state
@@ -139,14 +141,6 @@ export interface SessionMessage {
   error: string | null
   createdAt: string
   updatedAt: string
-}
-
-export interface EventRecord {
-  id: string
-  sessionId: string
-  sequence: number
-  event: AmaEvent
-  createdAt: string
 }
 
 export interface SessionApproval {

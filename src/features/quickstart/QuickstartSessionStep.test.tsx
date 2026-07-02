@@ -96,7 +96,7 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
     runState: 'idle',
     messages: [],
     tools: [],
-    eventRecords: [],
+    sessionEvents: [],
     eventKeys: [],
     error: null,
     ...state,
@@ -664,12 +664,13 @@ describe('QuickstartSessionStep — debug tab', () => {
 
   it('renders debug events list when runtime has debug events', async () => {
     mockRuntime({
-      eventRecords: [
+      sessionEvents: [
         {
           id: 'dbg_1',
           sessionId: 'session_1',
           sequence: 1,
-          event: { type: 'runtime.started', payload: { type: 'runtime.started' } },
+          type: 'runtime.started',
+          payload: { type: 'runtime.started' },
           createdAt: now,
         },
       ],

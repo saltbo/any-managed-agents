@@ -9,9 +9,9 @@ from ...types import Response, UNSET
 from ... import errors
 
 from ...models.error_response import ErrorResponse
-from ...models.event_record_list_response import EventRecordListResponse
 from ...models.list_session_events_order import ListSessionEventsOrder
 from ...models.list_session_events_type import ListSessionEventsType
+from ...models.session_event_list_response import SessionEventListResponse
 from ...types import UNSET, Unset
 from typing import cast
 import datetime
@@ -81,9 +81,9 @@ def _get_kwargs(
 
 
 
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> ErrorResponse | EventRecordListResponse | None:
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> ErrorResponse | SessionEventListResponse | None:
     if response.status_code == 200:
-        response_200 = EventRecordListResponse.from_dict(response.json())
+        response_200 = SessionEventListResponse.from_dict(response.json())
 
 
 
@@ -116,7 +116,7 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[ErrorResponse | EventRecordListResponse]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[ErrorResponse | SessionEventListResponse]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -136,7 +136,7 @@ def sync_detailed(
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
-) -> Response[ErrorResponse | EventRecordListResponse]:
+) -> Response[ErrorResponse | SessionEventListResponse]:
     """ List session events
 
      Content negotiation: application/json returns a paginated list, text/csv exports the filtered
@@ -156,7 +156,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | EventRecordListResponse]
+        Response[ErrorResponse | SessionEventListResponse]
      """
 
 
@@ -188,7 +188,7 @@ def sync(
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
-) -> ErrorResponse | EventRecordListResponse | None:
+) -> ErrorResponse | SessionEventListResponse | None:
     """ List session events
 
      Content negotiation: application/json returns a paginated list, text/csv exports the filtered
@@ -208,7 +208,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | EventRecordListResponse
+        ErrorResponse | SessionEventListResponse
      """
 
 
@@ -235,7 +235,7 @@ async def asyncio_detailed(
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
-) -> Response[ErrorResponse | EventRecordListResponse]:
+) -> Response[ErrorResponse | SessionEventListResponse]:
     """ List session events
 
      Content negotiation: application/json returns a paginated list, text/csv exports the filtered
@@ -255,7 +255,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ErrorResponse | EventRecordListResponse]
+        Response[ErrorResponse | SessionEventListResponse]
      """
 
 
@@ -287,7 +287,7 @@ async def asyncio(
     created_from: datetime.datetime | Unset = UNSET,
     created_to: datetime.datetime | Unset = UNSET,
 
-) -> ErrorResponse | EventRecordListResponse | None:
+) -> ErrorResponse | SessionEventListResponse | None:
     """ List session events
 
      Content negotiation: application/json returns a paginated list, text/csv exports the filtered
@@ -307,7 +307,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ErrorResponse | EventRecordListResponse
+        ErrorResponse | SessionEventListResponse
      """
 
 

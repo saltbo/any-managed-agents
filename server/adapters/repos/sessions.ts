@@ -21,7 +21,6 @@ import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 import { runtimePlacement } from '../../domain/runtime/driver'
 import {
   type ApprovalState,
-  type EventRecord,
   hostingModeFromSnapshot,
   type MessageDelivery,
   type MessageState,
@@ -29,6 +28,7 @@ import {
   type SessionAgentSnapshot,
   type SessionApproval,
   type SessionEnvironmentSnapshot,
+  type SessionEvent,
   type SessionMessage,
   type SessionState,
 } from '../../domain/session'
@@ -212,25 +212,19 @@ function serializeApproval(row: SessionApprovalRow): SessionApproval {
   }
 }
 
-function serializeEvent(row: SessionEventRow): EventRecord {
+function serializeEvent(row: SessionEventRow): SessionEvent {
   if (!isAmaSessionEventType(row.type)) {
     throw new Error(`Unsupported session event type: ${row.type}`)
   }
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
-  const event = {
-    type: row.type,
-    payload: rawPayload,
-  } as AmaEvent
   return {
     id: row.id,
     sessionId: row.sessionId,
     sequence: row.sequence,
-    event: {
-      type: event.type,
-      payload: redactSensitiveValue(event.payload) as typeof event.payload,
-    } as AmaEvent,
     createdAt: row.createdAt,
-  }
+    type: row.type,
+    payload: redactSensitiveValue(rawPayload) as AmaEvent['payload'],
+  } as SessionEvent
 }
 
 function runtimeRow(row: SessionRow): RuntimeSessionHandle {

@@ -86,7 +86,11 @@ describe('runner protocol schemas', () => {
         events: [{ id: 'evt_1' }],
         error: 'partial',
       },
-      { type: 'runner.event', sessionId: 'session_1', record: { id: 'evt_1', event: { type: 'message.completed' } } },
+      {
+        type: 'runner.event',
+        sessionId: 'session_1',
+        record: { id: 'evt_1', type: 'message.completed', payload: {} },
+      },
       { type: 'runner.event.accepted', eventId: 'evt_1' },
       { type: 'session.channel.error', eventId: 'evt_1', message: 'failed' },
       { type: 'session.channel.error', message: 'failed' },

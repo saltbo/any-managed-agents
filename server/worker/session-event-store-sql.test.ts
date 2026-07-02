@@ -8,7 +8,8 @@ function raw(id: string, sequence: number, type: string, payload: Record<string,
     id,
     sessionId: scope.sessionId,
     sequence,
-    event: { type: type as RelayedRunnerEvent['event']['type'], payload, metadata: {} } as RelayedRunnerEvent['event'],
+    type: type as RelayedRunnerEvent['type'],
+    payload: payload as RelayedRunnerEvent['payload'],
     createdAt: `2026-01-01T00:00:0${sequence}Z`,
   }
 }
@@ -44,14 +45,14 @@ describe('stepRelayEvent', () => {
 
     expect(byId.get('ms')?.sequence).toBe(2)
     expect(byId.get('ms')?.sessionId).toBe('sess-1')
-    expect(byId.get('t1s')?.event.payload).toMatchObject({
+    expect(byId.get('t1s')?.payload).toMatchObject({
       message: {
         id: 'msg_tool_call_1',
         parentMessageId: 'msg_1',
         content: [{ type: 'tool_call', toolCall: { id: 'call-1', name: 'bash', input: {} } }],
       },
     })
-    expect(byId.get('t1e')?.event.payload).toMatchObject({
+    expect(byId.get('t1e')?.payload).toMatchObject({
       message: {
         id: 'msg_tool_result_1',
         parentMessageId: 'msg_tool_call_1',

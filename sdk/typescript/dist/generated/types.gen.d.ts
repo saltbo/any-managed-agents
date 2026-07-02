@@ -3,49 +3,90 @@ export type ClientOptions = {
 };
 export type SessionSocketEventMessage = {
     type: 'event';
-    record: EventRecord;
+    record: SessionEvent;
 };
-export type EventRecord = {
+export type SessionEvent = {
     id: string;
     sessionId: string;
     sequence: number;
-    event: AmaEvent;
     createdAt: string;
-};
-export type AmaEvent = {
     type: 'runtime.started';
     payload: RuntimeLifecyclePayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'runtime.completed';
     payload: RuntimeLifecyclePayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'turn.started';
     payload: TurnPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'turn.completed';
     payload: TurnPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'message.started';
     payload: MessageEventPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'message.updated';
     payload: MessageEventPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'message.completed';
     payload: MessageEventPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'usage.recorded';
     payload: UsageRecordedPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'permission.requested';
     payload: PermissionRequestPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'permission.resolved';
     payload: PermissionResolvedPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'permission.denied';
     payload: PermissionDeniedPayload;
 } | {
+    id: string;
+    sessionId: string;
+    sequence: number;
+    createdAt: string;
     type: 'runtime.error';
     payload: EventError;
 };
@@ -158,7 +199,8 @@ export type GrepToolInput = {
     limit?: number;
 };
 export type FindToolInput = {
-    pattern: string;
+    pattern?: string;
+    glob?: string;
     path?: string;
     limit?: number;
 };
@@ -279,7 +321,7 @@ export type PermissionDeniedPayload = {
 export type SessionSocketBackfillMessage = {
     type: 'backfill';
     requestId: string | null;
-    events: Array<EventRecord>;
+    events: Array<SessionEvent>;
     nextCursor: number | null;
     hasMore: boolean;
 };
@@ -1502,8 +1544,8 @@ export type CreateSessionMessageRequest = {
     type: 'prompt';
     content: string;
 };
-export type EventRecordListResponse = {
-    data: Array<EventRecord>;
+export type SessionEventListResponse = {
+    data: Array<SessionEvent>;
     pagination: ListPagination;
 };
 export type SessionEventsAccepted = {
@@ -1511,6 +1553,43 @@ export type SessionEventsAccepted = {
 };
 export type CreateSessionEventsRequest = {
     events: Array<AmaEvent>;
+};
+export type AmaEvent = {
+    type: 'runtime.started';
+    payload: RuntimeLifecyclePayload;
+} | {
+    type: 'runtime.completed';
+    payload: RuntimeLifecyclePayload;
+} | {
+    type: 'turn.started';
+    payload: TurnPayload;
+} | {
+    type: 'turn.completed';
+    payload: TurnPayload;
+} | {
+    type: 'message.started';
+    payload: MessageEventPayload;
+} | {
+    type: 'message.updated';
+    payload: MessageEventPayload;
+} | {
+    type: 'message.completed';
+    payload: MessageEventPayload;
+} | {
+    type: 'usage.recorded';
+    payload: UsageRecordedPayload;
+} | {
+    type: 'permission.requested';
+    payload: PermissionRequestPayload;
+} | {
+    type: 'permission.resolved';
+    payload: PermissionResolvedPayload;
+} | {
+    type: 'permission.denied';
+    payload: PermissionDeniedPayload;
+} | {
+    type: 'runtime.error';
+    payload: EventError;
 };
 export type SessionApprovalListResponse = {
     data: Array<SessionApproval>;
@@ -3669,7 +3748,7 @@ export type ListSessionEventsResponses = {
     /**
      * Session events
      */
-    200: EventRecordListResponse;
+    200: SessionEventListResponse;
 };
 export type ListSessionEventsResponse = ListSessionEventsResponses[keyof ListSessionEventsResponses];
 export type CreateSessionEventsData = {
