@@ -177,7 +177,7 @@ export class SessionObject implements DurableObject {
       this.durableState.waitUntil(this.handleAbortMessage(ws, scope, message))
       return
     }
-    this.sendSocketError(ws, message.id, 'Session steer messages are not supported')
+    this.sendSocketError(ws, requestIdFor(message), 'Session steer messages are not supported')
   }
 
   // Hibernation close handler. Hibernation reaps the socket; nothing to clean up.
@@ -185,8 +185,7 @@ export class SessionObject implements DurableObject {
 
   private async sendBackfill(ws: WebSocket, sessionId: string, frame: Record<string, unknown>): Promise<void> {
     const scope = ws.deserializeAttachment() as BrowserScope | null
-    const requestId =
-      typeof frame.requestId === 'string' ? frame.requestId : typeof frame.id === 'string' ? frame.id : null
+    const requestId = requestIdFor(frame)
     const query: EventQuery = {
       order: 'asc',
       limit: typeof frame.limit === 'number' ? frame.limit : 200,
@@ -201,11 +200,7 @@ export class SessionObject implements DurableObject {
           ? await this.requestRunnerBackfill({ ...scope, runnerEnvironmentId }, sessionId, query)
           : queryEventsFromSql(this.eventSql(), sessionId, query)
     } catch (error) {
-      this.sendSocketError(
-        ws,
-        requestId ?? undefined,
-        error instanceof Error ? error.message : 'Session backfill failed',
-      )
+      this.sendSocketError(ws, requestId, error instanceof Error ? error.message : 'Session backfill failed')
       return
     }
     if (ws.readyState !== WebSocket.OPEN) return
@@ -252,6 +247,7 @@ export class SessionObject implements DurableObject {
     scope: BrowserScope,
     message: Extract<SessionSocketClientMessage, { type: 'prompt' }>,
   ): Promise<void> {
+    const requestId = requestIdFor(message)
     const outcome = await dispatchSessionPrompt(
       createDeps(this.env),
       browserAuthScope(scope),
@@ -259,10 +255,10 @@ export class SessionObject implements DurableObject {
       message.content,
     )
     if (!outcome.ok) {
-      this.sendSocketError(ws, message.id, outcome.message)
+      this.sendSocketError(ws, requestId, outcome.message)
       return
     }
-    this.sendSocketAck(ws, message.id)
+    this.sendSocketAck(ws, requestId)
   }
 
   private async handleAbortMessage(
@@ -270,31 +266,36 @@ export class SessionObject implements DurableObject {
     scope: BrowserScope,
     message: Extract<SessionSocketClientMessage, { type: 'abort' }>,
   ): Promise<void> {
+    const requestId = requestIdFor(message)
     const outcome = await stopSession(
       createDeps(this.env),
       browserAuthScope(scope),
       scope.sessionId,
-      message.id,
+      requestId,
       message.reason,
     )
     if (!outcome.ok) {
-      this.sendSocketError(ws, message.id, outcome.error.message)
+      this.sendSocketError(ws, requestId, outcome.error.message)
       return
     }
-    this.sendSocketAck(ws, message.id)
+    this.sendSocketAck(ws, requestId)
   }
 
-  private sendSocketAck(ws: WebSocket, id: string): void {
+  private sendSocketAck(ws: WebSocket, requestId: string): void {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'ack', id }))
+      ws.send(JSON.stringify({ type: 'ack', requestId }))
     }
   }
 
-  private sendSocketError(ws: WebSocket, id: string | undefined, message: string): void {
+  private sendSocketError(ws: WebSocket, requestId: string | undefined, message: string): void {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'error', ...(id ? { id } : {}), message }))
+      ws.send(JSON.stringify({ type: 'error', ...(requestId ? { requestId } : {}), message }))
     }
   }
+}
+
+function requestIdFor(message: Record<string, unknown>): string {
+  return typeof message.requestId === 'string' ? message.requestId : crypto.randomUUID()
 }
 
 function requiredParam(url: URL, name: string) {

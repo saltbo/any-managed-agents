@@ -355,7 +355,7 @@ export type PermissionDeniedPayload = {
 
 export type SessionSocketBackfillMessage = {
     type: 'backfill';
-    requestId: string | null;
+    requestId: string;
     events: Array<SessionEvent>;
     nextCursor: number | null;
     hasMore: boolean;
@@ -368,12 +368,12 @@ export type SessionSocketRunnerUnavailableMessage = {
 
 export type SessionSocketAckMessage = {
     type: 'ack';
-    id: string;
+    requestId: string;
 };
 
 export type SessionSocketErrorMessage = {
     type: 'error';
-    id?: string;
+    requestId?: string;
     message: string;
 };
 
@@ -390,24 +390,23 @@ export type SessionSocketServerMessage = ({
 } & SessionSocketErrorMessage);
 
 export type SessionSocketPromptMessage = {
-    id: string;
     type: 'prompt';
+    requestId?: string;
     content: string;
 };
 
 export type SessionSocketAbortMessage = {
-    id: string;
     type: 'abort';
+    requestId?: string;
 };
 
 export type SessionSocketSteerMessage = {
-    id: string;
     type: 'steer';
+    requestId?: string;
     content: string;
 };
 
 export type SessionSocketBackfillRequestMessage = {
-    id: string;
     type: 'backfill';
     requestId?: string;
     cursor?: number;

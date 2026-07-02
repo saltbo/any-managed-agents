@@ -24,7 +24,6 @@ T = TypeVar("T", bound="SessionSocketBackfillRequestMessage")
 class SessionSocketBackfillRequestMessage:
     """ 
         Attributes:
-            id (str):
             type_ (SessionSocketBackfillRequestMessageType):
             request_id (str | Unset):
             cursor (int | Unset):
@@ -32,7 +31,6 @@ class SessionSocketBackfillRequestMessage:
             event_type (str | Unset):
      """
 
-    id: str
     type_: SessionSocketBackfillRequestMessageType
     request_id: str | Unset = UNSET
     cursor: int | Unset = UNSET
@@ -45,8 +43,6 @@ class SessionSocketBackfillRequestMessage:
 
 
     def to_dict(self) -> dict[str, Any]:
-        id = self.id
-
         type_ = self.type_.value
 
         request_id = self.request_id
@@ -61,7 +57,6 @@ class SessionSocketBackfillRequestMessage:
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
-            "id": id,
             "type": type_,
         })
         if request_id is not UNSET:
@@ -80,8 +75,6 @@ class SessionSocketBackfillRequestMessage:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        id = d.pop("id")
-
         type_ = SessionSocketBackfillRequestMessageType(d.pop("type"))
 
 
@@ -96,7 +89,6 @@ class SessionSocketBackfillRequestMessage:
         event_type = d.pop("eventType", UNSET)
 
         session_socket_backfill_request_message = cls(
-            id=id,
             type_=type_,
             request_id=request_id,
             cursor=cursor,

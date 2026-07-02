@@ -459,7 +459,7 @@ const SessionSocketEventMessageSchema = z
 const SessionSocketBackfillMessageSchema = z
   .object({
     type: z.literal('backfill'),
-    requestId: z.string().nullable(),
+    requestId: z.string(),
     events: z.array(SessionEventSchema),
     nextCursor: z.number().int().nullable(),
     hasMore: z.boolean(),
@@ -469,10 +469,10 @@ const SessionSocketRunnerUnavailableMessageSchema = z
   .object({ type: z.literal('runner_unavailable'), message: z.string() })
   .openapi('SessionSocketRunnerUnavailableMessage')
 const SessionSocketAckMessageSchema = z
-  .object({ type: z.literal('ack'), id: z.string() })
+  .object({ type: z.literal('ack'), requestId: z.string() })
   .openapi('SessionSocketAckMessage')
 const SessionSocketErrorMessageSchema = z
-  .object({ type: z.literal('error'), id: z.string().optional(), message: z.string() })
+  .object({ type: z.literal('error'), requestId: z.string().optional(), message: z.string() })
   .openapi('SessionSocketErrorMessage')
 const SessionSocketServerMessageSchema = z
   .discriminatedUnion('type', [
@@ -486,17 +486,16 @@ const SessionSocketServerMessageSchema = z
 
 // client → server
 const SessionSocketPromptMessageSchema = z
-  .object({ id: z.string(), type: z.literal('prompt'), content: z.string() })
+  .object({ type: z.literal('prompt'), requestId: z.string().optional(), content: z.string() })
   .openapi('SessionSocketPromptMessage')
 const SessionSocketAbortMessageSchema = z
-  .object({ id: z.string(), type: z.literal('abort') })
+  .object({ type: z.literal('abort'), requestId: z.string().optional() })
   .openapi('SessionSocketAbortMessage')
 const SessionSocketSteerMessageSchema = z
-  .object({ id: z.string(), type: z.literal('steer'), content: z.string() })
+  .object({ type: z.literal('steer'), requestId: z.string().optional(), content: z.string() })
   .openapi('SessionSocketSteerMessage')
 const SessionSocketBackfillRequestMessageSchema = z
   .object({
-    id: z.string(),
     type: z.literal('backfill'),
     requestId: z.string().optional(),
     cursor: z.number().int().optional(),

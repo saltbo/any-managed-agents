@@ -1519,7 +1519,7 @@ describe('[CF] /api/v1/sessions', () => {
       throw new Error(`expected frame never arrived; got ${JSON.stringify(frames)}`)
     }
 
-    ws.send(JSON.stringify({ id: 'r1', type: 'backfill', requestId: 'r1', limit: 100 }))
+    ws.send(JSON.stringify({ type: 'backfill', requestId: 'r1', limit: 100 }))
     const backfill = await waitForFrame((frame) => frame.type === 'backfill' && frame.requestId === 'r1')
     expect((backfill.events as Array<{ type: string }>).some((record) => record.type === 'message.started')).toBe(true)
 

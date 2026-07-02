@@ -24,11 +24,11 @@ class SessionSocketAckMessage:
     """ 
         Attributes:
             type_ (SessionSocketAckMessageType):
-            id (str):
+            request_id (str):
      """
 
     type_: SessionSocketAckMessageType
-    id: str
+    request_id: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -38,14 +38,14 @@ class SessionSocketAckMessage:
     def to_dict(self) -> dict[str, Any]:
         type_ = self.type_.value
 
-        id = self.id
+        request_id = self.request_id
 
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
             "type": type_,
-            "id": id,
+            "requestId": request_id,
         })
 
         return field_dict
@@ -60,11 +60,11 @@ class SessionSocketAckMessage:
 
 
 
-        id = d.pop("id")
+        request_id = d.pop("requestId")
 
         session_socket_ack_message = cls(
             type_=type_,
-            id=id,
+            request_id=request_id,
         )
 
 

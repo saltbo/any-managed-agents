@@ -231,7 +231,7 @@ describe('useSessionRuntimeSession — null/stopped session', () => {
       </QueryClientProvider>,
     )
     await waitFor(() => expect(screen.getByTestId('connection').textContent).toBe('open'), { timeout: 5000 })
-    lastSocket!.emit({ type: 'backfill', requestId: null, events, nextCursor: null, hasMore: false })
+    lastSocket!.emit({ type: 'backfill', requestId: 'backfill-1', events, nextCursor: null, hasMore: false })
     await waitFor(() => expect(screen.getByTestId('messageCount').textContent).toBe('1'), { timeout: 5000 })
     expect(screen.getByTestId('runState').textContent).toBe('idle')
   })
@@ -275,7 +275,7 @@ describe('useSessionRuntimeSession — live session open', () => {
 
     lastSocket!.emit({
       type: 'backfill',
-      requestId: null,
+      requestId: 'backfill-1',
       events: [
         buildEvent({
           id: 'event_backfill',

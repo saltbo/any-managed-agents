@@ -1378,8 +1378,7 @@
             ]
           },
           "requestId": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "events": {
             "type": "array",
@@ -1430,13 +1429,13 @@
               "ack"
             ]
           },
-          "id": {
+          "requestId": {
             "type": "string"
           }
         },
         "required": [
           "type",
-          "id"
+          "requestId"
         ]
       },
       "SessionSocketErrorMessage": {
@@ -1448,7 +1447,7 @@
               "error"
             ]
           },
-          "id": {
+          "requestId": {
             "type": "string"
           },
           "message": {
@@ -1492,21 +1491,20 @@
       "SessionSocketPromptMessage": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": [
               "prompt"
             ]
           },
+          "requestId": {
+            "type": "string"
+          },
           "content": {
             "type": "string"
           }
         },
         "required": [
-          "id",
           "type",
           "content"
         ]
@@ -1514,39 +1512,37 @@
       "SessionSocketAbortMessage": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": [
               "abort"
             ]
+          },
+          "requestId": {
+            "type": "string"
           }
         },
         "required": [
-          "id",
           "type"
         ]
       },
       "SessionSocketSteerMessage": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": [
               "steer"
             ]
           },
+          "requestId": {
+            "type": "string"
+          },
           "content": {
             "type": "string"
           }
         },
         "required": [
-          "id",
           "type",
           "content"
         ]
@@ -1554,9 +1550,6 @@
       "SessionSocketBackfillRequestMessage": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": [
@@ -1577,7 +1570,6 @@
           }
         },
         "required": [
-          "id",
           "type"
         ]
       },

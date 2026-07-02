@@ -4877,8 +4877,8 @@ type SessionPlacement struct {
 
 // SessionSocketAbortMessage defines model for SessionSocketAbortMessage.
 type SessionSocketAbortMessage struct {
-	Id   string                        `json:"id"`
-	Type SessionSocketAbortMessageType `json:"type"`
+	RequestId *string                       `json:"requestId,omitempty"`
+	Type      SessionSocketAbortMessageType `json:"type"`
 }
 
 // SessionSocketAbortMessageType defines model for SessionSocketAbortMessage.Type.
@@ -4886,8 +4886,8 @@ type SessionSocketAbortMessageType string
 
 // SessionSocketAckMessage defines model for SessionSocketAckMessage.
 type SessionSocketAckMessage struct {
-	Id   string                      `json:"id"`
-	Type SessionSocketAckMessageType `json:"type"`
+	RequestId string                      `json:"requestId"`
+	Type      SessionSocketAckMessageType `json:"type"`
 }
 
 // SessionSocketAckMessageType defines model for SessionSocketAckMessage.Type.
@@ -4898,7 +4898,7 @@ type SessionSocketBackfillMessage struct {
 	Events     []SessionEvent                   `json:"events"`
 	HasMore    bool                             `json:"hasMore"`
 	NextCursor *int                             `json:"nextCursor"`
-	RequestId  *string                          `json:"requestId"`
+	RequestId  string                           `json:"requestId"`
 	Type       SessionSocketBackfillMessageType `json:"type"`
 }
 
@@ -4909,7 +4909,6 @@ type SessionSocketBackfillMessageType string
 type SessionSocketBackfillRequestMessage struct {
 	Cursor    *int                                    `json:"cursor,omitempty"`
 	EventType *string                                 `json:"eventType,omitempty"`
-	Id        string                                  `json:"id"`
 	Limit     *int                                    `json:"limit,omitempty"`
 	RequestId *string                                 `json:"requestId,omitempty"`
 	Type      SessionSocketBackfillRequestMessageType `json:"type"`
@@ -4925,9 +4924,9 @@ type SessionSocketClientMessage struct {
 
 // SessionSocketErrorMessage defines model for SessionSocketErrorMessage.
 type SessionSocketErrorMessage struct {
-	Id      *string                       `json:"id,omitempty"`
-	Message string                        `json:"message"`
-	Type    SessionSocketErrorMessageType `json:"type"`
+	Message   string                        `json:"message"`
+	RequestId *string                       `json:"requestId,omitempty"`
+	Type      SessionSocketErrorMessageType `json:"type"`
 }
 
 // SessionSocketErrorMessageType defines model for SessionSocketErrorMessage.Type.
@@ -4944,9 +4943,9 @@ type SessionSocketEventMessageType string
 
 // SessionSocketPromptMessage defines model for SessionSocketPromptMessage.
 type SessionSocketPromptMessage struct {
-	Content string                         `json:"content"`
-	Id      string                         `json:"id"`
-	Type    SessionSocketPromptMessageType `json:"type"`
+	Content   string                         `json:"content"`
+	RequestId *string                        `json:"requestId,omitempty"`
+	Type      SessionSocketPromptMessageType `json:"type"`
 }
 
 // SessionSocketPromptMessageType defines model for SessionSocketPromptMessage.Type.
@@ -4968,9 +4967,9 @@ type SessionSocketServerMessage struct {
 
 // SessionSocketSteerMessage defines model for SessionSocketSteerMessage.
 type SessionSocketSteerMessage struct {
-	Content string                        `json:"content"`
-	Id      string                        `json:"id"`
-	Type    SessionSocketSteerMessageType `json:"type"`
+	Content   string                        `json:"content"`
+	RequestId *string                       `json:"requestId,omitempty"`
+	Type      SessionSocketSteerMessageType `json:"type"`
 }
 
 // SessionSocketSteerMessageType defines model for SessionSocketSteerMessage.Type.

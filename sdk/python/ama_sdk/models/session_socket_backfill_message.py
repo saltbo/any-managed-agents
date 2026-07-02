@@ -38,7 +38,7 @@ class SessionSocketBackfillMessage:
     """ 
         Attributes:
             type_ (SessionSocketBackfillMessageType):
-            request_id (None | str):
+            request_id (str):
             events (list[SessionEventType0 | SessionEventType1 | SessionEventType10 | SessionEventType11 | SessionEventType2
                 | SessionEventType3 | SessionEventType4 | SessionEventType5 | SessionEventType6 | SessionEventType7 |
                 SessionEventType8 | SessionEventType9]):
@@ -47,7 +47,7 @@ class SessionSocketBackfillMessage:
      """
 
     type_: SessionSocketBackfillMessageType
-    request_id: None | str
+    request_id: str
     events: list[SessionEventType0 | SessionEventType1 | SessionEventType10 | SessionEventType11 | SessionEventType2 | SessionEventType3 | SessionEventType4 | SessionEventType5 | SessionEventType6 | SessionEventType7 | SessionEventType8 | SessionEventType9]
     next_cursor: int | None
     has_more: bool
@@ -72,7 +72,6 @@ class SessionSocketBackfillMessage:
         from ..models.session_event_type_9 import SessionEventType9
         type_ = self.type_.value
 
-        request_id: None | str
         request_id = self.request_id
 
         events = []
@@ -147,13 +146,7 @@ class SessionSocketBackfillMessage:
 
 
 
-        def _parse_request_id(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        request_id = _parse_request_id(d.pop("requestId"))
-
+        request_id = d.pop("requestId")
 
         events = []
         _events = d.pop("events")

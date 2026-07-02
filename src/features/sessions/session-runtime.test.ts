@@ -646,7 +646,7 @@ describe('sessionRuntimeReducer', () => {
   it('handles command_sent with abort type without changing local transcript', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'command_sent',
-      command: { id: 'cmd_1', type: 'abort' },
+      command: { requestId: 'cmd_1', type: 'abort' },
       at: new Date(1000).toISOString(),
     })
 
@@ -657,7 +657,7 @@ describe('sessionRuntimeReducer', () => {
   it('handles command_sent with empty content by returning unchanged state', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'command_sent',
-      command: { id: 'cmd_1', type: 'prompt', content: '' },
+      command: { requestId: 'cmd_1', type: 'prompt', content: '' },
       at: new Date(1000).toISOString(),
     })
 

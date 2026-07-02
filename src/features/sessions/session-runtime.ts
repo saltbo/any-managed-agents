@@ -84,7 +84,7 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
       ...state,
       runState: 'running',
       messages: upsertMessage(state.messages, {
-        id: action.command.id,
+        id: action.command.requestId ?? crypto.randomUUID(),
         role: 'user',
         content: action.command.content,
         status: 'complete',

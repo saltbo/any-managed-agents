@@ -26,12 +26,12 @@ class SessionSocketErrorMessage:
         Attributes:
             type_ (SessionSocketErrorMessageType):
             message (str):
-            id (str | Unset):
+            request_id (str | Unset):
      """
 
     type_: SessionSocketErrorMessageType
     message: str
-    id: str | Unset = UNSET
+    request_id: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -43,7 +43,7 @@ class SessionSocketErrorMessage:
 
         message = self.message
 
-        id = self.id
+        request_id = self.request_id
 
 
         field_dict: dict[str, Any] = {}
@@ -52,8 +52,8 @@ class SessionSocketErrorMessage:
             "type": type_,
             "message": message,
         })
-        if id is not UNSET:
-            field_dict["id"] = id
+        if request_id is not UNSET:
+            field_dict["requestId"] = request_id
 
         return field_dict
 
@@ -69,12 +69,12 @@ class SessionSocketErrorMessage:
 
         message = d.pop("message")
 
-        id = d.pop("id", UNSET)
+        request_id = d.pop("requestId", UNSET)
 
         session_socket_error_message = cls(
             type_=type_,
             message=message,
-            id=id,
+            request_id=request_id,
         )
 
 

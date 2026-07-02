@@ -77,8 +77,8 @@ export function useSessionRuntimeSession({
         if (socketMessage.hasMore && typeof socketMessage.nextCursor === 'number') {
           socket.send(
             JSON.stringify({
-              id: crypto.randomUUID(),
               type: 'backfill',
+              requestId: crypto.randomUUID(),
               cursor: socketMessage.nextCursor,
               limit: 200,
             }),
@@ -150,11 +150,11 @@ export function useSessionRuntimeSession({
 }
 
 function clientMessage(type: SessionSocketClientMessageType, content?: string): SessionRuntimeCommand {
-  const id = crypto.randomUUID()
+  const requestId = crypto.randomUUID()
   if (type === 'abort') {
-    return { id, type }
+    return { type, requestId }
   }
-  return { id, type, content: content ?? '' }
+  return { type, requestId, content: content ?? '' }
 }
 
 function parseSessionSocketServerMessage(data: unknown): SessionSocketServerMessage | Error {

@@ -12,60 +12,66 @@ const record = {
 
 describe('sessionSocketClientMessageFrom', () => {
   it('parses prompt, steer, abort, and backfill client envelopes', () => {
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'prompt', content: 'hello' })).toEqual({
-      id: 'msg_1',
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'prompt', content: 'hello' })).toEqual({
+      requestId: 'msg_1',
       type: 'prompt',
       content: 'hello',
     })
-    expect(sessionSocketClientMessageFrom({ id: 'msg_2', type: 'steer', content: 'adjust' })).toEqual({
-      id: 'msg_2',
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_2', type: 'steer', content: 'adjust' })).toEqual({
+      requestId: 'msg_2',
       type: 'steer',
       content: 'adjust',
     })
-    expect(sessionSocketClientMessageFrom({ id: 'msg_3', type: 'abort', reason: 'stop' })).toEqual({
-      id: 'msg_3',
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_3', type: 'abort', reason: 'stop' })).toEqual({
+      requestId: 'msg_3',
       type: 'abort',
       reason: 'stop',
     })
-    expect(sessionSocketClientMessageFrom({ id: 'msg_4', type: 'abort', reason: 1 })).toEqual({
-      id: 'msg_4',
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_4', type: 'abort', reason: 1 })).toEqual({
+      requestId: 'msg_4',
       type: 'abort',
     })
     expect(
       sessionSocketClientMessageFrom({
-        id: 'msg_5',
+        requestId: 'msg_5',
         type: 'backfill',
         cursor: 2,
         limit: 10,
         eventType: 'runtime.error',
       }),
     ).toEqual({
-      id: 'msg_5',
       type: 'backfill',
       requestId: 'msg_5',
       cursor: 2,
       limit: 10,
       eventType: 'runtime.error',
     })
-    expect(sessionSocketClientMessageFrom({ id: 'msg_6', type: 'backfill', requestId: 'req_1' })).toEqual({
-      id: 'msg_6',
+    expect(sessionSocketClientMessageFrom({ type: 'backfill', requestId: 'req_1' })).toEqual({
       type: 'backfill',
       requestId: 'req_1',
+    })
+    expect(sessionSocketClientMessageFrom({ type: 'backfill', limit: 10 })).toEqual({
+      type: 'backfill',
+      limit: 10,
+    })
+    expect(sessionSocketClientMessageFrom({ type: 'backfill', requestId: 'req_2' })).toEqual({
+      type: 'backfill',
+      requestId: 'req_2',
     })
   })
 
   it('rejects malformed client envelopes', () => {
     expect(sessionSocketClientMessageFrom(null)).toBeNull()
     expect(sessionSocketClientMessageFrom([])).toBeNull()
-    expect(sessionSocketClientMessageFrom({ type: 'prompt', content: 'hello' })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 1 })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'prompt' })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'steer', content: 1 })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'backfill', eventType: 'not.real' })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'backfill', cursor: -1 })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'backfill', cursor: 1.2 })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'backfill', limit: 0 })).toBeNull()
-    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'unknown' })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ id: 'msg_1', type: 'backfill' })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 1 })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'prompt' })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'steer', content: 1 })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'backfill', eventType: 'not.real' })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'backfill', cursor: -1 })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'backfill', cursor: 1.2 })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'backfill', limit: 0 })).toBeNull()
+    expect(sessionSocketClientMessageFrom({ requestId: 'msg_1', type: 'unknown' })).toBeNull()
   })
 })
 
@@ -81,17 +87,13 @@ describe('sessionSocketServerMessageFrom', () => {
         hasMore: true,
       }),
     ).toEqual({ type: 'backfill', requestId: 'req_1', events: [record], nextCursor: 2, hasMore: true })
-    expect(sessionSocketServerMessageFrom({ type: 'backfill', events: [], hasMore: false })).toEqual({
-      type: 'backfill',
-      requestId: null,
-      events: [],
-      nextCursor: null,
-      hasMore: false,
+    expect(sessionSocketServerMessageFrom({ type: 'ack', requestId: 'msg_1' })).toEqual({
+      type: 'ack',
+      requestId: 'msg_1',
     })
-    expect(sessionSocketServerMessageFrom({ type: 'ack', id: 'msg_1' })).toEqual({ type: 'ack', id: 'msg_1' })
-    expect(sessionSocketServerMessageFrom({ type: 'error', id: 'msg_1', message: 'failed' })).toEqual({
+    expect(sessionSocketServerMessageFrom({ type: 'error', requestId: 'msg_1', message: 'failed' })).toEqual({
       type: 'error',
-      id: 'msg_1',
+      requestId: 'msg_1',
       message: 'failed',
     })
     expect(sessionSocketServerMessageFrom({ type: 'error', message: 'failed' })).toEqual({
@@ -107,6 +109,7 @@ describe('sessionSocketServerMessageFrom', () => {
   it('rejects malformed server envelopes', () => {
     expect(sessionSocketServerMessageFrom(null)).toBeNull()
     expect(sessionSocketServerMessageFrom({ type: 'backfill' })).toBeNull()
+    expect(sessionSocketServerMessageFrom({ type: 'backfill', events: [], hasMore: false })).toBeNull()
     expect(
       sessionSocketServerMessageFrom({
         type: 'event',
@@ -119,7 +122,8 @@ describe('sessionSocketServerMessageFrom', () => {
         record: { ...record, payload: [] },
       }),
     ).toBeNull()
-    expect(sessionSocketServerMessageFrom({ type: 'ack', id: 1 })).toBeNull()
+    expect(sessionSocketServerMessageFrom({ type: 'ack', id: 'legacy' })).toBeNull()
+    expect(sessionSocketServerMessageFrom({ type: 'ack', requestId: 1 })).toBeNull()
     expect(sessionSocketServerMessageFrom({ type: 'error', message: 1 })).toBeNull()
     expect(sessionSocketServerMessageFrom({ type: 'runner_unavailable', message: 1 })).toBeNull()
     expect(sessionSocketServerMessageFrom({ type: 'unknown' })).toBeNull()

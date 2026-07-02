@@ -9,6 +9,7 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.session_socket_abort_message_type import SessionSocketAbortMessageType
+from ..types import UNSET, Unset
 
 
 
@@ -23,12 +24,12 @@ T = TypeVar("T", bound="SessionSocketAbortMessage")
 class SessionSocketAbortMessage:
     """ 
         Attributes:
-            id (str):
             type_ (SessionSocketAbortMessageType):
+            request_id (str | Unset):
      """
 
-    id: str
     type_: SessionSocketAbortMessageType
+    request_id: str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -36,17 +37,18 @@ class SessionSocketAbortMessage:
 
 
     def to_dict(self) -> dict[str, Any]:
-        id = self.id
-
         type_ = self.type_.value
+
+        request_id = self.request_id
 
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
-            "id": id,
             "type": type_,
         })
+        if request_id is not UNSET:
+            field_dict["requestId"] = request_id
 
         return field_dict
 
@@ -55,16 +57,16 @@ class SessionSocketAbortMessage:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        id = d.pop("id")
-
         type_ = SessionSocketAbortMessageType(d.pop("type"))
 
 
 
 
+        request_id = d.pop("requestId", UNSET)
+
         session_socket_abort_message = cls(
-            id=id,
             type_=type_,
+            request_id=request_id,
         )
 
 

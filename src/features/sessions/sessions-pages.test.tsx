@@ -1939,7 +1939,7 @@ describe('SessionDetailPage', () => {
     await waitFor(() => expect(sockets[0]).toBeTruthy(), { timeout: 5000 })
     sockets[0]!.emit({
       type: 'backfill',
-      requestId: null,
+      requestId: 'backfill-1',
       events: [buildMessageEvent('session_history', 1, 'First page reply')],
       hasMore: true,
       nextCursor: 1,
@@ -1948,7 +1948,7 @@ describe('SessionDetailPage', () => {
     expect(JSON.parse(sockets[0]!.sent[0] ?? '{}')).toMatchObject({ type: 'backfill', cursor: 1, limit: 200 })
     sockets[0]!.emit({
       type: 'backfill',
-      requestId: null,
+      requestId: 'backfill-2',
       events: [buildMessageEvent('session_history', 2, 'Second page reply')],
       hasMore: false,
       nextCursor: null,

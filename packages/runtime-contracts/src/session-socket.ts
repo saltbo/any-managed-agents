@@ -1,25 +1,24 @@
 import { type AmaSessionEventType, isAmaSessionEventType, type SessionEvent } from './session-events'
 
 export type SessionSocketPromptMessage = {
-  id: string
   type: 'prompt'
+  requestId?: string
   content: string
 }
 
 export type SessionSocketAbortMessage = {
-  id: string
   type: 'abort'
+  requestId?: string
   reason?: string
 }
 
 export type SessionSocketSteerMessage = {
-  id: string
   type: 'steer'
+  requestId?: string
   content: string
 }
 
 export type SessionSocketBackfillRequestMessage = {
-  id: string
   type: 'backfill'
   requestId?: string
   cursor?: number
@@ -40,7 +39,7 @@ export type SessionSocketEventMessage = {
 
 export type SessionSocketBackfillMessage = {
   type: 'backfill'
-  requestId: string | null
+  requestId: string
   events: SessionEvent[]
   nextCursor: number | null
   hasMore: boolean
@@ -48,12 +47,12 @@ export type SessionSocketBackfillMessage = {
 
 export type SessionSocketAckMessage = {
   type: 'ack'
-  id: string
+  requestId: string
 }
 
 export type SessionSocketErrorMessage = {
   type: 'error'
-  id?: string
+  requestId?: string
   message: string
 }
 
@@ -71,14 +70,23 @@ export type SessionSocketServerMessage =
 
 export function sessionSocketClientMessageFrom(value: unknown): SessionSocketClientMessage | null {
   const message = objectValue(value)
-  if (typeof message.id !== 'string' || typeof message.type !== 'string') {
+  if (typeof message.type !== 'string') {
+    return null
+  }
+  if ('id' in message) {
     return null
   }
   if (message.type === 'prompt' || message.type === 'steer') {
-    return typeof message.content === 'string' ? { id: message.id, type: message.type, content: message.content } : null
+    return typeof message.content === 'string'
+      ? {
+          type: message.type,
+          ...requestIdFields(message),
+          content: message.content,
+        }
+      : null
   }
   if (message.type === 'abort') {
-    return { id: message.id, type: 'abort', ...(typeof message.reason === 'string' ? { reason: message.reason } : {}) }
+    return { type: 'abort', ...requestIdFields(message), ...(typeof message.reason === 'string' ? { reason: message.reason } : {}) }
   }
   if (message.type === 'backfill') {
     if (
@@ -96,9 +104,8 @@ export function sessionSocketClientMessageFrom(value: unknown): SessionSocketCli
       return null
     }
     return {
-      id: message.id,
       type: 'backfill',
-      requestId: typeof message.requestId === 'string' ? message.requestId : message.id,
+      ...requestIdFields(message),
       ...(typeof cursor === 'number' ? { cursor } : {}),
       ...(typeof limit === 'number' ? { limit } : {}),
       ...(typeof message.eventType === 'string' ? { eventType: message.eventType } : {}),
@@ -111,24 +118,30 @@ export function sessionSocketServerMessageFrom(value: unknown): SessionSocketSer
   const message = objectValue(value)
   if (message.type === 'backfill') {
     return Array.isArray(message.events)
-      ? {
-          type: 'backfill',
-          requestId: typeof message.requestId === 'string' ? message.requestId : null,
-          events: message.events.filter(isSessionEvent),
-          nextCursor: typeof message.nextCursor === 'number' ? message.nextCursor : null,
-          hasMore: message.hasMore === true,
-        }
+      ? typeof message.requestId === 'string'
+        ? {
+            type: 'backfill',
+            requestId: message.requestId,
+            events: message.events.filter(isSessionEvent),
+            nextCursor: typeof message.nextCursor === 'number' ? message.nextCursor : null,
+            hasMore: message.hasMore === true,
+          }
+        : null
       : null
   }
   if (message.type === 'event') {
     return isSessionEvent(message.record) ? { type: 'event', record: message.record } : null
   }
   if (message.type === 'ack') {
-    return typeof message.id === 'string' ? { type: 'ack', id: message.id } : null
+    return typeof message.requestId === 'string' ? { type: 'ack', requestId: message.requestId } : null
   }
   if (message.type === 'error') {
     return typeof message.message === 'string'
-      ? { type: 'error', ...(typeof message.id === 'string' ? { id: message.id } : {}), message: message.message }
+      ? {
+          type: 'error',
+          ...(typeof message.requestId === 'string' ? { requestId: message.requestId } : {}),
+          message: message.message,
+        }
       : null
   }
   if (message.type === 'runner_unavailable') {
@@ -152,6 +165,13 @@ function isSessionEvent(value: unknown): value is SessionEvent {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function requestIdFields(message: Record<string, unknown>): { requestId?: string } {
+  if (typeof message.requestId === 'string') {
+    return { requestId: message.requestId }
+  }
+  return {}
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
