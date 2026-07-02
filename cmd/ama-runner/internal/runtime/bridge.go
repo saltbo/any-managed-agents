@@ -62,10 +62,8 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	if err != nil {
 		return nil, err
 	}
-	stderrReader, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
+	var stderrText bytes.Buffer
+	cmd.Stderr = &stderrText
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -86,15 +84,9 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		defer writeMu.Unlock()
 		return write(event)
 	}
-	var stderrText bytes.Buffer
-	stderrDone := make(chan error, 1)
-	go func() {
-		stderrDone <- streamBridgeStderr(stderrReader, &stderrText)
-	}()
 	stdoutLines := protocol.lineReader(stdoutReader)
 	if err := protocol.waitReady(stdoutLines); err != nil {
 		_ = b.waitOrStopProcess(cmd, runtimeBridgeReadyFailureGrace)
-		<-stderrDone
 		if stderrText.Len() > 0 {
 			return nil, fmt.Errorf("%w: %s", err, stderrText.String())
 		}
@@ -138,7 +130,6 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		b.stopProcess(cmd)
 	}
 	waitErr := cmd.Wait()
-	stderrErr := <-stderrDone
 
 	final := JSON{"stderr": stderrText.String(), "exitCode": exitCode(waitErr)}
 	for key, value := range result {
@@ -151,13 +142,6 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		// envelope stable instead of leaking process cleanup status.
 		final["exitCode"] = 1
 		return final, readErr
-	}
-	if stderrErr != nil && bridgePipeClosedAfterResult(stderrErr, result) {
-		stderrErr = nil
-	}
-	if stderrErr != nil {
-		final["error"] = stderrErr.Error()
-		return final, stderrErr
 	}
 	if commandCtx.Err() != nil {
 		final["error"] = commandCtx.Err().Error()
