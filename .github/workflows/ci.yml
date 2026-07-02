@@ -11,8 +11,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Test, Lint, Build
+  lint:
+    name: Lint and Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run lint:arch
+      - run: pnpm run lint:spec
+      - run: pnpm run lint:escapes
+      - run: pnpm run lint:types
+      - run: pnpm run typecheck
+      - run: pnpm --filter @any-managed-agents/sdk run typecheck
+      - run: pnpm --filter @any-managed-agents/sdk run smoke
+
+  contracts:
+    name: Contract and SDK Drift
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -27,28 +50,47 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.25'
-          cache: false
+          cache: true
+          cache-dependency-path: |
+            cmd/ama-runner/go.sum
+            sdk/go/go.sum
       - uses: astral-sh/setup-uv@v6
       - run: pnpm install --frozen-lockfile
-      - run: go install github.com/rest-sh/restish@v0.21.2
-      # SDK generators for `openapi:check` — pinned to the versions that produced
-      # the committed sdk/ artifacts so regeneration is byte-identical in CI.
+      # SDK generators are pinned to the versions that produced the committed artifacts.
       - run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1
       - run: uv tool install openapi-python-client==0.29.0
       - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - run: pnpm run lint
-      - run: pnpm run lint:arch
-      - run: pnpm run lint:spec
-      - run: pnpm run lint:escapes
-      - run: pnpm run lint:types
-      - run: pnpm run typecheck
       - run: pnpm run contract:check
       - run: pnpm run openapi:check
-      - run: pnpm --filter @any-managed-agents/sdk run typecheck
-      - run: pnpm --filter @any-managed-agents/sdk run smoke
+
+  web-coverage:
+    name: Unit and Web Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       # Coverage gate: unit + web (v8). Fails below 95% business / 90% else, per-file.
       - run: pnpm run test:coverage
+
+  ama-runner-coverage:
+    name: AMA Runner Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: cmd/ama-runner/go.sum
       # Coverage gate: ama-runner Go code. Generated protocol bindings are excluded.
       - name: Check ama-runner coverage
         working-directory: cmd/ama-runner
@@ -82,9 +124,58 @@ jobs:
               print(f"ama-runner coverage {coverage:.1f}% is below 90.0%", file=sys.stderr)
               sys.exit(1)
           PY
+
+  integration:
+    name: Workerd Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       # The workerd integration crown (real D1) — proven by pass/fail, not %.
       - run: pnpm exec vitest run --project integration
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
       # Cross-stack e2e crown: native Playwright (no Cucumber).
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run e2e
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm run build
