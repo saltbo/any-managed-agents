@@ -39,6 +39,7 @@ const TEST_GLOBS = [
   'src/**/*.test.tsx',
   'shared/**/*.test.ts',
   'runtime-bridge/src/**/*.test.ts',
+  'cmd/ama-runner/**/*_test.go',
   'workers/**/*.test.ts',
   'e2e/**/*.spec.ts',
 ]
