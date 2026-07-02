@@ -1,10 +1,12 @@
 const REDACTED_VALUE = '[REDACTED]'
 
 const SECRET_KEY =
-  /(^|[_-])(api[_-]?key|authorization|client[_-]?secret|password|private[_-]?key|refresh[_-]?token|access[_-]?token|token|secret[_-]?key)($|[_-])/i
+  /(^|[_-])(api[_-]?key|authorization|client[_-]?secret|credential|password|private[_-]?key|refresh[_-]?token|access[_-]?token|token|secret[_-]?key)($|[_-])/i
 
 const SECRET_ASSIGNMENT =
   /\b(api[_-]?key|authorization|client[_-]?secret|password|private[_-]?key|refresh[_-]?token|access[_-]?token|token|secret[_-]?key)\b(\s*[:=]\s*)(["']?)([^\s"',;]+)/gi
+
+const SENSITIVE_TEXT = /(bearer\s+|raw-[\w-]*token|secret|token=|api[_-]?key|password=)/i
 
 const BEARER_TOKEN = /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/gi
 const BASIC_AUTH = /\bBasic\s+[A-Za-z0-9+/=]{16,}/gi
@@ -45,7 +47,21 @@ function redactToolResultValue(value: unknown, parentKey?: string): unknown {
 }
 
 export function redactSensitiveValue(value: unknown): unknown {
-  return redactToolResultValue(value)
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveValue(item))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        SECRET_KEY.test(key) ? REDACTED_VALUE : redactSensitiveValue(item),
+      ]),
+    )
+  }
+  if (typeof value === 'string' && SENSITIVE_TEXT.test(value)) {
+    return REDACTED_VALUE
+  }
+  return value
 }
 
 function redactToolResultBlock(block: Record<string, unknown>): Record<string, unknown> {

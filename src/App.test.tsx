@@ -67,7 +67,7 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean; in
           new MessageEvent('message', {
             data: JSON.stringify({
               type: 'backfill',
-              requestId: null,
+              requestId: 'backfill-1',
               events: options.initialEvents ?? [],
               nextCursor: null,
               hasMore: false,
@@ -78,18 +78,19 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean; in
     }
 
     send(data: string) {
-      const command = JSON.parse(data) as { id?: string; type?: string; content?: string }
+      const command = JSON.parse(data) as { requestId?: string; type?: string; content?: string }
       sentCommands.push(command)
       if (command.type === 'prompt') {
+        const requestId = command.requestId ?? 'prompt'
         const content = `Received: ${command.content}`
         this.emitEvent(
           event({
-            id: `${command.id}_assistant`,
+            id: `${requestId}_assistant`,
             sequence: ++sequence,
             type: 'message.completed',
             payload: {
               message: {
-                id: `${command.id}_assistant_msg`,
+                id: `${requestId}_assistant_msg`,
                 role: 'assistant',
                 content: [{ type: 'text', text: content }],
               },
@@ -98,18 +99,18 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean; in
         )
         this.emitEvent(
           event({
-            id: `${command.id}_tool_call`,
+            id: `${requestId}_tool_call`,
             sequence: ++sequence,
             type: 'message.completed',
             payload: {
               message: {
-                id: `${command.id}_tool_call_msg`,
+                id: `${requestId}_tool_call_msg`,
                 role: 'assistant',
                 content: [
                   {
                     type: 'tool_call',
                     toolCall: {
-                      id: `${command.id}_tool`,
+                      id: `${requestId}_tool`,
                       name: 'bash',
                       input: { command: `printf %s ${JSON.stringify(command.content ?? '')}` },
                     },
@@ -121,18 +122,18 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean; in
         )
         this.emitEvent(
           event({
-            id: `${command.id}_tool_result`,
+            id: `${requestId}_tool_result`,
             sequence: ++sequence,
             type: 'message.completed',
             payload: {
               message: {
-                id: `${command.id}_tool_result_msg`,
+                id: `${requestId}_tool_result_msg`,
                 role: 'tool',
-                parentToolCallId: `${command.id}_tool`,
+                parentToolCallId: `${requestId}_tool`,
                 content: [
                   {
                     type: 'tool_result',
-                    toolCallId: `${command.id}_tool`,
+                    toolCallId: `${requestId}_tool`,
                     result: { content: [], structuredContent: { ok: true } },
                   },
                 ],
@@ -142,10 +143,10 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean; in
         )
         this.emitEvent(
           event({
-            id: `${command.id}_end`,
+            id: `${requestId}_end`,
             sequence: ++sequence,
             type: 'turn.completed',
-            payload: { id: `${command.id}_end`, stage: 'agent_completed', willRetry: false },
+            payload: { id: `${requestId}_end`, stage: 'agent_completed', willRetry: false },
           }),
         )
         if (options.closeAfterAgentEnd) {
