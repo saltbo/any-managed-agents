@@ -146,11 +146,10 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	}
 	if readErr != nil {
 		final["error"] = readErr.Error()
-		// A bridge-reported runtime error is a failed run even when the bridge
-		// process itself exits cleanly.
-		if exitCode(waitErr) == 0 {
-			final["exitCode"] = 1
-		}
+		// A bridge-reported runtime error is a failed run. The bridge process may
+		// later exit cleanly or be killed by cleanup, so keep the public run
+		// envelope stable instead of leaking process cleanup status.
+		final["exitCode"] = 1
 		return final, readErr
 	}
 	if stderrErr != nil && bridgePipeClosedAfterResult(stderrErr, result) {
