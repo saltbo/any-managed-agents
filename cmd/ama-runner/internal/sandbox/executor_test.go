@@ -151,6 +151,64 @@ func TestProcessAdapterReadAndWrite(t *testing.T) {
 	}
 }
 
+func TestProcessAdapterEdit(t *testing.T) {
+	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	workDir := t.TempDir()
+	path := filepath.Join(workDir, "notes.txt")
+	if err := os.WriteFile(path, []byte("alpha\nbeta\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := adapter.Execute(context.Background(), ToolRequest{
+		ToolName: "edit",
+		Input: map[string]any{
+			"path": "notes.txt",
+			"edits": []any{
+				map[string]any{"oldText": "alpha", "newText": "ALPHA"},
+				map[string]any{"oldText": "beta", "newText": "BETA"},
+			},
+		},
+		WorkDir: workDir,
+	})
+	if err != nil {
+		t.Fatalf("edit tool failed: %v", err)
+	}
+	if result.Output["ok"] != true {
+		t.Fatalf("unexpected edit output %#v", result.Output)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "ALPHA\nBETA\n" {
+		t.Fatalf("unexpected edited file %q", string(data))
+	}
+}
+
+func TestProcessAdapterEditValidatesInputs(t *testing.T) {
+	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	workDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workDir, "notes.txt"), []byte("alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []map[string]any{
+		{"path": "notes.txt"},
+		{"path": "notes.txt", "edits": []any{}},
+		{"path": "notes.txt", "edits": []any{"bad"}},
+		{"path": "notes.txt", "edits": []any{map[string]any{"oldText": "", "newText": "x"}}},
+		{"path": "notes.txt", "edits": []any{map[string]any{"oldText": "alpha"}}},
+		{"path": "notes.txt", "edits": []any{map[string]any{"oldText": "missing", "newText": "x"}}},
+	}
+	for _, input := range cases {
+		if _, err := adapter.Execute(context.Background(), ToolRequest{
+			ToolName: "edit",
+			Input:    input,
+			WorkDir:  workDir,
+		}); err == nil {
+			t.Fatalf("expected edit input %#v to fail", input)
+		}
+	}
+}
+
 func TestProcessAdapterFindSupportsGlob(t *testing.T) {
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("rg is required for find glob support")
@@ -178,6 +236,105 @@ func TestProcessAdapterFindSupportsGlob(t *testing.T) {
 	stdout, _ := result.Output["stdout"].(string)
 	if !strings.Contains(stdout, "src/app.test.ts") || strings.Contains(stdout, "src/app.ts") {
 		t.Fatalf("unexpected find output %q", stdout)
+	}
+}
+
+func TestProcessAdapterListAndGrep(t *testing.T) {
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg is required for grep support")
+	}
+	workDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workDir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "src", "app.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "README.md"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter := ProcessAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	list, err := adapter.Execute(context.Background(), ToolRequest{
+		ToolName: "ls",
+		Input:    map[string]any{"path": ".", "limit": 10},
+		WorkDir:  workDir,
+	})
+	if err != nil {
+		t.Fatalf("ls tool failed: %v", err)
+	}
+	if stdout, _ := list.Output["stdout"].(string); !strings.Contains(stdout, "README.md") || !strings.Contains(stdout, "src") {
+		t.Fatalf("unexpected ls output %q", stdout)
+	}
+
+	grep, err := adapter.Execute(context.Background(), ToolRequest{
+		ToolName: "grep",
+		Input:    map[string]any{"pattern": "FUNC MAIN", "path": "src", "ignoreCase": true, "literal": true, "limit": 1},
+		WorkDir:  workDir,
+	})
+	if err != nil {
+		t.Fatalf("grep tool failed: %v", err)
+	}
+	if stdout, _ := grep.Output["stdout"].(string); !strings.Contains(stdout, "app.go") || !strings.Contains(stdout, "func main") {
+		t.Fatalf("unexpected grep output %q", stdout)
+	}
+}
+
+func TestSandboxToolCommandBuilders(t *testing.T) {
+	grep := grepCommand(map[string]any{
+		"pattern":    "hello world",
+		"path":       "src",
+		"ignoreCase": true,
+		"literal":    true,
+		"glob":       "**/*.go",
+		"context":    float64(2),
+		"limit":      float64(5),
+	})
+	for _, expected := range []string{
+		"rg --line-number --color never",
+		"--ignore-case",
+		"--fixed-strings",
+		"--glob '**/*.go'",
+		"--context 2",
+		"--max-count 5",
+		"'hello world' 'src'",
+	} {
+		if !strings.Contains(grep, expected) {
+			t.Fatalf("expected grep command to contain %q, got %q", expected, grep)
+		}
+	}
+
+	if findCommand(map[string]any{"pattern": "test", "path": "src", "limit": 3}) != "find 'src' -type f -name '*test*' -print | head -n 3" {
+		t.Fatalf("unexpected find pattern command")
+	}
+	if findCommand(map[string]any{"path": "src"}) != "" {
+		t.Fatalf("expected find without pattern or glob to return empty command")
+	}
+	if lsCommand(map[string]any{"path": "src", "limit": 2}) != "find 'src' -maxdepth 1 -mindepth 1 -print | sort | head -n 2" {
+		t.Fatalf("unexpected ls command")
+	}
+	if fetchCommand(map[string]any{"url": "https://example.com/a'b"}) != "curl -fsS --max-time 60 'https://example.com/a'\\''b'" {
+		t.Fatalf("unexpected fetch command")
+	}
+	web := webSearchCommand(map[string]any{"query": "hello world", "limit": 99})
+	if !strings.Contains(web, "hello+world") || !strings.Contains(web, "head -n 200") {
+		t.Fatalf("unexpected web search command %q", web)
+	}
+}
+
+func TestSandboxInputHelpers(t *testing.T) {
+	input := map[string]any{"zero": 0, "float": float64(3), "negative": -1, "fraction": 1.5, "blank": " "}
+	if OptionalStringInput(input, "blank", "fallback") != "fallback" {
+		t.Fatalf("expected blank optional string to use fallback")
+	}
+	if PositiveIntInput(input, "zero", 9) != 0 {
+		t.Fatalf("expected zero to be accepted")
+	}
+	if PositiveIntInput(input, "float", 9) != 3 {
+		t.Fatalf("expected integral float to be accepted")
+	}
+	if PositiveIntInput(input, "negative", 9) != 9 || PositiveIntInput(input, "fraction", 9) != 9 {
+		t.Fatalf("expected invalid positive ints to use fallback")
 	}
 }
 

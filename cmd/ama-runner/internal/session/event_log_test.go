@@ -41,6 +41,9 @@ func TestEventLogAppendReadAllAndReopen(t *testing.T) {
 	if events[0].Type != "a" || events[2].Type != "c" {
 		t.Fatalf("order wrong: %s..%s", events[0].Type, events[2].Type)
 	}
+	if amaEvent := events[0].AmaEvent(); amaEvent["type"] != "a" || amaEvent["payload"] == nil {
+		t.Fatalf("unexpected AMA event projection %#v", amaEvent)
+	}
 	if events[0].Sequence != 1 || events[2].Sequence != 3 {
 		t.Fatalf("sequences = %d,%d want 1,3", events[0].Sequence, events[2].Sequence)
 	}
