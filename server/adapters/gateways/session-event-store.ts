@@ -4,9 +4,9 @@
 // runner only; the cloud relays live events and backfill reads but does not store
 // those events.
 //
-// The DO append owns redaction, sequence threading, and browser fan-out; this
-// router owns the routing + the D1 usage accounting that the DO path would
-// otherwise skip (the D1 insert records it inline).
+// The DO append owns tool-result redaction, sequence threading, and browser
+// fan-out; this router owns the routing + the D1 usage accounting that the DO
+// path would otherwise skip (the D1 insert records it inline).
 
 import type { EventStore } from '@server/usecases/ports'
 import type { AmaEvent } from '@shared/session-events'

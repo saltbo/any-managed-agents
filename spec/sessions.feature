@@ -119,11 +119,12 @@ Feature: Sessions
     Then the response returns a deterministic page with sequence boundaries
     And CSV and SSE views are available through content negotiation
 
-  @sessions/events-redaction @api
-  Scenario: Redact sensitive event payloads
-    Given a provider, tool, connector, vault, or sandbox emits sensitive values
+  @sessions/tool-result-redaction @api
+  Scenario: Redact sensitive tool result output
+    Given a tool result emits sensitive values
     When the event is stored or streamed
-    Then secret values are replaced with safe references without losing audit metadata
+    Then tool result output redacts high-confidence secret values
+    And tool calls, runtime state, and control-plane references keep their original structure
 
   @sessions/events-hierarchy @domain
   Scenario: Preserve event hierarchy for product consumers
@@ -147,4 +148,4 @@ Feature: Sessions
     When the user opens the session transcript
     Then transcript renders structured message, tool, lifecycle, usage, and error rows
     And debug keeps canonical payload JSON while the tool-trace tab pairs calls with results
-    And raw payloads stay out of transcript mode and redacted values stay redacted
+    And raw payloads stay out of transcript mode while tool-result redaction stays intact

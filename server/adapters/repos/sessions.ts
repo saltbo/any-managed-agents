@@ -32,7 +32,6 @@ import {
   type SessionMessage,
   type SessionState,
 } from '../../domain/session'
-import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 type SessionRow = typeof sessions.$inferSelect
@@ -223,7 +222,7 @@ function serializeEvent(row: SessionEventRow): SessionEvent {
     sequence: row.sequence,
     createdAt: row.createdAt,
     type: row.type,
-    payload: redactSensitiveValue(rawPayload) as AmaEvent['payload'],
+    payload: rawPayload as AmaEvent['payload'],
   } as SessionEvent
 }
 

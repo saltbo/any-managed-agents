@@ -2,19 +2,12 @@ import type { AuditListQuery, AuditReadRepo, AuditRecord } from '@server/usecase
 import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { auditRecords } from '../../db/schema'
-import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 type AuditRow = typeof auditRecords.$inferSelect
 
 function parseJson<T>(value: string, fallback: T) {
   return value ? (JSON.parse(value) as T) : fallback
-}
-
-// Secret material never leaves this boundary: the stored JSON blobs are parsed
-// and redacted here so the route serializes already-clean records.
-function redactedJson(value: string) {
-  return redactSensitiveValue(parseJson<Record<string, unknown>>(value, {})) as Record<string, unknown>
 }
 
 function recordFrom(row: AuditRow): AuditRecord {
@@ -32,9 +25,9 @@ function recordFrom(row: AuditRow): AuditRecord {
     correlationId: row.correlationId,
     sessionId: row.sessionId,
     policyCategory: row.policyCategory,
-    metadata: redactedJson(row.metadata),
-    before: redactedJson(row.before),
-    after: redactedJson(row.after),
+    metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
+    before: parseJson<Record<string, unknown>>(row.before, {}),
+    after: parseJson<Record<string, unknown>>(row.after, {}),
     createdAt: row.createdAt,
   }
 }

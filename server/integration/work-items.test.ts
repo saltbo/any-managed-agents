@@ -120,7 +120,7 @@ describe('[CF] /api/v1/work-items', () => {
     await seedPlatformProvider()
   })
 
-  it('lists queued session work with state filters and redacted payload secrets [spec: runners/queue-work] [spec: runners/work-items]', async () => {
+  it('lists queued session work with state filters and intact payload references [spec: runners/queue-work] [spec: runners/work-items]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
@@ -149,11 +149,12 @@ describe('[CF] /api/v1/work-items', () => {
           type: 'session.start',
           sessionId: session.id,
           requiredRunnerCapability: DEFAULT_AMA_RUNNER_CAPABILITY,
+          envFrom,
         }),
       }),
     ])
     expect(list.data[0].organizationId).toBeUndefined()
-    expect(JSON.stringify(list.data)).not.toContain('raw-ak-agent-key')
+    expect(JSON.stringify(list.data)).toContain('"type":"secret"')
     expect(list.pagination).toMatchObject({ limit: 50, hasMore: false, nextCursor: null })
 
     const availableRes = await jsonFetch(`/api/v1/work-items?sessionId=${session.id}&state=available`, authorization)

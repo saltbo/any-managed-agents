@@ -14,7 +14,6 @@ import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or, sql } from 'd
 import type { drizzle } from 'drizzle-orm/d1'
 import { environments, runners, vaultCredentials, vaultCredentialVersions } from '../../db/schema'
 import { credentialScopedSecretRef, credentialVersionSecretRef, secretRefIdentity } from '../../domain/vault'
-import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 type RunnerRow = typeof runners.$inferSelect
@@ -26,10 +25,8 @@ function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
-// Token-like values are redacted before they re-enter a JSON payload bound for
-// D1 or a response, so a misreporting runner never persists raw secrets.
 function parseJson<T>(value: string | null) {
-  return value ? (redactSensitiveValue(JSON.parse(value)) as T) : null
+  return value ? (JSON.parse(value) as T) : null
 }
 
 function parseRawJson<T>(value: string | null) {
@@ -37,7 +34,7 @@ function parseRawJson<T>(value: string | null) {
 }
 
 function stringify(value: unknown) {
-  return JSON.stringify(redactSensitiveValue(value))
+  return JSON.stringify(value)
 }
 
 async function secretRefFromColumns(db: Db, row: RunnerRow) {
@@ -235,9 +232,6 @@ export function createRunnerRepo(db: Db): RunnerRepo {
     },
 
     async heartbeat(projectId, runnerId, fields: RunnerHeartbeatFields, timestamp) {
-      // Inventory entries are stored as safe metadata only: stringify() redacts
-      // token-like values so provider tokens or local credential values never
-      // reach D1 even if a runner misreports them in diagnostic detail.
       await db
         .update(runners)
         .set({

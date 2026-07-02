@@ -4,7 +4,6 @@ import {
   renderHttpPromptTemplate,
   type Trigger,
 } from '@server/domain/trigger'
-import { redactSensitiveValue } from '@server/redaction'
 import type { Deps } from './deps'
 import { type AuthScope, type ClaimedRun, type DueTrigger, TriggerConflictError, TriggerValidationError } from './ports'
 import { createSession } from './runtime/sessions'
@@ -27,8 +26,7 @@ export interface ScheduleDispatchResult {
 }
 
 function safeMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  return redactSensitiveValue(message) as string
+  return error instanceof Error ? error.message : String(error)
 }
 
 function runResult(

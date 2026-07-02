@@ -1,8 +1,7 @@
-Feature: Audit
+  Feature: Audit
   Security-relevant control-plane changes and runtime policy actions create audit
   records automatically. Records carry actor, resource, action, outcome, request
-  correlation, and safe metadata, and are queryable and exportable per organization
-  with secret material redacted.
+  correlation, and metadata, and are queryable and exportable per organization.
 
   # ── Automatic recording (api: mutating actions and runtime policy actions) ──
 
@@ -10,15 +9,14 @@ Feature: Audit
   Scenario: Record mutating control-plane actions automatically
     Given a signed-in user
     When the user makes a mutating control-plane change
-    Then an audit record captures actor, resource, action, outcome, timestamp, and safe metadata
+    Then an audit record captures actor, resource, action, outcome, timestamp, and metadata
     And the record correlates to the request and omits the organization id
 
   @audit/runtime-policy @api
   Scenario: Record automated runtime policy denials
     Given a session evaluation is denied by provider, sandbox, or tool policy
     When the runtime blocks the action
-    Then an audit record captures the policy category, safe rule reference, and session id
-    And the denial record contains no secret or raw credential values
+    Then an audit record captures the policy category, rule reference, and session id
 
   @audit/records-api @api
   Scenario: List, read, and filter audit records within organization scope
@@ -26,14 +24,13 @@ Feature: Audit
     When the operator lists and reads audit records
     Then records filter by action and outcome and stay scoped to the organization
     And a single record is readable and unknown ids return not found
-    And secret-like values are redacted and the organization id is never exposed
+    And the organization id is never exposed
 
   @audit/export-api @api
   Scenario: Export audit records as CSV
     Given audit records exist
     When the operator exports the filtered audit records
-    Then the export returns CSV with stable identifiers and safe event metadata
-    And secret-like values are redacted in the export
+    Then the export returns CSV with stable identifiers and event metadata
 
   # ── Web console (web: audit log list and record detail in jsdom) ──
 
@@ -50,4 +47,4 @@ Feature: Audit
     Given an audit record exists for a resource change
     When the operator opens the record detail
     Then the detail shows actor, request correlation, resource link, and before/after change
-    And secret values and credential material are redacted
+    And the detail shows metadata recorded with the event

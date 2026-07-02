@@ -892,8 +892,7 @@ export interface AuditListQuery {
 
 // DB boundary for reading audit records. Distinct from AuditPort (the write
 // boundary other resources use to record governance mutations): this is the
-// audit *resource* reading its own log. The repo redacts secret material from
-// metadata/before/after at this boundary so raw secrets never leave the DB.
+// audit *resource* reading its own log.
 export interface AuditReadRepo {
   list(query: AuditListQuery): Promise<AuditRecord[]>
   find(organizationId: string, recordId: string): Promise<AuditRecord | null>
@@ -1320,9 +1319,9 @@ export interface WorkItemListQuery {
 }
 
 // DB boundary for the self-hosted work-item queue (read-only view). The only
-// implementation lives in adapters/repos. `find` returns the redacted record;
-// `rawPayload` returns the unredacted payload the lease-holding runner needs (the
-// materialize usecase resolves runtime inputs). `activeLeaseRunnerId` returns the
+// implementation lives in adapters/repos. `rawPayload` returns the payload the
+// lease-holding runner needs (the materialize usecase resolves runtime inputs).
+// `activeLeaseRunnerId` returns the
 // runner currently holding a still-active lease on the work item, or null.
 export interface WorkItemRepo {
   list(query: WorkItemListQuery): Promise<ListPageResult<WorkItemRecord>>
@@ -1332,7 +1331,7 @@ export interface WorkItemRepo {
 }
 
 // The claim-relevant projection of a work item: state machine fields plus the
-// raw (unredacted) payload the eligibility gate reads.
+// raw payload the eligibility gate reads.
 export interface WorkItemClaimCandidate {
   state: string
   availableAt: string

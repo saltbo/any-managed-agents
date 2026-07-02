@@ -1,7 +1,6 @@
 import type { AuditEntry, AuthScope } from '@server/usecases/ports'
 import type { drizzle } from 'drizzle-orm/d1'
 import { auditRecords } from '../../db/schema'
-import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -29,9 +28,6 @@ export interface AuditWriteRepo {
   record(auth: AuthScope, entry: AuditWriteEntry): Promise<void>
 }
 
-// Audit write boundary. The single audit_records insert path; secret material is
-// redacted from the JSON blobs before they land in the row. Consumed by the
-// AuditPort gateway and the env-bound recordAudit wrapper.
 export function createAuditWriteRepo(db: Db): AuditWriteRepo {
   return {
     async record(auth, entry) {
@@ -50,9 +46,9 @@ export function createAuditWriteRepo(db: Db): AuditWriteRepo {
         correlationId: entry.correlationId ?? null,
         sessionId: entry.sessionId ?? null,
         policyCategory: entry.policyCategory ?? null,
-        metadata: JSON.stringify(redactSensitiveValue(entry.metadata ?? {})),
-        before: JSON.stringify(redactSensitiveValue(entry.before ?? {})),
-        after: JSON.stringify(redactSensitiveValue(entry.after ?? {})),
+        metadata: JSON.stringify(entry.metadata ?? {}),
+        before: JSON.stringify(entry.before ?? {}),
+        after: JSON.stringify(entry.after ?? {}),
         createdAt: new Date().toISOString(),
       })
     },

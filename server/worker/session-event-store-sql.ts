@@ -11,7 +11,7 @@
 // rows.
 
 import type { SessionEvent } from '@server/domain/session'
-import { redactSensitiveValue } from '@server/redaction'
+import { redactToolResultsFromPayload } from '@server/redaction'
 import type { EventPage, EventQuery } from '@server/usecases/ports'
 import { type AmaEvent, isAmaSessionEventType, normalizeAmaEvent } from '@shared/session-events'
 
@@ -72,8 +72,8 @@ function dropLegacySessionEventColumns(sql: SqlStorage): void {
 }
 
 // Single insert path: allocates the next sequence (monotonic, no retry — the DO
-// thread serialises us), redacts payload/metadata, and returns the serialized
-// record so the DO shell can fan it out to sockets.
+// thread serialises us), redacts only tool-result output, and returns the
+// serialized record so the DO shell can fan it out to sockets.
 export function appendCanonicalEventToSql(
   sql: SqlStorage,
   scope: EventWriteContext,
@@ -87,7 +87,7 @@ export function appendCanonicalEventToSql(
       .one().m ?? 0
   const sequence = maxSequence + 1
   const createdAt = new Date().toISOString()
-  const payload = JSON.stringify(redactSensitiveValue(normalized.payload))
+  const payload = JSON.stringify(redactToolResultsFromPayload(normalized.payload))
   const metadata = '{}'
   sql.exec(
     'INSERT INTO session_events (id, organization_id, project_id, session_id, sequence, type, payload, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -172,7 +172,7 @@ export function stepRelayEvent(raw: RelayedRunnerEvent, scope: EventWriteContext
     session_id: scope.sessionId,
     sequence: raw.sequence,
     type: event.type,
-    payload: JSON.stringify(event.payload),
+    payload: JSON.stringify(redactToolResultsFromPayload(event.payload)),
     metadata: '{}',
     created_at: raw.createdAt,
   }
@@ -237,6 +237,6 @@ export function serializeRow(row: EventRow): SessionEvent {
     sequence: row.sequence,
     createdAt: row.created_at,
     type: row.type,
-    payload: redactSensitiveValue(rawPayload) as AmaEvent['payload'],
+    payload: rawPayload as AmaEvent['payload'],
   } as SessionEvent
 }

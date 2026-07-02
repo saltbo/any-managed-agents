@@ -59,11 +59,11 @@ Feature: Runners
     And the session stays pending with a waiting-for-runner reason until a runner claims it
 
   @runners/work-items @api
-  Scenario: List and read queued session work with redacted payload secrets
+  Scenario: List and read queued session work with intact payload references
     Given a self-hosted session has queued work
     When a user or runner token lists and reads work items with state and search filters
-    Then work items expose state, session, environment, runner, lease, and a safe payload
-    And resolved secret material never appears in the listed payloads
+    Then work items expose state, session, environment, runner, lease, and payload references
+    And unresolved secret references keep their canonical type and reference shape
 
   @runners/lease-claim @api
   Scenario: Claim a specific work item as a lease

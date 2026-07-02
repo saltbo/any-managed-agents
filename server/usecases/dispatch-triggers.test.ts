@@ -674,7 +674,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — failed disp
     expect(result.runs[0]!.errorMessage).toContain('project is unavailable')
   })
 
-  it('redacts sensitive values in error messages', async () => {
+  it('preserves error messages', async () => {
     const trigger = dueTrigger()
     const deps = fakeDeps({
       triggerDispatch: {
@@ -685,7 +685,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — failed disp
       },
     })
     const result = await dispatchDueScheduledTriggers(deps)
-    expect(result.runs[0]!.errorMessage).toBe('[REDACTED]')
+    expect(result.runs[0]!.errorMessage).toBe('bearer secrettoken123')
   })
 })
 

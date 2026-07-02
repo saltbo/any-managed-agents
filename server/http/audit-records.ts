@@ -190,8 +190,8 @@ const readRoute = createRoute({
 })
 
 // Pure-forward reporting resource over the AuditReadRepo (the read side, kept
-// distinct from the AuditPort write boundary other resources use). Secret
-// redaction happens in the repo, so the route just paginates/serializes/exports.
+// distinct from the AuditPort write boundary other resources use). The route
+// just paginates/serializes/exports.
 // Registration order is load-bearing: static before parameter segments; the
 // assembler in app.ts calls this at the audit-records resource's mount position.
 export function registerAuditRecordRoutes(routes: AuditRoutes) {

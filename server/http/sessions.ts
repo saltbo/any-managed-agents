@@ -33,7 +33,6 @@ import {
   negotiateMediaType,
   parseListCursor,
 } from '../openapi'
-import { redactSensitiveValue } from '../redaction'
 import { type SessionRuntimeError, SessionValidationError } from '../usecases/ports'
 import {
   createSession as createRuntimeSession,
@@ -1549,8 +1548,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
 
 // --- helpers ---
 
-// Extracts a redacted human message from a runtime error payload, for the
-// runtime error-message contract test and any runtime-failure surfacing.
+// Extracts a human message from a runtime error payload.
 export function runtimeErrorMessage(payload: Record<string, unknown>) {
   const error = payload.error
   let message: string
@@ -1563,7 +1561,7 @@ export function runtimeErrorMessage(payload: Record<string, unknown>) {
   } else {
     message = 'Runtime command failed'
   }
-  return redactSensitiveValue(message) as string
+  return message
 }
 
 function sessionValidationOr(c: Context<DepsEnv>, error: unknown) {

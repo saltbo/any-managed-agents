@@ -22,7 +22,6 @@ import {
   sessions,
   workItems,
 } from '../../db/schema'
-import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 type LeaseRow = typeof leases.$inferSelect
@@ -40,11 +39,11 @@ function now() {
 }
 
 function parseJson<T>(value: string | null) {
-  return value ? (redactSensitiveValue(JSON.parse(value)) as T) : null
+  return value ? (JSON.parse(value) as T) : null
 }
 
 function stringify(value: unknown) {
-  return JSON.stringify(redactSensitiveValue(value))
+  return JSON.stringify(value)
 }
 
 function memoryStoreSnapshotsFromResult(result: Record<string, unknown> | undefined): MemoryStoreSnapshot[] {

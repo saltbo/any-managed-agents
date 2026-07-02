@@ -390,7 +390,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
   })
 
-  it('creates, reads, lists, connects, messages, stops, archives, and records events for a cloud session [spec: sessions/create] [spec: sessions/prompt] [spec: sessions/stop] [spec: sessions/archive] [spec: sessions/connection] [spec: sessions/events-query] [spec: sessions/events-redaction]', async () => {
+  it('creates, reads, lists, connects, messages, stops, archives, and records events for a cloud session [spec: sessions/create] [spec: sessions/prompt] [spec: sessions/stop] [spec: sessions/archive] [spec: sessions/connection] [spec: sessions/events-query] [spec: sessions/tool-result-redaction]', async () => {
     const authorization = await signIn()
     const githubCredential = await connectMcp(authorization, 'github')
     await connectMcp(authorization, 'linear')
@@ -1780,7 +1780,7 @@ describe('[CF] /api/v1/sessions', () => {
     )
   })
 
-  it('validates prompt input and redacts runtime failure reasons', async () => {
+  it('validates prompt input and preserves runtime failure reasons', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1802,7 +1802,7 @@ describe('[CF] /api/v1/sessions', () => {
 
     expect(
       runtimeErrorMessage({ type: 'response', success: false, error: { message: 'token=raw-secret-token' } }),
-    ).toBe('[REDACTED]')
+    ).toBe('token=raw-secret-token')
   })
 
   it('lists sessions with pagination, state, search, and date filters [spec: sessions/list]', async () => {

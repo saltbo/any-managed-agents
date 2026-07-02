@@ -145,13 +145,13 @@ describe('[spec: audit/console-detail] AuditRecordPage', () => {
     )
   }
 
-  it('renders actor, correlation, resource link, and redacted before/after change', async () => {
+  it('renders actor, correlation, resource link, and before/after change', async () => {
     const record = buildRecord({
       action: 'vault.credential.update',
       resourceType: 'vault',
       resourceId: 'vault_1',
-      before: { apiKey: '[REDACTED]' },
-      after: { apiKey: '[REDACTED]', name: 'Workers token' },
+      before: { name: 'Workers token' },
+      after: { name: 'Workers token v2' },
     })
     server.use(http.get('*/api/v1/audit-records/audit_1', () => HttpResponse.json(record)))
 
@@ -161,7 +161,7 @@ describe('[spec: audit/console-detail] AuditRecordPage', () => {
     expect(screen.getByText('user_1')).toBeInTheDocument()
     expect(screen.getByText('corr_1')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open vault' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getAllByText(/\[REDACTED\]/).length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByText(/Workers token v2/)).toBeInTheDocument())
   })
 
   it('renders resource type without a link when resource type has no route', async () => {

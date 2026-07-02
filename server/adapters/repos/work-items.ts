@@ -2,13 +2,12 @@ import type { ListPageResult, WorkItemListQuery, WorkItemRecord, WorkItemRepo } 
 import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { leases, workItems } from '../../db/schema'
-import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 type WorkItemRow = typeof workItems.$inferSelect
 
 function parseJson<T>(value: string | null) {
-  return value ? (redactSensitiveValue(JSON.parse(value)) as T) : null
+  return value ? (JSON.parse(value) as T) : null
 }
 
 function recordFrom(row: WorkItemRow): WorkItemRecord {

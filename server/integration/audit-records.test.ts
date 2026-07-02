@@ -74,13 +74,13 @@ describe('[CF] v1 audit records', () => {
     expect(readRes.status).toBe(200)
     const record = (await readRes.json()) as { id: string; action: string }
     expect(record).toMatchObject({ id: recordId, action: 'budget.create' })
-    expect(JSON.stringify(record)).not.toContain('top-secret-credential')
+    expect(JSON.stringify(record)).toContain('top-secret-credential')
 
     const missingRes = await jsonFetch('/api/v1/audit-records/audit_does_not_exist', authorization)
     expect(missingRes.status).toBe(404)
   })
 
-  it('exports audit records as CSV with secret-like values redacted [spec: audit/export-api]', async () => {
+  it('exports audit records as CSV [spec: audit/export-api]', async () => {
     const authorization = await signIn()
     await createAuditedBudget(authorization, { apiKey: 'top-secret-credential' })
 
@@ -96,7 +96,6 @@ describe('[CF] v1 audit records', () => {
       'id,createdAt,projectId,actorType,actorUserId,action,resourceType,resourceId,outcome,requestId,correlationId,sessionId,policyCategory,metadata,before,after',
     )
     expect(lines.length).toBeGreaterThan(1)
-    expect(body).not.toContain('top-secret-credential')
-    expect(body).toContain('[REDACTED]')
+    expect(body).toContain('top-secret-credential')
   })
 })

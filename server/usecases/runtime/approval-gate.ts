@@ -16,7 +16,6 @@
 
 import { type PendingSessionApproval, sessionApprovalState } from '@server/domain/runtime/approval-state'
 import { now } from '@server/domain/runtime/util'
-import { redactSensitiveValue } from '@server/redaction'
 import type { AmaEvent } from '@shared/session-events'
 import type {
   AuditPort,
@@ -135,7 +134,7 @@ export function createToolApprovalGate(
           id: approvalId,
           toolCallId,
           toolName,
-          input: redactSensitiveValue(input) as Record<string, unknown>,
+          input,
           requestedAt: now(),
           relatedEventIds: [requestEventId],
         } satisfies PendingSessionApproval,

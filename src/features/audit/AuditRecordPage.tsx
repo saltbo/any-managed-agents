@@ -52,7 +52,7 @@ export function AuditRecordPage() {
         eyebrow="Audit record"
         title={record.action}
         titleAccessory={<StatusBadge value={record.outcome} />}
-        description="Actor, request correlation, and redacted change detail for one audit record."
+        description="Actor, request correlation, and change detail for one audit record."
         actions={
           <Link to="/audit" className={buttonVariants({ variant: 'outline' })}>
             Back to audit log
@@ -88,7 +88,7 @@ export function AuditRecordPage() {
           <Meta label="Resource id" value={record.resourceId ?? 'None'} />
         </MetaGrid>
       </DetailSection>
-      <DetailSection title="Change" description="Redacted before and after snapshots. Secret values never appear here.">
+      <DetailSection title="Change" description="Before and after snapshots recorded for this event.">
         <div className="grid gap-3 md:grid-cols-2">
           <div className="min-w-0">
             <h3 className="mb-1 text-xs font-medium text-muted-foreground">Before</h3>
@@ -100,7 +100,7 @@ export function AuditRecordPage() {
           </div>
         </div>
       </DetailSection>
-      <DetailSection title="Metadata" description="Safe, redacted request metadata recorded with this event.">
+      <DetailSection title="Metadata" description="Request metadata recorded with this event.">
         <JsonBlock value={stringifyJson(record.metadata)} />
       </DetailSection>
     </div>
