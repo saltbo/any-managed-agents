@@ -170,6 +170,7 @@ func TestRuntimeBridgeRunReportsReadyAndProcessFailures(t *testing.T) {
 	t.Run("invalid ready includes stderr", func(t *testing.T) {
 		installFakeNode(t, `#!/bin/sh
 echo 'startup failed' >&2
+sleep 0.1
 echo '{"type":"not-ready"}'
 `)
 		_, err := (Bridge{}).Run(context.Background(), Request{Runtime: "codex", WorkDir: t.TempDir()}, func(JSON) error { return nil })
