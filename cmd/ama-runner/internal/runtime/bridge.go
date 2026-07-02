@@ -93,8 +93,7 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	}()
 	stdoutScanner := protocol.scanner(stdoutReader)
 	if err := protocol.waitReady(stdoutScanner); err != nil {
-		b.stopProcess(cmd)
-		_ = cmd.Wait()
+		_ = b.waitOrStopProcess(cmd, 200*time.Millisecond)
 		<-stderrDone
 		if stderrText.Len() > 0 {
 			return nil, fmt.Errorf("%w: %s", err, stderrText.String())
@@ -374,4 +373,18 @@ func (b Bridge) stopProcess(cmd *exec.Cmd) {
 		return
 	}
 	_ = cmd.Process.Kill()
+}
+
+func (b Bridge) waitOrStopProcess(cmd *exec.Cmd, grace time.Duration) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(grace):
+		b.stopProcess(cmd)
+		return <-done
+	}
 }
