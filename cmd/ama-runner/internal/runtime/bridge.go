@@ -25,6 +25,7 @@ type Bridge struct {
 }
 
 const runtimeInventoryTimeout = 30 * time.Second
+const runtimeBridgeReadyFailureGrace = 2 * time.Second
 
 func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JSON, error) {
 	if request.Runtime == "" {
@@ -93,7 +94,7 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	}()
 	stdoutScanner := protocol.scanner(stdoutReader)
 	if err := protocol.waitReady(stdoutScanner); err != nil {
-		_ = b.waitOrStopProcess(cmd, 200*time.Millisecond)
+		_ = b.waitOrStopProcess(cmd, runtimeBridgeReadyFailureGrace)
 		<-stderrDone
 		if stderrText.Len() > 0 {
 			return nil, fmt.Errorf("%w: %s", err, stderrText.String())

@@ -117,8 +117,8 @@ echo 'bridge warning' >&2
 func TestRuntimeBridgeRunReportsReadyAndProcessFailures(t *testing.T) {
 	t.Run("invalid ready includes stderr", func(t *testing.T) {
 		installFakeNode(t, `#!/bin/sh
-echo '{"type":"not-ready"}'
 echo 'startup failed' >&2
+echo '{"type":"not-ready"}'
 `)
 		_, err := (Bridge{}).Run(context.Background(), Request{Runtime: "codex", WorkDir: t.TempDir()}, func(JSON) error { return nil })
 		if err == nil || !strings.Contains(err.Error(), "did not send ready") || !strings.Contains(err.Error(), "startup failed") {
