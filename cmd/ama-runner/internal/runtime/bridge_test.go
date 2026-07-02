@@ -167,14 +167,13 @@ echo '{"type":"result","requestId":"run_session_1","result":{"ok":true}}'
 }
 
 func TestRuntimeBridgeRunReportsReadyAndProcessFailures(t *testing.T) {
-	t.Run("invalid ready includes stderr", func(t *testing.T) {
+	t.Run("ready failure includes stderr", func(t *testing.T) {
 		installFakeNode(t, `#!/bin/sh
 echo 'startup failed' >&2
-sleep 0.1
-echo '{"type":"not-ready"}'
+exit 2
 `)
 		_, err := (Bridge{}).Run(context.Background(), Request{Runtime: "codex", WorkDir: t.TempDir()}, func(JSON) error { return nil })
-		if err == nil || !strings.Contains(err.Error(), "did not send ready") || !strings.Contains(err.Error(), "startup failed") {
+		if err == nil || !strings.Contains(err.Error(), "exited before ready") || !strings.Contains(err.Error(), "startup failed") {
 			t.Fatalf("expected ready failure with stderr, got %v", err)
 		}
 	})
@@ -260,6 +259,26 @@ echo '{"type":"result","requestId":"inventory","result":{"runtimes":[{"binary":"
 	}
 }
 
+func TestRuntimeBridgeInventoryReportsReadyFailures(t *testing.T) {
+	installFakeNode(t, `#!/bin/sh
+echo '{"type":"not-ready"}'
+`)
+	if _, err := (Bridge{}).Inventory(context.Background(), false); err == nil || !strings.Contains(err.Error(), "did not send ready") {
+		t.Fatalf("expected inventory ready error, got %v", err)
+	}
+}
+
+func TestRuntimeBridgeInventoryReportsBridgeErrors(t *testing.T) {
+	installFakeNode(t, `#!/bin/sh
+echo '{"type":"ready"}'
+IFS= read -r request
+echo '{"type":"error","requestId":"inventory","error":{"message":"inventory failed"}}'
+`)
+	if _, err := (Bridge{}).Inventory(context.Background(), false); err == nil || !strings.Contains(err.Error(), "inventory failed") {
+		t.Fatalf("expected inventory bridge error, got %v", err)
+	}
+}
+
 func TestRuntimeCommandEnvironmentSanitizesRunnerSecrets(t *testing.T) {
 	t.Setenv("AMA_TOKEN", "operator-token")
 	t.Setenv("AMA_RUNNER_OPERATOR_SECRET", "operator-secret")
@@ -310,6 +329,17 @@ func TestRuntimeCommandEnvironmentRejectsUnserializableConfig(t *testing.T) {
 	}
 }
 
+func TestRuntimeCommandEnvironmentRejectsUnserializableAgentSnapshot(t *testing.T) {
+	if _, err := commandEnvironment(Request{
+		SessionID:     "session_1",
+		Runtime:       "codex",
+		AgentSnapshot: map[string]any{"bad": make(chan int)},
+		WorkDir:       t.TempDir(),
+	}); err == nil || !strings.Contains(err.Error(), "unsupported type") {
+		t.Fatalf("expected agent snapshot marshal error, got %v", err)
+	}
+}
+
 func TestRuntimeCommandEnvironmentRejectsReservedEnv(t *testing.T) {
 	if _, err := commandEnvironment(Request{
 		SessionID: "session_1",
@@ -329,6 +359,17 @@ func TestRuntimeCommandEnvironmentRejectsInvalidEnvKey(t *testing.T) {
 		WorkDir:   t.TempDir(),
 	}); err == nil || !strings.Contains(err.Error(), "invalid") {
 		t.Fatalf("expected invalid env key error, got %v", err)
+	}
+}
+
+func TestRuntimeCommandEnvironmentRejectsEmptyEnvKey(t *testing.T) {
+	if _, err := commandEnvironment(Request{
+		SessionID: "session_1",
+		Runtime:   "codex",
+		Env:       map[string]string{"": "value"},
+		WorkDir:   t.TempDir(),
+	}); err == nil || !strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("expected empty env key error, got %v", err)
 	}
 }
 

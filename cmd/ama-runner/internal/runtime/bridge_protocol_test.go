@@ -200,3 +200,13 @@ func TestBridgeProtocolRejectsInventorySnapshotMissingRuntime(t *testing.T) {
 		t.Fatalf("expected missing runtime error, got %v", err)
 	}
 }
+
+func TestBridgeProtocolRejectsInvalidInventorySnapshot(t *testing.T) {
+	protocol := bridgeProtocol{}
+	if _, err := protocol.inventorySnapshot(JSON{"runtimes": make(chan int)}); err == nil || !strings.Contains(err.Error(), "unsupported type") {
+		t.Fatalf("expected inventory marshal error, got %v", err)
+	}
+	if _, err := protocol.inventorySnapshot(JSON{"runtimes": "invalid"}); err == nil || !strings.Contains(err.Error(), "cannot unmarshal") {
+		t.Fatalf("expected inventory unmarshal error, got %v", err)
+	}
+}
