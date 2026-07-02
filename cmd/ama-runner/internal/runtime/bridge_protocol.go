@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,12 +11,23 @@ import (
 )
 
 type bridgeProtocol struct{}
+type bridgeLineReader struct {
+	reader *bufio.Reader
+}
 
-func (bridgeProtocol) scanner(reader io.Reader) *bufio.Scanner {
-	scanner := bufio.NewScanner(reader)
-	buffer := make([]byte, 0, 64*1024)
-	scanner.Buffer(buffer, 1024*1024)
-	return scanner
+func (bridgeProtocol) lineReader(reader io.Reader) *bridgeLineReader {
+	return &bridgeLineReader{reader: bufio.NewReader(reader)}
+}
+
+func (r *bridgeLineReader) readLine() ([]byte, error) {
+	line, err := r.reader.ReadBytes('\n')
+	if err != nil {
+		if err == io.EOF && len(line) > 0 {
+			return bytes.TrimSpace(line), nil
+		}
+		return nil, err
+	}
+	return bytes.TrimSpace(line), nil
 }
 
 func (bridgeProtocol) encodeLine(value any) ([]byte, error) {
@@ -26,15 +38,19 @@ func (bridgeProtocol) encodeLine(value any) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
-func (bridgeProtocol) waitReady(scanner *bufio.Scanner) error {
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return err
+func (bridgeProtocol) waitReady(reader *bridgeLineReader) error {
+	line, err := reader.readLine()
+	if err != nil {
+		if err == io.EOF {
+			return fmt.Errorf("runtime bridge exited before ready")
 		}
+		return err
+	}
+	if len(line) == 0 {
 		return fmt.Errorf("runtime bridge exited before ready")
 	}
 	var envelope runtimebridge.RuntimeBridgeOutputMessage
-	if err := json.Unmarshal([]byte(scanner.Text()), &envelope); err != nil {
+	if err := json.Unmarshal(line, &envelope); err != nil {
 		return fmt.Errorf("invalid runtime bridge ready message: %w", err)
 	}
 	if envelope.Type != runtimebridge.BridgeMessageTypeReady {
@@ -43,10 +59,20 @@ func (bridgeProtocol) waitReady(scanner *bufio.Scanner) error {
 	return nil
 }
 
-func (bridgeProtocol) readResult(scanner *bufio.Scanner, requestID string, write EventWriter, onResumeToken func(string)) (JSON, error) {
-	for scanner.Scan() {
+func (bridgeProtocol) readResult(reader *bridgeLineReader, requestID string, write EventWriter, onResumeToken func(string)) (JSON, error) {
+	for {
+		line, err := reader.readLine()
+		if err != nil {
+			if err == io.EOF {
+				return nil, fmt.Errorf("runtime bridge exited before result for request %q", requestID)
+			}
+			return nil, err
+		}
+		if len(line) == 0 {
+			continue
+		}
 		var envelope runtimebridge.RuntimeBridgeOutputMessage
-		if err := json.Unmarshal([]byte(scanner.Text()), &envelope); err != nil {
+		if err := json.Unmarshal(line, &envelope); err != nil {
 			return nil, fmt.Errorf("invalid runtime bridge message: %w", err)
 		}
 		if envelope.RequestID != "" && envelope.RequestID != requestID {
@@ -78,10 +104,6 @@ func (bridgeProtocol) readResult(scanner *bufio.Scanner, requestID string, write
 			return nil, fmt.Errorf("unsupported runtime bridge message type %q", envelope.Type)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return nil, fmt.Errorf("runtime bridge exited before result for request %q", requestID)
 }
 
 func (bridgeProtocol) controlFrame(requestID string, command BridgeControlFrame) (JSON, error) {

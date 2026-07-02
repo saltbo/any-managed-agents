@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -92,8 +91,8 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 	go func() {
 		stderrDone <- streamBridgeStderr(stderrReader, &stderrText)
 	}()
-	stdoutScanner := protocol.scanner(stdoutReader)
-	if err := protocol.waitReady(stdoutScanner); err != nil {
+	stdoutLines := protocol.lineReader(stdoutReader)
+	if err := protocol.waitReady(stdoutLines); err != nil {
 		_ = b.waitOrStopProcess(cmd, runtimeBridgeReadyFailureGrace)
 		<-stderrDone
 		if stderrText.Len() > 0 {
@@ -133,8 +132,11 @@ func (b Bridge) Run(ctx context.Context, request Request, write EventWriter) (JS
 		})
 	}
 
-	result, readErr := protocol.readResult(stdoutScanner, requestID, writeSerialized, request.OnResumeToken)
+	result, readErr := protocol.readResult(stdoutLines, requestID, writeSerialized, request.OnResumeToken)
 	_ = stdin.Close()
+	if readErr != nil {
+		b.stopProcess(cmd)
+	}
 	waitErr := cmd.Wait()
 	stderrErr := <-stderrDone
 
@@ -225,15 +227,15 @@ func (b Bridge) bridgeRequest(ctx context.Context, requestID string, request any
 		_ = cmd.Wait()
 	}()
 
-	scanner := protocol.scanner(stdout)
-	if err := protocol.waitReady(scanner); err != nil {
+	reader := protocol.lineReader(stdout)
+	if err := protocol.waitReady(reader); err != nil {
 		return nil, err
 	}
 	if err := stdin.WriteJSON(request); err != nil {
 		return nil, err
 	}
 	noop := func(JSON) error { return nil }
-	return protocol.readResult(scanner, requestID, noop, nil)
+	return protocol.readResult(reader, requestID, noop, nil)
 }
 
 func commandEnvironment(request Request) ([]string, error) {
@@ -329,13 +331,8 @@ func (s *bridgeStdin) Close() error {
 }
 
 func streamBridgeStderr(reader io.Reader, output *bytes.Buffer) error {
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		line := scanner.Text()
-		output.WriteString(line)
-		output.WriteByte('\n')
-	}
-	return scanner.Err()
+	_, err := io.Copy(output, reader)
+	return err
 }
 
 func envMap(env []string) map[string]string {

@@ -114,6 +114,58 @@ echo 'bridge warning' >&2
 	}
 }
 
+func TestRuntimeBridgeRunStopsBridgeProcessAfterProtocolReadError(t *testing.T) {
+	installFakeNode(t, `#!/bin/sh
+echo '{"type":"ready"}'
+IFS= read -r request
+echo '{'
+sleep 5
+`)
+	startedAt := time.Now()
+	result, err := (Bridge{}).Run(context.Background(), Request{
+		Runtime:   "codex",
+		SessionID: "session_1",
+		WorkDir:   t.TempDir(),
+	}, func(JSON) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "invalid runtime bridge message") {
+		t.Fatalf("expected invalid protocol message error, result=%#v err=%v", result, err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > 2*time.Second {
+		t.Fatalf("expected protocol read error to stop the bridge promptly, took %s", elapsed)
+	}
+}
+
+func TestRuntimeBridgeRunRelaysLargeNativeRuntimeEvent(t *testing.T) {
+	// [spec: runtime/large-bridge-events]
+	installFakeNode(t, `#!/bin/sh
+echo '{"type":"ready"}'
+IFS= read -r request
+printf '{"type":"runtime.event","requestId":"run_session_1","event":{"type":"message.completed","payload":{"text":"'
+dd if=/dev/zero bs=1100000 count=1 2>/dev/null | tr '\000' x
+printf '"}}}\n'
+echo '{"type":"result","requestId":"run_session_1","result":{"ok":true}}'
+`)
+	var events []JSON
+	result, err := (Bridge{}).Run(context.Background(), Request{
+		Runtime:   "codex",
+		SessionID: "session_1",
+		WorkDir:   t.TempDir(),
+	}, func(event JSON) error {
+		events = append(events, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected large native event success, result=%#v err=%v", result, err)
+	}
+	if result["ok"] != true || len(events) != 1 {
+		t.Fatalf("unexpected bridge result=%#v events=%#v", result, events)
+	}
+	payload, ok := events[0]["payload"].(map[string]any)
+	if !ok || len(payload["text"].(string)) != 1100000 {
+		t.Fatalf("expected full large payload, got %#v", events[0]["payload"])
+	}
+}
+
 func TestRuntimeBridgeRunReportsReadyAndProcessFailures(t *testing.T) {
 	t.Run("invalid ready includes stderr", func(t *testing.T) {
 		installFakeNode(t, `#!/bin/sh
@@ -327,6 +379,14 @@ func TestBridgeStdinWritesAndHelpers(t *testing.T) {
 	}
 	if stderr.String() != "one\ntwo\n" {
 		t.Fatalf("unexpected stderr stream %q", stderr.String())
+	}
+	stderr.Reset()
+	largeStderr := strings.Repeat("x", 256*1024)
+	if err := streamBridgeStderr(strings.NewReader(largeStderr), &stderr); err != nil {
+		t.Fatalf("stream large stderr: %v", err)
+	}
+	if stderr.String() != largeStderr {
+		t.Fatalf("expected full large stderr, got %d bytes", stderr.Len())
 	}
 	Bridge{}.stopProcess(&exec.Cmd{})
 }

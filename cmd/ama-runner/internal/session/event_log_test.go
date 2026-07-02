@@ -83,6 +83,24 @@ func TestReadEventLogReturnsNilForMissingFile(t *testing.T) {
 	}
 }
 
+func TestEventLogReadsEventsLargerThanOldScannerLimit(t *testing.T) {
+	store, err := OpenEventLog(t.TempDir(), "session_1")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	largeText := strings.Repeat("x", 17*1024*1024)
+	if _, err := store.Append(ama.JSON{"type": "message.completed", "payload": ama.JSON{"text": largeText}}); err != nil {
+		t.Fatalf("append large event: %v", err)
+	}
+	events, err := store.ReadAll()
+	if err != nil {
+		t.Fatalf("read large event: %v", err)
+	}
+	if len(events) != 1 || events[0].Payload["text"] != largeText {
+		t.Fatalf("expected full large event, got %d events", len(events))
+	}
+}
+
 func TestEventLogAppendValidatesTypeAndNormalizesPayload(t *testing.T) {
 	store, err := OpenEventLog(t.TempDir(), "session_1")
 	if err != nil {

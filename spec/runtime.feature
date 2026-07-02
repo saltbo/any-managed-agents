@@ -54,6 +54,13 @@ Feature: Runtime
     When the runtime executes the turn
     Then a structured error event is recorded and the turn does not complete successfully
 
+  @runtime/large-bridge-events @usecase
+  Scenario: Relay large native runtime events across the runner bridge
+    Given a self-hosted runtime emits a native event larger than the old scanner token frame
+    When the bridge relays the event to the runner
+    Then the event is delivered without protocol-layer truncation
+    And the runner terminates the bridge process instead of hanging if protocol reading fails
+
   @runtime/sandbox-toolset @usecase
   Scenario: Gate sandbox tools by the agent allow-list
     Given an agent declares a sandbox tool allow-list

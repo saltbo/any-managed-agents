@@ -2,11 +2,13 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -148,16 +150,33 @@ func ReadEventLog(path string) ([]Event, error) {
 	}
 	defer file.Close()
 	var events []Event
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 1024*1024), 16*1024*1024)
+	reader := bufio.NewReader(file)
 	line := 0
-	for scanner.Scan() {
+	for {
+		raw, err := reader.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF && len(raw) == 0 {
+				return events, nil
+			}
+			if err != io.EOF {
+				return nil, err
+			}
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) == 0 {
+			if err == io.EOF {
+				return events, nil
+			}
+			continue
+		}
 		line++
 		var event Event
-		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+		if err := json.Unmarshal(raw, &event); err != nil {
 			return nil, fmt.Errorf("read session event log %s line %d: %w", path, line, err)
 		}
 		events = append(events, event)
+		if err == io.EOF {
+			return events, nil
+		}
 	}
-	return events, scanner.Err()
 }
