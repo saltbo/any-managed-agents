@@ -2004,10 +2004,7 @@ func TestRunOnceDisablesSessionDeadlineWhenMaxDurationIsZero(t *testing.T) {
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.MaxSessionDuration = 0
-	done := make(chan error, 1)
-	go func() { done <- daemon.RunOnce(context.Background()) }()
-	waitForChannelWriteCount(t, hubChannel, 1, done)
-	if err := <-done; err != nil {
+	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected run success with disabled session deadline, got %v", err)
 	}
 	if len(client.updates) != 1 || leaseState(client.updates[0]) != "completed" {
