@@ -86,7 +86,11 @@ export function sessionSocketClientMessageFrom(value: unknown): SessionSocketCli
       : null
   }
   if (message.type === 'abort') {
-    return { type: 'abort', ...requestIdFields(message), ...(typeof message.reason === 'string' ? { reason: message.reason } : {}) }
+    return {
+      type: 'abort',
+      ...requestIdFields(message),
+      ...(typeof message.reason === 'string' ? { reason: message.reason } : {}),
+    }
   }
   if (message.type === 'backfill') {
     if (
