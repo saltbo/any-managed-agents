@@ -781,7 +781,7 @@ export type AgentStatus = {
     currentVersionId: string | null;
     version: number;
     /**
-     * Whether an active Inbox Trigger can currently resolve a compatible execution environment.
+     * Whether the active bound Identity can currently resolve a compatible execution environment for a Session, without requiring a Trigger.
      */
     schedulable: boolean;
 };

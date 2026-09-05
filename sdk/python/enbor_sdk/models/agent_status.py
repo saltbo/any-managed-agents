@@ -27,8 +27,8 @@ class AgentStatus:
             phase (ResourcePhase):
             current_version_id (None | str):  Example: 0195f5d6-7c20-7000-8000-000000000003.
             version (int):  Example: 1.
-            schedulable (bool): Whether an active Inbox Trigger can currently resolve a compatible execution environment.
-                Example: True.
+            schedulable (bool): Whether the active bound Identity can currently resolve a compatible execution environment
+                for a Session, without requiring a Trigger. Example: True.
      """
 
     phase: ResourcePhase

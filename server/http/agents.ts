@@ -97,7 +97,8 @@ const AgentStatusSchema = z
     currentVersionId: z.string().nullable().openapi({ example: '0195f5d6-7c20-7000-8000-000000000003' }),
     version: z.number().int().openapi({ example: 1 }),
     schedulable: z.boolean().openapi({
-      description: 'Whether an active Inbox Trigger can currently resolve a compatible execution environment.',
+      description:
+        'Whether the active bound Identity can currently resolve a compatible execution environment for a Session, without requiring a Trigger.',
       example: true,
     }),
   })

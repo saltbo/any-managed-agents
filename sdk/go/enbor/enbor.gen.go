@@ -3132,7 +3132,7 @@ type AgentStatus struct {
 	CurrentVersionId *string       `json:"currentVersionId"`
 	Phase            ResourcePhase `json:"phase"`
 
-	// Schedulable Whether an active Inbox Trigger can currently resolve a compatible execution environment.
+	// Schedulable Whether the active bound Identity can currently resolve a compatible execution environment for a Session, without requiring a Trigger.
 	Schedulable bool `json:"schedulable"`
 	Version     int  `json:"version"`
 }

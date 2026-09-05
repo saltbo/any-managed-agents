@@ -2972,7 +2972,7 @@
           },
           "schedulable": {
             "type": "boolean",
-            "description": "Whether an active Inbox Trigger can currently resolve a compatible execution environment.",
+            "description": "Whether the active bound Identity can currently resolve a compatible execution environment for a Session, without requiring a Trigger.",
             "example": true
           }
         },

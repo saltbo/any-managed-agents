@@ -116,13 +116,14 @@ Feature: Agents
     And created-date filters and project scope are respected
 
   @agents/api-schedulability @api
-  Scenario: Discover agents that Enbor can schedule through Inbox
-    Given active Agents have Realmroot Identities and Inbox Triggers in a project
+  Scenario: Discover agents that can start Sessions without a Trigger
+    Given active Agents have Realmroot Identities in a project
     When a caller lists Agents by Identity runtime or schedulable state
-    Then each Agent reports whether an active Inbox Trigger can resolve a compatible live execution environment
+    Then each Agent reports whether its Identity runtime can resolve a compatible live execution environment
+    And an Agent does not require an Inbox Trigger to be schedulable
     And runtime filtering uses the exact runtime of the bound Identity
     And scheduling ignores task ownership, workload, and any accepting-tasks flag
-    And deleted Agents, Identities, Triggers, Environments, and Runners never make an Agent schedulable
+    And deleted Agents, Identities, Environments, and Runners never make an Agent schedulable
 
   @agents/api-delete @api
   Scenario: Soft-delete an agent without a restore path
