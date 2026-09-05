@@ -618,7 +618,7 @@ describe('[CF] /api/v1/agents', () => {
     ).resolves.toEqual({ bound_agent_id: null })
   })
 
-  it('[spec: agents/api-schedulability] filters by Identity runtime and current Inbox scheduling readiness', async () => {
+  it('[spec: agents/api-schedulability] filters by Identity runtime and direct Session readiness without a Trigger', async () => {
     const authorization = await signIn()
     const createRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
@@ -707,29 +707,6 @@ describe('[CF] /api/v1/agents', () => {
         1,
         JSON.stringify([{ runtime: 'codex', models: ['gpt-5.6-sol'], state: 'ready' }]),
         now,
-        now,
-        now,
-      ),
-      env.DB.prepare(`INSERT INTO triggers (
-        id,organization_id,project_id,agent_id,environment_id,trigger_type,runtime,name,prompt_template,enabled,
-        inbox_subscription_id,inbox_callback_token_hash,inbox_callback_token_ciphertext,inbox_provisioning_state,
-        inbox_registered_agent_subject,created_at,updated_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
-        'trigger_schedulable_codex',
-        defaultClaims().organizationId,
-        project.id,
-        agent.metadata.uid,
-        'environment_schedulable_codex',
-        'inbox',
-        'codex',
-        'Downstream Inbox',
-        'Handle the notification.',
-        1,
-        'subscription_schedulable_codex',
-        'callback_hash_schedulable_codex',
-        'callback_ciphertext_schedulable_codex',
-        'active',
-        subject,
         now,
         now,
       ),

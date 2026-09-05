@@ -133,30 +133,20 @@ function schedulableExpression() {
   return sql<number>`case when ${deletedAt} is null and exists (
     select 1
     from identities scheduling_identity
-    join triggers scheduling_trigger
-      on scheduling_trigger.agent_id = ${agentId}
-      and scheduling_trigger.project_id = ${projectId}
     where scheduling_identity.id = ${identityId}
       and scheduling_identity.project_id = ${projectId}
       and scheduling_identity.state = 'active'
       and scheduling_identity.deleted_at is null
       and scheduling_identity.bound_agent_id = ${agentId}
-      and scheduling_trigger.trigger_type = 'inbox'
-      and scheduling_trigger.enabled = 1
-      and scheduling_trigger.deleted_at is null
-      and scheduling_trigger.inbox_provisioning_state = 'active'
-      and scheduling_trigger.inbox_registered_agent_subject = scheduling_identity.subject
-      and scheduling_trigger.runtime = scheduling_identity.runtime
       and (
         exists (
           select 1
           from environments cloud_environment
-          where cloud_environment.id = scheduling_trigger.environment_id
-            and cloud_environment.project_id = ${projectId}
+          where cloud_environment.project_id = ${projectId}
             and cloud_environment.deleted_at is null
             and cloud_environment.current_version_id is not null
             and cloud_environment.hosting_mode = 'cloud'
-            and scheduling_trigger.runtime = 'enbor'
+            and scheduling_identity.runtime = 'enbor'
         )
         or exists (
           select 1
@@ -172,11 +162,10 @@ function schedulableExpression() {
             and runner_environment.deleted_at is null
             and runner_environment.current_version_id is not null
             and runner_environment.hosting_mode = 'self_hosted'
-            and (scheduling_trigger.environment_id is null or scheduling_trigger.environment_id = scheduling_runner.environment_id)
-            and json_extract(scheduling_runtime.value, '$.runtime') = scheduling_trigger.runtime
+            and json_extract(scheduling_runtime.value, '$.runtime') = scheduling_identity.runtime
             and json_extract(scheduling_runtime.value, '$.state') = 'ready'
             and (
-              scheduling_trigger.runtime = 'enbor'
+              scheduling_identity.runtime = 'enbor'
               or ${model} is null
               or exists (
                 select 1
